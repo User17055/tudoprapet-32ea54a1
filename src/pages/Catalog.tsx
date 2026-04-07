@@ -7,13 +7,7 @@ import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shop
 import { Loader2, PackageOpen, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORIES = [
   { value: "all", label: "Todas" },
@@ -75,40 +69,72 @@ const Catalog = () => {
     setSearchParams({});
   };
 
-  // Client-side filtering by category (tag-based)
+  // Client-side filtering
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    // Category filter (match against product type or tags in title/description)
+    // Helper para remover acentos do texto (ex: "Ração" vira "racao")
+    const normalizeText = (str: string) => {
+      return str
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    };
+
+    // Category filter (usando Regex para buscar apenas palavras exatas)
     if (category !== "all") {
       const categoryMap: Record<string, string[]> = {
-        racoes: ["ração", "racao", "ração", "alimento", "comida", "petisco"],
+        racoes: ["ração", "racao", "alimento", "comida", "petisco"],
         brinquedos: ["brinquedo", "toy", "bola", "mordedor"],
         camas: ["cama", "casinha", "caminha", "colchão", "colchao"],
-        farmacia: ["remédio", "remedio", "medicamento", "antipulgas", "carrapato", "vermífugo", "vitamina", "bravecto", "farmácia"],
+        farmacia: [
+          "remédio",
+          "remedio",
+          "medicamento",
+          "antipulgas",
+          "carrapato",
+          "vermífugo",
+          "vitamina",
+          "bravecto",
+          "farmácia",
+        ],
         higiene: ["shampoo", "banho", "higiene", "escova", "pente", "toalha"],
       };
+
       const keywords = categoryMap[category] || [];
+
       result = result.filter((p) => {
-        const text = `${p.node.title} ${p.node.description}`.toLowerCase();
-        return keywords.some((kw) => text.includes(kw));
+        const text = normalizeText(`${p.node.title} ${p.node.description}`);
+
+        return keywords.some((kw) => {
+          const cleanKw = normalizeText(kw);
+          // \b garante que a palavra não seja parte de outra (ex: impede que "escama" valide a busca por "cama")
+          const regex = new RegExp(`\\b${cleanKw}\\b`, "i");
+          return regex.test(text);
+        });
       });
     }
 
-    // Search filter (client-side for already loaded products)
+    // Search filter (agora também ignora acentos para melhorar a experiência de busca do usuário)
     if (search && !searchParams.get("busca")) {
-      const q = search.toLowerCase();
+      const q = normalizeText(search);
       result = result.filter((p) => {
-        const text = `${p.node.title} ${p.node.description}`.toLowerCase();
+        const text = normalizeText(`${p.node.title} ${p.node.description}`);
         return text.includes(q);
       });
     }
 
     // Sort
     if (sort === "price-asc") {
-      result.sort((a, b) => parseFloat(a.node.priceRange.minVariantPrice.amount) - parseFloat(b.node.priceRange.minVariantPrice.amount));
+      result.sort(
+        (a, b) =>
+          parseFloat(a.node.priceRange.minVariantPrice.amount) - parseFloat(b.node.priceRange.minVariantPrice.amount),
+      );
     } else if (sort === "price-desc") {
-      result.sort((a, b) => parseFloat(b.node.priceRange.minVariantPrice.amount) - parseFloat(a.node.priceRange.minVariantPrice.amount));
+      result.sort(
+        (a, b) =>
+          parseFloat(b.node.priceRange.minVariantPrice.amount) - parseFloat(a.node.priceRange.minVariantPrice.amount),
+      );
     } else if (sort === "name-asc") {
       result.sort((a, b) => a.node.title.localeCompare(b.node.title));
     } else if (sort === "name-desc") {
@@ -127,12 +153,8 @@ const Catalog = () => {
         {/* Page header */}
         <div className="bg-primary/5 border-b border-border">
           <div className="container mx-auto py-8 md:py-12">
-            <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">
-              Catálogo
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Encontre tudo que seu pet precisa
-            </p>
+            <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Catálogo</h1>
+            <p className="text-muted-foreground mt-2">Encontre tudo que seu pet precisa</p>
           </div>
         </div>
 
@@ -199,7 +221,12 @@ const Catalog = () => {
                   className="rounded-full"
                 />
               </div>
-              <Button variant="outline" size="icon" className="rounded-full shrink-0" onClick={() => setShowFilters(!showFilters)}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full shrink-0"
+                onClick={() => setShowFilters(!showFilters)}
+              >
                 <SlidersHorizontal className="h-4 w-4" />
               </Button>
               <Button size="sm" onClick={applyFilters} className="rounded-full shrink-0">
@@ -265,7 +292,8 @@ const Catalog = () => {
           {/* Results count */}
           {!loading && (
             <p className="text-sm text-muted-foreground mb-4">
-              {filteredProducts.length} produto{filteredProducts.length !== 1 ? "s" : ""} encontrado{filteredProducts.length !== 1 ? "s" : ""}
+              {filteredProducts.length} produto{filteredProducts.length !== 1 ? "s" : ""} encontrado
+              {filteredProducts.length !== 1 ? "s" : ""}
             </p>
           )}
 
@@ -278,9 +306,7 @@ const Catalog = () => {
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <PackageOpen className="h-16 w-16 text-muted-foreground mb-4" />
               <h3 className="font-display font-bold text-xl mb-2">Nenhum produto encontrado</h3>
-              <p className="text-muted-foreground max-w-md">
-                Tente ajustar os filtros ou buscar por outro termo.
-              </p>
+              <p className="text-muted-foreground max-w-md">Tente ajustar os filtros ou buscar por outro termo.</p>
               {hasActiveFilters && (
                 <Button variant="outline" className="mt-4" onClick={clearFilters}>
                   Limpar filtros
