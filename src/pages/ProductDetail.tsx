@@ -14,7 +14,9 @@ const ProductDetail = () => {
   const [loading, setLoading] = useState(true);
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
   const addItem = useCartStore((s) => s.addItem);
+  const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
+  const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
