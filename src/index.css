@@ -6,40 +6,40 @@
 
 @layer base {
   :root {
-    --background: 40 33% 98%;
-    --foreground: 220 25% 14%;
+    --background: 42 30% 97%;
+    --foreground: 218 50% 18%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 14%;
+    --card-foreground: 218 50% 18%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 14%;
+    --popover-foreground: 218 50% 18%;
 
-    --primary: 24 95% 53%;
+    --primary: 218 58% 27%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 199 89% 48%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 40 76% 60%;
+    --secondary-foreground: 218 50% 18%;
 
-    --muted: 40 20% 94%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 42 20% 93%;
+    --muted-foreground: 218 20% 46%;
 
-    --accent: 45 100% 51%;
-    --accent-foreground: 220 25% 14%;
+    --accent: 40 76% 60%;
+    --accent-foreground: 218 50% 18%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 90%;
-    --input: 220 13% 90%;
-    --ring: 24 95% 53%;
+    --border: 218 15% 88%;
+    --input: 218 15% 88%;
+    --ring: 218 58% 27%;
 
     --radius: 0.75rem;
 
     --pet-green: 152 69% 41%;
     --pet-green-foreground: 0 0% 100%;
-    --pet-orange-light: 35 100% 95%;
-    --pet-blue-light: 199 100% 95%;
+    --pet-navy-light: 218 40% 95%;
+    --pet-gold-light: 40 60% 94%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -74,7 +74,7 @@
   }
   .hover-lift:hover {
     transform: translateY(-4px);
-    box-shadow: 0 12px 24px -8px hsl(var(--primary) / 0.2);
+    box-shadow: 0 12px 24px -8px hsl(var(--primary) / 0.15);
   }
   .btn-bounce:active {
     transform: scale(0.96);

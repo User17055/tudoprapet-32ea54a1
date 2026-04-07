@@ -20,7 +20,7 @@ const testimonials = [
 
 export const Testimonials = () => {
   return (
-    <section className="py-12 md:py-16">
+    <section className="py-12 md:py-16 bg-pet-navy-light">
       <div className="container mx-auto">
         <h2 className="font-display font-800 text-2xl md:text-3xl text-center mb-8">
           O que nossos <span className="text-primary">clientes</span> dizem
@@ -31,13 +31,13 @@ export const Testimonials = () => {
               key={i}
               className="hover-lift bg-card border border-border rounded-2xl p-6 space-y-4"
             >
-              <Quote className="h-8 w-8 text-primary/30" />
+              <Quote className="h-8 w-8 text-secondary/50" />
               <p className="text-muted-foreground text-sm leading-relaxed">"{t.text}"</p>
               <div className="flex items-center justify-between">
                 <span className="font-display font-bold text-sm">{t.name}</span>
                 <div className="flex gap-0.5">
                   {Array.from({ length: t.stars }).map((_, j) => (
-                    <Star key={j} className="h-4 w-4 fill-accent text-accent" />
+                    <Star key={j} className="h-4 w-4 fill-secondary text-secondary" />
                   ))}
                 </div>
               </div>
