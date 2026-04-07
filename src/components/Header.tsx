@@ -18,6 +18,14 @@ export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { customer } = useShopifyAuth();
+  const navigate = useNavigate();
+
+  const handleSearch = () => {
+    if (search.trim()) {
+      navigate(`/catalogo?busca=${encodeURIComponent(search.trim())}`);
+      setSearch("");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-card shadow-sm border-b border-border">
