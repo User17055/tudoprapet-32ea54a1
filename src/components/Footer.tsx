@@ -1,4 +1,5 @@
-import { PawPrint, Instagram, Facebook, Mail } from "lucide-react";
+import { Instagram, Facebook, Mail } from "lucide-react";
+import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ export const Footer = () => {
       <div className="container mx-auto py-10 grid grid-cols-2 md:grid-cols-4 gap-8">
         <div className="col-span-2 md:col-span-1 space-y-3">
           <div className="flex items-center gap-2">
-            <PawPrint className="h-6 w-6 text-primary" />
+            <img src={logo} alt="TudoPraPet" className="h-7 w-auto" />
             <span className="font-display font-bold text-lg">TudoPraPet</span>
           </div>
           <p className="text-sm opacity-70">O melhor para o seu pet com o menor preço.</p>

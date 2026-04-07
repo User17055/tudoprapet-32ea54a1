@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Search, User, ShoppingCart, Menu, X, PawPrint } from "lucide-react";
+import { Search, User, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCartStore } from "@/stores/cartStore";
 import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
+import { useShopifyAuth } from "@/contexts/ShopifyAuthContext";
+import logo from "@/assets/logo.png";
 
 const navLinks = [
   { label: "Cachorros", href: "#" },
@@ -15,13 +16,14 @@ const navLinks = [
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const { customer } = useShopifyAuth();
 
   return (
     <header className="sticky top-0 z-50 bg-card shadow-sm border-b border-border">
       <div className="container mx-auto flex items-center justify-between gap-4 py-3">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <PawPrint className="h-8 w-8 text-primary" />
+          <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
           <span className="font-display font-900 text-xl md:text-2xl text-foreground">
             Tudo<span className="text-primary">Pra</span>Pet
           </span>
@@ -54,9 +56,11 @@ export const Header = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="hidden md:flex">
-            <User className="h-5 w-5" />
-          </Button>
+          <Link to={customer ? "/perfil" : "/login"}>
+            <Button variant="ghost" size="icon" className="hidden md:flex">
+              <User className="h-5 w-5" />
+            </Button>
+          </Link>
           <CartDrawer />
           <Button
             variant="ghost"
@@ -95,6 +99,12 @@ export const Header = () => {
               {link.label}
             </a>
           ))}
+          <Link
+            to={customer ? "/perfil" : "/login"}
+            className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+          >
+            {customer ? "Meu Perfil" : "Entrar"}
+          </Link>
         </nav>
       )}
     </header>
