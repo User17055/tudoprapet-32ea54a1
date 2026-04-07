@@ -7,10 +7,10 @@ import { useShopifyAuth } from "@/contexts/ShopifyAuthContext";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
-  { label: "Cachorros", href: "#" },
-  { label: "Gatos", href: "#" },
-  { label: "Outros Pets", href: "#" },
-  { label: "Promoções", href: "#" },
+  { label: "Catálogo", href: "/catalogo" },
+  { label: "Rações", href: "/catalogo?categoria=racoes" },
+  { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
+  { label: "Promoções", href: "/catalogo" },
 ];
 
 export const Header = () => {

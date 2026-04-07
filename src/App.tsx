@@ -21,6 +21,7 @@ const AppContent = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/catalogo" element={<Catalog />} />
         <Route path="/product/:handle" element={<ProductDetail />} />
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
