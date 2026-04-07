@@ -35,7 +35,7 @@ export const Footer = () => {
               className="flex-1 rounded-full px-5 py-3 text-foreground bg-background text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <Button type="submit" variant="secondary" className="rounded-full font-display font-bold btn-bounce">
-              Quero meu desconto
+              Inscrever-se
             </Button>
           </form>
         </div>
