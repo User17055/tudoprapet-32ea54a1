@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, User, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -17,6 +18,14 @@ export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { customer } = useShopifyAuth();
+  const navigate = useNavigate();
+
+  const handleSearch = () => {
+    if (search.trim()) {
+      navigate(`/catalogo?busca=${encodeURIComponent(search.trim())}`);
+      setSearch("");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-card shadow-sm border-b border-border">
@@ -35,10 +44,13 @@ export const Header = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="Buscar produtos..."
             className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
           />
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <button onClick={handleSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
+            <Search className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
 
         {/* Nav links - desktop */}
@@ -80,10 +92,13 @@ export const Header = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="Buscar produtos..."
             className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
           />
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <button onClick={handleSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
+            <Search className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       </div>
 
