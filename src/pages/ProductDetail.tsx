@@ -142,15 +142,26 @@ const ProductDetail = () => {
               </div>
             )}
 
-            <Button size="lg" className="w-full btn-bounce text-lg py-6 rounded-full" onClick={handleAdd} disabled={isLoading || !variant?.availableForSale}>
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <ShoppingCart className="h-5 w-5 mr-2" /> Adicionar ao Carrinho
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col gap-3">
+              <Button size="lg" className="w-full btn-bounce text-lg py-6 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90" onClick={handleBuyNow} disabled={isLoading || !variant?.availableForSale}>
+                {buyingNow ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <Zap className="h-5 w-5 mr-2" /> Comprar Agora
+                  </>
+                )}
+              </Button>
+              <Button size="lg" variant="outline" className="w-full text-lg py-6 rounded-full" onClick={handleAdd} disabled={isLoading || !variant?.availableForSale}>
+                {isLoading && !buyingNow ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <ShoppingCart className="h-5 w-5 mr-2" /> Adicionar ao Carrinho
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </main>
