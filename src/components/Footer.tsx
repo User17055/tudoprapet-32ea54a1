@@ -11,7 +11,7 @@ export const Footer = () => {
     e.preventDefault();
     if (email) {
       toast.success("Inscrito com sucesso! 🎉", {
-        description: "Você receberá seu cupom de 10% por e-mail.",
+        description: "Você receberá nossas ofertas exclusivas por e-mail.",
         position: "top-center",
       });
       setEmail("");
