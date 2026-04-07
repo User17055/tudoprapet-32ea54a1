@@ -23,7 +23,7 @@ export const Footer = () => {
       {/* Newsletter */}
       <div className="bg-primary text-primary-foreground py-10">
         <div className="container mx-auto text-center space-y-4">
-          <h3 className="font-display font-800 text-2xl">Ganhe 10% de desconto na primeira compra!</h3>
+          <h3 className="font-display font-800 text-2xl">Fique por dentro das novidades!</h3>
           <p className="text-sm opacity-90">Cadastre seu e-mail e receba ofertas exclusivas</p>
           <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
             <input
