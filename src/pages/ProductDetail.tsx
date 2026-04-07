@@ -5,7 +5,7 @@ import { useCartStore } from "@/stores/cartStore";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Loader2, ArrowLeft } from "lucide-react";
+import { ShoppingCart, Loader2, ArrowLeft, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 const ProductDetail = () => {
@@ -14,7 +14,9 @@ const ProductDetail = () => {
   const [loading, setLoading] = useState(true);
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
   const addItem = useCartStore((s) => s.addItem);
+  const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
+  const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -72,6 +74,24 @@ const ProductDetail = () => {
     toast.success("Adicionado ao carrinho!", { description: node.title, position: "top-center" });
   };
 
+  const handleBuyNow = async () => {
+    if (!variant) return;
+    setBuyingNow(true);
+    await addItem({
+      product,
+      variantId: variant.id,
+      variantTitle: variant.title,
+      price: variant.price,
+      quantity: 1,
+      selectedOptions: variant.selectedOptions || [],
+    });
+    const checkoutUrl = getCheckoutUrl();
+    if (checkoutUrl) {
+      window.open(checkoutUrl, '_blank');
+    }
+    setBuyingNow(false);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -122,15 +142,26 @@ const ProductDetail = () => {
               </div>
             )}
 
-            <Button size="lg" className="w-full btn-bounce text-lg py-6 rounded-full" onClick={handleAdd} disabled={isLoading || !variant?.availableForSale}>
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <ShoppingCart className="h-5 w-5 mr-2" /> Adicionar ao Carrinho
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col gap-3">
+              <Button size="lg" className="w-full btn-bounce text-lg py-6 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90" onClick={handleBuyNow} disabled={isLoading || !variant?.availableForSale}>
+                {buyingNow ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <Zap className="h-5 w-5 mr-2" /> Comprar Agora
+                  </>
+                )}
+              </Button>
+              <Button size="lg" variant="outline" className="w-full text-lg py-6 rounded-full" onClick={handleAdd} disabled={isLoading || !variant?.availableForSale}>
+                {isLoading && !buyingNow ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <ShoppingCart className="h-5 w-5 mr-2" /> Adicionar ao Carrinho
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </main>

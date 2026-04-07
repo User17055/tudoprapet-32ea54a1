@@ -1,9 +1,10 @@
 import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Loader2 } from "lucide-react";
+import { ShoppingCart, Loader2, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { useState } from "react";
 
 interface Props {
   product: ShopifyProduct;
@@ -11,12 +12,13 @@ interface Props {
 
 export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
+  const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
+  const [buyingNow, setBuyingNow] = useState(false);
   const { node } = product;
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
-  const currency = variant?.price?.currencyCode || "BRL";
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -34,6 +36,26 @@ export const ProductCard = ({ product }: Props) => {
       description: node.title,
       position: "top-center",
     });
+  };
+
+  const handleBuyNow = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!variant) return;
+    setBuyingNow(true);
+    await addItem({
+      product,
+      variantId: variant.id,
+      variantTitle: variant.title,
+      price: variant.price,
+      quantity: 1,
+      selectedOptions: variant.selectedOptions || [],
+    });
+    const checkoutUrl = getCheckoutUrl();
+    if (checkoutUrl) {
+      window.open(checkoutUrl, '_blank');
+    }
+    setBuyingNow(false);
   };
 
   return (
@@ -62,20 +84,35 @@ export const ProductCard = ({ product }: Props) => {
             R$ {price.toFixed(2)}
           </p>
         </div>
-        <Button
-          size="sm"
-          className="w-full btn-bounce mt-1"
-          onClick={handleAddToCart}
-          disabled={isLoading || !variant?.availableForSale}
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <>
-              <ShoppingCart className="h-4 w-4 mr-1" /> Adicionar
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2 mt-1">
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1"
+            onClick={handleAddToCart}
+            disabled={isLoading || !variant?.availableForSale}
+          >
+            {isLoading && !buyingNow ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ShoppingCart className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1 btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90"
+            onClick={handleBuyNow}
+            disabled={isLoading || !variant?.availableForSale}
+          >
+            {buyingNow ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Zap className="h-4 w-4 mr-1" /> Comprar
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </Link>
   );
