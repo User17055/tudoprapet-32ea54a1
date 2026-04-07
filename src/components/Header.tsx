@@ -7,10 +7,10 @@ import { useShopifyAuth } from "@/contexts/ShopifyAuthContext";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
-  { label: "Cachorros", href: "#" },
-  { label: "Gatos", href: "#" },
-  { label: "Outros Pets", href: "#" },
-  { label: "Promoções", href: "#" },
+  { label: "Catálogo", href: "/catalogo" },
+  { label: "Rações", href: "/catalogo?categoria=racoes" },
+  { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
+  { label: "Promoções", href: "/catalogo" },
 ];
 
 export const Header = () => {
@@ -44,13 +44,13 @@ export const Header = () => {
         {/* Nav links - desktop */}
         <nav className="hidden lg:flex items-center gap-6">
           {navLinks.map((link) => (
-            <a
+            <Link
               key={link.label}
-              href={link.href}
+              to={link.href}
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
@@ -91,13 +91,13 @@ export const Header = () => {
       {mobileOpen && (
         <nav className="lg:hidden border-t border-border px-4 py-4 flex flex-col gap-3 animate-fade-in-up">
           {navLinks.map((link) => (
-            <a
+            <Link
               key={link.label}
-              href={link.href}
+              to={link.href}
               className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
           <Link
             to={customer ? "/perfil" : "/login"}

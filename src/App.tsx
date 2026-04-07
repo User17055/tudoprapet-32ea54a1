@@ -10,6 +10,7 @@ import ProductDetail from "./pages/ProductDetail.tsx";
 import Login from "./pages/Login.tsx";
 import Register from "./pages/Register.tsx";
 import Profile from "./pages/Profile.tsx";
+import Catalog from "./pages/Catalog.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const AppContent = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/catalogo" element={<Catalog />} />
         <Route path="/product/:handle" element={<ProductDetail />} />
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
