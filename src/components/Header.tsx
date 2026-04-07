@@ -91,13 +91,13 @@ export const Header = () => {
       {mobileOpen && (
         <nav className="lg:hidden border-t border-border px-4 py-4 flex flex-col gap-3 animate-fade-in-up">
           {navLinks.map((link) => (
-            <a
+            <Link
               key={link.label}
-              href={link.href}
+              to={link.href}
               className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
           <Link
             to={customer ? "/perfil" : "/login"}
