@@ -1,4 +1,4 @@
-import heroImage from "@/assets/hero-pets.jpg";
+import heroImage from "@/assets/hero-pets.png";
 import { Button } from "@/components/ui/button";
 
 export const HeroSection = () => {
