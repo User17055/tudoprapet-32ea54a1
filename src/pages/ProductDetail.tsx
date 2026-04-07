@@ -74,6 +74,24 @@ const ProductDetail = () => {
     toast.success("Adicionado ao carrinho!", { description: node.title, position: "top-center" });
   };
 
+  const handleBuyNow = async () => {
+    if (!variant) return;
+    setBuyingNow(true);
+    await addItem({
+      product,
+      variantId: variant.id,
+      variantTitle: variant.title,
+      price: variant.price,
+      quantity: 1,
+      selectedOptions: variant.selectedOptions || [],
+    });
+    const checkoutUrl = getCheckoutUrl();
+    if (checkoutUrl) {
+      window.open(checkoutUrl, '_blank');
+    }
+    setBuyingNow(false);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
