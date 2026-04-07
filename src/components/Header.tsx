@@ -92,10 +92,13 @@ export const Header = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="Buscar produtos..."
             className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
           />
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <button onClick={handleSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
+            <Search className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       </div>
 
