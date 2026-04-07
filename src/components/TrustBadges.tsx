@@ -14,7 +14,7 @@ export const TrustBadges = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {badges.map((b, i) => (
             <div key={i} className="flex items-center gap-3 justify-center text-center md:text-left">
-              <b.icon className="h-6 w-6 shrink-0" />
+              <b.icon className="h-6 w-6 shrink-0 text-secondary" />
               <div>
                 <p className="font-display font-bold text-sm">{b.label}</p>
                 <p className="text-xs opacity-80">{b.desc}</p>

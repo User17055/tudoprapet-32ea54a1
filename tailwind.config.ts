@@ -55,8 +55,8 @@ export default {
           DEFAULT: "hsl(var(--pet-green))",
           foreground: "hsl(var(--pet-green-foreground))",
         },
-        "pet-orange-light": "hsl(var(--pet-orange-light))",
-        "pet-blue-light": "hsl(var(--pet-blue-light))",
+        "pet-navy-light": "hsl(var(--pet-navy-light))",
+        "pet-gold-light": "hsl(var(--pet-gold-light))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
