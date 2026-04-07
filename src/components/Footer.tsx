@@ -1,4 +1,5 @@
-import { PawPrint, Instagram, Facebook, Mail } from "lucide-react";
+import { Instagram, Facebook, Mail } from "lucide-react";
+import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
