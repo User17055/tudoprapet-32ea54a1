@@ -60,6 +60,8 @@ const ProductDetail = () => {
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
   const price = parseFloat(variant?.price?.amount || "0");
+  const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
+  const hasDiscount = compareAtPrice && compareAtPrice > price;
 
   const handleAdd = async () => {
     if (!variant) return;
