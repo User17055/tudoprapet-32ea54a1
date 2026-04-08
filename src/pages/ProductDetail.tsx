@@ -60,6 +60,8 @@ const ProductDetail = () => {
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
   const price = parseFloat(variant?.price?.amount || "0");
+  const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
+  const hasDiscount = compareAtPrice && compareAtPrice > price;
 
   const handleAdd = async () => {
     if (!variant) return;
@@ -119,7 +121,12 @@ const ProductDetail = () => {
           <div className="space-y-6">
             <h1 className="font-display font-900 text-3xl">{node.title}</h1>
             <p className="text-muted-foreground">{node.description}</p>
-            <p className="font-display font-900 text-3xl text-primary">R$ {price.toFixed(2)}</p>
+            <div className="flex items-center gap-3">
+              <p className="font-display font-900 text-3xl text-primary">R$ {price.toFixed(2)}</p>
+              {hasDiscount && (
+                <p className="text-xl text-muted-foreground line-through">R$ {compareAtPrice.toFixed(2)}</p>
+              )}
+            </div>
 
             {node.variants.edges.length > 1 && (
               <div className="space-y-2">

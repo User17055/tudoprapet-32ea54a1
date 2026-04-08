@@ -19,6 +19,8 @@ export const ProductCard = ({ product }: Props) => {
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
+  const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
+  const hasDiscount = compareAtPrice && compareAtPrice > price;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -79,10 +81,15 @@ export const ProductCard = ({ product }: Props) => {
       </div>
       <div className="p-4 flex flex-col flex-1 gap-2">
         <h3 className="font-display font-bold text-sm line-clamp-2">{node.title}</h3>
-        <div className="mt-auto">
+        <div className="mt-auto flex items-center gap-2">
           <p className="font-display font-900 text-lg text-primary">
             R$ {price.toFixed(2)}
           </p>
+          {hasDiscount && (
+            <p className="text-sm text-muted-foreground line-through">
+              R$ {compareAtPrice.toFixed(2)}
+            </p>
+          )}
         </div>
         <div className="flex gap-2 mt-1">
           <Button
