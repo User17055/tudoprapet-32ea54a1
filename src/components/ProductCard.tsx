@@ -19,6 +19,8 @@ export const ProductCard = ({ product }: Props) => {
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
+  const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
+  const hasDiscount = compareAtPrice && compareAtPrice > price;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
