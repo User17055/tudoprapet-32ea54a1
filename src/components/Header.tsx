@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, User, Menu, X } from "lucide-react";
+import { Search, User, Menu, X, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
@@ -11,7 +11,7 @@ const navLinks = [
   { label: "Catálogo", href: "/catalogo" },
   { label: "Rações", href: "/catalogo?categoria=racoes" },
   { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
-  { label: "Promoções", href: "/catalogo" },
+  { label: "Clube", href: "/clube", icon: true },
 ];
 
 export const Header = () => {
