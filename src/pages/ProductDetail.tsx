@@ -9,6 +9,7 @@ import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, Loader2, ArrowLeft, Zap, Crown } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
@@ -85,6 +86,24 @@ const ProductDetail = () => {
   const handleBuyNow = async () => {
     if (!variant) return;
     setBuyingNow(true);
+
+    if (isSubscribed && subscriberPrice !== null) {
+      try {
+        const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
+          body: { items: [{ variantId: variant.id, quantity: 1 }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          window.open(data.checkoutUrl, '_blank');
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Subscriber checkout failed:", err);
+        toast.error("Erro ao aplicar desconto do clube.");
+      }
+    }
+
     await addItem({
       product,
       variantId: variant.id,
@@ -93,9 +112,6 @@ const ProductDetail = () => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
-    if (isSubscribed) {
-      await applyDiscount("CLUBE2025");
-    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');
