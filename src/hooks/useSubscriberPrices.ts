@@ -13,15 +13,18 @@ async function fetchPrices(): Promise<SubscriberPrice[]> {
   if (cachedPrices) return cachedPrices;
   if (fetchPromise) return fetchPromise;
   
-  fetchPromise = supabase
-    .from('subscriber_prices')
-    .select('shopify_variant_id, subscriber_price')
-    .then(({ data, error }) => {
-      fetchPromise = null;
+  fetchPromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('subscriber_prices')
+        .select('shopify_variant_id, subscriber_price');
       if (error) throw error;
       cachedPrices = data || [];
       return cachedPrices;
-    });
+    } finally {
+      fetchPromise = null;
+    }
+  })();
   
   return fetchPromise;
 }
