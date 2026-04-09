@@ -17,11 +17,11 @@ async function fetchPrices(): Promise<SubscriberPrice[]> {
     .from('subscriber_prices')
     .select('shopify_variant_id, subscriber_price')
     .then(({ data, error }) => {
+      fetchPromise = null;
       if (error) throw error;
       cachedPrices = data || [];
       return cachedPrices;
-    })
-    .finally(() => { fetchPromise = null; });
+    });
   
   return fetchPromise;
 }
