@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useShopifyAuth } from '@/contexts/ShopifyAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 
@@ -9,19 +9,22 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useShopifyAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const result = await login(email, password);
-    setLoading(false);
-    if (result.success) {
-      toast.success('Login realizado com sucesso!');
-      navigate('/perfil');
-    } else {
-      toast.error(result.error || 'Email ou senha incorretos.');
+    try {
+      const result = await login(email, password);
+      if (result.success) {
+        toast.success('Login realizado com sucesso!');
+        navigate('/perfil');
+      } else {
+        toast.error(result.error || 'Email ou senha incorretos.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

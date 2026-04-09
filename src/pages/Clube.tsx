@@ -1,6 +1,6 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { useShopifyAuth } from "@/contexts/ShopifyAuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Crown, Check, Loader2, Star } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -15,14 +15,13 @@ const benefits = [
 ];
 
 const ClubePage = () => {
-  const { customer } = useShopifyAuth();
+  const { user } = useAuth();
   const { isSubscribed, loading } = useSubscription();
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        {/* Hero */}
         <section className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground py-16 md:py-24">
           <div className="container mx-auto px-4 text-center">
             <div className="inline-flex items-center gap-2 bg-secondary/20 rounded-full px-4 py-2 mb-6">
@@ -48,7 +47,7 @@ const ClubePage = () => {
                   Seu desconto é aplicado automaticamente ao finalizar a compra.
                 </p>
               </div>
-            ) : customer ? (
+            ) : user ? (
               <div className="space-y-4">
                 <p className="opacity-80 text-lg">
                   O Clube é exclusivo para membros convidados.
@@ -73,7 +72,6 @@ const ClubePage = () => {
           </div>
         </section>
 
-        {/* Benefits */}
         <section className="py-16 container mx-auto px-4">
           <h2 className="font-display font-900 text-3xl text-center mb-12">
             Vantagens do Clube

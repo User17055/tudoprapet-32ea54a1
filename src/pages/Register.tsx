@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useShopifyAuth } from '@/contexts/ShopifyAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import logo from '@/assets/logo.png';
 
@@ -11,23 +11,26 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { register } = useShopifyAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 5) {
-      toast.error('A senha deve ter pelo menos 5 caracteres.');
+    if (password.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres.');
       return;
     }
     setLoading(true);
-    const result = await register({ firstName, lastName, email, password });
-    setLoading(false);
-    if (result.success) {
-      toast.success('Conta criada com sucesso! 🎉');
-      navigate('/perfil');
-    } else {
-      toast.error(result.error || 'Erro ao criar conta.');
+    try {
+      const result = await register({ firstName, lastName, email, password });
+      if (result.success) {
+        toast.success('Conta criada com sucesso! 🎉');
+        navigate('/perfil');
+      } else {
+        toast.error(result.error || 'Erro ao criar conta.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -85,7 +88,7 @@ const Register = () => {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              placeholder="Mínimo 5 caracteres"
+              placeholder="Mínimo 6 caracteres"
               className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
             />
           </div>

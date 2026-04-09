@@ -4,7 +4,7 @@ import { Search, User, Menu, X, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
-import { useShopifyAuth } from "@/contexts/ShopifyAuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
@@ -17,7 +17,7 @@ const navLinks = [
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { customer } = useShopifyAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleSearch = () => {
@@ -30,7 +30,6 @@ export const Header = () => {
   return (
     <header className="sticky top-0 z-50 bg-card shadow-sm border-b border-border">
       <div className="container mx-auto flex items-center justify-between gap-4 py-3">
-        {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
           <span className="font-display font-900 text-xl md:text-2xl text-foreground">
@@ -38,7 +37,6 @@ export const Header = () => {
           </span>
         </Link>
 
-        {/* Search - hidden mobile */}
         <div className="hidden md:flex flex-1 max-w-lg relative">
           <input
             type="text"
@@ -53,7 +51,6 @@ export const Header = () => {
           </button>
         </div>
 
-        {/* Nav links - desktop */}
         <nav className="hidden lg:flex items-center gap-6">
           {navLinks.map((link) => (
             <Link
@@ -69,9 +66,8 @@ export const Header = () => {
           ))}
         </nav>
 
-        {/* Actions */}
         <div className="flex items-center gap-2">
-          <Link to={customer ? "/perfil" : "/login"}>
+          <Link to={user ? "/perfil" : "/login"}>
             <Button variant="ghost" size="icon" className="hidden md:flex">
               <User className="h-5 w-5" />
             </Button>
@@ -88,7 +84,6 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* Mobile search */}
       <div className="md:hidden px-4 pb-3">
         <div className="relative">
           <input
@@ -105,7 +100,6 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* Mobile nav */}
       {mobileOpen && (
         <nav className="lg:hidden border-t border-border px-4 py-4 flex flex-col gap-3 animate-fade-in-up">
           {navLinks.map((link) => (
@@ -121,10 +115,10 @@ export const Header = () => {
             </Link>
           ))}
           <Link
-            to={customer ? "/perfil" : "/login"}
+            to={user ? "/perfil" : "/login"}
             className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
           >
-            {customer ? "Meu Perfil" : "Entrar"}
+            {user ? "Meu Perfil" : "Entrar"}
           </Link>
         </nav>
       )}
