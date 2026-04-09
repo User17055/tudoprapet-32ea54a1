@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { useShopifyAuth } from '@/contexts/ShopifyAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 interface SubscriptionState {
@@ -14,21 +14,21 @@ interface SubscriptionContextType extends SubscriptionState {
 const SubscriptionContext = createContext<SubscriptionContextType | null>(null);
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
-  const { customer } = useShopifyAuth();
+  const { user } = useAuth();
   const [state, setState] = useState<SubscriptionState>({
     isSubscribed: false,
     loading: false,
   });
 
   const checkSubscription = useCallback(async () => {
-    if (!customer?.email) {
+    if (!user?.email) {
       setState({ isSubscribed: false, loading: false });
       return;
     }
     setState((s) => ({ ...s, loading: true }));
     try {
       const { data, error } = await supabase.functions.invoke('check-subscription', {
-        body: { email: customer.email },
+        body: { email: user.email },
       });
       if (error) throw error;
       setState({
@@ -38,15 +38,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     } catch {
       setState((s) => ({ ...s, loading: false }));
     }
-  }, [customer?.email]);
+  }, [user?.email]);
 
   useEffect(() => {
-    if (customer?.email) {
+    if (user?.email) {
       checkSubscription();
     } else {
       setState({ isSubscribed: false, loading: false });
     }
-  }, [customer?.email, checkSubscription]);
+  }, [user?.email, checkSubscription]);
 
   return (
     <SubscriptionContext.Provider value={{ ...state, checkSubscription }}>

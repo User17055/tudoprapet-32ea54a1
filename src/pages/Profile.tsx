@@ -1,12 +1,12 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useShopifyAuth } from '@/contexts/ShopifyAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { LogOut, User } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 const Profile = () => {
-  const { customer, loading, logout } = useShopifyAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
   if (loading) {
@@ -17,10 +17,13 @@ const Profile = () => {
     );
   }
 
-  if (!customer) {
+  if (!user) {
     navigate('/login');
     return null;
   }
+
+  const firstName = user.user_metadata?.first_name || '';
+  const lastName = user.user_metadata?.last_name || '';
 
   const handleLogout = async () => {
     await logout();
@@ -45,17 +48,11 @@ const Profile = () => {
             </div>
             <div>
               <p className="font-display font-bold text-lg text-foreground">
-                {customer.firstName} {customer.lastName}
+                {firstName} {lastName}
               </p>
-              <p className="text-sm text-muted-foreground">{customer.email}</p>
+              <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
           </div>
-
-          {customer.phone && (
-            <div className="text-sm text-muted-foreground">
-              📞 {customer.phone}
-            </div>
-          )}
 
           <Button onClick={handleLogout} variant="outline" className="w-full rounded-xl gap-2">
             <LogOut className="h-4 w-4" />

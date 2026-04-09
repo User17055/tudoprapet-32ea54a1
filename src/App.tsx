@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useCartSync } from "@/hooks/useCartSync";
-import { ShopifyAuthProvider } from "@/contexts/ShopifyAuthContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import Index from "./pages/Index.tsx";
 import ProductDetail from "./pages/ProductDetail.tsx";
@@ -40,11 +40,11 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <ShopifyAuthProvider>
+      <AuthProvider>
         <SubscriptionProvider>
           <AppContent />
         </SubscriptionProvider>
-      </ShopifyAuthProvider>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
