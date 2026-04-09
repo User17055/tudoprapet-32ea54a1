@@ -20,7 +20,7 @@ const ProductDetail = () => {
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
   const applyDiscount = useCartStore((s) => s.applyDiscount);
-  const { isSubscribed } = useSubscription();
+  const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const [buyingNow, setBuyingNow] = useState(false);
 
@@ -87,7 +87,7 @@ const ProductDetail = () => {
     if (!variant) return;
     setBuyingNow(true);
 
-    if (isSubscribed && subscriberPrice !== null) {
+    if (isSubscribed) {
       try {
         const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
           body: { items: [{ variantId: variant.id, quantity: 1 }] },
@@ -191,7 +191,7 @@ const ProductDetail = () => {
             )}
 
             <div className="flex flex-col gap-3">
-              <Button size="lg" className="w-full btn-bounce text-lg py-6 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90" onClick={handleBuyNow} disabled={isLoading || !variant?.availableForSale}>
+              <Button size="lg" className="w-full btn-bounce text-lg py-6 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90" onClick={handleBuyNow} disabled={isLoading || buyingNow || subscriptionLoading || !variant?.availableForSale}>
                 {buyingNow ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
