@@ -17,7 +17,7 @@ const ProductDetail = () => {
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
-  const { getSubscriberPrice, isSubscribed } = useSubscription();
+  const { isSubscribed } = useSubscription();
   const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ const ProductDetail = () => {
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
-  const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
+  
 
   const handleAdd = async () => {
     if (!variant) return;
@@ -132,17 +132,12 @@ const ProductDetail = () => {
                   <p className="text-xl text-muted-foreground line-through">R$ {compareAtPrice.toFixed(2)}</p>
                 )}
               </div>
-              {subscriberPrice !== null && (
+              {isSubscribed && (
                 <div className="flex items-center gap-2 bg-secondary/10 rounded-lg px-4 py-2">
                   <Crown className="h-5 w-5 text-secondary" />
                   <span className="font-display font-bold text-secondary">
-                    {isSubscribed ? "Seu preço:" : "Preço Clube:"} R$ {subscriberPrice.toFixed(2)}
+                    Membro do Clube — 50% OFF aplicado no checkout
                   </span>
-                  {!isSubscribed && (
-                    <Link to="/clube" className="ml-auto text-sm text-primary underline hover:no-underline">
-                      Assinar
-                    </Link>
-                  )}
                 </div>
               )}
             </div>
