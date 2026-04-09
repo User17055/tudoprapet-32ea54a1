@@ -141,12 +141,14 @@ const ProductDetail = () => {
                 R$ {price.toFixed(2)}
               </p>
               {subscriberPrice !== null && (
-                <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg px-4 py-2">
-                  <Crown className="h-5 w-5 text-blue-600" />
-                  <span className="font-display font-bold text-blue-600">
-                    R$ {subscriberPrice.toFixed(2)}
-                  </span>
-                  <span className="text-sm text-muted-foreground">para assinantes</span>
+                <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl px-5 py-3 border border-blue-200 dark:border-blue-800">
+                  <Crown className="h-6 w-6 text-blue-600 flex-shrink-0" />
+                  <div>
+                    <span className="font-display font-900 text-2xl text-blue-600">
+                      R$ {subscriberPrice.toFixed(2)}
+                    </span>
+                    <p className="text-sm text-blue-600/70 font-medium">Preço exclusivo do clube</p>
+                  </div>
                 </div>
               )}
             </div>

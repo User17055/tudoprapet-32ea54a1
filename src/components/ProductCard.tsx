@@ -102,13 +102,13 @@ export const ProductCard = ({ product }: Props) => {
             R$ {price.toFixed(2)}
           </p>
           {subscriberPrice !== null && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold text-blue-600">
+            <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-1.5">
+              <Crown className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <span className="text-base font-display font-bold text-blue-600">
                 R$ {subscriberPrice.toFixed(2)}
               </span>
-              <Crown className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-xs text-muted-foreground">
-                para assinantes
+              <span className="text-xs text-blue-600/70 font-medium">
+                no clube
               </span>
             </div>
           )}
