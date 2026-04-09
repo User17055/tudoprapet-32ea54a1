@@ -7,6 +7,7 @@ import { ShoppingCart, Loader2, Zap, Crown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   product: ShopifyProduct;
@@ -53,6 +54,26 @@ export const ProductCard = ({ product }: Props) => {
     e.stopPropagation();
     if (!variant) return;
     setBuyingNow(true);
+
+    if (isSubscribed && subscriberPrice !== null) {
+      // Use subscriber checkout edge function
+      try {
+        const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
+          body: { items: [{ variantId: variant.id, quantity: 1 }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          window.open(data.checkoutUrl, '_blank');
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Subscriber checkout failed:", err);
+        toast.error("Erro ao aplicar desconto do clube.");
+      }
+    }
+
+    // Fallback: regular checkout
     await addItem({
       product,
       variantId: variant.id,
@@ -61,9 +82,6 @@ export const ProductCard = ({ product }: Props) => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
-    if (isSubscribed) {
-      await applyDiscount("CLUBE2025");
-    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');

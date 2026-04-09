@@ -5,12 +5,12 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-
-const CLUBE_DISCOUNT_CODE = "CLUBE2025";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const CartDrawer = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, applyDiscount } = useCartStore();
+  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart } = useCartStore();
   const { isSubscribed } = useSubscription();
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
@@ -19,7 +19,26 @@ export const CartDrawer = () => {
 
   const handleCheckout = async () => {
     if (isSubscribed) {
-      await applyDiscount(CLUBE_DISCOUNT_CODE);
+      // Use subscriber checkout with draft order for exact pricing
+      try {
+        const lineItems = items.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+        }));
+        const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
+          body: { items: lineItems },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          window.open(data.checkoutUrl, '_blank');
+          clearCart();
+          setIsOpen(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Subscriber checkout failed:", err);
+        toast.error("Erro ao aplicar desconto do clube. Usando checkout normal.");
+      }
     }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
