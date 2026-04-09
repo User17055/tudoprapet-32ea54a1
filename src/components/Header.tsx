@@ -59,8 +59,11 @@ export const Header = () => {
             <Link
               key={link.label}
               to={link.href}
-              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+              className={`text-sm font-medium transition-colors flex items-center gap-1 ${
+                link.icon ? "text-secondary hover:text-secondary/80 font-bold" : "text-muted-foreground hover:text-primary"
+              }`}
             >
+              {link.icon && <Crown className="h-4 w-4" />}
               {link.label}
             </Link>
           ))}
