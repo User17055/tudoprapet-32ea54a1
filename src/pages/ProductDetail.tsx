@@ -9,6 +9,7 @@ import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, Loader2, ArrowLeft, Zap, Crown } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
@@ -85,6 +86,24 @@ const ProductDetail = () => {
   const handleBuyNow = async () => {
     if (!variant) return;
     setBuyingNow(true);
+
+    if (isSubscribed && subscriberPrice !== null) {
+      try {
+        const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
+          body: { items: [{ variantId: variant.id, quantity: 1 }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          window.open(data.checkoutUrl, '_blank');
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Subscriber checkout failed:", err);
+        toast.error("Erro ao aplicar desconto do clube.");
+      }
+    }
+
     await addItem({
       product,
       variantId: variant.id,
@@ -93,9 +112,6 @@ const ProductDetail = () => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
-    if (isSubscribed) {
-      await applyDiscount("CLUBE2025");
-    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');
@@ -141,12 +157,14 @@ const ProductDetail = () => {
                 R$ {price.toFixed(2)}
               </p>
               {subscriberPrice !== null && (
-                <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg px-4 py-2">
-                  <Crown className="h-5 w-5 text-blue-600" />
-                  <span className="font-display font-bold text-blue-600">
-                    R$ {subscriberPrice.toFixed(2)}
-                  </span>
-                  <span className="text-sm text-muted-foreground">para assinantes</span>
+                <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl px-5 py-3 border border-blue-200 dark:border-blue-800">
+                  <Crown className="h-6 w-6 text-blue-600 flex-shrink-0" />
+                  <div>
+                    <span className="font-display font-900 text-2xl text-blue-600">
+                      R$ {subscriberPrice.toFixed(2)}
+                    </span>
+                    <p className="text-sm text-blue-600/70 font-medium">Preço exclusivo do clube</p>
+                  </div>
                 </div>
               )}
             </div>

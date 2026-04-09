@@ -7,6 +7,7 @@ import { ShoppingCart, Loader2, Zap, Crown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   product: ShopifyProduct;
@@ -53,6 +54,26 @@ export const ProductCard = ({ product }: Props) => {
     e.stopPropagation();
     if (!variant) return;
     setBuyingNow(true);
+
+    if (isSubscribed && subscriberPrice !== null) {
+      // Use subscriber checkout edge function
+      try {
+        const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
+          body: { items: [{ variantId: variant.id, quantity: 1 }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          window.open(data.checkoutUrl, '_blank');
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Subscriber checkout failed:", err);
+        toast.error("Erro ao aplicar desconto do clube.");
+      }
+    }
+
+    // Fallback: regular checkout
     await addItem({
       product,
       variantId: variant.id,
@@ -61,9 +82,6 @@ export const ProductCard = ({ product }: Props) => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
-    if (isSubscribed) {
-      await applyDiscount("CLUBE2025");
-    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');
@@ -102,13 +120,13 @@ export const ProductCard = ({ product }: Props) => {
             R$ {price.toFixed(2)}
           </p>
           {subscriberPrice !== null && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold text-blue-600">
+            <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-1.5">
+              <Crown className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <span className="text-base font-display font-bold text-blue-600">
                 R$ {subscriberPrice.toFixed(2)}
               </span>
-              <Crown className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-xs text-muted-foreground">
-                para assinantes
+              <span className="text-xs text-blue-600/70 font-medium">
+                no clube
               </span>
             </div>
           )}
