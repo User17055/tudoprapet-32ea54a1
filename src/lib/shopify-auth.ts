@@ -59,25 +59,35 @@ export async function shopifyRegister(input: {
   email: string;
   password: string;
 }): Promise<{ success: boolean; error?: string }> {
-  const data = await storefrontApiRequest(CUSTOMER_CREATE_MUTATION, { input });
-  const errors = data?.data?.customerCreate?.customerUserErrors || [];
-  if (errors.length > 0) {
-    return { success: false, error: errors.map((e: { message: string }) => e.message).join(', ') };
+  try {
+    const data = await storefrontApiRequest(CUSTOMER_CREATE_MUTATION, { input });
+    const errors = data?.data?.customerCreate?.customerUserErrors || [];
+    if (errors.length > 0) {
+      return { success: false, error: errors.map((e: { message: string }) => e.message).join(', ') };
+    }
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao criar conta.';
+    return { success: false, error: message };
   }
-  return { success: true };
 }
 
 export async function shopifyLogin(email: string, password: string): Promise<{ token: string; expiresAt: string } | { error: string }> {
-  const data = await storefrontApiRequest(CUSTOMER_ACCESS_TOKEN_CREATE, {
-    input: { email, password },
-  });
-  const errors = data?.data?.customerAccessTokenCreate?.customerUserErrors || [];
-  if (errors.length > 0) {
-    return { error: errors.map((e: { message: string }) => e.message).join(', ') };
+  try {
+    const data = await storefrontApiRequest(CUSTOMER_ACCESS_TOKEN_CREATE, {
+      input: { email, password },
+    });
+    const errors = data?.data?.customerAccessTokenCreate?.customerUserErrors || [];
+    if (errors.length > 0) {
+      return { error: errors.map((e: { message: string }) => e.message).join(', ') };
+    }
+    const tokenData = data?.data?.customerAccessTokenCreate?.customerAccessToken;
+    if (!tokenData) return { error: 'Não foi possível fazer login.' };
+    return { token: tokenData.accessToken, expiresAt: tokenData.expiresAt };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao fazer login.';
+    return { error: message };
   }
-  const tokenData = data?.data?.customerAccessTokenCreate?.customerAccessToken;
-  if (!tokenData) return { error: 'Não foi possível fazer login.' };
-  return { token: tokenData.accessToken, expiresAt: tokenData.expiresAt };
 }
 
 export async function shopifyLogout(token: string): Promise<void> {
