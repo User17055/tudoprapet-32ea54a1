@@ -15,7 +15,8 @@ export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
-  const { getSubscriberPrice, isSubscribed } = useSubscription();
+  const applyDiscount = useCartStore((s) => s.applyDiscount);
+  const { isSubscribed } = useSubscription();
   const [buyingNow, setBuyingNow] = useState(false);
   const { node } = product;
   const variant = node.variants.edges[0]?.node;
@@ -23,7 +24,6 @@ export const ProductCard = ({ product }: Props) => {
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
-  const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -56,6 +56,9 @@ export const ProductCard = ({ product }: Props) => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
+    if (isSubscribed) {
+      await applyDiscount("CLUBE2025");
+    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');
@@ -95,11 +98,11 @@ export const ProductCard = ({ product }: Props) => {
               </p>
             )}
           </div>
-          {subscriberPrice !== null && (
+          {isSubscribed && (
             <div className="flex items-center gap-1.5">
               <Crown className="h-3.5 w-3.5 text-secondary" />
               <span className="text-sm font-bold text-secondary">
-                {isSubscribed ? "Seu preço:" : "Clube:"} R$ {subscriberPrice.toFixed(2)}
+                50% OFF no checkout
               </span>
             </div>
           )}

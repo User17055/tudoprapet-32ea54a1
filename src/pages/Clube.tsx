@@ -1,15 +1,13 @@
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { Button } from "@/components/ui/button";
 import { useShopifyAuth } from "@/contexts/ShopifyAuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { Crown, Check, Loader2, Settings, Star } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useEffect } from "react";
-import { toast } from "sonner";
+import { Crown, Check, Loader2, Star } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 const benefits = [
-  "Preços exclusivos em todos os produtos",
+  "Desconto de 50% em todos os produtos",
   "Acesso antecipado a lançamentos",
   "Frete grátis em pedidos acima de R$ 99",
   "Atendimento prioritário",
@@ -18,40 +16,7 @@ const benefits = [
 
 const ClubePage = () => {
   const { customer } = useShopifyAuth();
-  const { isSubscribed, subscriptionEnd, loading, createCheckout, openCustomerPortal, checkSubscription } = useSubscription();
-  const [searchParams] = useSearchParams();
-
-  useEffect(() => {
-    const status = searchParams.get("status");
-    if (status === "success") {
-      toast.success("Assinatura realizada com sucesso! 🎉", { position: "top-center" });
-      checkSubscription();
-    } else if (status === "canceled") {
-      toast.info("Assinatura cancelada.", { position: "top-center" });
-    }
-  }, [searchParams, checkSubscription]);
-
-  const handleSubscribe = async () => {
-    if (!customer) {
-      toast.error("Faça login para assinar o clube!", { position: "top-center" });
-      return;
-    }
-    const url = await createCheckout();
-    if (url) {
-      window.open(url, "_blank");
-    } else {
-      toast.error("Erro ao criar sessão de pagamento.", { position: "top-center" });
-    }
-  };
-
-  const handleManage = async () => {
-    const url = await openCustomerPortal();
-    if (url) {
-      window.open(url, "_blank");
-    } else {
-      toast.error("Erro ao abrir portal de gerenciamento.", { position: "top-center" });
-    }
-  };
+  const { isSubscribed, loading } = useSubscription();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -68,8 +33,7 @@ const ClubePage = () => {
               Clube TudoPraPet
             </h1>
             <p className="text-lg md:text-xl opacity-90 max-w-2xl mx-auto mb-8">
-              Assine por apenas <span className="font-bold text-secondary">R$ 29,90/mês</span> e tenha
-              acesso a preços exclusivos em toda a loja!
+              Membros do clube recebem <span className="font-bold text-secondary">50% de desconto</span> em todos os produtos, aplicado automaticamente no checkout!
             </p>
 
             {loading ? (
@@ -80,44 +44,30 @@ const ClubePage = () => {
                   <Star className="h-5 w-5 text-secondary" />
                   <span className="font-display font-bold">Você é membro do Clube! 🎉</span>
                 </div>
-                {subscriptionEnd && (
-                  <p className="text-sm opacity-80">
-                    Próxima renovação: {new Date(subscriptionEnd).toLocaleDateString("pt-BR")}
-                  </p>
-                )}
-                <div>
-                  <Button
-                    variant="outline"
-                    className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
-                    onClick={handleManage}
-                  >
-                    <Settings className="h-4 w-4 mr-2" /> Gerenciar Assinatura
-                  </Button>
-                </div>
+                <p className="text-sm opacity-80">
+                  Seu desconto é aplicado automaticamente ao finalizar a compra.
+                </p>
+              </div>
+            ) : customer ? (
+              <div className="space-y-4">
+                <p className="opacity-80 text-lg">
+                  O Clube é exclusivo para membros convidados.
+                </p>
+                <p className="opacity-60 text-sm">
+                  Se você acredita que deveria ser membro, entre em contato conosco.
+                </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {customer ? (
+              <div className="space-y-3">
+                <p className="opacity-80">Faça login para verificar seu status de membro</p>
+                <Link to="/login">
                   <Button
                     size="lg"
-                    className="btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 rounded-full"
-                    onClick={handleSubscribe}
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 rounded-full"
                   >
-                    <Crown className="h-5 w-5 mr-2" /> Assinar Agora — R$ 29,90/mês
+                    Fazer Login
                   </Button>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="opacity-80">Faça login para assinar o clube</p>
-                    <Link to="/login">
-                      <Button
-                        size="lg"
-                        className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 rounded-full"
-                      >
-                        Fazer Login
-                      </Button>
-                    </Link>
-                  </div>
-                )}
+                </Link>
               </div>
             )}
           </div>
