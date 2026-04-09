@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      club_members: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          name: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+        }
+        Relationships: []
+      }
       subscriber_prices: {
         Row: {
           created_at: string
