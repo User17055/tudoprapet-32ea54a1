@@ -1,7 +1,8 @@
 import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Loader2, Zap } from "lucide-react";
+import { ShoppingCart, Loader2, Zap, Crown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -14,6 +15,7 @@ export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
+  const { getSubscriberPrice, isSubscribed } = useSubscription();
   const [buyingNow, setBuyingNow] = useState(false);
   const { node } = product;
   const variant = node.variants.edges[0]?.node;
@@ -21,6 +23,7 @@ export const ProductCard = ({ product }: Props) => {
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
+  const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -81,14 +84,24 @@ export const ProductCard = ({ product }: Props) => {
       </div>
       <div className="p-4 flex flex-col flex-1 gap-2">
         <h3 className="font-display font-bold text-sm line-clamp-2">{node.title}</h3>
-        <div className="mt-auto flex items-center gap-2">
-          <p className="font-display font-900 text-lg text-primary">
-            R$ {price.toFixed(2)}
-          </p>
-          {hasDiscount && (
-            <p className="text-sm text-muted-foreground line-through">
-              R$ {compareAtPrice.toFixed(2)}
+        <div className="mt-auto space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="font-display font-900 text-lg text-primary">
+              R$ {price.toFixed(2)}
             </p>
+            {hasDiscount && (
+              <p className="text-sm text-muted-foreground line-through">
+                R$ {compareAtPrice.toFixed(2)}
+              </p>
+            )}
+          </div>
+          {subscriberPrice !== null && (
+            <div className="flex items-center gap-1.5">
+              <Crown className="h-3.5 w-3.5 text-secondary" />
+              <span className="text-sm font-bold text-secondary">
+                {isSubscribed ? "Seu preço:" : "Clube:"} R$ {subscriberPrice.toFixed(2)}
+              </span>
+            </div>
           )}
         </div>
         <div className="flex gap-2 mt-1">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, User, Menu, X } from "lucide-react";
+import { Search, User, Menu, X, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
@@ -11,7 +11,7 @@ const navLinks = [
   { label: "Catálogo", href: "/catalogo" },
   { label: "Rações", href: "/catalogo?categoria=racoes" },
   { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
-  { label: "Promoções", href: "/catalogo" },
+  { label: "Clube", href: "/clube", icon: true },
 ];
 
 export const Header = () => {
@@ -59,8 +59,11 @@ export const Header = () => {
             <Link
               key={link.label}
               to={link.href}
-              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+              className={`text-sm font-medium transition-colors flex items-center gap-1 ${
+                link.icon ? "text-secondary hover:text-secondary/80 font-bold" : "text-muted-foreground hover:text-primary"
+              }`}
             >
+              {link.icon && <Crown className="h-4 w-4" />}
               {link.label}
             </Link>
           ))}
@@ -109,8 +112,11 @@ export const Header = () => {
             <Link
               key={link.label}
               to={link.href}
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+              className={`text-sm font-medium transition-colors py-1 flex items-center gap-1 ${
+                link.icon ? "text-secondary font-bold" : "text-foreground hover:text-primary"
+              }`}
             >
+              {link.icon && <Crown className="h-4 w-4" />}
               {link.label}
             </Link>
           ))}

@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Loader2, ArrowLeft, Zap } from "lucide-react";
+import { ShoppingCart, Loader2, ArrowLeft, Zap, Crown } from "lucide-react";
 import { toast } from "sonner";
 
 const ProductDetail = () => {
@@ -16,6 +17,7 @@ const ProductDetail = () => {
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
+  const { getSubscriberPrice, isSubscribed } = useSubscription();
   const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
@@ -62,6 +64,7 @@ const ProductDetail = () => {
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
+  const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
 
   const handleAdd = async () => {
     if (!variant) return;
@@ -121,10 +124,26 @@ const ProductDetail = () => {
           <div className="space-y-6">
             <h1 className="font-display font-900 text-3xl">{node.title}</h1>
             <p className="text-muted-foreground">{node.description}</p>
-            <div className="flex items-center gap-3">
-              <p className="font-display font-900 text-3xl text-primary">R$ {price.toFixed(2)}</p>
-              {hasDiscount && (
-                <p className="text-xl text-muted-foreground line-through">R$ {compareAtPrice.toFixed(2)}</p>
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <p className="font-display font-900 text-3xl text-primary">R$ {price.toFixed(2)}</p>
+                {hasDiscount && (
+                  <p className="text-xl text-muted-foreground line-through">R$ {compareAtPrice.toFixed(2)}</p>
+                )}
+              </div>
+              {subscriberPrice !== null && (
+                <div className="flex items-center gap-2 bg-secondary/10 rounded-lg px-4 py-2">
+                  <Crown className="h-5 w-5 text-secondary" />
+                  <span className="font-display font-bold text-secondary">
+                    {isSubscribed ? "Seu preço:" : "Preço Clube:"} R$ {subscriberPrice.toFixed(2)}
+                  </span>
+                  {!isSubscribed && (
+                    <Link to="/clube" className="ml-auto text-sm text-primary underline hover:no-underline">
+                      Assinar
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
 
