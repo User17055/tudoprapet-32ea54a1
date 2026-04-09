@@ -8,6 +8,7 @@ import {
   updateShopifyCartLine,
   removeLineFromShopifyCart,
   syncShopifyCart,
+  applyDiscountToCart,
 } from '@/lib/shopify';
 
 export type { CartItem, ShopifyProduct };
@@ -24,6 +25,7 @@ interface CartStore {
   clearCart: () => void;
   syncCart: () => Promise<void>;
   getCheckoutUrl: () => string | null;
+  applyDiscount: (discountCode: string) => Promise<void>;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -114,6 +116,12 @@ export const useCartStore = create<CartStore>()(
 
       clearCart: () => set({ items: [], cartId: null, checkoutUrl: null }),
       getCheckoutUrl: () => get().checkoutUrl,
+
+      applyDiscount: async (discountCode: string) => {
+        const { cartId } = get();
+        if (!cartId) return;
+        await applyDiscountToCart(cartId, discountCode);
+      },
 
       syncCart: async () => {
         const { cartId, isSyncing, clearCart } = get();
