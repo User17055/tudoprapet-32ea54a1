@@ -18,7 +18,7 @@ export const ProductCard = ({ product }: Props) => {
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
   const applyDiscount = useCartStore((s) => s.applyDiscount);
-  const { isSubscribed } = useSubscription();
+  const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const [buyingNow, setBuyingNow] = useState(false);
   const { node } = product;
@@ -55,7 +55,7 @@ export const ProductCard = ({ product }: Props) => {
     if (!variant) return;
     setBuyingNow(true);
 
-    if (isSubscribed && subscriberPrice !== null) {
+    if (isSubscribed) {
       // Use subscriber checkout edge function
       try {
         const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
@@ -149,7 +149,7 @@ export const ProductCard = ({ product }: Props) => {
             size="sm"
             className="flex-1 btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90"
             onClick={handleBuyNow}
-            disabled={isLoading || !variant?.availableForSale}
+            disabled={isLoading || buyingNow || subscriptionLoading || !variant?.availableForSale}
           >
             {buyingNow ? (
               <Loader2 className="h-4 w-4 animate-spin" />
