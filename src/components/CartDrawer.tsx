@@ -11,7 +11,7 @@ import { toast } from "sonner";
 export const CartDrawer = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart } = useCartStore();
-  const { isSubscribed } = useSubscription();
+  const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
 
@@ -113,7 +113,7 @@ export const CartDrawer = () => {
                   <span className="text-lg font-display font-bold">Total</span>
                   <span className="text-xl font-bold text-primary">R$ {totalPrice.toFixed(2)}</span>
                 </div>
-                <Button onClick={handleCheckout} className="w-full btn-bounce" size="lg" disabled={items.length === 0 || isLoading || isSyncing}>
+                <Button onClick={handleCheckout} className="w-full btn-bounce" size="lg" disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading}>
                   {isLoading || isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ExternalLink className="w-4 h-4 mr-2" />Finalizar Compra</>}
                 </Button>
               </div>
