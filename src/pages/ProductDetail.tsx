@@ -17,6 +17,7 @@ const ProductDetail = () => {
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
+  const applyDiscount = useCartStore((s) => s.applyDiscount);
   const { isSubscribed } = useSubscription();
   const [buyingNow, setBuyingNow] = useState(false);
 
@@ -90,6 +91,9 @@ const ProductDetail = () => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
+    if (isSubscribed) {
+      await applyDiscount("CLUBE2025");
+    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');
