@@ -21,7 +21,12 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const shopifyToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN")!;
+    // Try multiple token sources
+    const shopifyToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN") 
+      || Deno.env.get("SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2")
+      || "";
+    
+    console.log("Token available:", !!shopifyToken, "Token length:", shopifyToken.length);
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
