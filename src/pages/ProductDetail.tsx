@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -19,10 +20,11 @@ const ProductDetail = () => {
   const isLoading = useCartStore((s) => s.isLoading);
   const applyDiscount = useCartStore((s) => s.applyDiscount);
   const { isSubscribed } = useSubscription();
+  const { getSubscriberPrice } = useSubscriberPrices();
   const [buyingNow, setBuyingNow] = useState(false);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchProduct = async () => {
       try {
         const data = await storefrontApiRequest(PRODUCT_BY_HANDLE_QUERY, { handle });
         const p = data?.data?.productByHandle;
@@ -33,7 +35,7 @@ const ProductDetail = () => {
         setLoading(false);
       }
     };
-    fetch();
+    fetchProduct();
   }, [handle]);
 
   if (loading) {
@@ -65,7 +67,7 @@ const ProductDetail = () => {
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
-  
+  const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
 
   const handleAdd = async () => {
     if (!variant) return;
@@ -130,18 +132,21 @@ const ProductDetail = () => {
             <p className="text-muted-foreground">{node.description}</p>
             
             <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <p className="font-display font-900 text-3xl text-primary">R$ {price.toFixed(2)}</p>
-                {hasDiscount && (
-                  <p className="text-xl text-muted-foreground line-through">R$ {compareAtPrice.toFixed(2)}</p>
-                )}
-              </div>
-              {isSubscribed && (
-                <div className="flex items-center gap-2 bg-secondary/10 rounded-lg px-4 py-2">
-                  <Crown className="h-5 w-5 text-secondary" />
-                  <span className="font-display font-bold text-secondary">
-                    Membro do Clube — 50% OFF aplicado no checkout
+              {hasDiscount && (
+                <p className="text-lg text-muted-foreground line-through">
+                  R$ {compareAtPrice.toFixed(2)}
+                </p>
+              )}
+              <p className="font-display font-900 text-3xl text-primary">
+                R$ {price.toFixed(2)}
+              </p>
+              {subscriberPrice !== null && (
+                <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg px-4 py-2">
+                  <Crown className="h-5 w-5 text-blue-600" />
+                  <span className="font-display font-bold text-blue-600">
+                    R$ {subscriberPrice.toFixed(2)}
                   </span>
+                  <span className="text-sm text-muted-foreground">para assinantes</span>
                 </div>
               )}
             </div>
