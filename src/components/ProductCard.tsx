@@ -155,10 +155,12 @@ export const ProductCard = ({ product }: Props) => {
               <span className="font-display font-bold text-sm sm:text-base text-primary">
                 R$ {subscriberPrice.toFixed(2)}
               </span>
-              <span className="text-[10px] sm:text-xs text-primary/70 font-medium">
-                para assinantes
-              </span>
             </div>
+          )}
+          {subscriberPrice !== null && (
+            <span className="text-[10px] sm:text-xs text-primary/70 font-medium">
+              para assinantes
+            </span>
           )}
         </div>
       </div>
