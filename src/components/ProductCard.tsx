@@ -139,29 +139,43 @@ export const ProductCard = ({ product }: Props) => {
           {node.title}
         </h3>
 
-        <div className="mt-auto pt-1 space-y-0.5">
+        <div className="mt-auto pt-1">
           {hasDiscount && (
-            <p className="text-[11px] sm:text-sm text-muted-foreground line-through">
+            <p className="font-display text-[11px] sm:text-sm text-muted-foreground line-through leading-tight">
               R$ {compareAtPrice.toFixed(2)}
             </p>
           )}
-          <p className="font-display font-extrabold text-base sm:text-lg text-foreground">
+          <p className="font-display font-extrabold text-base sm:text-lg text-foreground leading-tight">
             R$ {price.toFixed(2)}
           </p>
 
           {subscriberPrice !== null && (
-            <div className="flex items-center gap-1 pt-0.5">
-              <span className="font-display font-bold text-sm sm:text-base text-primary">
-                R$ {subscriberPrice.toFixed(2)}
+            <div className="mt-1">
+              <div className="flex items-center gap-1">
+                <span className="font-display font-extrabold text-sm sm:text-base text-sky-500 leading-tight">
+                  R$ {subscriberPrice.toFixed(2)}
+                </span>
+                <Crown className="h-3.5 w-3.5 text-sky-500 flex-shrink-0" />
+              </div>
+              <span className="font-display text-[10px] sm:text-xs text-sky-400 font-medium leading-tight">
+                para assinantes
               </span>
-              <Crown className="h-3.5 w-3.5 text-primary flex-shrink-0" />
             </div>
           )}
-          {subscriberPrice !== null && (
-            <span className="text-[10px] sm:text-xs text-primary/70 font-medium -mt-0.5">
-              para assinantes
-            </span>
-          )}
+
+          <button
+            onClick={handleBuyNow}
+            disabled={isLoading || buyingNow || subscriptionLoading || !variant?.availableForSale}
+            className="mt-2 w-full flex items-center justify-center gap-1 bg-accent text-accent-foreground font-display font-bold text-xs sm:text-sm py-1.5 sm:py-2 rounded-lg hover:bg-accent/90 active:scale-[0.97] transition-all disabled:opacity-50"
+          >
+            {buyingNow ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Zap className="h-3.5 w-3.5" /> Comprar Agora
+              </>
+            )}
+          </button>
         </div>
       </div>
     </Link>
