@@ -2,8 +2,7 @@ import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
-import { Button } from "@/components/ui/button";
-import { ShoppingCart, Loader2, Zap, Crown } from "lucide-react";
+import { ShoppingCart, Loader2, Zap, Crown, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -17,7 +16,6 @@ export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
-  const applyDiscount = useCartStore((s) => s.applyDiscount);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const [buyingNow, setBuyingNow] = useState(false);
@@ -25,10 +23,14 @@ export const ProductCard = ({ product }: Props) => {
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
-  const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
+  const compareAtPrice = variant?.compareAtPrice
+    ? parseFloat(variant.compareAtPrice.amount)
+    : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
+  const discountPercent = hasDiscount
+    ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
+    : 0;
 
-  // Per-product subscriber price
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
@@ -56,14 +58,16 @@ export const ProductCard = ({ product }: Props) => {
     setBuyingNow(true);
 
     if (isSubscribed) {
-      // Use subscriber checkout edge function
       try {
-        const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
-          body: { items: [{ variantId: variant.id, quantity: 1 }] },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "subscriber-checkout",
+          {
+            body: { items: [{ variantId: variant.id, quantity: 1 }] },
+          }
+        );
         if (error) throw error;
         if (data?.checkoutUrl) {
-          window.open(data.checkoutUrl, '_blank');
+          window.open(data.checkoutUrl, "_blank");
           setBuyingNow(false);
           return;
         }
@@ -73,7 +77,6 @@ export const ProductCard = ({ product }: Props) => {
       }
     }
 
-    // Fallback: regular checkout
     await addItem({
       product,
       variantId: variant.id,
@@ -84,7 +87,7 @@ export const ProductCard = ({ product }: Props) => {
     });
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
-      window.open(checkoutUrl, '_blank');
+      window.open(checkoutUrl, "_blank");
     }
     setBuyingNow(false);
   };
@@ -92,9 +95,17 @@ export const ProductCard = ({ product }: Props) => {
   return (
     <Link
       to={`/product/${node.handle}`}
-      className="group hover-lift rounded-2xl bg-card border border-border overflow-hidden flex flex-col"
+      className="group relative rounded-xl bg-card border border-border overflow-hidden flex flex-col transition-shadow hover:shadow-lg"
     >
-      <div className="aspect-square bg-muted overflow-hidden relative">
+      {/* Discount badge */}
+      {hasDiscount && discountPercent > 0 && (
+        <span className="absolute top-2 left-2 z-10 bg-accent text-accent-foreground text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md shadow-sm">
+          {discountPercent}% OFF
+        </span>
+      )}
+
+      {/* Image + Add to cart button */}
+      <div className="relative aspect-square bg-muted overflow-hidden">
         {image ? (
           <img
             src={image.url}
@@ -104,61 +115,51 @@ export const ProductCard = ({ product }: Props) => {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <ShoppingCart className="h-12 w-12" />
+            <ShoppingCart className="h-10 w-10" />
           </div>
         )}
+
+        {/* Floating add-to-cart button */}
+        <button
+          onClick={handleAddToCart}
+          disabled={isLoading || !variant?.availableForSale}
+          className="absolute bottom-2 right-2 z-10 bg-foreground text-background rounded-full w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform disabled:opacity-50"
+        >
+          {isLoading && !buyingNow ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-5 w-5" />
+          )}
+        </button>
       </div>
-      <div className="p-4 flex flex-col flex-1 gap-2">
-        <h3 className="font-display font-bold text-sm line-clamp-2">{node.title}</h3>
-        <div className="mt-auto space-y-1">
+
+      {/* Info */}
+      <div className="p-3 sm:p-4 flex flex-col flex-1 gap-1">
+        <h3 className="font-display font-bold text-xs sm:text-sm leading-tight line-clamp-2 min-h-[2.5em]">
+          {node.title}
+        </h3>
+
+        <div className="mt-auto pt-1 space-y-0.5">
           {hasDiscount && (
-            <p className="text-sm text-muted-foreground line-through">
+            <p className="text-[11px] sm:text-sm text-muted-foreground line-through">
               R$ {compareAtPrice.toFixed(2)}
             </p>
           )}
-          <p className="font-display font-900 text-lg text-primary">
+          <p className="font-display font-extrabold text-base sm:text-lg text-foreground">
             R$ {price.toFixed(2)}
           </p>
+
           {subscriberPrice !== null && (
-            <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-lg px-3 py-1.5">
-              <Crown className="h-4 w-4 text-blue-600 flex-shrink-0" />
-              <span className="text-base font-display font-bold text-blue-600">
+            <div className="flex items-center gap-1 pt-0.5">
+              <Crown className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+              <span className="font-display font-bold text-sm sm:text-base text-primary">
                 R$ {subscriberPrice.toFixed(2)}
               </span>
-              <span className="text-xs text-blue-600/70 font-medium">
-                no clube
+              <span className="text-[10px] sm:text-xs text-primary/70 font-medium">
+                para assinantes
               </span>
             </div>
           )}
-        </div>
-        <div className="flex gap-2 mt-1">
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex-1"
-            onClick={handleAddToCart}
-            disabled={isLoading || !variant?.availableForSale}
-          >
-            {isLoading && !buyingNow ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShoppingCart className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            className="flex-1 btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90"
-            onClick={handleBuyNow}
-            disabled={isLoading || buyingNow || subscriptionLoading || !variant?.availableForSale}
-          >
-            {buyingNow ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Zap className="h-4 w-4 mr-1" /> Comprar
-              </>
-            )}
-          </Button>
         </div>
       </div>
     </Link>
