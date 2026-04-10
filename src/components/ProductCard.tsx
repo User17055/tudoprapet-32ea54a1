@@ -151,14 +151,14 @@ export const ProductCard = ({ product }: Props) => {
 
           {subscriberPrice !== null && (
             <div className="flex items-center gap-1 pt-0.5">
-              <Crown className="h-3.5 w-3.5 text-primary flex-shrink-0" />
               <span className="font-display font-bold text-sm sm:text-base text-primary">
                 R$ {subscriberPrice.toFixed(2)}
               </span>
+              <Crown className="h-3.5 w-3.5 text-primary flex-shrink-0" />
             </div>
           )}
           {subscriberPrice !== null && (
-            <span className="text-[10px] sm:text-xs text-primary/70 font-medium">
+            <span className="text-[10px] sm:text-xs text-primary/70 font-medium -mt-0.5">
               para assinantes
             </span>
           )}
