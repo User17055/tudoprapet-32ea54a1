@@ -361,9 +361,15 @@ const ProductDetail = () => {
                   R$ {price.toFixed(2).replace(".", ",")}
                 </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                ou 2x de <span className="font-semibold text-foreground">R$ {installment}</span> sem juros
-              </p>
+              {subscriberPrice !== null && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <Crown className="h-4 w-4 text-sky-500" />
+                  <span className="font-display font-900 text-xl text-sky-500 tabular-nums">
+                    R$ {subscriberPrice.toFixed(2).replace(".", ",")}
+                  </span>
+                  <span className="text-xs text-sky-500/80 font-medium">para assinantes</span>
+                </div>
+              )}
             </div>
 
             {/* Variant selector */}
