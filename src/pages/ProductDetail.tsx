@@ -254,7 +254,7 @@ const ProductDetail = () => {
           <div>
             {/* Mobile: Carousel */}
             <div className="lg:hidden">
-              <div className="relative aspect-square bg-muted/40 rounded-2xl overflow-hidden border border-border">
+              <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-border">
                 {hasDiscount && (
                   <span className="absolute top-3 left-3 z-10 bg-accent text-accent-foreground text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm">
                     {discountPercent}% OFF
@@ -274,12 +274,12 @@ const ProductDetail = () => {
                   {images.map((img, i) => (
                     <div
                       key={i}
-                      className="flex-shrink-0 w-full h-full snap-center flex items-center justify-center"
+                      className="flex-shrink-0 w-full h-full snap-center"
                     >
                       <img
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-contain p-6"
+                        className="w-full h-full object-cover"
                       />
                     </div>
                   ))}
