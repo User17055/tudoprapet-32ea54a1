@@ -149,23 +149,30 @@ const ProductDetail = () => {
 
   const parseDescription = (raw: string): Block[] => {
     if (!raw) return [];
-    // Normalize: convert <br>, <li>, <p> tags into newlines, strip remaining HTML
+    // Normalize: convert block-level tags into newlines, strip remaining HTML
     let text = raw
+      .replace(/\r/g, "")
       .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-      .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, "\n")
-      .replace(/<\s*li[^>]*>/gi, "\n• ")
+      .replace(/<\s*\/\s*(p|div|li|h[1-6]|ul|ol)\s*>/gi, "\n")
+      .replace(/<\s*li[^>]*>/gi, "\n- ")
+      .replace(/<\s*p[^>]*>/gi, "\n")
       .replace(/<[^>]+>/g, "")
       .replace(/&nbsp;/gi, " ")
       .replace(/&amp;/gi, "&")
       .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">");
+      .replace(/&gt;/gi, ">")
+      .replace(/&#39;/gi, "'")
+      .replace(/&quot;/gi, '"');
 
-    // Split bullets that came glued in a single line: " - ", " • ", " * "
-    text = text.replace(/\s+([-•*])\s+/g, "\n$1 ");
+    // If everything came in a single line, try to split on bullet markers
+    if (!/\n/.test(text)) {
+      text = text.replace(/\s+(?=[-•*]\s)/g, "\n");
+    }
 
     const lines = text
       .split(/\n+/)
-      .map((l) => l.trim())
+      .map((l) => l.replace(/\s+/g, " ").trim())
+      .map((l) => l.replace(/[;\s]+$/, "")) // remove trailing ; and spaces
       .filter(Boolean);
 
     const blocks: Block[] = [];
@@ -179,10 +186,13 @@ const ProductDetail = () => {
     };
 
     for (const line of lines) {
-      const bulletMatch = /^[-*•]\s+(.+)/.exec(line) || /^\d+[.)]\s+(.+)/.exec(line);
+      const bulletMatch = /^[-–—*•]\s*(.+)/.exec(line) || /^\d+[.)]\s+(.+)/.exec(line);
       if (bulletMatch) {
-        if (!currentList) currentList = [];
-        currentList.push(bulletMatch[1].trim());
+        const item = bulletMatch[1].trim();
+        if (item) {
+          if (!currentList) currentList = [];
+          currentList.push(item);
+        }
         continue;
       }
       flushList();
@@ -191,7 +201,6 @@ const ProductDetail = () => {
         blocks.push({ type: "heading", text: line.replace(/[:：]$/, "").trim() });
         continue;
       }
-      // Long paragraph: split into sentences for readability if very long
       blocks.push({ type: "paragraph", text: line });
     }
     flushList();
