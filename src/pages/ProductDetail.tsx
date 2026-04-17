@@ -141,11 +141,64 @@ const ProductDetail = () => {
     setBuyingNow(false);
   };
 
-  // Format description: split into paragraphs, detect bullet-like lines
-  const descriptionParagraphs = (node.description || "")
-    .split(/\n+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // Parse description into structured blocks (headings, bullet lists, paragraphs)
+  type Block =
+    | { type: "heading"; text: string }
+    | { type: "list"; items: string[] }
+    | { type: "paragraph"; text: string };
+
+  const parseDescription = (raw: string): Block[] => {
+    if (!raw) return [];
+    // Normalize: convert <br>, <li>, <p> tags into newlines, strip remaining HTML
+    let text = raw
+      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, "\n")
+      .replace(/<\s*li[^>]*>/gi, "\n• ")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">");
+
+    // Split bullets that came glued in a single line: " - ", " • ", " * "
+    text = text.replace(/\s+([-•*])\s+/g, "\n$1 ");
+
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const blocks: Block[] = [];
+    let currentList: string[] | null = null;
+
+    const flushList = () => {
+      if (currentList && currentList.length) {
+        blocks.push({ type: "list", items: currentList });
+      }
+      currentList = null;
+    };
+
+    for (const line of lines) {
+      const bulletMatch = /^[-*•]\s+(.+)/.exec(line) || /^\d+[.)]\s+(.+)/.exec(line);
+      if (bulletMatch) {
+        if (!currentList) currentList = [];
+        currentList.push(bulletMatch[1].trim());
+        continue;
+      }
+      flushList();
+      // Heading: ends with ":" and is short
+      if (/[:：]$/.test(line) && line.length <= 80) {
+        blocks.push({ type: "heading", text: line.replace(/[:：]$/, "").trim() });
+        continue;
+      }
+      // Long paragraph: split into sentences for readability if very long
+      blocks.push({ type: "paragraph", text: line });
+    }
+    flushList();
+    return blocks;
+  };
+
+  const descriptionBlocks = parseDescription(node.description || "");
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
