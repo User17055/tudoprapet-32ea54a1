@@ -51,6 +51,21 @@ const ProductDetail = () => {
       }
     };
     fetchProduct();
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [handle]);
+
+  useEffect(() => {
+    const fetchRecommended = async () => {
+      try {
+        const data = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
+        const edges: ShopifyProduct[] = data?.data?.products?.edges || [];
+        const filtered = edges.filter((p) => p.node.handle !== handle).slice(0, 8);
+        setRecommended(filtered);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchRecommended();
   }, [handle]);
 
   if (loading) {
