@@ -105,7 +105,7 @@ export const ProductCard = ({ product }: Props) => {
       )}
 
       {/* Image + Add to cart button */}
-      <div className="relative aspect-[4/5] sm:aspect-square bg-muted overflow-hidden">
+      <div className="relative aspect-square bg-muted overflow-hidden">
         {image ? (
           <img
             src={image.url}
