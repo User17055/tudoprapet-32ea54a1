@@ -141,11 +141,64 @@ const ProductDetail = () => {
     setBuyingNow(false);
   };
 
-  // Format description: split into paragraphs, detect bullet-like lines
-  const descriptionParagraphs = (node.description || "")
-    .split(/\n+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // Parse description into structured blocks (headings, bullet lists, paragraphs)
+  type Block =
+    | { type: "heading"; text: string }
+    | { type: "list"; items: string[] }
+    | { type: "paragraph"; text: string };
+
+  const parseDescription = (raw: string): Block[] => {
+    if (!raw) return [];
+    // Normalize: convert <br>, <li>, <p> tags into newlines, strip remaining HTML
+    let text = raw
+      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, "\n")
+      .replace(/<\s*li[^>]*>/gi, "\n• ")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">");
+
+    // Split bullets that came glued in a single line: " - ", " • ", " * "
+    text = text.replace(/\s+([-•*])\s+/g, "\n$1 ");
+
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const blocks: Block[] = [];
+    let currentList: string[] | null = null;
+
+    const flushList = () => {
+      if (currentList && currentList.length) {
+        blocks.push({ type: "list", items: currentList });
+      }
+      currentList = null;
+    };
+
+    for (const line of lines) {
+      const bulletMatch = /^[-*•]\s+(.+)/.exec(line) || /^\d+[.)]\s+(.+)/.exec(line);
+      if (bulletMatch) {
+        if (!currentList) currentList = [];
+        currentList.push(bulletMatch[1].trim());
+        continue;
+      }
+      flushList();
+      // Heading: ends with ":" and is short
+      if (/[:：]$/.test(line) && line.length <= 80) {
+        blocks.push({ type: "heading", text: line.replace(/[:：]$/, "").trim() });
+        continue;
+      }
+      // Long paragraph: split into sentences for readability if very long
+      blocks.push({ type: "paragraph", text: line });
+    }
+    flushList();
+    return blocks;
+  };
+
+  const descriptionBlocks = parseDescription(node.description || "");
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -359,19 +412,27 @@ const ProductDetail = () => {
               </h2>
             </div>
 
-            {descriptionParagraphs.length > 0 ? (
-              <div className="prose prose-neutral dark:prose-invert max-w-none">
-                {descriptionParagraphs.map((para, idx) => {
-                  // Detect bullet-style lines starting with -, *, • or numbered
-                  if (/^[-*•]\s+/.test(para) || /^\d+[.)]\s+/.test(para)) {
-                    const items = para
-                      .split(/\n/)
-                      .map((l) => l.replace(/^[-*•]\s+|^\d+[.)]\s+/, "").trim())
-                      .filter(Boolean);
+            {descriptionBlocks.length > 0 ? (
+              <div className="space-y-5">
+                {descriptionBlocks.map((block, idx) => {
+                  if (block.type === "heading") {
                     return (
-                      <ul key={idx} className="space-y-2 my-4 list-none pl-0">
-                        {items.map((item, i) => (
-                          <li key={i} className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed">
+                      <h3
+                        key={idx}
+                        className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0"
+                      >
+                        {block.text}
+                      </h3>
+                    );
+                  }
+                  if (block.type === "list") {
+                    return (
+                      <ul key={idx} className="space-y-2.5">
+                        {block.items.map((item, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed"
+                          >
                             <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                             <span>{item}</span>
                           </li>
@@ -382,11 +443,9 @@ const ProductDetail = () => {
                   return (
                     <p
                       key={idx}
-                      className={`text-base leading-relaxed text-foreground/80 ${
-                        idx === 0 ? "text-lg font-medium text-foreground" : ""
-                      } mb-4`}
+                      className="text-base leading-relaxed text-foreground/80"
                     >
-                      {para}
+                      {block.text}
                     </p>
                   );
                 })}
