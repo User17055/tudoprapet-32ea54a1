@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCTS_QUERY, ShopifyProduct } from "@/lib/shopify";
+import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -56,17 +56,29 @@ const ProductDetail = () => {
 
   useEffect(() => {
     const fetchRecommended = async () => {
+      if (!product?.node?.id) return;
       try {
-        const data = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
-        const edges: ShopifyProduct[] = data?.data?.products?.edges || [];
-        const filtered = edges.filter((p) => p.node.handle !== handle).slice(0, 8);
-        setRecommended(filtered);
+        const data = await storefrontApiRequest(PRODUCT_RECOMMENDATIONS_QUERY, {
+          productId: product.node.id,
+        });
+        const recs = data?.data?.productRecommendations || [];
+        let mapped: ShopifyProduct[] = recs
+          .filter((p: { handle: string }) => p.handle !== handle)
+          .map((node: ShopifyProduct["node"]) => ({ node }));
+
+        // Fallback: if Shopify didn't return recommendations, show recent products
+        if (mapped.length === 0) {
+          const fb = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
+          const edges: ShopifyProduct[] = fb?.data?.products?.edges || [];
+          mapped = edges.filter((p) => p.node.handle !== handle);
+        }
+        setRecommended(mapped.slice(0, 8));
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load recommendations:", err);
       }
     };
     fetchRecommended();
-  }, [handle]);
+  }, [handle, product?.node?.id]);
 
   if (loading) {
     return (

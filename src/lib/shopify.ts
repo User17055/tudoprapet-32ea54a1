@@ -135,6 +135,36 @@ export const PRODUCTS_QUERY = `
   }
 `;
 
+export const PRODUCT_RECOMMENDATIONS_QUERY = `
+  query GetRecommendations($productId: ID!) {
+    productRecommendations(productId: $productId, intent: RELATED) {
+      id
+      title
+      description
+      handle
+      priceRange {
+        minVariantPrice { amount currencyCode }
+      }
+      images(first: 3) {
+        edges { node { url altText } }
+      }
+      variants(first: 5) {
+        edges {
+          node {
+            id
+            title
+            price { amount currencyCode }
+            compareAtPrice { amount currencyCode }
+            availableForSale
+            selectedOptions { name value }
+          }
+        }
+      }
+      options { name values }
+    }
+  }
+`;
+
 export const PRODUCT_BY_HANDLE_QUERY = `
   query GetProductByHandle($handle: String!) {
     productByHandle(handle: $handle) {
