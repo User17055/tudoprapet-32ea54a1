@@ -445,23 +445,12 @@ const ProductDetail = () => {
                   Assine pra não faltar
                 </h3>
               </div>
-              {subscriberPrice !== null ? (
-                <>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-muted-foreground">Preço do clube:</span>
-                    <span className="font-display font-900 text-2xl text-sky-500">
-                      R$ {subscriberPrice.toFixed(2).replace(".", ",")}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Receba na frequência que seu pet precisa, sem custo de envio. Cancele quando quiser.
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Receba os produtos na frequência que seu pet precisa e sem custos. Cancele quando quiser.
-                </p>
-              )}
+              <p className="text-sm font-semibold text-foreground leading-snug">
+                Assine para benefícios exclusivos
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Receba na frequência que seu pet precisa, sem custo de envio, com descontos especiais e prioridade no atendimento. Cancele quando quiser.
+              </p>
               <Link
                 to="/clube"
                 className="inline-flex items-center gap-1 text-sm font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400"
