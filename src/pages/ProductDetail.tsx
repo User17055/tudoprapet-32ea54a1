@@ -164,10 +164,10 @@ const ProductDetail = () => {
       .replace(/&#39;/gi, "'")
       .replace(/&quot;/gi, '"');
 
-    // If everything came in a single line, try to split on bullet markers
-    if (!/\n/.test(text)) {
-      text = text.replace(/\s+(?=[-•*]\s)/g, "\n");
-    }
+    // Split on inline bullet separators like ";-" used by some Shopify imports
+    text = text.replace(/\s*;\s*(?=[-–—*•]\s)/g, "\n");
+    // Also split when a new bullet starts mid-line
+    text = text.replace(/\s+(?=[-–—*•]\s)/g, "\n");
 
     const lines = text
       .split(/\n+/)
