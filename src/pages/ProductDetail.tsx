@@ -205,11 +205,6 @@ const ProductDetail = () => {
           {/* Buy Box */}
           <div className="space-y-5">
             <div>
-              {node.vendor && (
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                  {node.vendor}
-                </p>
-              )}
               <h1 className="font-display font-900 text-2xl lg:text-3xl leading-tight">
                 {node.title}
               </h1>
