@@ -412,19 +412,27 @@ const ProductDetail = () => {
               </h2>
             </div>
 
-            {descriptionParagraphs.length > 0 ? (
-              <div className="prose prose-neutral dark:prose-invert max-w-none">
-                {descriptionParagraphs.map((para, idx) => {
-                  // Detect bullet-style lines starting with -, *, • or numbered
-                  if (/^[-*•]\s+/.test(para) || /^\d+[.)]\s+/.test(para)) {
-                    const items = para
-                      .split(/\n/)
-                      .map((l) => l.replace(/^[-*•]\s+|^\d+[.)]\s+/, "").trim())
-                      .filter(Boolean);
+            {descriptionBlocks.length > 0 ? (
+              <div className="space-y-5">
+                {descriptionBlocks.map((block, idx) => {
+                  if (block.type === "heading") {
                     return (
-                      <ul key={idx} className="space-y-2 my-4 list-none pl-0">
-                        {items.map((item, i) => (
-                          <li key={i} className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed">
+                      <h3
+                        key={idx}
+                        className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0"
+                      >
+                        {block.text}
+                      </h3>
+                    );
+                  }
+                  if (block.type === "list") {
+                    return (
+                      <ul key={idx} className="space-y-2.5">
+                        {block.items.map((item, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed"
+                          >
                             <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                             <span>{item}</span>
                           </li>
@@ -435,11 +443,9 @@ const ProductDetail = () => {
                   return (
                     <p
                       key={idx}
-                      className={`text-base leading-relaxed text-foreground/80 ${
-                        idx === 0 ? "text-lg font-medium text-foreground" : ""
-                      } mb-4`}
+                      className="text-base leading-relaxed text-foreground/80"
                     >
-                      {para}
+                      {block.text}
                     </p>
                   );
                 })}
