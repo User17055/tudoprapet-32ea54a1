@@ -251,45 +251,93 @@ const ProductDetail = () => {
 
         <div className="grid lg:grid-cols-[1fr_420px] gap-8 lg:gap-12">
           {/* Gallery */}
-          <div className="grid grid-cols-[80px_1fr] gap-3 lg:gap-4">
-            {/* Thumbnails */}
-            <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto">
-              {images.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedImageIdx(i)}
-                  className={`aspect-square w-20 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
-                    i === selectedImageIdx
-                      ? "border-primary shadow-md"
-                      : "border-border hover:border-primary/50"
-                  }`}
+          <div>
+            {/* Mobile: Carousel */}
+            <div className="lg:hidden">
+              <div className="relative aspect-square bg-muted/40 rounded-2xl overflow-hidden border border-border">
+                {hasDiscount && (
+                  <span className="absolute top-3 left-3 z-10 bg-accent text-accent-foreground text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm">
+                    {discountPercent}% OFF
+                  </span>
+                )}
+                <span className="absolute top-3 right-3 z-10 bg-background/90 backdrop-blur text-[10px] font-medium px-2 py-1 rounded-md border border-border">
+                  Imagens ilustrativas
+                </span>
+                <div
+                  className="flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    const idx = Math.round(el.scrollLeft / el.clientWidth);
+                    if (idx !== selectedImageIdx) setSelectedImageIdx(idx);
+                  }}
                 >
-                  <img
-                    src={img.node.url}
-                    alt={img.node.altText || `${node.title} ${i + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+                  {images.map((img, i) => (
+                    <div
+                      key={i}
+                      className="flex-shrink-0 w-full h-full snap-center flex items-center justify-center"
+                    >
+                      <img
+                        src={img.node.url}
+                        alt={img.node.altText || `${node.title} ${i + 1}`}
+                        className="w-full h-full object-contain p-6"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Dots */}
+              {images.length > 1 && (
+                <div className="flex justify-center gap-1.5 mt-3">
+                  {images.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`h-1.5 rounded-full transition-all ${
+                        i === selectedImageIdx ? "w-6 bg-primary" : "w-1.5 bg-border"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Main image */}
-            <div className="relative aspect-square bg-muted/40 rounded-2xl overflow-hidden border border-border">
-              {hasDiscount && (
-                <span className="absolute top-4 left-4 z-10 bg-accent text-accent-foreground text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
-                  {discountPercent}% OFF
+            {/* Desktop: Thumbnails + main */}
+            <div className="hidden lg:grid grid-cols-[80px_1fr] gap-4">
+              <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto">
+                {images.map((img, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setSelectedImageIdx(i)}
+                    className={`aspect-square w-20 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
+                      i === selectedImageIdx
+                        ? "border-primary shadow-md"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <img
+                      src={img.node.url}
+                      alt={img.node.altText || `${node.title} ${i + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+              <div className="relative aspect-square bg-muted/40 rounded-2xl overflow-hidden border border-border">
+                {hasDiscount && (
+                  <span className="absolute top-4 left-4 z-10 bg-accent text-accent-foreground text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
+                    {discountPercent}% OFF
+                  </span>
+                )}
+                <span className="absolute top-4 right-4 z-10 bg-background/90 backdrop-blur text-xs font-medium px-3 py-1.5 rounded-lg border border-border">
+                  Imagens ilustrativas
                 </span>
-              )}
-              <span className="absolute top-4 right-4 z-10 bg-background/90 backdrop-blur text-xs font-medium px-3 py-1.5 rounded-lg border border-border">
-                Imagens ilustrativas
-              </span>
-              {mainImage && (
-                <img
-                  src={mainImage.url}
-                  alt={mainImage.altText || node.title}
-                  className="w-full h-full object-contain p-6"
-                />
-              )}
+                {mainImage && (
+                  <img
+                    src={mainImage.url}
+                    alt={mainImage.altText || node.title}
+                    className="w-full h-full object-contain p-6"
+                  />
+                )}
+              </div>
             </div>
           </div>
 
