@@ -105,7 +105,7 @@ export const ProductCard = ({ product }: Props) => {
       )}
 
       {/* Image + Add to cart button */}
-      <div className="relative aspect-square bg-muted overflow-hidden">
+      <div className="relative aspect-[4/5] sm:aspect-square bg-muted overflow-hidden">
         {image ? (
           <img
             src={image.url}
@@ -134,30 +134,30 @@ export const ProductCard = ({ product }: Props) => {
       </div>
 
       {/* Info */}
-      <div className="p-3 sm:p-4 flex flex-col flex-1 gap-1">
-        <h3 className="font-display font-bold text-xs sm:text-sm leading-tight line-clamp-2 min-h-[2.5em]">
+      <div className="p-3 sm:p-4 flex flex-col flex-1 gap-1.5">
+        <h3 className="font-display font-bold text-xs sm:text-sm leading-tight line-clamp-2 min-h-[2.5em] tracking-tight">
           {node.title}
         </h3>
 
         <div className="mt-auto pt-1">
           {hasDiscount && (
-            <p className="font-display text-[11px] sm:text-sm text-muted-foreground line-through leading-tight">
+            <p className="font-sans text-[11px] sm:text-sm text-muted-foreground line-through leading-tight tabular-nums">
               R$ {compareAtPrice.toFixed(2)}
             </p>
           )}
-          <p className="font-display font-extrabold text-base sm:text-lg text-foreground leading-tight">
+          <p className="font-sans font-bold text-lg sm:text-xl text-foreground leading-none tabular-nums tracking-tight">
             R$ {price.toFixed(2)}
           </p>
 
           {subscriberPrice !== null && (
-            <div className="mt-1">
+            <div className="mt-1.5">
               <div className="flex items-center gap-1">
-                <span className="font-display font-extrabold text-sm sm:text-base text-sky-500 leading-tight">
+                <span className="font-sans font-bold text-base sm:text-lg text-sky-500 leading-none tabular-nums tracking-tight">
                   R$ {subscriberPrice.toFixed(2)}
                 </span>
                 <Crown className="h-3.5 w-3.5 text-sky-500 flex-shrink-0" />
               </div>
-              <span className="font-display text-[10px] sm:text-xs text-sky-400 font-medium leading-tight">
+              <span className="font-sans text-[10px] sm:text-xs text-sky-500/80 font-medium leading-tight">
                 para assinantes
               </span>
             </div>
