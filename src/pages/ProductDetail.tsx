@@ -483,6 +483,23 @@ const ProductDetail = () => {
             )}
           </div>
         </section>
+
+        {/* Recommended products */}
+        {recommended.length > 0 && (
+          <section className="mt-12 lg:mt-16">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-1.5 bg-accent rounded-full" />
+              <h2 className="font-display font-900 text-2xl lg:text-3xl">
+                Você também pode gostar
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              {recommended.map((p) => (
+                <ProductCard key={p.node.id} product={p} />
+              ))}
+            </div>
+          </section>
+        )}
       </main>
       <Footer />
     </div>
