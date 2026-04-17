@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, ShopifyProduct } from "@/lib/shopify";
+import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCTS_QUERY, ShopifyProduct } from "@/lib/shopify";
+import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
@@ -29,6 +30,7 @@ const ProductDetail = () => {
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [recommended, setRecommended] = useState<ShopifyProduct[]>([]);
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
@@ -49,6 +51,21 @@ const ProductDetail = () => {
       }
     };
     fetchProduct();
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [handle]);
+
+  useEffect(() => {
+    const fetchRecommended = async () => {
+      try {
+        const data = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
+        const edges: ShopifyProduct[] = data?.data?.products?.edges || [];
+        const filtered = edges.filter((p) => p.node.handle !== handle).slice(0, 8);
+        setRecommended(filtered);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchRecommended();
   }, [handle]);
 
   if (loading) {
@@ -466,6 +483,23 @@ const ProductDetail = () => {
             )}
           </div>
         </section>
+
+        {/* Recommended products */}
+        {recommended.length > 0 && (
+          <section className="mt-12 lg:mt-16">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-1.5 bg-accent rounded-full" />
+              <h2 className="font-display font-900 text-2xl lg:text-3xl">
+                Você também pode gostar
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              {recommended.map((p) => (
+                <ProductCard key={p.node.id} product={p} />
+              ))}
+            </div>
+          </section>
+        )}
       </main>
       <Footer />
     </div>
