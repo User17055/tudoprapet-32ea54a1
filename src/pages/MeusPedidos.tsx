@@ -124,7 +124,7 @@ const MeusPedidos = () => {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-to-br from-sky-500 to-sky-400 text-white border-0">
+              <Card className="bg-gradient-to-br from-primary to-[#2d5499] text-white border-0">
                 <CardContent className="p-5 flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
                     <Crown className="h-6 w-6 text-white" />
