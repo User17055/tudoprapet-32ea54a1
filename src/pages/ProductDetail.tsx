@@ -39,6 +39,24 @@ const ProductDetail = () => {
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const [buyingNow, setBuyingNow] = useState(false);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+  const [thumbsOverflow, setThumbsOverflow] = useState(false);
+
+  useEffect(() => {
+    const el = thumbsRef.current;
+    if (!el) return;
+    const check = () => setThumbsOverflow(el.scrollHeight > el.clientHeight + 2);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [product]);
+
+  const scrollThumbs = (dir: 1 | -1) => {
+    const el = thumbsRef.current;
+    if (!el) return;
+    el.scrollBy({ top: dir * 180, behavior: "smooth" });
+  };
 
   useEffect(() => {
     const fetchProduct = async () => {
