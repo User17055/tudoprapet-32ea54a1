@@ -81,47 +81,54 @@ const Catalog = () => {
         .replace(/[\u0300-\u036f]/g, "");
     };
 
-    // Category filter (usando Regex para buscar apenas palavras exatas)
+    // Category filter — prioriza TAGS do Shopify, depois productType, depois texto como fallback
     if (category !== "all") {
-      const categoryMap: Record<string, string[]> = {
-        racoes: ["ração", "racao", "alimento", "comida", "petisco"],
-        brinquedos: ["brinquedo", "toy", "bola", "mordedor"],
-        camas: ["cama", "casinha", "caminha", "colchão", "colchao"],
-        farmacia: [
-          "remédio",
-          "remedio",
-          "medicamento",
-          "antipulgas",
-          "carrapato",
-          "vermífugo",
-          "vitamina",
-          "bravecto",
-          "farmácia",
-        ],
-        higiene: ["shampoo", "banho", "higiene", "escova", "pente", "toalha"],
+      const categoryMap: Record<string, { tags: string[]; keywords: string[] }> = {
+        racoes: {
+          tags: ["racoes", "racao", "ração", "rações", "alimento", "petisco"],
+          keywords: ["ração", "racao", "alimento", "petisco"],
+        },
+        brinquedos: {
+          tags: ["brinquedos", "brinquedo", "toy"],
+          keywords: ["brinquedo", "toy", "bola", "mordedor"],
+        },
+        camas: {
+          tags: ["camas", "cama", "casinha", "caminha"],
+          keywords: ["cama", "casinha", "caminha", "colchão", "colchao"],
+        },
+        farmacia: {
+          tags: ["farmacia", "farmácia", "remedio", "medicamento", "antipulgas"],
+          keywords: ["remédio", "remedio", "medicamento", "antipulgas", "vermífugo", "vitamina", "bravecto"],
+        },
+        higiene: {
+          tags: ["higiene", "shampoo", "banho"],
+          keywords: ["shampoo", "banho", "higiene", "escova", "pente", "toalha"],
+        },
       };
 
-      const keywords = categoryMap[category] || [];
+      const config = categoryMap[category];
+      if (config) {
+        const normalizedTags = config.tags.map(normalizeText);
+        const keywords = config.keywords;
 
-      result = result.filter((p) => {
-        const text = normalizeText(`${p.node.title} ${p.node.description}`);
+        result = result.filter((p) => {
+          // 1) Match por TAG do Shopify (prioridade)
+          const productTags = (p.node.tags || []).map(normalizeText);
+          if (productTags.some((t) => normalizedTags.includes(t))) return true;
 
-        return keywords.some((kw) => {
-          const cleanKw = normalizeText(kw);
-          // \b garante que a palavra não seja parte de outra (ex: impede que "escama" valide a busca por "cama")
-          const regex = new RegExp(`\\b${cleanKw}\\b`, "i");
-          return regex.test(text);
+          // 2) Match por productType
+          const pType = normalizeText(p.node.productType || "");
+          if (pType && normalizedTags.some((t) => pType.includes(t))) return true;
+
+          // 3) Fallback: busca em texto
+          const text = normalizeText(`${p.node.title} ${p.node.description}`);
+          return keywords.some((kw) => {
+            const cleanKw = normalizeText(kw);
+            const regex = new RegExp(`\\b${cleanKw}\\b`, "i");
+            return regex.test(text);
+          });
         });
-      });
-    }
-
-    // Search filter (agora também ignora acentos para melhorar a experiência de busca do usuário)
-    if (search && !searchParams.get("busca")) {
-      const q = normalizeText(search);
-      result = result.filter((p) => {
-        const text = normalizeText(`${p.node.title} ${p.node.description}`);
-        return text.includes(q);
-      });
+      }
     }
 
     // Sort
