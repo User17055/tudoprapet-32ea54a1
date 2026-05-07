@@ -15,15 +15,12 @@ const SHOP_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
 const ADMIN_API = `https://${SHOP_DOMAIN}/admin/api/2025-07`;
 const STOREFRONT_API = `https://${SHOP_DOMAIN}/api/2025-07/graphql.json`;
 
-function randomCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "CLUBE-";
-  for (let i = 0; i < 10; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return s;
+function gidToNumericId(gid: string): string {
+  const parts = gid.split("/");
+  return parts[parts.length - 1];
 }
 
 async function findOrCreateCustomer(email: string, token: string): Promise<number | null> {
-  // Search
   const searchRes = await fetch(
     `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${email}`)}`,
     { headers: { "X-Shopify-Access-Token": token } }
@@ -32,7 +29,6 @@ async function findOrCreateCustomer(email: string, token: string): Promise<numbe
     const data = await searchRes.json();
     if (data?.customers?.[0]?.id) return data.customers[0].id;
   }
-  // Create
   const createRes = await fetch(`${ADMIN_API}/customers.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
@@ -135,17 +131,6 @@ Deno.serve(async (req) => {
       if (n?.id && Number.isFinite(amt)) currentPriceMap.set(n.id, amt);
     }
 
-    // Calculate total discount
-    let totalDiscount = 0;
-    for (const item of items) {
-      const sub = subPriceMap.get(item.variantId);
-      const cur = currentPriceMap.get(item.variantId);
-      if (sub !== undefined && cur !== undefined && cur > sub) {
-        totalDiscount += (cur - sub) * item.quantity;
-      }
-    }
-    totalDiscount = Number(totalDiscount.toFixed(2));
-
     // Find or create customer
     const customerId = await findOrCreateCustomer(memberEmail, shopifyToken);
     if (!customerId) {
@@ -154,100 +139,56 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create Storefront cart first (we need it regardless of discount)
-    const cartRes = await fetch(STOREFRONT_API, {
+    // Build draft order line items with overridden (subscriber) prices baked in
+    const lineItems = items.map((item) => {
+      const sub = subPriceMap.get(item.variantId);
+      const cur = currentPriceMap.get(item.variantId);
+      const finalPrice = sub !== undefined && cur !== undefined && cur > sub ? sub : cur;
+      const li: Record<string, unknown> = {
+        variant_id: Number(gidToNumericId(item.variantId)),
+        quantity: item.quantity,
+      };
+      if (finalPrice !== undefined) {
+        li.price = finalPrice.toFixed(2);
+      }
+      return li;
+    });
+
+    // Create draft order tied to customer; prices are already the subscriber prices,
+    // so no discount line is shown at checkout.
+    const draftRes = await fetch(`${ADMIN_API}/draft_orders.json`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Storefront-Access-Token": storefrontToken },
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": shopifyToken },
       body: JSON.stringify({
-        query: `mutation($input: CartInput!){ cartCreate(input:$input){ cart { id checkoutUrl } userErrors { message } } }`,
-        variables: {
-          input: {
-            lines: items.map((i) => ({ quantity: i.quantity, merchandiseId: i.variantId })),
-            buyerIdentity: { email: memberEmail },
-          },
+        draft_order: {
+          line_items: lineItems,
+          customer: { id: customerId },
+          email: memberEmail,
+          use_customer_default_address: true,
+          tags: "clube-tudoprapet",
+          note: `Pedido do Clube TudoPraPet - ${memberEmail}`,
         },
       }),
     });
-    const cartData = await cartRes.json();
-    const cart = cartData?.data?.cartCreate?.cart;
-    if (!cart?.checkoutUrl) {
-      console.error("Cart create failed:", JSON.stringify(cartData));
-      return new Response(JSON.stringify({ error: "Falha ao criar carrinho" }), {
+
+    if (!draftRes.ok) {
+      const errText = await draftRes.text();
+      console.error("Draft order failed:", errText);
+      return new Response(JSON.stringify({ error: "Falha ao criar pedido" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // If there is a discount, create a single-use price rule + code restricted to this customer
-    if (totalDiscount > 0) {
-      const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min
-      const code = randomCode();
+    const draftData = await draftRes.json();
+    const invoiceUrl: string | undefined = draftData?.draft_order?.invoice_url;
 
-      const prRes = await fetch(`${ADMIN_API}/price_rules.json`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": shopifyToken },
-        body: JSON.stringify({
-          price_rule: {
-            title: `Clube ${memberEmail} ${Date.now()}`,
-            target_type: "line_item",
-            target_selection: "all",
-            allocation_method: "across",
-            value_type: "fixed_amount",
-            value: `-${totalDiscount.toFixed(2)}`,
-            customer_selection: "prerequisite",
-            prerequisite_customer_ids: [customerId],
-            once_per_customer: true,
-            usage_limit: 1,
-            starts_at: new Date().toISOString(),
-            ends_at: expiresAt,
-          },
-        }),
+    if (!invoiceUrl) {
+      return new Response(JSON.stringify({ error: "Link de checkout indisponível" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-
-      if (!prRes.ok) {
-        console.error("Price rule failed:", await prRes.text());
-      } else {
-        const prData = await prRes.json();
-        const priceRuleId = prData?.price_rule?.id;
-        if (priceRuleId) {
-          const dcRes = await fetch(`${ADMIN_API}/price_rules/${priceRuleId}/discount_codes.json`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": shopifyToken },
-            body: JSON.stringify({ discount_code: { code } }),
-          });
-          if (!dcRes.ok) {
-            console.error("Discount code failed:", await dcRes.text());
-          } else {
-            // Apply code to cart
-            const applyRes = await fetch(STOREFRONT_API, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Shopify-Storefront-Access-Token": storefrontToken },
-              body: JSON.stringify({
-                query: `mutation($cartId: ID!, $codes: [String!]!){
-                  cartDiscountCodesUpdate(cartId:$cartId, discountCodes:$codes){
-                    cart { checkoutUrl discountCodes { code applicable } }
-                    userErrors { message }
-                  }
-                }`,
-                variables: { cartId: cart.id, codes: [code] },
-              }),
-            });
-            const applyData = await applyRes.json();
-            const updatedCart = applyData?.data?.cartDiscountCodesUpdate?.cart;
-            if (updatedCart?.checkoutUrl) {
-              const url = new URL(updatedCart.checkoutUrl);
-              url.searchParams.set("channel", "online_store");
-              return new Response(JSON.stringify({ checkoutUrl: url.toString() }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
-            }
-          }
-        }
-      }
     }
 
-    const url = new URL(cart.checkoutUrl);
-    url.searchParams.set("channel", "online_store");
-    return new Response(JSON.stringify({ checkoutUrl: url.toString() }), {
+    return new Response(JSON.stringify({ checkoutUrl: invoiceUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
