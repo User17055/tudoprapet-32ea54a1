@@ -504,6 +504,10 @@ function UsersTab() {
                           <span className="text-xs font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
                             Assinante
                           </span>
+                        ) : isMember ? (
+                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700 inline-flex items-center gap-1">
+                            <Crown className="h-3 w-3" /> Clube
+                          </span>
                         ) : (
                           <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
                             Sem plano
@@ -514,21 +518,40 @@ function UsersTab() {
                         {new Date(p.created_at).toLocaleDateString("pt-BR")}
                       </TableCell>
                       <TableCell>
-                        {editing ? (
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => saveEdit(p)}>
-                              <Check className="h-4 w-4 text-emerald-600" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setEditId(null)}>
-                              <X className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button variant="ghost" size="icon" onClick={() => startEdit(p)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {editing ? (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => saveEdit(p)}>
+                                <Check className="h-4 w-4 text-emerald-600" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => setEditId(null)}>
+                                <X className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => startEdit(p)} title="Editar nome">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant={isMember ? "outline" : "default"}
+                                size="sm"
+                                disabled={!p.email || togglingEmail === (p.email || "").toLowerCase()}
+                                onClick={() => toggleMembership(p)}
+                                className="h-8 gap-1"
+                              >
+                                {togglingEmail === (p.email || "").toLowerCase() ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Crown className="h-3 w-3" />
+                                )}
+                                {isMember ? "Remover" : "Membro"}
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
+
                     </TableRow>
                   );
                 })}
