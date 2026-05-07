@@ -63,11 +63,15 @@ export default function Admin() {
           <h1 className="text-3xl font-display font-bold text-primary">Painel Administrativo</h1>
           <p className="text-muted-foreground">Gerencie preços do clube e membros assinantes.</p>
         </div>
-        <Tabs defaultValue="prices">
+        <Tabs defaultValue="users">
           <TabsList>
+            <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" />Usuários</TabsTrigger>
             <TabsTrigger value="prices"><Package className="h-4 w-4 mr-2" />Preços do Clube</TabsTrigger>
             <TabsTrigger value="members"><Crown className="h-4 w-4 mr-2" />Membros</TabsTrigger>
           </TabsList>
+          <TabsContent value="users" className="mt-4">
+            <UsersTab />
+          </TabsContent>
           <TabsContent value="prices" className="mt-4">
             <PricesTab />
           </TabsContent>
