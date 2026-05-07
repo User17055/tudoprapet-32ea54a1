@@ -30,6 +30,7 @@ const AppContent = () => {
         <Route path="/cadastro" element={<Register />} />
         <Route path="/perfil" element={<Profile />} />
         <Route path="/clube" element={<Clube />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
