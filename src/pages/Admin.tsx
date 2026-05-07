@@ -483,6 +483,7 @@ function UsersTab() {
               <TableBody>
                 {filtered.map(p => {
                   const hasPlan = subscriberIds.has(p.user_id);
+                  const isMember = memberEmails.has((p.email || "").toLowerCase());
                   const editing = editId === p.id;
                   return (
                     <TableRow key={p.id}>
