@@ -86,7 +86,7 @@ const Profile = () => {
 
         {/* Economia + Pedidos recentes */}
         <div className="bg-card rounded-2xl shadow-lg border border-border overflow-hidden">
-          <div className="bg-gradient-to-r from-sky-500 to-sky-400 p-5 text-white flex items-center justify-between">
+          <div className="bg-gradient-to-r from-primary to-[#2d5499] p-5 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
               <PiggyBank className="h-7 w-7" />
               <div>
