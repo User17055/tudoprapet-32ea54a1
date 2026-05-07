@@ -321,25 +321,48 @@ const ProductDetail = () => {
             </div>
 
             {/* Desktop: Thumbnails + main */}
-            <div className="hidden lg:grid grid-cols-[80px_1fr] gap-4">
-              <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto">
-                {images.map((img, i) => (
+            <div className="hidden lg:grid grid-cols-[88px_1fr] gap-4">
+              <div className="relative">
+                {thumbsOverflow && (
                   <button
-                    key={i}
-                    onClick={() => setSelectedImageIdx(i)}
-                    className={`aspect-square w-20 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
-                      i === selectedImageIdx
-                        ? "border-primary shadow-md"
-                        : "border-border hover:border-primary/50"
-                    }`}
+                    onClick={() => scrollThumbs(-1)}
+                    className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 h-7 w-7 rounded-full bg-background border border-border shadow-sm flex items-center justify-center hover:bg-muted transition-colors"
+                    aria-label="Anterior"
                   >
-                    <img
-                      src={img.node.url}
-                      alt={img.node.altText || `${node.title} ${i + 1}`}
-                      className="w-full h-full object-cover"
-                    />
+                    <ChevronUp className="h-4 w-4" />
                   </button>
-                ))}
+                )}
+                <div
+                  ref={thumbsRef}
+                  className="flex flex-col gap-2 max-h-[500px] overflow-hidden scroll-smooth"
+                >
+                  {images.map((img, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSelectedImageIdx(i)}
+                      className={`aspect-square w-[88px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white ${
+                        i === selectedImageIdx
+                          ? "border-primary shadow-md"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <img
+                        src={img.node.url}
+                        alt={img.node.altText || `${node.title} ${i + 1}`}
+                        className="w-full h-full object-contain p-1"
+                      />
+                    </button>
+                  ))}
+                </div>
+                {thumbsOverflow && (
+                  <button
+                    onClick={() => scrollThumbs(1)}
+                    className="absolute -bottom-2 left-1/2 -translate-x-1/2 z-10 h-7 w-7 rounded-full bg-background border border-border shadow-sm flex items-center justify-center hover:bg-muted transition-colors"
+                    aria-label="Próximo"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               <div className="relative aspect-square bg-muted/40 rounded-2xl overflow-hidden border border-border">
                 {hasDiscount && (
