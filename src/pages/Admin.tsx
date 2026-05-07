@@ -372,16 +372,19 @@ interface ProfileRow {
 function UsersTab() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [subscriberIds, setSubscriberIds] = useState<Set<string>>(new Set());
+  const [memberEmails, setMemberEmails] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [search, setSearch] = useState("");
+  const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
-    const [p, s] = await Promise.all([
+    const [p, s, m] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("subscribers").select("user_id, status"),
+      supabase.from("club_members").select("email, is_active"),
     ]);
     if (p.error) toast.error("Erro ao carregar usuários");
     setProfiles((p.data || []) as ProfileRow[]);
@@ -390,6 +393,11 @@ function UsersTab() {
       if (row.status === "active") ids.add(row.user_id);
     });
     setSubscriberIds(ids);
+    const emails = new Set<string>();
+    (m.data || []).forEach((row: any) => {
+      if (row.is_active && row.email) emails.add(row.email.toLowerCase());
+    });
+    setMemberEmails(emails);
     setLoading(false);
   };
 
@@ -408,6 +416,27 @@ function UsersTab() {
     setEditId(null);
   };
 
+  const toggleMembership = async (p: ProfileRow) => {
+    if (!p.email) return toast.error("Usuário sem e-mail");
+    const email = p.email.toLowerCase();
+    setTogglingEmail(email);
+    const isMember = memberEmails.has(email);
+    if (isMember) {
+      const { error } = await supabase.from("club_members").delete().eq("email", email);
+      if (error) { setTogglingEmail(null); return toast.error("Erro: " + error.message); }
+      const next = new Set(memberEmails); next.delete(email); setMemberEmails(next);
+      toast.success("Removido do clube");
+    } else {
+      const { error } = await supabase.from("club_members").insert({
+        email, name: p.name, is_active: true,
+      });
+      if (error) { setTogglingEmail(null); return toast.error("Erro: " + error.message); }
+      const next = new Set(memberEmails); next.add(email); setMemberEmails(next);
+      toast.success("Adicionado ao clube 👑");
+    }
+    setTogglingEmail(null);
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return profiles;
@@ -417,7 +446,8 @@ function UsersTab() {
     );
   }, [profiles, search]);
 
-  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id));
+  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id) && !memberEmails.has((p.email || "").toLowerCase()));
+
 
   return (
     <div className="space-y-6">
@@ -453,6 +483,7 @@ function UsersTab() {
               <TableBody>
                 {filtered.map(p => {
                   const hasPlan = subscriberIds.has(p.user_id);
+                  const isMember = memberEmails.has((p.email || "").toLowerCase());
                   const editing = editId === p.id;
                   return (
                     <TableRow key={p.id}>
@@ -474,6 +505,10 @@ function UsersTab() {
                           <span className="text-xs font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
                             Assinante
                           </span>
+                        ) : isMember ? (
+                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700 inline-flex items-center gap-1">
+                            <Crown className="h-3 w-3" /> Clube
+                          </span>
                         ) : (
                           <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
                             Sem plano
@@ -484,21 +519,40 @@ function UsersTab() {
                         {new Date(p.created_at).toLocaleDateString("pt-BR")}
                       </TableCell>
                       <TableCell>
-                        {editing ? (
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => saveEdit(p)}>
-                              <Check className="h-4 w-4 text-emerald-600" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setEditId(null)}>
-                              <X className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button variant="ghost" size="icon" onClick={() => startEdit(p)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {editing ? (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => saveEdit(p)}>
+                                <Check className="h-4 w-4 text-emerald-600" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => setEditId(null)}>
+                                <X className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => startEdit(p)} title="Editar nome">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant={isMember ? "outline" : "default"}
+                                size="sm"
+                                disabled={!p.email || togglingEmail === (p.email || "").toLowerCase()}
+                                onClick={() => toggleMembership(p)}
+                                className="h-8 gap-1"
+                              >
+                                {togglingEmail === (p.email || "").toLowerCase() ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Crown className="h-3 w-3" />
+                                )}
+                                {isMember ? "Remover" : "Membro"}
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
+
                     </TableRow>
                   );
                 })}
