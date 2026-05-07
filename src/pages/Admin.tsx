@@ -372,16 +372,19 @@ interface ProfileRow {
 function UsersTab() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [subscriberIds, setSubscriberIds] = useState<Set<string>>(new Set());
+  const [memberEmails, setMemberEmails] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [search, setSearch] = useState("");
+  const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
-    const [p, s] = await Promise.all([
+    const [p, s, m] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("subscribers").select("user_id, status"),
+      supabase.from("club_members").select("email, is_active"),
     ]);
     if (p.error) toast.error("Erro ao carregar usuários");
     setProfiles((p.data || []) as ProfileRow[]);
@@ -390,6 +393,11 @@ function UsersTab() {
       if (row.status === "active") ids.add(row.user_id);
     });
     setSubscriberIds(ids);
+    const emails = new Set<string>();
+    (m.data || []).forEach((row: any) => {
+      if (row.is_active && row.email) emails.add(row.email.toLowerCase());
+    });
+    setMemberEmails(emails);
     setLoading(false);
   };
 
@@ -408,6 +416,27 @@ function UsersTab() {
     setEditId(null);
   };
 
+  const toggleMembership = async (p: ProfileRow) => {
+    if (!p.email) return toast.error("Usuário sem e-mail");
+    const email = p.email.toLowerCase();
+    setTogglingEmail(email);
+    const isMember = memberEmails.has(email);
+    if (isMember) {
+      const { error } = await supabase.from("club_members").delete().eq("email", email);
+      if (error) { setTogglingEmail(null); return toast.error("Erro: " + error.message); }
+      const next = new Set(memberEmails); next.delete(email); setMemberEmails(next);
+      toast.success("Removido do clube");
+    } else {
+      const { error } = await supabase.from("club_members").insert({
+        email, name: p.name, is_active: true,
+      });
+      if (error) { setTogglingEmail(null); return toast.error("Erro: " + error.message); }
+      const next = new Set(memberEmails); next.add(email); setMemberEmails(next);
+      toast.success("Adicionado ao clube 👑");
+    }
+    setTogglingEmail(null);
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return profiles;
@@ -417,7 +446,8 @@ function UsersTab() {
     );
   }, [profiles, search]);
 
-  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id));
+  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id) && !memberEmails.has((p.email || "").toLowerCase()));
+
 
   return (
     <div className="space-y-6">
