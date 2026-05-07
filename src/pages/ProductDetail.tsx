@@ -321,7 +321,7 @@ const ProductDetail = () => {
             </div>
 
             {/* Desktop: Thumbnails + main */}
-            <div className="hidden lg:grid grid-cols-[112px_1fr] gap-4">
+            <div className="hidden lg:grid grid-cols-[140px_1fr] gap-4">
               <div className="relative">
                 {thumbsOverflow && (
                   <button
@@ -334,14 +334,14 @@ const ProductDetail = () => {
                 )}
                 <div
                   ref={thumbsRef}
-                  className="flex flex-col gap-2.5 max-h-[560px] overflow-y-auto scroll-smooth scrollbar-hide"
+                  className="flex flex-col gap-3 max-h-[600px] overflow-y-auto scroll-smooth scrollbar-hide"
                   style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                 >
                   {images.map((img, i) => (
                     <button
                       key={i}
                       onClick={() => setSelectedImageIdx(i)}
-                      className={`aspect-square w-[112px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white ${
+                      className={`aspect-square w-[140px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white ${
                         i === selectedImageIdx
                           ? "border-primary shadow-md"
                           : "border-border hover:border-primary/50"
@@ -350,7 +350,7 @@ const ProductDetail = () => {
                       <img
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-contain p-1.5"
+                        className="w-full h-full object-contain p-2"
                       />
                     </button>
                   ))}
@@ -365,7 +365,7 @@ const ProductDetail = () => {
                   </button>
                 )}
               </div>
-              <div className="relative aspect-square bg-muted/40 rounded-2xl overflow-hidden border border-border">
+              <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-border">
                 {hasDiscount && (
                   <span className="absolute top-4 left-4 z-10 bg-accent text-accent-foreground text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
                     {discountPercent}% OFF
@@ -378,7 +378,7 @@ const ProductDetail = () => {
                   <img
                     src={mainImage.url}
                     alt={mainImage.altText || node.title}
-                    className="w-full h-full object-contain p-6"
+                    className="w-full h-full object-cover"
                   />
                 )}
               </div>
