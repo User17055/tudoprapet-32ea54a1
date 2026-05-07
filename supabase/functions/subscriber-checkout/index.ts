@@ -139,17 +139,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build draft order line items with overridden (subscriber) prices baked in
+    // Build draft order line items. Shopify ignora "price" quando passamos variant_id,
+    // então aplicamos applied_discount por linha (fixed_amount por unidade).
     const lineItems = items.map((item) => {
       const sub = subPriceMap.get(item.variantId);
       const cur = currentPriceMap.get(item.variantId);
-      const finalPrice = sub !== undefined && cur !== undefined && cur > sub ? sub : cur;
       const li: Record<string, unknown> = {
         variant_id: Number(gidToNumericId(item.variantId)),
         quantity: item.quantity,
       };
-      if (finalPrice !== undefined) {
-        li.price = finalPrice.toFixed(2);
+      if (sub !== undefined && cur !== undefined && cur > sub) {
+        const perUnitDiscount = Number((cur - sub).toFixed(2));
+        li.applied_discount = {
+          description: "Clube TudoPraPet",
+          value_type: "fixed_amount",
+          value: perUnitDiscount.toFixed(2),
+          amount: (perUnitDiscount * item.quantity).toFixed(2),
+          title: "Clube TudoPraPet",
+        };
       }
       return li;
     });
