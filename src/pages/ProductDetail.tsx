@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
