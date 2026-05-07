@@ -321,7 +321,7 @@ const ProductDetail = () => {
             </div>
 
             {/* Desktop: Thumbnails + main */}
-            <div className="hidden lg:grid grid-cols-[88px_1fr] gap-4">
+            <div className="hidden lg:grid grid-cols-[112px_1fr] gap-4">
               <div className="relative">
                 {thumbsOverflow && (
                   <button
@@ -334,13 +334,14 @@ const ProductDetail = () => {
                 )}
                 <div
                   ref={thumbsRef}
-                  className="flex flex-col gap-2 max-h-[500px] overflow-hidden scroll-smooth"
+                  className="flex flex-col gap-2.5 max-h-[560px] overflow-y-auto scroll-smooth scrollbar-hide"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                 >
                   {images.map((img, i) => (
                     <button
                       key={i}
                       onClick={() => setSelectedImageIdx(i)}
-                      className={`aspect-square w-[88px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white ${
+                      className={`aspect-square w-[112px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white ${
                         i === selectedImageIdx
                           ? "border-primary shadow-md"
                           : "border-border hover:border-primary/50"
@@ -349,7 +350,7 @@ const ProductDetail = () => {
                       <img
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-contain p-1"
+                        className="w-full h-full object-contain p-1.5"
                       />
                     </button>
                   ))}
