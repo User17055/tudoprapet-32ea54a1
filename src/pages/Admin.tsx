@@ -360,3 +360,153 @@ function MembersTab() {
     </div>
   );
 }
+
+interface ProfileRow {
+  id: string;
+  user_id: string;
+  email: string | null;
+  name: string | null;
+  created_at: string;
+}
+
+function UsersTab() {
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [subscriberIds, setSubscriberIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [search, setSearch] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const [p, s] = await Promise.all([
+      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("subscribers").select("user_id, status"),
+    ]);
+    if (p.error) toast.error("Erro ao carregar usuários");
+    setProfiles((p.data || []) as ProfileRow[]);
+    const ids = new Set<string>();
+    (s.data || []).forEach((row: any) => {
+      if (row.status === "active") ids.add(row.user_id);
+    });
+    setSubscriberIds(ids);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const startEdit = (p: ProfileRow) => {
+    setEditId(p.id);
+    setEditName(p.name || "");
+  };
+
+  const saveEdit = async (p: ProfileRow) => {
+    const { error } = await supabase.from("profiles").update({ name: editName.trim() || null }).eq("id", p.id);
+    if (error) return toast.error("Erro ao salvar");
+    toast.success("Nome atualizado");
+    setProfiles(profiles.map(x => x.id === p.id ? { ...x, name: editName.trim() || null } : x));
+    setEditId(null);
+  };
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return profiles;
+    return profiles.filter(p =>
+      (p.email || "").toLowerCase().includes(q) ||
+      (p.name || "").toLowerCase().includes(q)
+    );
+  }, [profiles, search]);
+
+  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id));
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Usuários cadastrados ({profiles.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            placeholder="Buscar por nome ou e-mail..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+          <p className="text-sm text-muted-foreground">
+            {withoutPlan.length} sem plano · {filtered.length - withoutPlan.length} com plano ativo
+          </p>
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : filtered.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>E-mail</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Cadastrado em</TableHead>
+                  <TableHead className="w-24">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map(p => {
+                  const hasPlan = subscriberIds.has(p.user_id);
+                  const editing = editId === p.id;
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.email || "—"}</TableCell>
+                      <TableCell>
+                        {editing ? (
+                          <Input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="h-8"
+                            autoFocus
+                          />
+                        ) : (
+                          p.name || <span className="text-muted-foreground italic">sem nome</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {hasPlan ? (
+                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
+                            Assinante
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                            Sem plano
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(p.created_at).toLocaleDateString("pt-BR")}
+                      </TableCell>
+                      <TableCell>
+                        {editing ? (
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => saveEdit(p)}>
+                              <Check className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setEditId(null)}>
+                              <X className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button variant="ghost" size="icon" onClick={() => startEdit(p)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
