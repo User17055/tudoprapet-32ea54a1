@@ -10,86 +10,98 @@ import {
   type CarouselApi,
 } from "@/components/ui/carousel";
 
+import bannerPromo from "@/assets/banner-promo.jpg";
+import bannerFarmacia from "@/assets/banner-farmacia.jpg";
+import bannerRacoes from "@/assets/banner-racoes.jpg";
+import bannerFrete from "@/assets/banner-frete.jpg";
+import bannerClube from "@/assets/banner-clube.jpg";
+import bannerBrinquedos from "@/assets/banner-brinquedos.jpg";
 
-// Substitua pelas suas imagens reais (1600x600 recomendado).
 type Banner = {
+  image: string;
   alt: string;
   href: string;
   badge: string;
   title: string;
   subtitle: string;
   cta: string;
-  gradient: string;
-  textColor: string;
+  overlay: string;
   ctaClass: string;
+  align?: "left" | "right";
 };
 
 const banners: Banner[] = [
   {
+    image: bannerPromo,
     alt: "Mega Promoção da Semana",
     href: "/catalogo",
     badge: "Oferta da semana",
     title: "Mega Promoção TudoPraPet",
     subtitle: "Descontos imperdíveis em todo o catálogo",
     cta: "Aproveitar agora",
-    gradient: "from-primary via-primary to-[hsl(218_70%_18%)]",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-r from-primary/85 via-primary/55 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerFarmacia,
     alt: "Farmácia Pet",
     href: "/catalogo?categoria=farmacia",
     badge: "Farmácia",
     title: "Cuide da saúde do seu pet",
     subtitle: "Antipulgas, vermífugos e suplementos com até 25% OFF",
     cta: "Ver farmácia",
-    gradient: "from-secondary via-[hsl(40_85%_55%)] to-[hsl(40_90%_48%)]",
-    textColor: "text-primary",
-    ctaClass: "bg-primary text-primary-foreground hover:bg-primary/90",
+    overlay: "bg-gradient-to-r from-primary/80 via-primary/40 to-transparent",
+    ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerRacoes,
     alt: "Rações com até 30% off",
     href: "/catalogo?categoria=racoes",
     badge: "Rações Premium",
     title: "Até 30% OFF em rações",
     subtitle: "As melhores marcas com preço de clube",
     cta: "Ver rações",
-    gradient: "from-[hsl(218_70%_18%)] via-primary to-secondary",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-l from-primary/85 via-primary/50 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "right",
   },
   {
+    image: bannerFrete,
     alt: "Frete R$ 10 em Presidente Prudente",
     href: "/catalogo",
     badge: "Entrega rápida",
     title: "Frete R$ 10 em Presidente Prudente",
     subtitle: "Receba no mesmo dia em pedidos selecionados",
     cta: "Comprar agora",
-    gradient: "from-[hsl(218_70%_25%)] via-primary to-[hsl(218_70%_15%)]",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-r from-primary/85 via-primary/55 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerClube,
     alt: "Clube TudoPraPet",
     href: "/clube",
     badge: "Clube TudoPraPet",
     title: "Vire assinante e pague menos",
     subtitle: "Frete grátis acima de R$ 99 e preços exclusivos",
     cta: "Quero assinar",
-    gradient: "from-primary via-[hsl(218_70%_22%)] to-secondary",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-r from-primary/90 via-primary/60 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerBrinquedos,
     alt: "Brinquedos e diversão",
     href: "/catalogo?categoria=brinquedos",
     badge: "Diversão",
     title: "Brinquedos para todos os pets",
     subtitle: "Estimule e divirta seu melhor amigo",
     cta: "Ver brinquedos",
-    gradient: "from-secondary/80 via-[hsl(40_85%_60%)] to-primary",
-    textColor: "text-white",
-    ctaClass: "bg-white text-primary hover:bg-secondary",
+    overlay: "bg-gradient-to-l from-primary/85 via-primary/50 to-transparent",
+    ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "right",
   },
 ];
 
@@ -147,29 +159,39 @@ export const HeroSection = () => {
                     to={banner.href}
                     className="block group rounded-2xl md:rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-500 ring-1 ring-border/50"
                   >
-                    <div
-                      className={`relative aspect-[16/8] md:aspect-[21/9] bg-gradient-to-br ${banner.gradient} ${banner.textColor} flex items-center`}
-                    >
-                      {/* Decorative shapes */}
-                      <span className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-                      <span className="absolute -bottom-12 -left-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-                      <Tag className="absolute top-6 right-6 h-20 w-20 md:h-28 md:w-28 opacity-10 rotate-12" />
+                    <div className="relative aspect-[16/8] md:aspect-[21/9] bg-muted overflow-hidden">
+                      <img
+                        src={banner.image}
+                        alt={banner.alt}
+                        width={1600}
+                        height={700}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-700"
+                        loading={i === 0 ? "eager" : "lazy"}
+                      />
+                      {/* Overlay gradient para legibilidade */}
+                      <div className={`absolute inset-0 ${banner.overlay}`} />
 
-                      <div className="relative z-10 px-6 md:px-12 py-6 md:py-10 max-w-2xl">
-                        <span className="inline-block text-[10px] md:text-xs font-900 uppercase tracking-wider bg-white/20 backdrop-blur px-3 py-1 rounded-full mb-3">
-                          {banner.badge}
-                        </span>
-                        <h2 className="font-display font-900 text-2xl md:text-5xl leading-tight mb-2 md:mb-3">
-                          {banner.title}
-                        </h2>
-                        <p className="text-sm md:text-base opacity-90 mb-4 md:mb-6 max-w-md">
-                          {banner.subtitle}
-                        </p>
-                        <span
-                          className={`inline-flex items-center gap-2 text-xs md:text-sm font-bold px-4 md:px-5 py-2 md:py-2.5 rounded-full transition-colors ${banner.ctaClass}`}
-                        >
-                          {banner.cta} →
-                        </span>
+                      <div
+                        className={`absolute inset-0 flex items-center ${
+                          banner.align === "right" ? "justify-end text-right" : "justify-start text-left"
+                        }`}
+                      >
+                        <div className="relative z-10 px-6 md:px-12 py-6 md:py-10 max-w-xl text-white">
+                          <span className="inline-block text-[10px] md:text-xs font-900 uppercase tracking-wider bg-secondary text-primary px-3 py-1 rounded-full mb-3">
+                            {banner.badge}
+                          </span>
+                          <h2 className="font-display font-900 text-2xl md:text-5xl leading-tight mb-2 md:mb-3 drop-shadow-lg">
+                            {banner.title}
+                          </h2>
+                          <p className="text-sm md:text-base opacity-95 mb-4 md:mb-6 drop-shadow">
+                            {banner.subtitle}
+                          </p>
+                          <span
+                            className={`inline-flex items-center gap-2 text-xs md:text-sm font-bold px-4 md:px-5 py-2 md:py-2.5 rounded-full transition-colors ${banner.ctaClass}`}
+                          >
+                            {banner.cta} →
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </Link>
