@@ -81,71 +81,21 @@ const Catalog = () => {
         .replace(/[\u0300-\u036f]/g, "");
     };
 
-    // Category filter — prioriza TAGS do Shopify, depois productType, depois texto como fallback
+    // Category filter — APENAS por TAG do Shopify (igual ao filtro de farmácia)
     if (category !== "all") {
-      const categoryMap: Record<string, { tags: string[]; keywords: string[] }> = {
-        racoes: {
-          tags: ["racoes", "racao", "ração", "rações", "alimento", "petisco"],
-          keywords: ["ração", "racao", "alimento", "petisco"],
-        },
-        brinquedos: {
-          tags: ["brinquedos", "brinquedo", "toy"],
-          keywords: ["brinquedo", "toy", "bola", "mordedor"],
-        },
-        camas: {
-          tags: ["camas", "cama", "casinha", "caminha"],
-          keywords: ["cama", "casinha", "caminha", "colchão", "colchao"],
-        },
-        farmacia: {
-          tags: ["farmacia", "farmácia", "remedio", "medicamento", "antipulgas"],
-          keywords: ["remédio", "remedio", "medicamento", "antipulgas", "vermífugo", "vitamina", "bravecto"],
-        },
-        higiene: {
-          tags: ["higiene", "shampoo", "banho"],
-          keywords: ["shampoo", "banho", "higiene", "escova", "pente", "toalha"],
-        },
+      const categoryTags: Record<string, string[]> = {
+        racoes: ["racoes", "racao", "rações", "ração", "alimento", "petisco"],
+        brinquedos: ["brinquedos", "brinquedo", "toy"],
+        camas: ["camas", "cama", "casinha", "caminha"],
+        farmacia: ["farmacia", "farmácia", "remedio", "medicamento", "antipulgas"],
+        higiene: ["higiene", "shampoo", "banho"],
       };
 
-      // Palavras-chave que indicam FARMÁCIA — produtos com esses termos NUNCA devem entrar em rações/petiscos
-      const pharmaExclusions = [
-        "bravecto", "nexgard", "simparic", "frontline", "advantage", "advocate",
-        "antipulgas", "vermifugo", "vermífugo", "vermicida", "remedio", "remédio",
-        "medicamento", "antibiotico", "antibiótico", "anti-inflamatorio", "anti-inflamatório",
-        "vacina", "suplemento", "vitamina",
-      ];
-
-      const config = categoryMap[category];
-      if (config) {
-        const normalizedTags = config.tags.map(normalizeText);
-        const keywords = config.keywords;
-        const normalizedExclusions = pharmaExclusions.map(normalizeText);
-
+      const tags = (categoryTags[category] || []).map(normalizeText);
+      if (tags.length > 0) {
         result = result.filter((p) => {
           const productTags = (p.node.tags || []).map(normalizeText);
-          const pType = normalizeText(p.node.productType || "");
-          const text = normalizeText(`${p.node.title} ${p.node.description}`);
-
-          // Se a categoria buscada NÃO é farmácia, exclui produtos de farmácia
-          if (category !== "farmacia") {
-            const isPharma =
-              normalizedExclusions.some((kw) => text.includes(kw)) ||
-              productTags.some((t) => normalizedExclusions.includes(t)) ||
-              normalizedExclusions.some((kw) => pType.includes(kw));
-            if (isPharma) return false;
-          }
-
-          // 1) Match por TAG do Shopify (prioridade)
-          if (productTags.some((t) => normalizedTags.includes(t))) return true;
-
-          // 2) Match por productType
-          if (pType && normalizedTags.some((t) => pType.includes(t))) return true;
-
-          // 3) Fallback: busca em texto
-          return keywords.some((kw) => {
-            const cleanKw = normalizeText(kw);
-            const regex = new RegExp(`\\b${cleanKw}\\b`, "i");
-            return regex.test(text);
-          });
+          return productTags.some((t) => tags.includes(t));
         });
       }
     }
