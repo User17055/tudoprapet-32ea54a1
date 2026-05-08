@@ -1,8 +1,6 @@
-import { Truck, BadgePercent, ShieldCheck, Award } from "lucide-react";
+import { ShieldCheck, Award } from "lucide-react";
 
 const badges = [
-  { icon: Truck, label: "Frete Grátis", desc: "Acima de R$99" },
-  { icon: BadgePercent, label: "Preço Baixo Garantido", desc: "Ou devolvemos a diferença" },
   { icon: ShieldCheck, label: "Pagamento Seguro", desc: "Proteção total" },
   { icon: Award, label: "Marcas Premium", desc: "Só o melhor" },
 ];
