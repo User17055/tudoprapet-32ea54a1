@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const benefits = [
-  "Desconto de 50% em todos os produtos",
+  "Até 50% de desconto em produtos selecionados",
   "Acesso antecipado a lançamentos",
   "Frete grátis em pedidos acima de R$ 99",
   "Atendimento prioritário",
