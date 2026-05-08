@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const benefits = [
-  "Desconto de 50% em todos os produtos",
+  "Até 50% de desconto em produtos selecionados",
   "Acesso antecipado a lançamentos",
   "Frete grátis em pedidos acima de R$ 99",
   "Atendimento prioritário",
@@ -32,7 +32,7 @@ const ClubePage = () => {
               Clube TudoPraPet
             </h1>
             <p className="text-lg md:text-xl opacity-90 max-w-2xl mx-auto mb-8">
-              Membros do clube recebem <span className="font-bold text-secondary">50% de desconto</span> em todos os produtos, aplicado automaticamente no checkout!
+              Membros do clube recebem <span className="font-bold text-secondary">até 50% de desconto</span> em produtos selecionados, aplicado automaticamente no checkout!
             </p>
 
             {loading ? (
