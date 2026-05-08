@@ -4,7 +4,7 @@ import { TrustBadges } from "@/components/TrustBadges";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ClubBanner } from "@/components/ClubBanner";
-import { ShopByPet } from "@/components/ShopByPet";
+import { PromoBanner } from "@/components/PromoBanner";
 import { Footer } from "@/components/Footer";
 
 const Index = () => {
@@ -17,7 +17,7 @@ const Index = () => {
         <Categories />
         <ProductGrid />
         <ClubBanner />
-        <ShopByPet />
+        <PromoBanner />
       </main>
       <Footer />
     </div>

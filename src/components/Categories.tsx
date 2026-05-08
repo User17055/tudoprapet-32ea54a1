@@ -2,12 +2,12 @@ import { Utensils, Gamepad2, BedDouble, Pill, Sparkles, Bone } from "lucide-reac
 import { useNavigate } from "react-router-dom";
 
 const categories = [
-  { icon: Utensils, label: "Rações", slug: "racoes", from: "from-amber-400", to: "to-amber-600" },
-  { icon: Pill, label: "Farmácia", slug: "farmacia", from: "from-emerald-400", to: "to-emerald-600" },
-  { icon: Gamepad2, label: "Brinquedos", slug: "brinquedos", from: "from-rose-400", to: "to-rose-600" },
-  { icon: BedDouble, label: "Camas", slug: "camas", from: "from-[hsl(218_58%_35%)]", to: "to-[hsl(218_70%_18%)]" },
-  { icon: Sparkles, label: "Higiene", slug: "higiene", from: "from-[hsl(218_50%_45%)]", to: "to-[hsl(218_65%_25%)]" },
-  { icon: Bone, label: "Petiscos", slug: "petiscos", from: "from-orange-400", to: "to-orange-600" },
+  { icon: Utensils, label: "Rações", slug: "racoes" },
+  { icon: Pill, label: "Farmácia", slug: "farmacia" },
+  { icon: Gamepad2, label: "Brinquedos", slug: "brinquedos" },
+  { icon: BedDouble, label: "Camas", slug: "camas" },
+  { icon: Sparkles, label: "Higiene", slug: "higiene" },
+  { icon: Bone, label: "Petiscos", slug: "petiscos" },
 ];
 
 export const Categories = () => {
@@ -33,19 +33,26 @@ export const Categories = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-5">
           {categories.map((cat, i) => (
             <button
               key={i}
               onClick={() => navigate(`/catalogo?categoria=${cat.slug}`)}
-              className="group relative flex flex-col items-center gap-3 p-4 md:p-5 rounded-2xl bg-card border border-border hover:border-secondary hover:-translate-y-1 transition-all duration-300 shadow-sm hover:shadow-lg"
+              className="group flex flex-col items-center gap-3 p-4 md:p-5 rounded-2xl bg-card border border-border hover:border-secondary hover:-translate-y-1 transition-all duration-300 shadow-sm hover:shadow-xl"
             >
-              <div
-                className={`flex items-center justify-center h-14 w-14 md:h-16 md:w-16 rounded-2xl bg-gradient-to-br ${cat.from} ${cat.to} shadow-md group-hover:scale-110 transition-transform`}
-              >
-                <cat.icon className="h-7 w-7 md:h-8 md:w-8 text-white" />
+              {/* Ícone com efeito mais bonito */}
+              <div className="relative">
+                {/* Halo dourado por trás */}
+                <span className="absolute inset-0 bg-secondary/30 blur-xl rounded-full group-hover:bg-secondary/50 transition-colors" />
+                {/* Círculo principal */}
+                <div className="relative flex items-center justify-center h-16 w-16 md:h-20 md:w-20 rounded-full bg-gradient-to-br from-primary via-primary to-[hsl(218_70%_18%)] shadow-lg ring-4 ring-secondary/20 group-hover:ring-secondary/50 group-hover:scale-110 transition-all">
+                  <cat.icon
+                    className="h-8 w-8 md:h-10 md:w-10 text-secondary"
+                    strokeWidth={2.2}
+                  />
+                </div>
               </div>
-              <span className="font-display font-bold text-xs md:text-sm text-center leading-tight">
+              <span className="font-display font-bold text-xs md:text-sm text-center leading-tight text-foreground group-hover:text-primary transition-colors">
                 {cat.label}
               </span>
             </button>
