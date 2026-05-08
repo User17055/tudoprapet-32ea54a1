@@ -147,13 +147,30 @@ export const HeroSection = () => {
                     to={banner.href}
                     className="block group rounded-2xl md:rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-500 ring-1 ring-border/50"
                   >
-                    <div className="relative aspect-[16/8] md:aspect-[21/9] bg-muted">
-                      <img
-                        src={banner.image}
-                        alt={banner.alt}
-                        className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700"
-                        loading={i === 0 ? "eager" : "lazy"}
-                      />
+                    <div
+                      className={`relative aspect-[16/8] md:aspect-[21/9] bg-gradient-to-br ${banner.gradient} ${banner.textColor} flex items-center`}
+                    >
+                      {/* Decorative shapes */}
+                      <span className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+                      <span className="absolute -bottom-12 -left-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+                      <Tag className="absolute top-6 right-6 h-20 w-20 md:h-28 md:w-28 opacity-10 rotate-12" />
+
+                      <div className="relative z-10 px-6 md:px-12 py-6 md:py-10 max-w-2xl">
+                        <span className="inline-block text-[10px] md:text-xs font-900 uppercase tracking-wider bg-white/20 backdrop-blur px-3 py-1 rounded-full mb-3">
+                          {banner.badge}
+                        </span>
+                        <h2 className="font-display font-900 text-2xl md:text-5xl leading-tight mb-2 md:mb-3">
+                          {banner.title}
+                        </h2>
+                        <p className="text-sm md:text-base opacity-90 mb-4 md:mb-6 max-w-md">
+                          {banner.subtitle}
+                        </p>
+                        <span
+                          className={`inline-flex items-center gap-2 text-xs md:text-sm font-bold px-4 md:px-5 py-2 md:py-2.5 rounded-full transition-colors ${banner.ctaClass}`}
+                        >
+                          {banner.cta} →
+                        </span>
+                      </div>
                     </div>
                   </Link>
                 </CarouselItem>
