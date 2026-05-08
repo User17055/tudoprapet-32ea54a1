@@ -3,6 +3,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { TrustBadges } from "@/components/TrustBadges";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
+import { ClubBanner } from "@/components/ClubBanner";
 import { Testimonials } from "@/components/Testimonials";
 import { Footer } from "@/components/Footer";
 
@@ -15,6 +16,7 @@ const Index = () => {
         <TrustBadges />
         <Categories />
         <ProductGrid />
+        <ClubBanner />
         <Testimonials />
       </main>
       <Footer />

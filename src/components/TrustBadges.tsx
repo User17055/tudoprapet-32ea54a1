@@ -1,21 +1,32 @@
-import { ShieldCheck, Award } from "lucide-react";
+import { ShieldCheck, Truck, CreditCard, Headphones } from "lucide-react";
 
 const badges = [
-  { icon: ShieldCheck, label: "Pagamento Seguro", desc: "Proteção total" },
-  { icon: Award, label: "Marcas Premium", desc: "Só o melhor" },
+  { icon: Truck, label: "Frete a partir de R$10", desc: "Em Pres. Prudente" },
+  { icon: CreditCard, label: "Em até 12x", desc: "Sem juros no cartão" },
+  { icon: ShieldCheck, label: "Compra 100% segura", desc: "Pagamento protegido" },
+  { icon: Headphones, label: "Atendimento humano", desc: "Tira dúvidas no WhatsApp" },
 ];
 
 export const TrustBadges = () => {
   return (
-    <section className="bg-primary text-primary-foreground py-4">
+    <section className="bg-primary text-primary-foreground py-3 border-y border-primary/20">
       <div className="container mx-auto">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           {badges.map((b, i) => (
-            <div key={i} className="flex items-center gap-3 justify-center text-center md:text-left">
-              <b.icon className="h-6 w-6 shrink-0 text-secondary" />
-              <div>
-                <p className="font-display font-bold text-sm">{b.label}</p>
-                <p className="text-xs opacity-80">{b.desc}</p>
+            <div
+              key={i}
+              className="flex items-center gap-2.5 justify-center md:justify-start"
+            >
+              <div className="flex items-center justify-center h-10 w-10 rounded-full bg-secondary/20 shrink-0">
+                <b.icon className="h-5 w-5 text-secondary" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-display font-bold text-xs md:text-sm leading-tight truncate">
+                  {b.label}
+                </p>
+                <p className="text-[10px] md:text-xs opacity-75 leading-tight truncate">
+                  {b.desc}
+                </p>
               </div>
             </div>
           ))}
