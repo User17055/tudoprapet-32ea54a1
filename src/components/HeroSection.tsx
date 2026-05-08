@@ -10,86 +10,98 @@ import {
   type CarouselApi,
 } from "@/components/ui/carousel";
 
+import bannerPromo from "@/assets/banner-promo.jpg";
+import bannerFarmacia from "@/assets/banner-farmacia.jpg";
+import bannerRacoes from "@/assets/banner-racoes.jpg";
+import bannerFrete from "@/assets/banner-frete.jpg";
+import bannerClube from "@/assets/banner-clube.jpg";
+import bannerBrinquedos from "@/assets/banner-brinquedos.jpg";
 
-// Substitua pelas suas imagens reais (1600x600 recomendado).
 type Banner = {
+  image: string;
   alt: string;
   href: string;
   badge: string;
   title: string;
   subtitle: string;
   cta: string;
-  gradient: string;
-  textColor: string;
+  overlay: string;
   ctaClass: string;
+  align?: "left" | "right";
 };
 
 const banners: Banner[] = [
   {
+    image: bannerPromo,
     alt: "Mega Promoção da Semana",
     href: "/catalogo",
     badge: "Oferta da semana",
     title: "Mega Promoção TudoPraPet",
     subtitle: "Descontos imperdíveis em todo o catálogo",
     cta: "Aproveitar agora",
-    gradient: "from-primary via-primary to-[hsl(218_70%_18%)]",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-r from-primary/85 via-primary/55 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerFarmacia,
     alt: "Farmácia Pet",
     href: "/catalogo?categoria=farmacia",
     badge: "Farmácia",
     title: "Cuide da saúde do seu pet",
     subtitle: "Antipulgas, vermífugos e suplementos com até 25% OFF",
     cta: "Ver farmácia",
-    gradient: "from-secondary via-[hsl(40_85%_55%)] to-[hsl(40_90%_48%)]",
-    textColor: "text-primary",
-    ctaClass: "bg-primary text-primary-foreground hover:bg-primary/90",
+    overlay: "bg-gradient-to-r from-primary/80 via-primary/40 to-transparent",
+    ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerRacoes,
     alt: "Rações com até 30% off",
     href: "/catalogo?categoria=racoes",
     badge: "Rações Premium",
     title: "Até 30% OFF em rações",
     subtitle: "As melhores marcas com preço de clube",
     cta: "Ver rações",
-    gradient: "from-[hsl(218_70%_18%)] via-primary to-secondary",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-l from-primary/85 via-primary/50 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "right",
   },
   {
+    image: bannerFrete,
     alt: "Frete R$ 10 em Presidente Prudente",
     href: "/catalogo",
     badge: "Entrega rápida",
     title: "Frete R$ 10 em Presidente Prudente",
     subtitle: "Receba no mesmo dia em pedidos selecionados",
     cta: "Comprar agora",
-    gradient: "from-[hsl(218_70%_25%)] via-primary to-[hsl(218_70%_15%)]",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-r from-primary/85 via-primary/55 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerClube,
     alt: "Clube TudoPraPet",
     href: "/clube",
     badge: "Clube TudoPraPet",
     title: "Vire assinante e pague menos",
     subtitle: "Frete grátis acima de R$ 99 e preços exclusivos",
     cta: "Quero assinar",
-    gradient: "from-primary via-[hsl(218_70%_22%)] to-secondary",
-    textColor: "text-white",
+    overlay: "bg-gradient-to-r from-primary/90 via-primary/60 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "left",
   },
   {
+    image: bannerBrinquedos,
     alt: "Brinquedos e diversão",
     href: "/catalogo?categoria=brinquedos",
     badge: "Diversão",
     title: "Brinquedos para todos os pets",
     subtitle: "Estimule e divirta seu melhor amigo",
     cta: "Ver brinquedos",
-    gradient: "from-secondary/80 via-[hsl(40_85%_60%)] to-primary",
-    textColor: "text-white",
-    ctaClass: "bg-white text-primary hover:bg-secondary",
+    overlay: "bg-gradient-to-l from-primary/85 via-primary/50 to-transparent",
+    ctaClass: "bg-secondary text-primary hover:bg-white",
+    align: "right",
   },
 ];
 
