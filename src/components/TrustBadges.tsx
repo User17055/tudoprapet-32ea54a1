@@ -1,8 +1,6 @@
-import { Truck, BadgePercent, ShieldCheck, Award } from "lucide-react";
+import { ShieldCheck, Award } from "lucide-react";
 
 const badges = [
-  { icon: Truck, label: "Frete Grátis", desc: "Acima de R$99" },
-  { icon: BadgePercent, label: "Preço Baixo Garantido", desc: "Ou devolvemos a diferença" },
   { icon: ShieldCheck, label: "Pagamento Seguro", desc: "Proteção total" },
   { icon: Award, label: "Marcas Premium", desc: "Só o melhor" },
 ];
@@ -11,7 +9,7 @@ export const TrustBadges = () => {
   return (
     <section className="bg-primary text-primary-foreground py-4">
       <div className="container mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {badges.map((b, i) => (
             <div key={i} className="flex items-center gap-3 justify-center text-center md:text-left">
               <b.icon className="h-6 w-6 shrink-0 text-secondary" />
