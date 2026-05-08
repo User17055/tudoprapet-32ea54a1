@@ -168,43 +168,96 @@ function PricesTab() {
     return { productTitle: prod?.title || "Produto removido", variantTitle: variant?.node.title || sp.shopify_variant_id };
   };
 
+  const previewImage = selectedProduct?.node.images.edges[0]?.node;
+  const previewVariant = selectedProduct?.node.variants.edges.find(v => v.node.id === variantId)?.node
+    || selectedProduct?.node.variants.edges[0]?.node;
+  const previewPrice = previewVariant ? parseFloat(previewVariant.price.amount) : null;
+  const previewCompare = previewVariant?.compareAtPrice ? parseFloat(previewVariant.compareAtPrice.amount) : null;
+  const previewSubscriber = price ? parseFloat(price.replace(",", ".")) : null;
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader><CardTitle>Adicionar / atualizar preço de assinante</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-4">
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium mb-1 block">Produto</label>
-            <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {products.map(p => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Variante</label>
-            <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {selectedProduct?.node.variants.edges.map(v => (
-                  <SelectItem key={v.node.id} value={v.node.id}>
-                    {v.node.title} — R$ {parseFloat(v.node.price.amount).toFixed(2)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Preço assinante (R$)</label>
-            <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
-          </div>
-          <div className="md:col-span-4">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
-            </Button>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-[220px_1fr]">
+            {/* Preview */}
+            <div className="rounded-xl border border-border bg-muted/30 p-3 flex flex-col gap-2">
+              <div className="aspect-square w-full rounded-lg bg-muted overflow-hidden flex items-center justify-center">
+                {previewImage ? (
+                  <img
+                    src={previewImage.url}
+                    alt={previewImage.altText || selectedProduct?.node.title || ""}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Package className="h-10 w-10 text-muted-foreground" />
+                )}
+              </div>
+              <div className="text-xs">
+                <p className="font-bold line-clamp-2 min-h-[2.4em]">
+                  {selectedProduct?.node.title || "Selecione um produto"}
+                </p>
+                {previewVariant && (
+                  <p className="text-muted-foreground mt-0.5">{previewVariant.title}</p>
+                )}
+                {previewPrice !== null && (
+                  <div className="mt-1.5">
+                    {previewCompare && previewCompare > previewPrice && (
+                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">
+                        R$ {previewCompare.toFixed(2)}
+                      </p>
+                    )}
+                    <p className="font-bold text-base tabular-nums">R$ {previewPrice.toFixed(2)}</p>
+                    {previewSubscriber !== null && !isNaN(previewSubscriber) && previewSubscriber > 0 && (
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className="font-bold text-sky-500 tabular-nums">
+                          R$ {previewSubscriber.toFixed(2)}
+                        </span>
+                        <Crown className="h-3.5 w-3.5 text-sky-500" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="md:col-span-3">
+                <label className="text-sm font-medium mb-1 block">Produto</label>
+                <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium mb-1 block">Variante</label>
+                <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {selectedProduct?.node.variants.edges.map(v => (
+                      <SelectItem key={v.node.id} value={v.node.id}>
+                        {v.node.title} — R$ {parseFloat(v.node.price.amount).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Preço assinante (R$)</label>
+                <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
+              </div>
+              <div className="md:col-span-3">
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
