@@ -68,8 +68,13 @@ export const Header = () => {
 
         <div className="flex items-center gap-2">
           <Link to={user ? "/perfil" : "/login"}>
-            <Button variant="ghost" size="icon" className="hidden md:flex">
+            <Button variant="ghost" size="sm" className="hidden md:flex items-center gap-2">
               <User className="h-5 w-5" />
+              {user && (
+                <span className="text-sm font-medium max-w-[140px] truncate">
+                  {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
+                </span>
+              )}
             </Button>
           </Link>
           <CartDrawer />
