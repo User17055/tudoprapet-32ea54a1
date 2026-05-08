@@ -11,7 +11,7 @@ export const ClubBanner = () => {
   return (
     <section className="py-10 md:py-14">
       <div className="container mx-auto">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-600 via-sky-500 to-primary text-white p-6 md:p-10 shadow-2xl">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-[hsl(218_70%_15%)] text-white p-6 md:p-10 shadow-2xl">
           {/* Decorative crown */}
           <Crown className="absolute -right-8 -top-8 h-56 w-56 text-white/10 rotate-12" />
           <Crown className="absolute right-32 bottom-4 h-20 w-20 text-white/5 -rotate-12" />
