@@ -9,7 +9,7 @@ import {
   CarouselPrevious,
   type CarouselApi,
 } from "@/components/ui/carousel";
-import heroImage from "@/assets/hero-pets.jpg";
+
 
 // Substitua pelas suas imagens reais (1600x600 recomendado).
 type Banner = {
