@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Truck, Tag, Crown } from "lucide-react";
+import { Tag, Crown } from "lucide-react";
 import {
   Carousel,
   CarouselContent,
@@ -19,7 +19,6 @@ const banners = [
 ];
 
 const promoStrip = [
-  { icon: Truck, title: "Frete R$10", desc: "Pres. Prudente" },
   { icon: Tag, title: "Até 30% OFF", desc: "Em rações premium" },
   { icon: Crown, title: "Clube TudoPraPet", desc: "Preços exclusivos" },
 ];
