@@ -14,10 +14,11 @@ export const HeroSection = () => {
             Qualidade premium com preços que cabem no seu bolso. Aproveite nossas ofertas exclusivas.
           </p>
           <Button
+            asChild
             size="lg"
             className="btn-bounce text-lg px-8 py-6 rounded-full font-display font-bold shadow-lg hover:shadow-xl transition-shadow bg-secondary text-secondary-foreground hover:bg-secondary/90"
           >
-            Ver Ofertas
+            <Link to="/catalogo">Ver Ofertas</Link>
           </Button>
         </div>
         <div className="flex justify-center animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
