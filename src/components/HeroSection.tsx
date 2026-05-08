@@ -110,7 +110,7 @@ export const HeroSection = () => {
           <div className="hidden lg:flex flex-col gap-4">
             <Link
               to="/clube"
-              className="group relative flex-1 rounded-2xl overflow-hidden bg-gradient-to-br from-sky-500 to-sky-700 text-white p-5 shadow-lg hover:shadow-2xl transition-all hover-lift"
+              className="group relative flex-1 rounded-2xl overflow-hidden bg-gradient-to-br from-primary to-[hsl(218_70%_15%)] text-white p-5 shadow-lg hover:shadow-2xl transition-all hover-lift"
             >
               <Crown className="absolute -top-2 -right-2 h-24 w-24 text-white/10 rotate-12" />
               <span className="inline-block text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full mb-2">
@@ -122,7 +122,7 @@ export const HeroSection = () => {
               <p className="text-xs text-white/90 mb-3">
                 Preços exclusivos com a coroa em todos os produtos.
               </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-white text-sky-700 px-3 py-1.5 rounded-full group-hover:bg-secondary group-hover:text-primary transition-colors">
+              <span className="inline-flex items-center gap-1 text-xs font-bold bg-secondary text-primary px-3 py-1.5 rounded-full group-hover:bg-white transition-colors">
                 Quero assinar →
               </span>
             </Link>

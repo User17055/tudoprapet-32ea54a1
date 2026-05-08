@@ -5,8 +5,8 @@ const categories = [
   { icon: Utensils, label: "Rações", slug: "racoes", from: "from-amber-400", to: "to-amber-600" },
   { icon: Pill, label: "Farmácia", slug: "farmacia", from: "from-emerald-400", to: "to-emerald-600" },
   { icon: Gamepad2, label: "Brinquedos", slug: "brinquedos", from: "from-rose-400", to: "to-rose-600" },
-  { icon: BedDouble, label: "Camas", slug: "camas", from: "from-indigo-400", to: "to-indigo-600" },
-  { icon: Sparkles, label: "Higiene", slug: "higiene", from: "from-sky-400", to: "to-sky-600" },
+  { icon: BedDouble, label: "Camas", slug: "camas", from: "from-[hsl(218_58%_35%)]", to: "to-[hsl(218_70%_18%)]" },
+  { icon: Sparkles, label: "Higiene", slug: "higiene", from: "from-[hsl(218_50%_45%)]", to: "to-[hsl(218_65%_25%)]" },
   { icon: Bone, label: "Petiscos", slug: "petiscos", from: "from-orange-400", to: "to-orange-600" },
 ];
 
