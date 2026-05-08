@@ -14,7 +14,7 @@ export const AnnouncementBar = () => {
         <span className="inline-flex items-center gap-1.5">
           <Crown className="h-3.5 w-3.5 text-secondary" />
           <span>
-            Membros do <strong>Clube</strong>: frete grátis acima de R$99
+            Membros do <strong>Clube</strong>: preços exclusivos
           </span>
         </span>
       </div>

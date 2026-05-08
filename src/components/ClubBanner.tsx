@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 const perks = [
   "Preços exclusivos em todo o site",
   "Frete R$ 10,00 em Presidente Prudente",
-  "Lançamentos antes de todo mundo",
+  "Atendimento prioritário no WhatsApp",
 ];
 
 export const ClubBanner = () => {

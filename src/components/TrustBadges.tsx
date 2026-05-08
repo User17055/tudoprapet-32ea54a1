@@ -1,8 +1,7 @@
-import { ShieldCheck, Truck, CreditCard, Headphones } from "lucide-react";
+import { ShieldCheck, Truck, Headphones } from "lucide-react";
 
 const badges = [
   { icon: Truck, label: "Frete a partir de R$10", desc: "Em Pres. Prudente" },
-  { icon: CreditCard, label: "Em até 12x", desc: "Sem juros no cartão" },
   { icon: ShieldCheck, label: "Compra 100% segura", desc: "Pagamento protegido" },
   { icon: Headphones, label: "Atendimento humano", desc: "Tira dúvidas no WhatsApp" },
 ];
@@ -11,7 +10,7 @@ export const TrustBadges = () => {
   return (
     <section className="bg-primary text-primary-foreground py-3 border-y border-primary/20">
       <div className="container mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           {badges.map((b, i) => (
             <div
               key={i}

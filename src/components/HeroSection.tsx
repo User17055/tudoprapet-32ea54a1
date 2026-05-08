@@ -85,7 +85,7 @@ const banners: Banner[] = [
     href: "/clube",
     badge: "Clube TudoPraPet",
     title: "Vire assinante e pague menos",
-    subtitle: "Frete grátis acima de R$ 99 e preços exclusivos",
+    subtitle: "Preços exclusivos para membros",
     cta: "Quero assinar",
     overlay: "bg-gradient-to-r from-primary/90 via-primary/60 to-transparent",
     ctaClass: "bg-secondary text-primary hover:bg-white",
