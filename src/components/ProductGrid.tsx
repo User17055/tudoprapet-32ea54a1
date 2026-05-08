@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
-import { Loader2, PackageOpen, Flame } from "lucide-react";
+import { Loader2, PackageOpen } from "lucide-react";
 
 export const ProductGrid = () => {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
@@ -27,8 +27,8 @@ export const ProductGrid = () => {
       <div className="container mx-auto">
         <div className="flex items-end justify-between mb-6">
           <div>
-            <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-destructive">
-              <Flame className="h-3.5 w-3.5" /> Bombando agora
+            <span className="text-xs font-bold uppercase tracking-wider text-secondary">
+              Selecionados pra você
             </span>
             <h2 className="font-display font-900 text-2xl md:text-3xl">
               Destaques da semana
