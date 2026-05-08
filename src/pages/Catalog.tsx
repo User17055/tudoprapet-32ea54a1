@@ -106,22 +106,41 @@ const Catalog = () => {
         },
       };
 
+      // Palavras-chave que indicam FARMÁCIA — produtos com esses termos NUNCA devem entrar em rações/petiscos
+      const pharmaExclusions = [
+        "bravecto", "nexgard", "simparic", "frontline", "advantage", "advocate",
+        "antipulgas", "vermifugo", "vermífugo", "vermicida", "remedio", "remédio",
+        "medicamento", "antibiotico", "antibiótico", "anti-inflamatorio", "anti-inflamatório",
+        "vacina", "suplemento", "vitamina",
+      ];
+
       const config = categoryMap[category];
       if (config) {
         const normalizedTags = config.tags.map(normalizeText);
         const keywords = config.keywords;
+        const normalizedExclusions = pharmaExclusions.map(normalizeText);
 
         result = result.filter((p) => {
-          // 1) Match por TAG do Shopify (prioridade)
           const productTags = (p.node.tags || []).map(normalizeText);
+          const pType = normalizeText(p.node.productType || "");
+          const text = normalizeText(`${p.node.title} ${p.node.description}`);
+
+          // Se a categoria buscada NÃO é farmácia, exclui produtos de farmácia
+          if (category !== "farmacia") {
+            const isPharma =
+              normalizedExclusions.some((kw) => text.includes(kw)) ||
+              productTags.some((t) => normalizedExclusions.includes(t)) ||
+              normalizedExclusions.some((kw) => pType.includes(kw));
+            if (isPharma) return false;
+          }
+
+          // 1) Match por TAG do Shopify (prioridade)
           if (productTags.some((t) => normalizedTags.includes(t))) return true;
 
           // 2) Match por productType
-          const pType = normalizeText(p.node.productType || "");
           if (pType && normalizedTags.some((t) => pType.includes(t))) return true;
 
           // 3) Fallback: busca em texto
-          const text = normalizeText(`${p.node.title} ${p.node.description}`);
           return keywords.some((kw) => {
             const cleanKw = normalizeText(kw);
             const regex = new RegExp(`\\b${cleanKw}\\b`, "i");
