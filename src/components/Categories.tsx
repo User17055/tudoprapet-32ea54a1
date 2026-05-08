@@ -47,7 +47,7 @@ export const Categories = () => {
                 {/* Círculo principal */}
                 <div className="relative flex items-center justify-center h-16 w-16 md:h-20 md:w-20 rounded-full bg-gradient-to-br from-primary via-primary to-[hsl(218_70%_18%)] shadow-lg ring-4 ring-secondary/20 group-hover:ring-secondary/50 group-hover:scale-110 transition-all">
                   <cat.icon
-                    className="h-8 w-8 md:h-10 md:w-10 text-secondary"
+                    className="h-8 w-8 md:h-10 md:w-10 text-white"
                     strokeWidth={2.2}
                   />
                 </div>

@@ -62,6 +62,12 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+    background-image:
+      radial-gradient(at 12% 8%, hsl(40 76% 60% / 0.10) 0px, transparent 45%),
+      radial-gradient(at 88% 6%, hsl(218 58% 27% / 0.08) 0px, transparent 50%),
+      radial-gradient(at 92% 88%, hsl(40 76% 60% / 0.10) 0px, transparent 45%),
+      radial-gradient(at 5% 92%, hsl(218 58% 27% / 0.07) 0px, transparent 50%);
+    background-attachment: fixed;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
@@ -84,4 +90,14 @@
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Pequenas patinhas decorativas no fundo das seções */
+  .paw-pattern {
+    background-image:
+      radial-gradient(circle at 10% 20%, hsl(var(--primary) / 0.04) 0 6px, transparent 7px),
+      radial-gradient(circle at 80% 70%, hsl(var(--secondary) / 0.05) 0 8px, transparent 9px),
+      radial-gradient(circle at 30% 80%, hsl(var(--primary) / 0.04) 0 5px, transparent 6px),
+      radial-gradient(circle at 65% 25%, hsl(var(--secondary) / 0.05) 0 7px, transparent 8px);
+    background-size: 220px 220px;
+  }
 }
