@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const CATEGORIES = [
   { value: "all", label: "Todas" },
+  { value: "promocoes", label: "Promoções" },
   { value: "racoes", label: "Rações" },
   { value: "brinquedos", label: "Brinquedos" },
   { value: "camas", label: "Camas & Casinhas" },
@@ -81,21 +82,34 @@ const Catalog = () => {
         .replace(/[\u0300-\u036f]/g, "");
     };
 
-    // Category filter — APENAS por TAG do Shopify (igual ao filtro de farmácia)
-    if (category !== "all") {
-      const categoryTags: Record<string, string[]> = {
-        racoes: ["racoes", "racao", "rações", "ração", "alimento", "petisco"],
-        brinquedos: ["brinquedos", "brinquedo", "toy"],
-        camas: ["camas", "cama", "casinha", "caminha"],
-        farmacia: ["farmacia", "farmácia", "remedio", "medicamento", "antipulgas"],
-        higiene: ["higiene", "shampoo", "banho"],
+    // Category filter
+    if (category === "promocoes") {
+      result = result.filter((p) => {
+        const v = p.node.variants.edges[0]?.node;
+        const price = parseFloat(v?.price?.amount || "0");
+        const cmp = v?.compareAtPrice ? parseFloat(v.compareAtPrice.amount) : 0;
+        return cmp > price;
+      });
+    } else if (category !== "all") {
+      const categoryKeywords: Record<string, string[]> = {
+        racoes: ["racoes", "racao", "alimento", "petisco", "ração", "rações"],
+        brinquedos: ["brinquedo", "brinquedos", "toy"],
+        camas: ["cama", "camas", "casinha", "caminha"],
+        farmacia: ["farmacia", "farmácia", "remedio", "medicamento", "antipulgas", "vermifugo"],
+        higiene: ["higiene", "shampoo", "banho", "perfume"],
       };
 
-      const tags = (categoryTags[category] || []).map(normalizeText);
-      if (tags.length > 0) {
+      const keywords = (categoryKeywords[category] || []).map(normalizeText);
+      if (keywords.length > 0) {
         result = result.filter((p) => {
-          const productTags = (p.node.tags || []).map(normalizeText);
-          return productTags.some((t) => tags.includes(t));
+          const haystack = [
+            ...(p.node.tags || []),
+            p.node.productType || "",
+            p.node.title || "",
+          ]
+            .map(normalizeText)
+            .join(" ");
+          return keywords.some((k) => haystack.includes(k));
         });
       }
     }
