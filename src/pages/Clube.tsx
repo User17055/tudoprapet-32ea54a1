@@ -2,9 +2,16 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { Crown, Check, Loader2, Star } from "lucide-react";
+import { Crown, Check, Loader2, Star, MessageCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+
+// Atualize com seu número (formato internacional, só números): 55 + DDD + número
+const WHATSAPP_NUMBER = "5518999999999";
+const WHATSAPP_MESSAGE = encodeURIComponent(
+  "Olá! Gostaria de saber mais sobre o Clube TudoPraPet."
+);
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`;
 
 const benefits = [
   "Até 50% de desconto em produtos selecionados",
@@ -34,6 +41,19 @@ const ClubePage = () => {
             <p className="text-lg md:text-xl opacity-90 max-w-2xl mx-auto mb-8">
               Membros do clube recebem <span className="font-bold text-secondary">até 50% de desconto</span> em produtos selecionados, aplicado automaticamente no checkout!
             </p>
+
+            {/* CTA WhatsApp - sempre visível */}
+            <div className="mb-8">
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1faa53] text-white font-display font-bold px-6 py-3 rounded-full shadow-lg transition-colors"
+              >
+                <MessageCircle className="h-5 w-5" />
+                Falar com a gente no WhatsApp
+              </a>
+            </div>
 
             {loading ? (
               <Loader2 className="h-8 w-8 animate-spin mx-auto" />
