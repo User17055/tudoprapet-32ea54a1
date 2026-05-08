@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 // Atualize com seu número (formato internacional, só números): 55 + DDD + número
-const WHATSAPP_NUMBER = "5518999999999";
+const WHATSAPP_NUMBER = "5518996642021";
 const WHATSAPP_MESSAGE = encodeURIComponent(
   "Olá! Gostaria de saber mais sobre o Clube TudoPraPet."
 );
@@ -16,7 +16,7 @@ const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`
 const benefits = [
   "Até 50% de desconto em produtos selecionados",
   "Acesso antecipado a lançamentos",
-  "Frete grátis em pedidos acima de R$ 99",
+  "Frete a partir de R$ 10 em Presidente Prudente",
   "Atendimento prioritário",
   "Ofertas e promoções especiais",
 ];
