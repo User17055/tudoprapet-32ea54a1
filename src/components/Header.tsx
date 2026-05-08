@@ -123,7 +123,7 @@ export const Header = () => {
             to={user ? "/perfil" : "/login"}
             className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
           >
-            {user ? "Meu Perfil" : "Entrar"}
+            {user ? (user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]) : "Entrar"}
           </Link>
         </nav>
       )}
