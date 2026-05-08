@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 const perks = [
   "Preços exclusivos em todo o site",
-  "Frete grátis em compras selecionadas",
+  "Frete R$ 10,00 em Presidente Prudente",
   "Lançamentos antes de todo mundo",
 ];
 
