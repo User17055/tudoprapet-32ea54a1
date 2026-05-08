@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { AnnouncementBar } from "@/components/AnnouncementBar";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
@@ -29,6 +30,7 @@ export const Header = () => {
 
   return (
     <header className="sticky top-0 z-50 bg-card shadow-sm border-b border-border">
+      <AnnouncementBar />
       <div className="container mx-auto flex items-center justify-between gap-4 py-3">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
