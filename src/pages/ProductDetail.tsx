@@ -316,7 +316,7 @@ const ProductDetail = () => {
   };
 
   const descriptionBlocks = parseDescription(customContent?.description || node.description || "");
-  const specBlocks = parseDescription(customContent?.specifications || "");
+  
 
   // Render **bold** and *italic* markers as <strong>/<em>
   const renderInline = (text: string) => {
