@@ -249,7 +249,8 @@ const ProductDetail = () => {
     };
 
     for (const line of lines) {
-      const bulletMatch = /^[-–—*•]\s*(.+)/.exec(line) || /^\d+[.)]\s+(.+)/.exec(line);
+      // Bullet: -, –, —, • require a space; * requires space AND must not be ** (bold marker)
+      const bulletMatch = /^(?:[-–—•]|\*(?!\*))\s+(.+)/.exec(line) || /^\d+[.)]\s+(.+)/.exec(line);
       if (bulletMatch) {
         const item = bulletMatch[1].trim();
         if (item) {
