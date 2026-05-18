@@ -86,7 +86,9 @@ export const Header = () => {
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-        </div>
+      </div>
+
+      <MegaMenu />
       </div>
 
       <div className="md:hidden px-4 pb-3">
