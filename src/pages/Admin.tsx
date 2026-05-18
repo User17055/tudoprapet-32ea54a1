@@ -755,16 +755,6 @@ function ContentTab() {
               disabled={!productId}
             />
           </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Especificações</label>
-            <FormattedTextarea
-              value={specifications}
-              onChange={setSpecifications}
-              placeholder={"Especificações:\n- Peso: 500g\n- Validade: 12 meses\n- Princípio ativo: ..."}
-              rows={8}
-              disabled={!productId}
-            />
-          </div>
           <Button onClick={handleSave} disabled={saving || !productId}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
           </Button>
