@@ -613,7 +613,7 @@ function AssignPanel() {
                   <div className="mt-6">
                     <label className="text-sm font-medium mb-2 block">Atributos extras</label>
                     <p className="text-xs text-muted-foreground mb-2">
-                      Use para coisas como Peso, Idade, Sabor, Princípio Ativo, etc.
+                      Use os rótulos padrão (Linha, Pet, Idade, Formato, Indicação Veterinária, Raça, Sabor, Tipo) — eles aparecem como filtros no catálogo. Você também pode criar um rótulo personalizado.
                     </p>
                     <div className="space-y-2">
                       {attrs.map((a) => (
@@ -625,19 +625,29 @@ function AssignPanel() {
                           </Button>
                         </div>
                       ))}
-                      <div className="flex gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto] gap-2">
+                        <Select value={newKey} onValueChange={setNewKey}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {STANDARD_ATTR_KEYS.map((k) => (
+                              <SelectItem key={k} value={k}>{k}</SelectItem>
+                            ))}
+                            <SelectItem value="__custom__">Personalizado…</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {newKey === "__custom__" && (
+                          <Input
+                            placeholder="Rótulo personalizado"
+                            value={customKey}
+                            onChange={(e) => setCustomKey(e.target.value)}
+                          />
+                        )}
                         <Input
-                          placeholder="Rótulo (ex: Peso)"
-                          value={newKey}
-                          onChange={(e) => setNewKey(e.target.value)}
-                          className="flex-1"
-                        />
-                        <Input
-                          placeholder="Valor (ex: 4kg)"
+                          placeholder="Valor (ex: Adulto, Frango, 4kg)"
                           value={newValue}
                           onChange={(e) => setNewValue(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
-                          className="flex-1"
+                          className={newKey === "__custom__" ? "" : "sm:col-span-1"}
                         />
                         <Button onClick={handleAddAttr} size="icon">
                           <Plus className="h-4 w-4" />
