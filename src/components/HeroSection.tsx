@@ -49,23 +49,6 @@ export const HeroSection = () => {
               </Link>
             </div>
 
-            {/* Mini stats */}
-            <div className="flex flex-wrap gap-6 justify-center lg:justify-start text-sm">
-              <div>
-                <div className="font-display font-900 text-2xl text-primary">10k+</div>
-                <div className="text-xs text-muted-foreground">Pets atendidos</div>
-              </div>
-              <div className="h-10 w-px bg-border" />
-              <div>
-                <div className="font-display font-900 text-2xl text-primary">25%</div>
-                <div className="text-xs text-muted-foreground">OFF p/ membros</div>
-              </div>
-              <div className="h-10 w-px bg-border" />
-              <div>
-                <div className="font-display font-900 text-2xl text-primary">4.9★</div>
-                <div className="text-xs text-muted-foreground">Avaliação</div>
-              </div>
-            </div>
           </div>
 
           {/* Lado direito — Imagem com círculo amarelo */}
