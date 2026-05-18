@@ -1,9 +1,9 @@
 import { ShieldCheck, Truck, Headphones } from "lucide-react";
 
 const badges = [
-  { icon: Truck, label: "Frete a partir de R$10", desc: "Em Pres. Prudente" },
-  { icon: ShieldCheck, label: "Compra 100% segura", desc: "Pagamento protegido" },
-  { icon: Headphones, label: "Atendimento humano", desc: "Tira dúvidas no WhatsApp" },
+  { icon: Truck, label: "Frete a partir de R$10" },
+  { icon: ShieldCheck, label: "Compra 100% segura" },
+  { icon: Headphones, label: "Atendimento humano" },
 ];
 
 export const TrustBadges = () => {
