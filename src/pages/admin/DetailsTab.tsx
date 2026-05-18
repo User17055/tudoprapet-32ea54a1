@@ -10,6 +10,7 @@ import { Trash2, Loader2, Plus, FolderTree, Tag, Package, X } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
 interface Category {
   id: string;
@@ -297,7 +298,8 @@ function AssignPanel() {
   const [brandId, setBrandId] = useState<string>("none");
   const [attrs, setAttrs] = useState<ProductAttribute[]>([]);
   const [contentRow, setContentRow] = useState<ProductContentRow | null>(null);
-  const [newKey, setNewKey] = useState("");
+  const [newKey, setNewKey] = useState<string>(STANDARD_ATTR_KEYS[0]);
+  const [customKey, setCustomKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
@@ -411,12 +413,13 @@ function AssignPanel() {
 
   const handleAddAttr = async () => {
     if (!productId) return;
-    if (!newKey.trim() || !newValue.trim()) return toast.error("Preencha rótulo e valor");
+    const finalKey = newKey === "__custom__" ? customKey.trim() : newKey.trim();
+    if (!finalKey || !newValue.trim()) return toast.error("Preencha rótulo e valor");
     const { data, error } = await supabase
       .from("product_attributes")
       .insert({
         shopify_product_id: productId,
-        attr_key: newKey.trim(),
+        attr_key: finalKey,
         attr_value: newValue.trim(),
         sort_order: attrs.length,
       })
@@ -424,7 +427,7 @@ function AssignPanel() {
       .single();
     if (error) return toast.error("Erro: " + error.message);
     setAttrs([...attrs, data as ProductAttribute]);
-    setNewKey("");
+    setCustomKey("");
     setNewValue("");
     await reloadAll();
   };
@@ -610,7 +613,7 @@ function AssignPanel() {
                   <div className="mt-6">
                     <label className="text-sm font-medium mb-2 block">Atributos extras</label>
                     <p className="text-xs text-muted-foreground mb-2">
-                      Use para coisas como Peso, Idade, Sabor, Princípio Ativo, etc.
+                      Use os rótulos padrão (Linha, Pet, Idade, Formato, Indicação Veterinária, Raça, Sabor, Tipo) — eles aparecem como filtros no catálogo. Você também pode criar um rótulo personalizado.
                     </p>
                     <div className="space-y-2">
                       {attrs.map((a) => (
@@ -622,19 +625,30 @@ function AssignPanel() {
                           </Button>
                         </div>
                       ))}
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Select value={newKey} onValueChange={setNewKey}>
+                          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {STANDARD_ATTR_KEYS.map((k) => (
+                              <SelectItem key={k} value={k}>{k}</SelectItem>
+                            ))}
+                            <SelectItem value="__custom__">Personalizado…</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {newKey === "__custom__" && (
+                          <Input
+                            placeholder="Rótulo personalizado"
+                            value={customKey}
+                            onChange={(e) => setCustomKey(e.target.value)}
+                            className="w-[180px]"
+                          />
+                        )}
                         <Input
-                          placeholder="Rótulo (ex: Peso)"
-                          value={newKey}
-                          onChange={(e) => setNewKey(e.target.value)}
-                          className="flex-1"
-                        />
-                        <Input
-                          placeholder="Valor (ex: 4kg)"
+                          placeholder="Valor (ex: Adulto, Frango, 4kg)"
                           value={newValue}
                           onChange={(e) => setNewValue(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
-                          className="flex-1"
+                          className="flex-1 min-w-[160px]"
                         />
                         <Button onClick={handleAddAttr} size="icon">
                           <Plus className="h-4 w-4" />
