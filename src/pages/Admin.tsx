@@ -622,3 +622,192 @@ function UsersTab() {
     </div>
   );
 }
+
+interface ProductContent {
+  id: string;
+  shopify_product_id: string;
+  description: string | null;
+  specifications: string | null;
+}
+
+function ContentTab() {
+  const [products, setProducts] = useState<ShopifyProduct[]>([]);
+  const [contents, setContents] = useState<ProductContent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [productId, setProductId] = useState("");
+  const [description, setDescription] = useState("");
+  const [specifications, setSpecifications] = useState("");
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [shop, cnt] = await Promise.all([
+        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        supabase.from("product_content").select("*").order("updated_at", { ascending: false }),
+      ]);
+      setProducts(shop?.data?.products?.edges || []);
+      if (cnt.error) throw cnt.error;
+      setContents((cnt.data || []) as ProductContent[]);
+    } catch (e) {
+      toast.error("Erro ao carregar dados");
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  // When product changes, load existing content if any
+  useEffect(() => {
+    if (!productId) {
+      setDescription("");
+      setSpecifications("");
+      return;
+    }
+    const existing = contents.find(c => c.shopify_product_id === productId);
+    setDescription(existing?.description || "");
+    setSpecifications(existing?.specifications || "");
+  }, [productId, contents]);
+
+  const selectedProduct = useMemo(
+    () => products.find(p => p.node.id === productId),
+    [products, productId]
+  );
+
+  const handleSave = async () => {
+    if (!productId) {
+      toast.error("Selecione um produto");
+      return;
+    }
+    setSaving(true);
+    const existing = contents.find(c => c.shopify_product_id === productId);
+    const payload = {
+      shopify_product_id: productId,
+      description: description.trim() || null,
+      specifications: specifications.trim() || null,
+    };
+    const { error } = existing
+      ? await supabase.from("product_content").update(payload).eq("id", existing.id)
+      : await supabase.from("product_content").insert(payload);
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao salvar: " + error.message);
+      return;
+    }
+    toast.success("Conteúdo salvo!");
+    loadAll();
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("product_content").delete().eq("id", id);
+    if (error) return toast.error("Erro ao excluir");
+    toast.success("Removido");
+    setContents(contents.filter(c => c.id !== id));
+    if (selectedProduct && contents.find(c => c.id === id)?.shopify_product_id === productId) {
+      setDescription("");
+      setSpecifications("");
+    }
+  };
+
+  const productById = useMemo(() => {
+    const map = new Map<string, ShopifyProduct["node"]>();
+    products.forEach(p => map.set(p.node.id, p.node));
+    return map;
+  }, [products]);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Editar conteúdo do produto</CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            O conteúdo aqui aparece em "Sobre o produto" na página de detalhes, substituindo o que vem da Shopify.
+            Use uma linha por item. Termine uma linha com ":" para criar um título. Linhas iniciadas com "-" viram itens de lista.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Produto</label>
+            <Select value={productId} onValueChange={setProductId}>
+              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+              <SelectContent>
+                {products.map(p => (
+                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Descrição</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
+              rows={10}
+              disabled={!productId}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Especificações</label>
+            <Textarea
+              value={specifications}
+              onChange={(e) => setSpecifications(e.target.value)}
+              placeholder={"Especificações:\n- Peso: 500g\n- Validade: 12 meses\n- Princípio ativo: ..."}
+              rows={8}
+              disabled={!productId}
+            />
+          </div>
+          <Button onClick={handleSave} disabled={saving || !productId}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Produtos com conteúdo personalizado ({contents.length})</CardTitle></CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : contents.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">Nenhum conteúdo cadastrado.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Especificações</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contents.map(c => {
+                  const prod = productById.get(c.shopify_product_id);
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{prod?.title || "Produto removido"}</TableCell>
+                      <TableCell>{c.description ? "✓" : "—"}</TableCell>
+                      <TableCell>{c.specifications ? "✓" : "—"}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setProductId(c.shopify_product_id)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
