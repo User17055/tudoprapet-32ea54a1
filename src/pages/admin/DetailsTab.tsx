@@ -287,6 +287,11 @@ function AssignPanel() {
   const [productId, setProductId] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // all configured links across products (for the "já configurados" list)
+  const [allProductCats, setAllProductCats] = useState<ProductCategoryLink[]>([]);
+  const [allProductContent, setAllProductContent] = useState<ProductContentRow[]>([]);
+  const [allProductAttrs, setAllProductAttrs] = useState<ProductAttribute[]>([]);
+
   // selection for current product
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
   const [brandId, setBrandId] = useState<string>("none");
@@ -295,6 +300,18 @@ function AssignPanel() {
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const reloadAll = async () => {
+    const [pc, pcontent, pa] = await Promise.all([
+      supabase.from("product_categories").select("*"),
+      supabase.from("product_content").select("id, shopify_product_id, brand_id"),
+      supabase.from("product_attributes").select("*"),
+    ]);
+    setAllProductCats((pc.data || []) as ProductCategoryLink[]);
+    setAllProductContent((pcontent.data || []) as ProductContentRow[]);
+    setAllProductAttrs((pa.data || []) as ProductAttribute[]);
+  };
 
   useEffect(() => {
     (async () => {
@@ -308,6 +325,7 @@ function AssignPanel() {
         setProducts(shop?.data?.products?.edges || []);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
+        await reloadAll();
       } catch (e) {
         toast.error("Erro ao carregar dados");
       } finally {
