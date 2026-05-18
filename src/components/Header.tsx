@@ -6,10 +6,12 @@ import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
-import { MegaMenu } from "@/components/MegaMenu";
 import logo from "@/assets/logo.png";
 
-const navLinks: { label: string; href: string }[] = [
+const navLinks = [
+  { label: "Catálogo", href: "/catalogo" },
+  { label: "Rações", href: "/catalogo?categoria=racoes" },
+  { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
   { label: "Clube", href: "/clube" },
 ];
 
@@ -63,7 +65,7 @@ export const Header = () => {
           ))}
         </nav>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <Link to={user ? "/perfil" : "/login"}>
             <Button variant="ghost" size="sm" className="hidden md:flex items-center gap-2">
               <User className="h-5 w-5" />
@@ -85,8 +87,6 @@ export const Header = () => {
           </Button>
         </div>
       </div>
-
-      <MegaMenu />
 
       <div className="md:hidden px-4 pb-3">
         <div className="relative">
