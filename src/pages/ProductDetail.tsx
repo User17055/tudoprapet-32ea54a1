@@ -273,6 +273,26 @@ const ProductDetail = () => {
   const descriptionBlocks = parseDescription(customContent?.description || node.description || "");
   const specBlocks = parseDescription(customContent?.specifications || "");
 
+  // Render **bold** and *italic* markers as <strong>/<em>
+  const renderInline = (text: string) => {
+    const parts: (string | JSX.Element)[] = [];
+    const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    let key = 0;
+    while ((m = regex.exec(text)) !== null) {
+      if (m.index > lastIndex) parts.push(text.slice(lastIndex, m.index));
+      if (m[2] !== undefined) {
+        parts.push(<strong key={key++} className="font-bold text-foreground">{m[2]}</strong>);
+      } else if (m[3] !== undefined) {
+        parts.push(<em key={key++} className="italic">{m[3]}</em>);
+      }
+      lastIndex = m.index + m[0].length;
+    }
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    return parts;
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
@@ -561,7 +581,7 @@ const ProductDetail = () => {
                         key={idx}
                         className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0"
                       >
-                        {block.text}
+                        {renderInline(block.text)}
                       </h3>
                     );
                   }
@@ -574,7 +594,7 @@ const ProductDetail = () => {
                             className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed"
                           >
                             <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                            <span>{item}</span>
+                            <span>{renderInline(item)}</span>
                           </li>
                         ))}
                       </ul>
@@ -585,7 +605,7 @@ const ProductDetail = () => {
                       key={idx}
                       className="text-base leading-relaxed text-foreground/80"
                     >
-                      {block.text}
+                      {renderInline(block.text)}
                     </p>
                   );
                 })}
@@ -613,7 +633,7 @@ const ProductDetail = () => {
                   if (block.type === "heading") {
                     return (
                       <h3 key={idx} className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0">
-                        {block.text}
+                        {renderInline(block.text)}
                       </h3>
                     );
                   }
@@ -623,14 +643,14 @@ const ProductDetail = () => {
                         {block.items.map((item, i) => (
                           <li key={i} className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed">
                             <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                            <span>{item}</span>
+                            <span>{renderInline(item)}</span>
                           </li>
                         ))}
                       </ul>
                     );
                   }
                   return (
-                    <p key={idx} className="text-base leading-relaxed text-foreground/80">{block.text}</p>
+                    <p key={idx} className="text-base leading-relaxed text-foreground/80">{renderInline(block.text)}</p>
                   );
                 })}
               </div>

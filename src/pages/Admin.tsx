@@ -8,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText } from "lucide-react";
+import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText, Bold, Italic } from "lucide-react";
+import { useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -741,9 +742,9 @@ function ContentTab() {
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">Descrição</label>
-            <Textarea
+            <FormattedTextarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
               rows={10}
               disabled={!productId}
@@ -751,9 +752,9 @@ function ContentTab() {
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">Especificações</label>
-            <Textarea
+            <FormattedTextarea
               value={specifications}
-              onChange={(e) => setSpecifications(e.target.value)}
+              onChange={setSpecifications}
               placeholder={"Especificações:\n- Peso: 500g\n- Validade: 12 meses\n- Princípio ativo: ..."}
               rows={8}
               disabled={!productId}
@@ -808,6 +809,60 @@ function ContentTab() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function FormattedTextarea({
+  value,
+  onChange,
+  placeholder,
+  rows,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const wrap = (marker: string) => {
+    const ta = ref.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = value.slice(start, end) || "texto";
+    const next = value.slice(0, start) + marker + selected + marker + value.slice(end);
+    onChange(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + marker.length, start + marker.length + selected.length);
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1">
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => wrap("**")}>
+          <Bold className="h-3.5 w-3.5" />
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => wrap("*")}>
+          <Italic className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-xs text-muted-foreground self-center ml-2">
+          Use **negrito** e *itálico*
+        </span>
+      </div>
+      <Textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        disabled={disabled}
+      />
     </div>
   );
 }
