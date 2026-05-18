@@ -401,6 +401,7 @@ function AssignPanel() {
         setContentRow(data as ProductContentRow);
       }
       toast.success("Salvo!");
+      await reloadAll();
     } catch (e: any) {
       toast.error("Erro: " + (e?.message || ""));
     } finally {
