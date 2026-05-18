@@ -581,7 +581,7 @@ const ProductDetail = () => {
                         key={idx}
                         className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0"
                       >
-                        {block.text}
+                        {renderInline(block.text)}
                       </h3>
                     );
                   }
