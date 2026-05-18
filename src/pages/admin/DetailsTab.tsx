@@ -89,33 +89,27 @@ interface AttrValue { id: string; attr_key: string; attr_value: string; sort_ord
 function ValuesPanel() {
   const [items, setItems] = useState<AttrValue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [customKeys, setCustomKeys] = useState<string[]>([]);
-  const [key, setKey] = useState<string>(STANDARD_ATTR_KEYS[0]);
-  const [customKey, setCustomKey] = useState("");
+  const [key, setKey] = useState("");
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: vals }, { data: prodAttrs }] = await Promise.all([
-      supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
-      supabase.from("product_attributes").select("attr_key"),
-    ]);
+    const { data: vals } = await supabase
+      .from("attribute_values")
+      .select("*")
+      .order("attr_key")
+      .order("sort_order")
+      .order("attr_value");
     setItems((vals || []) as AttrValue[]);
-    // discover custom keys already used on products
-    const std = new Set(STANDARD_ATTR_KEYS as readonly string[]);
-    const extra = new Set<string>();
-    (prodAttrs || []).forEach((r: any) => { if (!std.has(r.attr_key)) extra.add(r.attr_key); });
-    (vals || []).forEach((r: any) => { if (!std.has(r.attr_key)) extra.add(r.attr_key); });
-    setCustomKeys(Array.from(extra).sort());
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
   const handleAdd = async () => {
-    const finalKey = key === "__custom__" ? customKey.trim() : key;
-    if (!finalKey || !value.trim()) return toast.error("Preencha rótulo e valor");
+    const finalKey = key.trim();
+    if (!finalKey || !value.trim()) return toast.error("Preencha o título e o valor");
     setSaving(true);
     const { error } = await supabase.from("attribute_values").insert({
       attr_key: finalKey,
@@ -124,12 +118,11 @@ function ValuesPanel() {
     });
     setSaving(false);
     if (error) {
-      if (error.code === "23505") return toast.error("Esse valor já existe para esse rótulo");
+      if (error.code === "23505") return toast.error("Esse valor já existe para esse título");
       return toast.error("Erro: " + error.message);
     }
     toast.success("Valor adicionado");
     setValue("");
-    setCustomKey("");
     load();
   };
 
@@ -139,16 +132,20 @@ function ValuesPanel() {
     load();
   };
 
+  const existingKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) set.add(it.attr_key);
+    return Array.from(set).sort();
+  }, [items]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, AttrValue[]>();
-    for (const k of STANDARD_ATTR_KEYS) map.set(k, []);
-    for (const k of customKeys) if (!map.has(k)) map.set(k, []);
     for (const it of items) {
       if (!map.has(it.attr_key)) map.set(it.attr_key, []);
       map.get(it.attr_key)!.push(it);
     }
-    return Array.from(map.entries());
-  }, [items, customKeys]);
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
 
   return (
     <div className="space-y-6">
@@ -156,36 +153,49 @@ function ValuesPanel() {
         <CardHeader><CardTitle>Cadastrar valor</CardTitle></CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-3">
-            Cadastre valores que poderão ser selecionados rapidamente ao atribuir atributos a um produto. Ex.: Pet → Cachorro, Gato.
+            Crie seus próprios títulos (ex.: Pet, Sabor, Tamanho) e os valores correspondentes (ex.: Cachorro, Frango, 1kg). Eles aparecerão como filtros no catálogo e como opções ao atribuir produtos.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <Select value={key} onValueChange={setKey}>
-              <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STANDARD_ATTR_KEYS.map((k) => (
-                  <SelectItem key={k} value={k}>{k}</SelectItem>
-                ))}
-                {customKeys.map((k) => (
-                  <SelectItem key={k} value={k}>{k}</SelectItem>
-                ))}
-                <SelectItem value="__custom__">Personalizado…</SelectItem>
-              </SelectContent>
-            </Select>
-            {key === "__custom__" && (
-              <Input placeholder="Novo rótulo" value={customKey} onChange={(e) => setCustomKey(e.target.value)} className="w-[180px]" />
-            )}
-            <Input
-              placeholder="Valor (ex: Cachorro)"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              className="flex-1 min-w-[180px]"
-            />
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="w-[200px]">
+              <label className="text-xs font-medium mb-1 block">Título</label>
+              <Input
+                list="existing-attr-keys"
+                placeholder="Ex.: Pet"
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+              />
+              <datalist id="existing-attr-keys">
+                {existingKeys.map((k) => <option key={k} value={k} />)}
+              </datalist>
+            </div>
+            <div className="flex-1 min-w-[180px]">
+              <label className="text-xs font-medium mb-1 block">Valor</label>
+              <Input
+                placeholder="Ex.: Cachorro"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              />
+            </div>
             <Button onClick={handleAdd} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
               Adicionar
             </Button>
           </div>
+          {existingKeys.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs text-muted-foreground">Reutilizar título:</span>
+              {existingKeys.map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setKey(k)}
+                  className="text-xs px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary"
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -194,25 +204,23 @@ function ValuesPanel() {
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : grouped.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Nenhum valor cadastrado ainda.</p>
           ) : (
             <div className="space-y-4">
               {grouped.map(([k, list]) => (
                 <div key={k} className="border border-border rounded-lg p-3">
                   <div className="font-display font-bold text-sm mb-2">{k}</div>
-                  {list.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Nenhum valor cadastrado.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {list.map((v) => (
-                        <Badge key={v.id} variant="secondary" className="gap-1.5 pl-2 pr-1 py-1">
-                          {v.attr_value}
-                          <button onClick={() => handleDel(v.id)} className="hover:text-destructive">
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {list.map((v) => (
+                      <Badge key={v.id} variant="secondary" className="gap-1.5 pl-2 pr-1 py-1">
+                        {v.attr_value}
+                        <button onClick={() => handleDel(v.id)} className="hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
