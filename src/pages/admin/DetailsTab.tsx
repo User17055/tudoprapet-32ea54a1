@@ -580,8 +580,8 @@ function AssignPanel() {
 
   const handleAddAttr = async () => {
     if (!productId) return;
-    const finalKey = newKey === "__custom__" ? customKey.trim() : newKey.trim();
-    if (!finalKey || !newValue.trim()) return toast.error("Preencha rótulo e valor");
+    const finalKey = newKey.trim();
+    if (!finalKey || !newValue.trim()) return toast.error("Selecione um título e um valor");
     const { data, error } = await supabase
       .from("product_attributes")
       .insert({
@@ -594,7 +594,6 @@ function AssignPanel() {
       .single();
     if (error) return toast.error("Erro: " + error.message);
     setAttrs([...attrs, data as ProductAttribute]);
-    setCustomKey("");
     setNewValue("");
     await reloadAll();
   };
