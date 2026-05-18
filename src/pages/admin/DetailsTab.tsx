@@ -70,15 +70,156 @@ const categoryPath = (cat: Category, all: Category[]): string => {
 export default function DetailsTab() {
   return (
     <Tabs defaultValue="categories">
-      <TabsList>
+      <TabsList className="flex-wrap h-auto">
         <TabsTrigger value="categories"><FolderTree className="h-4 w-4 mr-2" />Categorias</TabsTrigger>
         <TabsTrigger value="brands"><Tag className="h-4 w-4 mr-2" />Marcas</TabsTrigger>
+        <TabsTrigger value="values"><ListChecks className="h-4 w-4 mr-2" />Valores</TabsTrigger>
         <TabsTrigger value="assign"><Package className="h-4 w-4 mr-2" />Atribuir a produtos</TabsTrigger>
       </TabsList>
       <TabsContent value="categories" className="mt-4"><CategoriesPanel /></TabsContent>
       <TabsContent value="brands" className="mt-4"><BrandsPanel /></TabsContent>
+      <TabsContent value="values" className="mt-4"><ValuesPanel /></TabsContent>
       <TabsContent value="assign" className="mt-4"><AssignPanel /></TabsContent>
     </Tabs>
+  );
+}
+
+interface AttrValue { id: string; attr_key: string; attr_value: string; sort_order: number; }
+
+function ValuesPanel() {
+  const [items, setItems] = useState<AttrValue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [customKeys, setCustomKeys] = useState<string[]>([]);
+  const [key, setKey] = useState<string>(STANDARD_ATTR_KEYS[0]);
+  const [customKey, setCustomKey] = useState("");
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data: vals }, { data: prodAttrs }] = await Promise.all([
+      supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
+      supabase.from("product_attributes").select("attr_key"),
+    ]);
+    setItems((vals || []) as AttrValue[]);
+    // discover custom keys already used on products
+    const std = new Set(STANDARD_ATTR_KEYS as readonly string[]);
+    const extra = new Set<string>();
+    (prodAttrs || []).forEach((r: any) => { if (!std.has(r.attr_key)) extra.add(r.attr_key); });
+    (vals || []).forEach((r: any) => { if (!std.has(r.attr_key)) extra.add(r.attr_key); });
+    setCustomKeys(Array.from(extra).sort());
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleAdd = async () => {
+    const finalKey = key === "__custom__" ? customKey.trim() : key;
+    if (!finalKey || !value.trim()) return toast.error("Preencha rótulo e valor");
+    setSaving(true);
+    const { error } = await supabase.from("attribute_values").insert({
+      attr_key: finalKey,
+      attr_value: value.trim(),
+      sort_order: items.filter((i) => i.attr_key === finalKey).length,
+    });
+    setSaving(false);
+    if (error) {
+      if (error.code === "23505") return toast.error("Esse valor já existe para esse rótulo");
+      return toast.error("Erro: " + error.message);
+    }
+    toast.success("Valor adicionado");
+    setValue("");
+    setCustomKey("");
+    load();
+  };
+
+  const handleDel = async (id: string) => {
+    const { error } = await supabase.from("attribute_values").delete().eq("id", id);
+    if (error) return toast.error("Erro");
+    load();
+  };
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, AttrValue[]>();
+    for (const k of STANDARD_ATTR_KEYS) map.set(k, []);
+    for (const k of customKeys) if (!map.has(k)) map.set(k, []);
+    for (const it of items) {
+      if (!map.has(it.attr_key)) map.set(it.attr_key, []);
+      map.get(it.attr_key)!.push(it);
+    }
+    return Array.from(map.entries());
+  }, [items, customKeys]);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader><CardTitle>Cadastrar valor</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">
+            Cadastre valores que poderão ser selecionados rapidamente ao atribuir atributos a um produto. Ex.: Pet → Cachorro, Gato.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Select value={key} onValueChange={setKey}>
+              <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STANDARD_ATTR_KEYS.map((k) => (
+                  <SelectItem key={k} value={k}>{k}</SelectItem>
+                ))}
+                {customKeys.map((k) => (
+                  <SelectItem key={k} value={k}>{k}</SelectItem>
+                ))}
+                <SelectItem value="__custom__">Personalizado…</SelectItem>
+              </SelectContent>
+            </Select>
+            {key === "__custom__" && (
+              <Input placeholder="Novo rótulo" value={customKey} onChange={(e) => setCustomKey(e.target.value)} className="w-[180px]" />
+            )}
+            <Input
+              placeholder="Valor (ex: Cachorro)"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              className="flex-1 min-w-[180px]"
+            />
+            <Button onClick={handleAdd} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Adicionar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Valores cadastrados</CardTitle></CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : (
+            <div className="space-y-4">
+              {grouped.map(([k, list]) => (
+                <div key={k} className="border border-border rounded-lg p-3">
+                  <div className="font-display font-bold text-sm mb-2">{k}</div>
+                  {list.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum valor cadastrado.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {list.map((v) => (
+                        <Badge key={v.id} variant="secondary" className="gap-1.5 pl-2 pr-1 py-1">
+                          {v.attr_value}
+                          <button onClick={() => handleDel(v.id)} className="hover:text-destructive">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
