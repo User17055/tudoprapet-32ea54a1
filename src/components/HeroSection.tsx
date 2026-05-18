@@ -95,7 +95,7 @@ export const HeroSection = () => {
                   Entrega rápida
                 </div>
                 <div className="text-[10px] md:text-xs text-muted-foreground leading-tight">
-                  Prudente R$ 10 · Grátis acima de R$ 99
+                  Pres. Prudente R$ 10
                 </div>
               </div>
             </div>
