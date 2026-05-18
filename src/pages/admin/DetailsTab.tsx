@@ -641,20 +641,22 @@ function AssignPanel() {
   const handleAddAttr = async () => {
     if (!productId) return;
     const finalKey = newKey.trim();
-    if (!finalKey || !newValue.trim()) return toast.error("Selecione um título e um valor");
-    const { data, error } = await supabase
-      .from("product_attributes")
-      .insert({
-        shopify_product_id: productId,
-        attr_key: finalKey,
-        attr_value: newValue.trim(),
-        sort_order: attrs.length,
-      })
-      .select()
-      .single();
+    const values = Array.isArray(newValue) ? newValue : (newValue ? [newValue] : []);
+    if (!finalKey || values.length === 0) return toast.error("Selecione um título e ao menos um valor");
+    const existing = new Set(attrs.filter((a) => a.attr_key === finalKey).map((a) => a.attr_value));
+    const toInsert = values.filter((v) => !existing.has(v));
+    if (toInsert.length === 0) return toast.error("Todos os valores já estão atribuídos");
+    const rows = toInsert.map((v, i) => ({
+      shopify_product_id: productId,
+      attr_key: finalKey,
+      attr_value: v,
+      sort_order: attrs.length + i,
+    }));
+    const { data, error } = await supabase.from("product_attributes").insert(rows).select();
     if (error) return toast.error("Erro: " + error.message);
-    setAttrs([...attrs, data as ProductAttribute]);
-    setNewValue("");
+    setAttrs([...attrs, ...((data || []) as ProductAttribute[])]);
+    setNewValue([] as any);
+    toast.success(`${toInsert.length} valor(es) adicionado(s)`);
     await reloadAll();
   };
 
