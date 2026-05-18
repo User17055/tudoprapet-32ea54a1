@@ -14,6 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      brands: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          parent_id: string | null
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          parent_id?: string | null
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          parent_id?: string | null
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       club_members: {
         Row: {
           created_at: string
@@ -38,8 +100,65 @@ export type Database = {
         }
         Relationships: []
       }
+      product_attributes: {
+        Row: {
+          attr_key: string
+          attr_value: string
+          created_at: string
+          id: string
+          shopify_product_id: string
+          sort_order: number
+        }
+        Insert: {
+          attr_key: string
+          attr_value: string
+          created_at?: string
+          id?: string
+          shopify_product_id: string
+          sort_order?: number
+        }
+        Update: {
+          attr_key?: string
+          attr_value?: string
+          created_at?: string
+          id?: string
+          shopify_product_id?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      product_categories: {
+        Row: {
+          category_id: string
+          created_at: string
+          id: string
+          shopify_product_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          id?: string
+          shopify_product_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          id?: string
+          shopify_product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_content: {
         Row: {
+          brand_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -48,6 +167,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          brand_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -56,6 +176,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          brand_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -63,7 +184,15 @@ export type Database = {
           specifications?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "product_content_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
