@@ -650,7 +650,7 @@ const ProductDetail = () => {
                     );
                   }
                   return (
-                    <p key={idx} className="text-base leading-relaxed text-foreground/80">{block.text}</p>
+                    <p key={idx} className="text-base leading-relaxed text-foreground/80">{renderInline(block.text)}</p>
                   );
                 })}
               </div>
