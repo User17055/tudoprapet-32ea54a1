@@ -793,7 +793,10 @@ function ContentTab() {
                       <TableCell>{c.specifications ? "✓" : "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setProductId(c.shopify_product_id)}>
+                          <Button variant="ghost" size="icon" onClick={() => {
+                            setProductId(c.shopify_product_id);
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id)}>
