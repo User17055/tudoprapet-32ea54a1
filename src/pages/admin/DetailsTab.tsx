@@ -10,6 +10,7 @@ import { Trash2, Loader2, Plus, FolderTree, Tag, Package, X } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
 interface Category {
   id: string;
