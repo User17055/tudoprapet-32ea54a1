@@ -508,7 +508,7 @@ function AssignPanel() {
   const [attrs, setAttrs] = useState<ProductAttribute[]>([]);
   const [contentRow, setContentRow] = useState<ProductContentRow | null>(null);
   const [newKey, setNewKey] = useState<string>("");
-  const [newValue, setNewValue] = useState("");
+  const [newValue, setNewValue] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
 
@@ -641,20 +641,22 @@ function AssignPanel() {
   const handleAddAttr = async () => {
     if (!productId) return;
     const finalKey = newKey.trim();
-    if (!finalKey || !newValue.trim()) return toast.error("Selecione um título e um valor");
-    const { data, error } = await supabase
-      .from("product_attributes")
-      .insert({
-        shopify_product_id: productId,
-        attr_key: finalKey,
-        attr_value: newValue.trim(),
-        sort_order: attrs.length,
-      })
-      .select()
-      .single();
+    const values = Array.isArray(newValue) ? newValue : (newValue ? [newValue] : []);
+    if (!finalKey || values.length === 0) return toast.error("Selecione um título e ao menos um valor");
+    const existing = new Set(attrs.filter((a) => a.attr_key === finalKey).map((a) => a.attr_value));
+    const toInsert = values.filter((v) => !existing.has(v));
+    if (toInsert.length === 0) return toast.error("Todos os valores já estão atribuídos");
+    const rows = toInsert.map((v, i) => ({
+      shopify_product_id: productId,
+      attr_key: finalKey,
+      attr_value: v,
+      sort_order: attrs.length + i,
+    }));
+    const { data, error } = await supabase.from("product_attributes").insert(rows).select();
     if (error) return toast.error("Erro: " + error.message);
-    setAttrs([...attrs, data as ProductAttribute]);
-    setNewValue("");
+    setAttrs([...attrs, ...((data || []) as ProductAttribute[])]);
+    setNewValue([] as any);
+    toast.success(`${toInsert.length} valor(es) adicionado(s)`);
     await reloadAll();
   };
 
@@ -856,10 +858,10 @@ function AssignPanel() {
                           Você ainda não cadastrou nenhum título. Vá à aba "Valores" para criar.
                         </p>
                       ) : (
-                        <div className="flex flex-wrap gap-2">
-                          <Select value={newKey} onValueChange={(v) => { setNewKey(v); setNewValue(""); }}>
-                            <SelectTrigger className="w-[180px]">
-                              <SelectValue placeholder="Título" />
+                        <div className="space-y-2">
+                          <Select value={newKey} onValueChange={(v) => { setNewKey(v); setNewValue([]); }}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Escolha o título" />
                             </SelectTrigger>
                             <SelectContent>
                               {registeredKeys.map((k) => (
@@ -867,24 +869,49 @@ function AssignPanel() {
                               ))}
                             </SelectContent>
                           </Select>
-                          <Select value={newValue} onValueChange={setNewValue} disabled={!newKey}>
-                            <SelectTrigger className="flex-1 min-w-[180px]">
-                              <SelectValue placeholder={newKey ? "Selecione um valor" : "Escolha o título primeiro"} />
-                            </SelectTrigger>
-                            <SelectContent>
+                          {newKey && (
+                            <div className="border border-border rounded-md p-2 max-h-48 overflow-auto">
                               {presetValues.length === 0 ? (
-                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground px-1 py-1">
                                   Nenhum valor cadastrado para "{newKey}".
-                                </div>
+                                </p>
                               ) : (
-                                presetValues.map((v) => (
-                                  <SelectItem key={v.id} value={v.attr_value}>{v.attr_value}</SelectItem>
-                                ))
+                                presetValues.map((v) => {
+                                  const already = attrs.some((a) => a.attr_key === newKey && a.attr_value === v.attr_value);
+                                  const checked = newValue.includes(v.attr_value);
+                                  return (
+                                    <label
+                                      key={v.id}
+                                      className={`flex items-center gap-2 py-1 px-1 rounded text-sm ${already ? "opacity-50" : "hover:bg-muted/50 cursor-pointer"}`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4"
+                                        disabled={already}
+                                        checked={checked}
+                                        onChange={() =>
+                                          setNewValue((prev) =>
+                                            prev.includes(v.attr_value)
+                                              ? prev.filter((x) => x !== v.attr_value)
+                                              : [...prev, v.attr_value]
+                                          )
+                                        }
+                                      />
+                                      <span>{v.attr_value}</span>
+                                      {already && <span className="text-[10px] text-muted-foreground ml-auto">já atribuído</span>}
+                                    </label>
+                                  );
+                                })
                               )}
-                            </SelectContent>
-                          </Select>
-                          <Button onClick={handleAddAttr} size="icon" disabled={!newKey || !newValue}>
-                            <Plus className="h-4 w-4" />
+                            </div>
+                          )}
+                          <Button
+                            onClick={handleAddAttr}
+                            disabled={!newKey || newValue.length === 0}
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Adicionar {newValue.length > 0 ? `(${newValue.length})` : ""}
                           </Button>
                         </div>
                       )}
