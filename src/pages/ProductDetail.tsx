@@ -33,6 +33,7 @@ const ProductDetail = () => {
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [recommended, setRecommended] = useState<ShopifyProduct[]>([]);
+  const [customContent, setCustomContent] = useState<{ description: string | null; specifications: string | null } | null>(null);
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
@@ -99,6 +100,19 @@ const ProductDetail = () => {
     };
     fetchRecommended();
   }, [handle, product?.node?.id]);
+
+  useEffect(() => {
+    const fetchCustomContent = async () => {
+      if (!product?.node?.id) return;
+      const { data } = await supabase
+        .from("product_content")
+        .select("description, specifications")
+        .eq("shopify_product_id", product.node.id)
+        .maybeSingle();
+      setCustomContent(data || null);
+    };
+    fetchCustomContent();
+  }, [product?.node?.id]);
 
   if (loading) {
     return (
@@ -256,7 +270,8 @@ const ProductDetail = () => {
     return blocks;
   };
 
-  const descriptionBlocks = parseDescription(node.description || "");
+  const descriptionBlocks = parseDescription(customContent?.description || node.description || "");
+  const specBlocks = parseDescription(customContent?.specifications || "");
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -582,6 +597,46 @@ const ProductDetail = () => {
             )}
           </div>
         </section>
+
+        {/* Specifications section */}
+        {specBlocks.length > 0 && (
+          <section className="mt-10 lg:mt-12 max-w-4xl">
+            <div className="border-t border-border pt-10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-10 w-1.5 bg-primary rounded-full" />
+                <h2 className="font-display font-900 text-2xl lg:text-3xl">
+                  Especificações
+                </h2>
+              </div>
+              <div className="space-y-5">
+                {specBlocks.map((block, idx) => {
+                  if (block.type === "heading") {
+                    return (
+                      <h3 key={idx} className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0">
+                        {block.text}
+                      </h3>
+                    );
+                  }
+                  if (block.type === "list") {
+                    return (
+                      <ul key={idx} className="space-y-2.5">
+                        {block.items.map((item, i) => (
+                          <li key={i} className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed">
+                            <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  }
+                  return (
+                    <p key={idx} className="text-base leading-relaxed text-foreground/80">{block.text}</p>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Recommended products */}
         {recommended.length > 0 && (
