@@ -812,3 +812,57 @@ function ContentTab() {
     </div>
   );
 }
+
+function FormattedTextarea({
+  value,
+  onChange,
+  placeholder,
+  rows,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const wrap = (marker: string) => {
+    const ta = ref.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = value.slice(start, end) || "texto";
+    const next = value.slice(0, start) + marker + selected + marker + value.slice(end);
+    onChange(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + marker.length, start + marker.length + selected.length);
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1">
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => wrap("**")}>
+          <Bold className="h-3.5 w-3.5" />
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => wrap("*")}>
+          <Italic className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-xs text-muted-foreground self-center ml-2">
+          Use **negrito** e *itálico*
+        </span>
+      </div>
+      <Textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
