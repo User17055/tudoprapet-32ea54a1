@@ -433,6 +433,7 @@ function AssignPanel() {
     const { error } = await supabase.from("product_attributes").delete().eq("id", id);
     if (error) return toast.error("Erro");
     setAttrs(attrs.filter((a) => a.id !== id));
+    await reloadAll();
   };
 
   if (loading) {
