@@ -643,7 +643,7 @@ const ProductDetail = () => {
                         {block.items.map((item, i) => (
                           <li key={i} className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed">
                             <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                            <span>{item}</span>
+                            <span>{renderInline(item)}</span>
                           </li>
                         ))}
                       </ul>
