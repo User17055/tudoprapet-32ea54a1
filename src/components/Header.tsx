@@ -6,6 +6,7 @@ import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { MegaMenu } from "@/components/MegaMenu";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
@@ -85,7 +86,9 @@ export const Header = () => {
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-        </div>
+      </div>
+
+      <MegaMenu />
       </div>
 
       <div className="md:hidden px-4 pb-3">
