@@ -4,7 +4,7 @@ import { TrustBadges } from "@/components/TrustBadges";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ClubBanner } from "@/components/ClubBanner";
-import { PromoBanner } from "@/components/PromoBanner";
+
 import { Footer } from "@/components/Footer";
 
 const Index = () => {
