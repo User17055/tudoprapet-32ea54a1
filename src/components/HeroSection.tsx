@@ -1,263 +1,121 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Tag, Crown } from "lucide-react";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-  type CarouselApi,
-} from "@/components/ui/carousel";
-
-import bannerPromo from "@/assets/banner-promo.jpg";
-import bannerFarmacia from "@/assets/banner-farmacia.jpg";
-import bannerRacoes from "@/assets/banner-racoes.jpg";
-import bannerFrete from "@/assets/banner-frete.jpg";
-import bannerClube from "@/assets/banner-clube.jpg";
-import bannerBrinquedos from "@/assets/banner-brinquedos.jpg";
-
-type Banner = {
-  image: string;
-  alt: string;
-  href: string;
-  badge: string;
-  title: string;
-  subtitle: string;
-  cta: string;
-  overlay: string;
-  ctaClass: string;
-  align?: "left" | "right";
-};
-
-const banners: Banner[] = [
-  {
-    image: bannerPromo,
-    alt: "Mega Promoção da Semana",
-    href: "/catalogo",
-    badge: "Oferta da semana",
-    title: "Mega Promoção TudoPraPet",
-    subtitle: "Descontos imperdíveis em todo o catálogo",
-    cta: "Aproveitar agora",
-    overlay: "bg-gradient-to-r from-primary/85 via-primary/55 to-transparent",
-    ctaClass: "bg-secondary text-primary hover:bg-white",
-    align: "left",
-  },
-  {
-    image: bannerFarmacia,
-    alt: "Farmácia Pet",
-    href: "/catalogo?categoria=farmacia",
-    badge: "Farmácia",
-    title: "Cuide da saúde do seu pet",
-    subtitle: "Antipulgas, vermífugos e suplementos com até 25% OFF",
-    cta: "Ver farmácia",
-    overlay: "bg-gradient-to-r from-primary/80 via-primary/40 to-transparent",
-    ctaClass: "bg-secondary text-primary hover:bg-white",
-    align: "left",
-  },
-  {
-    image: bannerRacoes,
-    alt: "Rações com até 30% off",
-    href: "/catalogo?categoria=racoes",
-    badge: "Rações Premium",
-    title: "Até 30% OFF em rações",
-    subtitle: "As melhores marcas com preço de clube",
-    cta: "Ver rações",
-    overlay: "bg-gradient-to-l from-primary/85 via-primary/50 to-transparent",
-    ctaClass: "bg-secondary text-primary hover:bg-white",
-    align: "right",
-  },
-  {
-    image: bannerFrete,
-    alt: "Frete R$ 10 em Presidente Prudente",
-    href: "/catalogo",
-    badge: "Entrega rápida",
-    title: "Frete R$ 10 em Presidente Prudente",
-    subtitle: "Receba no mesmo dia em pedidos selecionados",
-    cta: "Comprar agora",
-    overlay: "bg-gradient-to-r from-primary/85 via-primary/55 to-transparent",
-    ctaClass: "bg-secondary text-primary hover:bg-white",
-    align: "left",
-  },
-  {
-    image: bannerClube,
-    alt: "Clube TudoPraPet",
-    href: "/clube",
-    badge: "Clube TudoPraPet",
-    title: "Vire assinante e pague menos",
-    subtitle: "Preços exclusivos para membros",
-    cta: "Quero assinar",
-    overlay: "bg-gradient-to-r from-primary/90 via-primary/60 to-transparent",
-    ctaClass: "bg-secondary text-primary hover:bg-white",
-    align: "left",
-  },
-  {
-    image: bannerBrinquedos,
-    alt: "Brinquedos e diversão",
-    href: "/catalogo?categoria=brinquedos",
-    badge: "Diversão",
-    title: "Brinquedos para todos os pets",
-    subtitle: "Estimule e divirta seu melhor amigo",
-    cta: "Ver brinquedos",
-    overlay: "bg-gradient-to-l from-primary/85 via-primary/50 to-transparent",
-    ctaClass: "bg-secondary text-primary hover:bg-white",
-    align: "right",
-  },
-];
-
-const promoStrip = [
-  { icon: Tag, title: "Até 30% OFF", desc: "Em rações premium" },
-  { icon: Crown, title: "Clube TudoPraPet", desc: "Preços exclusivos" },
-];
+import { Sparkles, Stethoscope, ShoppingBag, Crown, Truck } from "lucide-react";
+import heroPets from "@/assets/hero-petzen.png";
 
 export const HeroSection = () => {
-  const [api, setApi] = useState<CarouselApi>();
-  const [current, setCurrent] = useState(0);
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!api) return;
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap());
-    api.on("select", () => setCurrent(api.selectedScrollSnap()));
-  }, [api]);
-
-  useEffect(() => {
-    if (!api) return;
-    const id = setInterval(() => api.scrollNext(), 6000);
-    return () => clearInterval(id);
-  }, [api]);
-
   return (
-    <section className="relative bg-gradient-to-br from-primary/10 via-secondary/5 to-background pt-4 pb-6 md:pt-6 md:pb-10">
-      <div className="container mx-auto px-2 md:px-4">
-        {/* Faixa promocional topo */}
-        <div className="hidden md:flex items-center justify-center gap-3 mb-4">
-          {promoStrip.map((p, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 bg-card border border-border/60 rounded-full px-4 py-1.5 shadow-sm"
-            >
-              <p.icon className="h-4 w-4 text-secondary" />
-              <span className="text-xs font-bold text-foreground">{p.title}</span>
-              <span className="text-xs text-muted-foreground">· {p.desc}</span>
+    <section className="relative overflow-hidden bg-background pt-6 pb-10 md:pt-10 md:pb-16">
+      {/* Sparkles decorativos no fundo */}
+      <Sparkles className="hidden md:block absolute top-20 left-10 h-8 w-8 text-secondary/40 rotate-12" />
+      <Sparkles className="hidden md:block absolute bottom-24 right-1/3 h-6 w-6 text-secondary/30 -rotate-12" />
+
+      <div className="container mx-auto px-4">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+          {/* Lado esquerdo — Texto */}
+          <div className="relative z-10 order-2 lg:order-1 text-center lg:text-left">
+            <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary bg-secondary/20 px-3 py-1.5 rounded-full mb-5">
+              <Crown className="h-3.5 w-3.5 text-secondary" />
+              Tudo para o seu melhor amigo
+            </span>
+
+            <h1 className="font-display font-900 text-4xl md:text-5xl lg:text-6xl xl:text-7xl leading-[1.05] text-primary mb-5">
+              O melhor cuidado <br className="hidden md:block" /> para o seu{" "}
+              <span className="relative inline-block text-secondary">
+                pet
+                <Sparkles className="absolute -top-3 -right-6 h-5 w-5 md:h-6 md:w-6 text-secondary" />
+              </span>
+            </h1>
+
+            <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-7 leading-relaxed">
+              Rações premium, farmácia veterinária, brinquedos e acessórios com
+              os melhores preços. Entrega em Presidente Prudente por apenas R$ 10
+              e frete grátis acima de R$ 99.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
+              <Link
+                to="/catalogo"
+                className="inline-flex items-center justify-center gap-2 bg-secondary text-primary font-bold px-7 py-3.5 rounded-full hover:bg-secondary/90 hover:-translate-y-0.5 transition-all shadow-lg shadow-secondary/30"
+              >
+                <ShoppingBag className="h-5 w-5" />
+                Comprar agora
+              </Link>
+              <Link
+                to="/clube"
+                className="inline-flex items-center justify-center gap-2 bg-transparent border-2 border-primary text-primary font-bold px-7 py-3.5 rounded-full hover:bg-primary hover:text-primary-foreground transition-all"
+              >
+                <Crown className="h-5 w-5" />
+                Vire assinante
+              </Link>
             </div>
-          ))}
-        </div>
 
-        <div className="grid lg:grid-cols-[1fr_320px] gap-4">
-          {/* Carousel principal */}
-          <Carousel
-            setApi={setApi}
-            opts={{ loop: true, align: "center" }}
-            className="relative"
-          >
-            <CarouselContent>
-              {banners.map((banner, i) => (
-                <CarouselItem key={i}>
-                  <Link
-                    to={banner.href}
-                    className="block group rounded-2xl md:rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-500 ring-1 ring-border/50"
-                  >
-                    <div className="relative aspect-[16/8] md:aspect-[21/9] bg-muted overflow-hidden">
-                      <img
-                        src={banner.image}
-                        alt={banner.alt}
-                        width={1600}
-                        height={700}
-                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-700"
-                        loading={i === 0 ? "eager" : "lazy"}
-                      />
-                      {/* Overlay gradient para legibilidade */}
-                      <div className={`absolute inset-0 ${banner.overlay}`} />
-
-                      <div
-                        className={`absolute inset-0 flex items-center ${
-                          banner.align === "right" ? "justify-end text-right" : "justify-start text-left"
-                        }`}
-                      >
-                        <div className="relative z-10 px-6 md:px-12 py-6 md:py-10 max-w-xl text-white">
-                          <span className="inline-block text-[10px] md:text-xs font-900 uppercase tracking-wider bg-secondary text-primary px-3 py-1 rounded-full mb-3">
-                            {banner.badge}
-                          </span>
-                          <h2 className="font-display font-900 text-2xl md:text-5xl leading-tight mb-2 md:mb-3 drop-shadow-lg">
-                            {banner.title}
-                          </h2>
-                          <p className="text-sm md:text-base opacity-95 mb-4 md:mb-6 drop-shadow">
-                            {banner.subtitle}
-                          </p>
-                          <span
-                            className={`inline-flex items-center gap-2 text-xs md:text-sm font-bold px-4 md:px-5 py-2 md:py-2.5 rounded-full transition-colors ${banner.ctaClass}`}
-                          >
-                            {banner.cta} →
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-
-            <CarouselPrevious className="hidden md:flex left-3 h-11 w-11 bg-background/95 hover:bg-background border-border shadow-lg" />
-            <CarouselNext className="hidden md:flex right-3 h-11 w-11 bg-background/95 hover:bg-background border-border shadow-lg" />
-
-            {/* Dots */}
-            <div className="flex justify-center gap-2 mt-3">
-              {Array.from({ length: count }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => api?.scrollTo(i)}
-                  aria-label={`Banner ${i + 1}`}
-                  className={`h-2 rounded-full transition-all ${
-                    current === i
-                      ? "w-8 bg-primary"
-                      : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50"
-                  }`}
-                />
-              ))}
+            {/* Mini stats */}
+            <div className="flex flex-wrap gap-6 justify-center lg:justify-start text-sm">
+              <div>
+                <div className="font-display font-900 text-2xl text-primary">10k+</div>
+                <div className="text-xs text-muted-foreground">Pets atendidos</div>
+              </div>
+              <div className="h-10 w-px bg-border" />
+              <div>
+                <div className="font-display font-900 text-2xl text-primary">25%</div>
+                <div className="text-xs text-muted-foreground">OFF p/ membros</div>
+              </div>
+              <div className="h-10 w-px bg-border" />
+              <div>
+                <div className="font-display font-900 text-2xl text-primary">4.9★</div>
+                <div className="text-xs text-muted-foreground">Avaliação</div>
+              </div>
             </div>
-          </Carousel>
+          </div>
 
-          {/* Mini banners laterais (desktop) */}
-          <div className="hidden lg:flex flex-col gap-4">
-            <Link
-              to="/clube"
-              className="group relative flex-1 rounded-2xl overflow-hidden bg-gradient-to-br from-primary to-[hsl(218_70%_15%)] text-white p-5 shadow-lg hover:shadow-2xl transition-all hover-lift"
-            >
-              <Crown className="absolute -top-2 -right-2 h-24 w-24 text-white/10 rotate-12" />
-              <span className="inline-block text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full mb-2">
-                Clube
-              </span>
-              <h3 className="font-display font-900 text-xl leading-tight mb-1">
-                Vire assinante e pague menos
-              </h3>
-              <p className="text-xs text-white/90 mb-3">
-                Preços exclusivos com a coroa em todos os produtos.
-              </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-secondary text-primary px-3 py-1.5 rounded-full group-hover:bg-white transition-colors">
-                Quero assinar →
-              </span>
-            </Link>
+          {/* Lado direito — Imagem com círculo amarelo */}
+          <div className="relative order-1 lg:order-2 flex items-center justify-center min-h-[340px] md:min-h-[480px]">
+            {/* Círculo amarelo de fundo */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] md:w-[440px] md:h-[440px] lg:w-[500px] lg:h-[500px] rounded-full bg-secondary" />
 
-            <Link
-              to="/catalogo?categoria=farmacia"
-              className="group relative flex-1 rounded-2xl overflow-hidden bg-gradient-to-br from-secondary to-secondary/70 text-primary p-5 shadow-lg hover:shadow-2xl transition-all hover-lift"
-            >
-              <Tag className="absolute -top-2 -right-2 h-24 w-24 text-primary/10 -rotate-12" />
-              <span className="inline-block text-[10px] font-bold uppercase tracking-wider bg-primary/10 px-2 py-0.5 rounded-full mb-2">
-                Promoção
-              </span>
-              <h3 className="font-display font-900 text-xl leading-tight mb-1">
-                Farmácia com até 25% OFF
-              </h3>
-              <p className="text-xs text-primary/80 mb-3">
-                Antipulgas, vermífugos e suplementos.
-              </p>
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-full">
-                Ver ofertas →
-              </span>
-            </Link>
+            {/* Sparkles ao redor */}
+            <Sparkles className="absolute top-6 right-6 md:top-10 md:right-10 h-10 w-10 md:h-14 md:w-14 text-secondary fill-secondary" />
+            <div className="absolute bottom-12 left-4 md:bottom-20 md:left-8 h-6 w-6 md:h-8 md:w-8 rounded-full bg-secondary/70" />
+            <div className="absolute top-16 left-12 md:top-24 md:left-20 h-3 w-3 md:h-4 md:w-4 rounded-full bg-primary/30" />
+
+            {/* Imagem do pet */}
+            <img
+              src={heroPets}
+              alt="Cachorro e gato felizes — TudoPraPet"
+              width={1024}
+              height={1024}
+              className="relative z-10 w-[280px] md:w-[440px] lg:w-[520px] h-auto object-contain drop-shadow-2xl"
+            />
+
+            {/* Card flutuante 1 — Farmácia */}
+            <div className="absolute top-4 left-0 md:top-10 md:-left-4 z-20 bg-card border border-border/60 rounded-2xl shadow-xl px-3 py-2.5 md:px-4 md:py-3 flex items-center gap-2.5 max-w-[180px] md:max-w-[230px] animate-fade-in-up">
+              <div className="h-9 w-9 md:h-11 md:w-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Stethoscope className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+              </div>
+              <div className="text-left">
+                <div className="font-display font-900 text-xs md:text-sm text-foreground leading-tight">
+                  Farmácia Pet
+                </div>
+                <div className="text-[10px] md:text-xs text-muted-foreground leading-tight">
+                  Antipulgas e vermífugos com até 25% OFF
+                </div>
+              </div>
+            </div>
+
+            {/* Card flutuante 2 — Frete */}
+            <div className="absolute bottom-4 right-0 md:bottom-12 md:-right-4 z-20 bg-card border border-border/60 rounded-2xl shadow-xl px-3 py-2.5 md:px-4 md:py-3 flex items-center gap-2.5 max-w-[180px] md:max-w-[230px] animate-fade-in-up">
+              <div className="h-9 w-9 md:h-11 md:w-11 rounded-xl bg-secondary/20 flex items-center justify-center flex-shrink-0">
+                <Truck className="h-5 w-5 md:h-6 md:w-6 text-secondary" />
+              </div>
+              <div className="text-left">
+                <div className="font-display font-900 text-xs md:text-sm text-foreground leading-tight">
+                  Entrega rápida
+                </div>
+                <div className="text-[10px] md:text-xs text-muted-foreground leading-tight">
+                  Prudente R$ 10 · Grátis acima de R$ 99
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
