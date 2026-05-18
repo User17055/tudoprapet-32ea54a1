@@ -426,6 +426,7 @@ function AssignPanel() {
     setAttrs([...attrs, data as ProductAttribute]);
     setNewKey("");
     setNewValue("");
+    await reloadAll();
   };
 
   const handleDelAttr = async (id: string) => {
