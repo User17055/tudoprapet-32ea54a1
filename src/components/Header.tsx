@@ -9,10 +9,7 @@ import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { MegaMenu } from "@/components/MegaMenu";
 import logo from "@/assets/logo.png";
 
-const navLinks = [
-  { label: "Catálogo", href: "/catalogo" },
-  { label: "Rações", href: "/catalogo?categoria=racoes" },
-  { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
+const navLinks: { label: string; href: string }[] = [
   { label: "Clube", href: "/clube" },
 ];
 
