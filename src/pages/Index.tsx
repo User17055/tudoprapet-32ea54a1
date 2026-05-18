@@ -17,7 +17,6 @@ const Index = () => {
         <Categories />
         <ProductGrid />
         <ClubBanner />
-        <PromoBanner />
       </main>
       <Footer />
     </div>
