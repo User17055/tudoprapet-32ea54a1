@@ -781,7 +781,7 @@ function AssignPanel() {
                         </div>
                       ))}
                       <div className="flex flex-wrap gap-2">
-                        <Select value={newKey} onValueChange={setNewKey}>
+                        <Select value={newKey} onValueChange={(v) => { setNewKey(v); setNewValue(""); }}>
                           <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {STANDARD_ATTR_KEYS.map((k) => (
@@ -798,14 +798,37 @@ function AssignPanel() {
                             className="w-[180px]"
                           />
                         )}
-                        <Input
-                          placeholder="Valor (ex: Adulto, Frango, 4kg)"
-                          value={newValue}
-                          onChange={(e) => setNewValue(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
-                          className="flex-1 min-w-[160px]"
-                        />
-                        <Button onClick={handleAddAttr} size="icon">
+                        {presetValues.length > 0 ? (
+                          <Select value={newValue} onValueChange={setNewValue}>
+                            <SelectTrigger className="flex-1 min-w-[180px]">
+                              <SelectValue placeholder="Selecione um valor cadastrado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {presetValues.map((v) => (
+                                <SelectItem key={v.id} value={v.attr_value}>{v.attr_value}</SelectItem>
+                              ))}
+                              <SelectItem value="__manual__">Outro (digitar)…</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            placeholder="Valor (cadastre na aba Valores)"
+                            value={newValue}
+                            onChange={(e) => setNewValue(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
+                            className="flex-1 min-w-[160px]"
+                          />
+                        )}
+                        {newValue === "__manual__" && (
+                          <Input
+                            autoFocus
+                            placeholder="Digite o valor"
+                            onChange={(e) => setNewValue(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
+                            className="w-[200px]"
+                          />
+                        )}
+                        <Button onClick={handleAddAttr} size="icon" disabled={!newValue || newValue === "__manual__"}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
