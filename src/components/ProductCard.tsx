@@ -1,4 +1,4 @@
-import { ShopifyProduct } from "@/lib/shopify";
+import { ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
