@@ -742,9 +742,9 @@ function ContentTab() {
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">Descrição</label>
-            <Textarea
+            <FormattedTextarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
               rows={10}
               disabled={!productId}
@@ -752,9 +752,9 @@ function ContentTab() {
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">Especificações</label>
-            <Textarea
+            <FormattedTextarea
               value={specifications}
-              onChange={(e) => setSpecifications(e.target.value)}
+              onChange={setSpecifications}
               placeholder={"Especificações:\n- Peso: 500g\n- Validade: 12 meses\n- Princípio ativo: ..."}
               rows={8}
               disabled={!productId}
