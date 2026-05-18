@@ -270,7 +270,8 @@ const ProductDetail = () => {
     return blocks;
   };
 
-  const descriptionBlocks = parseDescription(node.description || "");
+  const descriptionBlocks = parseDescription(customContent?.description || node.description || "");
+  const specBlocks = parseDescription(customContent?.specifications || "");
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
