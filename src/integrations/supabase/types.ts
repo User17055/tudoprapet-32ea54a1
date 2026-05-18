@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      attribute_values: {
+        Row: {
+          attr_key: string
+          attr_value: string
+          created_at: string
+          id: string
+          sort_order: number
+        }
+        Insert: {
+          attr_key: string
+          attr_value: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+        }
+        Update: {
+          attr_key?: string
+          attr_value?: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       brands: {
         Row: {
           created_at: string
