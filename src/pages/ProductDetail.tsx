@@ -33,6 +33,7 @@ const ProductDetail = () => {
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [recommended, setRecommended] = useState<ShopifyProduct[]>([]);
+  const [customContent, setCustomContent] = useState<{ description: string | null; specifications: string | null } | null>(null);
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
