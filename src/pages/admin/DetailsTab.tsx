@@ -464,8 +464,90 @@ function AssignPanel() {
     ]);
   };
 
+  // Build summary of configured products
+  const configuredIds = new Set<string>([
+    ...allProductCats.map((x) => x.shopify_product_id),
+    ...allProductContent.filter((x) => x.brand_id).map((x) => x.shopify_product_id),
+    ...allProductAttrs.map((x) => x.shopify_product_id),
+  ]);
+  const configuredProducts = products.filter((p) => configuredIds.has(p.node.id));
+  const filteredConfigured = configuredProducts.filter((p) =>
+    !filter.trim() ? true : p.node.title.toLowerCase().includes(filter.toLowerCase())
+  );
+  const brandById = new Map(brands.map((b) => [b.id, b]));
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  const summaryFor = (pid: string) => {
+    const cats = allProductCats.filter((x) => x.shopify_product_id === pid);
+    const content = allProductContent.find((x) => x.shopify_product_id === pid);
+    const attrs = allProductAttrs.filter((x) => x.shopify_product_id === pid);
+    return {
+      cats: cats.map((c) => catById.get(c.category_id)).filter(Boolean) as Category[],
+      brand: content?.brand_id ? brandById.get(content.brand_id) : undefined,
+      attrs,
+    };
+  };
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-3 flex-wrap">
+            <span>Produtos já configurados ({configuredProducts.length})</span>
+            <Input
+              placeholder="Filtrar..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full sm:w-64"
+            />
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {configuredProducts.length === 0 ? (
+            <p className="text-muted-foreground text-center py-6 text-sm">
+              Nenhum produto configurado ainda. Selecione um abaixo para começar.
+            </p>
+          ) : filteredConfigured.length === 0 ? (
+            <p className="text-muted-foreground text-center py-6 text-sm">Nenhum resultado.</p>
+          ) : (
+            <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
+              {filteredConfigured.map((p) => {
+                const s = summaryFor(p.node.id);
+                const active = productId === p.node.id;
+                return (
+                  <button
+                    key={p.node.id}
+                    onClick={() => {
+                      setProductId(p.node.id);
+                      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+                    }}
+                    className={`w-full text-left border rounded-lg p-3 transition-colors ${
+                      active ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="font-medium text-sm mb-1.5">{p.node.title}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {s.brand && (
+                        <Badge variant="default" className="text-[10px]">Marca: {s.brand.name}</Badge>
+                      )}
+                      {s.cats.map((c) => (
+                        <Badge key={c.id} variant="secondary" className="text-[10px]">
+                          {categoryPath(c, categories)}
+                        </Badge>
+                      ))}
+                      {s.attrs.map((a) => (
+                        <Badge key={a.id} variant="outline" className="text-[10px]">
+                          {a.attr_key}: {a.attr_value}
+                        </Badge>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader><CardTitle>Atribuir detalhes a um produto</CardTitle></CardHeader>
         <CardContent className="space-y-4">
