@@ -6,6 +6,7 @@ import { CartDrawer } from "@/components/CartDrawer";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { MegaMenu } from "@/components/MegaMenu";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
