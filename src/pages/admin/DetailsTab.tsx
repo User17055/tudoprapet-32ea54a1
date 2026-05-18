@@ -512,19 +512,19 @@ function AssignPanel() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
 
-  // preset values for the current key
+  // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
+  const [registeredKeys, setRegisteredKeys] = useState<string[]>([]);
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("attribute_values").select("*").order("attr_key").order("sort_order");
-      setAllValues((data || []) as AttrValue[]);
+      const [{ data: vals }, { data: ks }] = await Promise.all([
+        supabase.from("attribute_values").select("*").order("attr_key").order("sort_order"),
+        supabase.from("attribute_keys").select("name").order("sort_order").order("name"),
+      ]);
+      setAllValues((vals || []) as AttrValue[]);
+      setRegisteredKeys(((ks || []) as { name: string }[]).map((r) => r.name));
     })();
   }, []);
-  const registeredKeys = useMemo(() => {
-    const set = new Set<string>();
-    for (const v of allValues) set.add(v.attr_key);
-    return Array.from(set).sort();
-  }, [allValues]);
   const activeKey = newKey;
   const presetValues = useMemo(
     () => allValues.filter((v) => v.attr_key === activeKey),
