@@ -4,11 +4,12 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
-import { Loader2, PackageOpen, X } from "lucide-react";
+import { Loader2, PackageOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
@@ -20,8 +21,17 @@ const SORT_OPTIONS = [
   { value: "name-desc", label: "Z - A" },
 ];
 
+const PRICE_RANGES = [
+  { label: "R$ 0,00 - R$ 25,00", min: 0, max: 25 },
+  { label: "R$ 25,00 - R$ 50,00", min: 25, max: 50 },
+  { label: "R$ 50,00 - R$ 100,00", min: 50, max: 100 },
+  { label: "R$ 100,00 - R$ 200,00", min: 100, max: 200 },
+  { label: "+ R$ 200,00", min: 200, max: Infinity },
+];
+
 interface Category { id: string; name: string; slug: string; parent_id: string | null; sort_order: number; }
 interface Brand { id: string; name: string; slug: string; }
+interface AttrValue { id: string; attr_key: string; attr_value: string; sort_order: number; }
 
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,15 +39,15 @@ const Catalog = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get("busca") || "");
   const [categorySlug, setCategorySlug] = useState(searchParams.get("categoria") || "all");
-  const [brandSlug, setBrandSlug] = useState(searchParams.get("marca") || "all");
-  // selected value per standard attribute key
-  const [attrValues, setAttrValues] = useState<Record<string, string>>({});
-  const [minPrice, setMinPrice] = useState<string>("");
-  const [maxPrice, setMaxPrice] = useState<string>("");
+  // multi-select brand slugs and attribute values
+  const [brandSlugs, setBrandSlugs] = useState<Set<string>>(new Set());
+  const [attrValues, setAttrValues] = useState<Record<string, Set<string>>>({});
+  const [priceRangeIdxs, setPriceRangeIdxs] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState("relevance");
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [presetValues, setPresetValues] = useState<AttrValue[]>([]);
   const [productCats, setProductCats] = useState<{ shopify_product_id: string; category_id: string }[]>([]);
   const [productBrands, setProductBrands] = useState<{ shopify_product_id: string; brand_id: string | null }[]>([]);
   const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
@@ -47,10 +57,11 @@ const Catalog = () => {
       setLoading(true);
       try {
         const queryParam = searchParams.get("busca") || undefined;
-        const [shop, cats, brs, pc, pcontent, pa] = await Promise.all([
+        const [shop, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
           storefrontApiRequest(PRODUCTS_QUERY, { first: 100, query: queryParam || undefined }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
+          supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
           supabase.from("product_categories").select("shopify_product_id, category_id"),
           supabase.from("product_content").select("shopify_product_id, brand_id"),
           supabase.from("product_attributes").select("shopify_product_id, attr_key, attr_value"),
@@ -58,6 +69,7 @@ const Catalog = () => {
         setProducts(shop?.data?.products?.edges || []);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
+        setPresetValues((pv.data || []) as AttrValue[]);
         setProductCats((pc.data || []) as any);
         setProductBrands((pcontent.data || []) as any);
         setProductAttrs((pa.data || []) as any);
@@ -74,17 +86,15 @@ const Catalog = () => {
     const params: Record<string, string> = {};
     if (search) params.busca = search;
     if (categorySlug !== "all") params.categoria = categorySlug;
-    if (brandSlug !== "all") params.marca = brandSlug;
     setSearchParams(params);
   };
 
   const clearFilters = () => {
     setSearch("");
     setCategorySlug("all");
-    setBrandSlug("all");
+    setBrandSlugs(new Set());
     setAttrValues({});
-    setMinPrice("");
-    setMaxPrice("");
+    setPriceRangeIdxs(new Set());
     setSort("relevance");
     setSearchParams({});
   };
@@ -106,15 +116,24 @@ const Catalog = () => {
     return ids;
   };
 
-  // values per standard key
+  // Counts per filter — based on products that pass all OTHER filters
+  // For simplicity & performance, counts are based on the unfiltered product set.
+  const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
+  const productById = useMemo(() => new Map(products.map((p) => [p.node.id, p])), [products]);
+
+  // Build per-key value list (union of preset values + values used on products)
   const valuesByKey = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const a of productAttrs) {
       if (!map.has(a.attr_key)) map.set(a.attr_key, new Set());
       map.get(a.attr_key)!.add(a.attr_value);
     }
+    for (const v of presetValues) {
+      if (!map.has(v.attr_key)) map.set(v.attr_key, new Set());
+      map.get(v.attr_key)!.add(v.attr_value);
+    }
     return map;
-  }, [productAttrs]);
+  }, [productAttrs, presetValues]);
 
   const customKeys = useMemo(() => {
     const keys: string[] = [];
@@ -123,6 +142,29 @@ const Catalog = () => {
     }
     return keys.sort();
   }, [valuesByKey]);
+
+  // count products per brand slug
+  const brandCount = useMemo(() => {
+    const m = new Map<string, number>();
+    const productBrandMap = new Map<string, string>();
+    productBrands.forEach((pb) => { if (pb.brand_id) productBrandMap.set(pb.shopify_product_id, pb.brand_id); });
+    for (const b of brands) {
+      let n = 0;
+      for (const p of products) if (productBrandMap.get(p.node.id) === b.id) n++;
+      m.set(b.slug, n);
+    }
+    return m;
+  }, [brands, productBrands, products]);
+
+  const priceCount = useMemo(() => {
+    return PRICE_RANGES.map((r) => products.filter((p) => {
+      const price = productPrice(p);
+      return price >= r.min && price <= r.max;
+    }).length);
+  }, [products]);
+
+  const attrCount = (key: string, value: string) =>
+    productAttrs.filter((a) => a.attr_key === key && a.attr_value === value).length;
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -142,50 +184,82 @@ const Catalog = () => {
       }
     }
 
-    if (brandSlug !== "all") {
-      const brand = brands.find((b) => b.slug === brandSlug);
-      if (brand) {
-        const productIds = new Set(productBrands.filter((pb) => pb.brand_id === brand.id).map((pb) => pb.shopify_product_id));
-        result = result.filter((p) => productIds.has(p.node.id));
-      }
-    }
-
-    // attribute filters (one per key, AND across keys)
-    for (const [k, v] of Object.entries(attrValues)) {
-      if (!v) continue;
-      const productIds = new Set(productAttrs.filter((a) => a.attr_key === k && a.attr_value === v).map((a) => a.shopify_product_id));
+    if (brandSlugs.size > 0) {
+      const brandIds = new Set(brands.filter((b) => brandSlugs.has(b.slug)).map((b) => b.id));
+      const productIds = new Set(productBrands.filter((pb) => pb.brand_id && brandIds.has(pb.brand_id)).map((pb) => pb.shopify_product_id));
       result = result.filter((p) => productIds.has(p.node.id));
     }
 
-    // price range
-    const minP = parseFloat(minPrice);
-    const maxP = parseFloat(maxPrice);
-    if (!isNaN(minP)) result = result.filter((p) => parseFloat(p.node.priceRange.minVariantPrice.amount) >= minP);
-    if (!isNaN(maxP)) result = result.filter((p) => parseFloat(p.node.priceRange.minVariantPrice.amount) <= maxP);
+    // attribute filters: AND across keys, OR within a key
+    for (const [k, set] of Object.entries(attrValues)) {
+      if (!set || set.size === 0) continue;
+      const productIds = new Set(productAttrs.filter((a) => a.attr_key === k && set.has(a.attr_value)).map((a) => a.shopify_product_id));
+      result = result.filter((p) => productIds.has(p.node.id));
+    }
 
-    if (sort === "price-asc") result.sort((a, b) => parseFloat(a.node.priceRange.minVariantPrice.amount) - parseFloat(b.node.priceRange.minVariantPrice.amount));
-    else if (sort === "price-desc") result.sort((a, b) => parseFloat(b.node.priceRange.minVariantPrice.amount) - parseFloat(a.node.priceRange.minVariantPrice.amount));
+    // price ranges (OR)
+    if (priceRangeIdxs.size > 0) {
+      result = result.filter((p) => {
+        const price = productPrice(p);
+        for (const idx of priceRangeIdxs) {
+          const r = PRICE_RANGES[idx];
+          if (price >= r.min && price <= r.max) return true;
+        }
+        return false;
+      });
+    }
+
+    if (sort === "price-asc") result.sort((a, b) => productPrice(a) - productPrice(b));
+    else if (sort === "price-desc") result.sort((a, b) => productPrice(b) - productPrice(a));
     else if (sort === "name-asc") result.sort((a, b) => a.node.title.localeCompare(b.node.title));
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [products, categorySlug, brandSlug, attrValues, minPrice, maxPrice, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
+  }, [products, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
 
-  const activeAttrCount = Object.values(attrValues).filter(Boolean).length;
+  const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasActiveFilters =
-    categorySlug !== "all" || brandSlug !== "all" || activeAttrCount > 0 || search ||
-    minPrice !== "" || maxPrice !== "" || sort !== "relevance";
+    categorySlug !== "all" || brandSlugs.size > 0 || totalAttrSelected > 0 || search ||
+    priceRangeIdxs.size > 0 || sort !== "relevance";
 
-  const setAttr = (key: string, value: string) =>
-    setAttrValues((prev) => {
-      const next = { ...prev };
-      if (!value || value === "all") delete next[key]; else next[key] = value;
+  const toggleSetItem = <T,>(setState: React.Dispatch<React.SetStateAction<Set<T>>>, item: T) =>
+    setState((prev) => {
+      const next = new Set(prev);
+      if (next.has(item)) next.delete(item); else next.add(item);
       return next;
     });
+
+  const toggleAttr = (key: string, value: string) =>
+    setAttrValues((prev) => {
+      const next = { ...prev };
+      const cur = new Set(next[key] || []);
+      if (cur.has(value)) cur.delete(value); else cur.add(value);
+      if (cur.size === 0) delete next[key]; else next[key] = cur;
+      return next;
+    });
+
+  const CheckRow = ({ checked, onChange, label, count }: { checked: boolean; onChange: () => void; label: string; count?: number }) => (
+    <label className="flex items-center gap-2 py-1.5 cursor-pointer text-sm hover:text-primary">
+      <Checkbox checked={checked} onCheckedChange={onChange} />
+      <span className="flex-1">{label}</span>
+      {count !== undefined && <span className="text-muted-foreground text-xs">({count})</span>}
+    </label>
+  );
 
   // Sidebar with all filters
   const FiltersSidebar = (
     <aside className="space-y-4">
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-display font-bold text-base">Filtrar Produtos</h3>
+        </div>
+        {hasActiveFilters && (
+          <button onClick={clearFilters} className="text-sm text-primary hover:underline flex items-center gap-1.5">
+            Limpar filtros <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="font-display font-bold text-sm uppercase tracking-wide mb-3">Buscar</h3>
         <div className="flex gap-2">
@@ -200,18 +274,26 @@ const Catalog = () => {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="font-display font-bold text-sm uppercase tracking-wide mb-3">Faixa de preço</h3>
-        <div className="flex items-center gap-2">
-          <Input type="number" inputMode="numeric" placeholder="Mín" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
-          <span className="text-muted-foreground">—</span>
-          <Input type="number" inputMode="numeric" placeholder="Máx" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} />
-        </div>
-      </div>
+      <Accordion type="multiple" defaultValue={["preco", "categoria", "marca", ...STANDARD_ATTR_KEYS as unknown as string[]]} className="rounded-xl border border-border bg-card px-4">
+        <AccordionItem value="preco" className="border-b border-border last:border-0">
+          <AccordionTrigger className="font-display font-bold text-sm">Faixa de Preço</AccordionTrigger>
+          <AccordionContent>
+            <div className="space-y-0.5">
+              {PRICE_RANGES.map((r, idx) => (
+                <CheckRow
+                  key={idx}
+                  checked={priceRangeIdxs.has(idx)}
+                  onChange={() => toggleSetItem(setPriceRangeIdxs, idx)}
+                  label={r.label}
+                  count={priceCount[idx]}
+                />
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
 
-      <Accordion type="multiple" defaultValue={["categoria", "marca", ...STANDARD_ATTR_KEYS as unknown as string[]]} className="rounded-xl border border-border bg-card px-4">
         <AccordionItem value="categoria" className="border-b border-border last:border-0">
-          <AccordionTrigger className="font-display font-bold text-sm uppercase tracking-wide">Categoria</AccordionTrigger>
+          <AccordionTrigger className="font-display font-bold text-sm">Categoria</AccordionTrigger>
           <AccordionContent>
             <div className="space-y-1">
               <button onClick={() => setCategorySlug("all")} className={`block w-full text-left text-sm px-2 py-1.5 rounded ${categorySlug === "all" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>Todas</button>
@@ -231,42 +313,40 @@ const Catalog = () => {
         </AccordionItem>
 
         <AccordionItem value="marca" className="border-b border-border last:border-0">
-          <AccordionTrigger className="font-display font-bold text-sm uppercase tracking-wide">Marca</AccordionTrigger>
+          <AccordionTrigger className="font-display font-bold text-sm">Marca</AccordionTrigger>
           <AccordionContent>
-            <Select value={brandSlug} onValueChange={setBrandSlug}>
-              <SelectTrigger className="rounded-full"><SelectValue placeholder="Todas as marcas" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as marcas</SelectItem>
-                {brands.map((b) => (
-                  <SelectItem key={b.id} value={b.slug}>{b.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-0.5 max-h-72 overflow-auto">
+              {brands.length === 0 && <p className="text-xs text-muted-foreground py-2">Nenhuma marca.</p>}
+              {brands.map((b) => (
+                <CheckRow
+                  key={b.id}
+                  checked={brandSlugs.has(b.slug)}
+                  onChange={() => toggleSetItem(setBrandSlugs, b.slug)}
+                  label={b.name}
+                  count={brandCount.get(b.slug)}
+                />
+              ))}
+            </div>
           </AccordionContent>
         </AccordionItem>
 
         {STANDARD_ATTR_KEYS.map((key) => {
           const values = Array.from(valuesByKey.get(key) || []).sort();
           if (values.length === 0) return null;
+          const selected = attrValues[key] || new Set<string>();
           return (
             <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
-              <AccordionTrigger className="font-display font-bold text-sm uppercase tracking-wide">{key}</AccordionTrigger>
+              <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setAttr(key, "all")}
-                    className={`block w-full text-left text-sm px-2 py-1.5 rounded ${!attrValues[key] ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}
-                  >
-                    Todos
-                  </button>
+                <div className="space-y-0.5 max-h-72 overflow-auto">
                   {values.map((v) => (
-                    <button
+                    <CheckRow
                       key={v}
-                      onClick={() => setAttr(key, v)}
-                      className={`block w-full text-left text-sm px-2 py-1.5 rounded ${attrValues[key] === v ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}
-                    >
-                      {v}
-                    </button>
+                      checked={selected.has(v)}
+                      onChange={() => toggleAttr(key, v)}
+                      label={v}
+                      count={attrCount(key, v)}
+                    />
                   ))}
                 </div>
               </AccordionContent>
@@ -276,14 +356,20 @@ const Catalog = () => {
 
         {customKeys.map((key) => {
           const values = Array.from(valuesByKey.get(key) || []).sort();
+          const selected = attrValues[key] || new Set<string>();
           return (
             <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
-              <AccordionTrigger className="font-display font-bold text-sm uppercase tracking-wide">{key}</AccordionTrigger>
+              <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-1">
-                  <button onClick={() => setAttr(key, "all")} className={`block w-full text-left text-sm px-2 py-1.5 rounded ${!attrValues[key] ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>Todos</button>
+                <div className="space-y-0.5 max-h-72 overflow-auto">
                   {values.map((v) => (
-                    <button key={v} onClick={() => setAttr(key, v)} className={`block w-full text-left text-sm px-2 py-1.5 rounded ${attrValues[key] === v ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>{v}</button>
+                    <CheckRow
+                      key={v}
+                      checked={selected.has(v)}
+                      onChange={() => toggleAttr(key, v)}
+                      label={v}
+                      count={attrCount(key, v)}
+                    />
                   ))}
                 </div>
               </AccordionContent>
@@ -291,12 +377,6 @@ const Catalog = () => {
           );
         })}
       </Accordion>
-
-      {hasActiveFilters && (
-        <Button variant="outline" className="w-full rounded-full" onClick={clearFilters}>
-          <X className="h-4 w-4 mr-2" /> Limpar filtros
-        </Button>
-      )}
     </aside>
   );
 
@@ -313,10 +393,8 @@ const Catalog = () => {
 
         <div className="container mx-auto py-6 md:py-8">
           <div className="grid lg:grid-cols-[260px_1fr] gap-6">
-            {/* Sidebar */}
             <div className="hidden lg:block">{FiltersSidebar}</div>
 
-            {/* Mobile filters as accordion at top */}
             <details className="lg:hidden rounded-xl border border-border bg-card overflow-hidden">
               <summary className="cursor-pointer px-4 py-3 font-display font-bold text-sm uppercase tracking-wide flex items-center justify-between">
                 Filtros {hasActiveFilters && <span className="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">Ativos</span>}
@@ -324,7 +402,6 @@ const Catalog = () => {
               <div className="p-4 border-t border-border">{FiltersSidebar}</div>
             </details>
 
-            {/* Results */}
             <div>
               <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                 {!loading && (
