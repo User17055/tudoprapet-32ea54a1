@@ -508,7 +508,7 @@ function AssignPanel() {
   const [attrs, setAttrs] = useState<ProductAttribute[]>([]);
   const [contentRow, setContentRow] = useState<ProductContentRow | null>(null);
   const [newKey, setNewKey] = useState<string>("");
-  const [newValue, setNewValue] = useState("");
+  const [newValue, setNewValue] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
 
