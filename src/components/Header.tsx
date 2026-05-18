@@ -12,7 +12,7 @@ const navLinks = [
   { label: "Catálogo", href: "/catalogo" },
   { label: "Rações", href: "/catalogo?categoria=racoes" },
   { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
-  { label: "Clube", href: "/clube", icon: true },
+  { label: "Clube", href: "/clube" },
 ];
 
 export const Header = () => {
@@ -58,11 +58,8 @@ export const Header = () => {
             <Link
               key={link.label}
               to={link.href}
-              className={`text-sm font-medium transition-colors flex items-center gap-1 ${
-                link.icon ? "text-secondary hover:text-secondary/80 font-bold" : "text-muted-foreground hover:text-primary"
-              }`}
+              className="text-sm font-medium transition-colors text-muted-foreground hover:text-primary"
             >
-              {link.icon && <Crown className="h-4 w-4" />}
               {link.label}
             </Link>
           ))}
@@ -113,11 +110,8 @@ export const Header = () => {
             <Link
               key={link.label}
               to={link.href}
-              className={`text-sm font-medium transition-colors py-1 flex items-center gap-1 ${
-                link.icon ? "text-secondary font-bold" : "text-foreground hover:text-primary"
-              }`}
+              className="text-sm font-medium transition-colors py-1 text-foreground hover:text-primary"
             >
-              {link.icon && <Crown className="h-4 w-4" />}
               {link.label}
             </Link>
           ))}
