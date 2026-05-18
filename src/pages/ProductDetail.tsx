@@ -109,12 +109,51 @@ const ProductDetail = () => {
   useEffect(() => {
     const fetchCustomContent = async () => {
       if (!product?.node?.id) return;
+      const pid = product.node.id;
       const { data } = await supabase
         .from("product_content")
         .select("description, specifications")
-        .eq("shopify_product_id", product.node.id)
+        .eq("shopify_product_id", pid)
         .maybeSingle();
       setCustomContent(data || null);
+
+      // Fetch categories, brand, attributes
+      const [pcRes, contentRes, attrsRes, catsAllRes, brandsAllRes] = await Promise.all([
+        supabase.from("product_categories").select("category_id").eq("shopify_product_id", pid),
+        supabase.from("product_content").select("brand_id").eq("shopify_product_id", pid).maybeSingle(),
+        supabase.from("product_attributes").select("attr_key, attr_value").eq("shopify_product_id", pid).order("sort_order"),
+        supabase.from("categories").select("id, name, parent_id"),
+        supabase.from("brands").select("id, name"),
+      ]);
+      const allCats = (catsAllRes.data || []) as { id: string; name: string; parent_id: string | null }[];
+      const allBrands = (brandsAllRes.data || []) as { id: string; name: string }[];
+      const linkedIds = ((pcRes.data || []) as { category_id: string }[]).map((r) => r.category_id);
+      const buildPath = (id: string): string => {
+        const cat = allCats.find((c) => c.id === id);
+        if (!cat) return "";
+        const parts = [cat.name];
+        let cur = cat;
+        const seen = new Set([cur.id]);
+        while (cur.parent_id) {
+          const p = allCats.find((c) => c.id === cur.parent_id);
+          if (!p || seen.has(p.id)) break;
+          seen.add(p.id);
+          parts.unshift(p.name);
+          cur = p;
+        }
+        return parts.join(" › ");
+      };
+      const cats = linkedIds.map((id) => {
+        const c = allCats.find((x) => x.id === id);
+        return c ? { id, name: c.name, path: buildPath(id) } : null;
+      }).filter(Boolean) as { id: string; name: string; path: string }[];
+      const bId = (contentRes.data as { brand_id: string | null } | null)?.brand_id;
+      const brand = bId ? allBrands.find((b) => b.id === bId) || null : null;
+      const attributes = ((attrsRes.data || []) as { attr_key: string; attr_value: string }[]).map((a) => ({
+        key: a.attr_key,
+        value: a.attr_value,
+      }));
+      setProductDetails({ categories: cats, brand: brand ? { id: brand.id, name: brand.name } : null, attributes });
     };
     fetchCustomContent();
   }, [product?.node?.id]);
