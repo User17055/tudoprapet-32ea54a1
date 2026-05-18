@@ -63,7 +63,7 @@ export const Header = () => {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <Link to={user ? "/perfil" : "/login"}>
             <Button variant="ghost" size="sm" className="hidden md:flex items-center gap-2">
               <User className="h-5 w-5" />
@@ -83,10 +83,10 @@ export const Header = () => {
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
+        </div>
       </div>
 
       <MegaMenu />
-      </div>
 
       <div className="md:hidden px-4 pb-3">
         <div className="relative">
