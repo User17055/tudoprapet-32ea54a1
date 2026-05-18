@@ -774,7 +774,7 @@ function ContentTab() {
                 <TableRow>
                   <TableHead>Produto</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead>Especificações</TableHead>
+                  
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
