@@ -34,6 +34,11 @@ const ProductDetail = () => {
   const [quantity, setQuantity] = useState(1);
   const [recommended, setRecommended] = useState<ShopifyProduct[]>([]);
   const [customContent, setCustomContent] = useState<{ description: string | null; specifications: string | null } | null>(null);
+  const [productDetails, setProductDetails] = useState<{
+    categories: { id: string; name: string; path: string }[];
+    brand: { id: string; name: string } | null;
+    attributes: { key: string; value: string }[];
+  }>({ categories: [], brand: null, attributes: [] });
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
