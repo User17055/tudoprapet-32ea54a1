@@ -233,17 +233,14 @@ const ProductDetail = () => {
       }
     }
 
-    await addItem({
-      product,
-      variantId: variant.id,
-      variantTitle: variant.title,
-      price: variant.price,
-      quantity,
-      selectedOptions: variant.selectedOptions || [],
-    });
-    const checkoutUrl = getCheckoutUrl();
+    // Não-assinante: checkout instantâneo sem afetar o carrinho
+    const checkoutUrl = await createInstantCheckoutUrl([
+      { variantId: variant.id, quantity },
+    ]);
     if (checkoutUrl) {
       window.open(checkoutUrl, "_blank");
+    } else {
+      toast.error("Não foi possível iniciar o checkout.");
     }
     setBuyingNow(false);
   };
