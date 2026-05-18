@@ -68,6 +68,7 @@ export default function Admin() {
           <TabsList>
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" />Usuários</TabsTrigger>
             <TabsTrigger value="prices"><Package className="h-4 w-4 mr-2" />Preços do Clube</TabsTrigger>
+            <TabsTrigger value="content"><FileText className="h-4 w-4 mr-2" />Conteúdo</TabsTrigger>
             <TabsTrigger value="members"><Crown className="h-4 w-4 mr-2" />Membros</TabsTrigger>
           </TabsList>
           <TabsContent value="users" className="mt-4">
@@ -75,6 +76,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="prices" className="mt-4">
             <PricesTab />
+          </TabsContent>
+          <TabsContent value="content" className="mt-4">
+            <ContentTab />
           </TabsContent>
           <TabsContent value="members" className="mt-4">
             <MembersTab />
