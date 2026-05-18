@@ -101,6 +101,19 @@ const ProductDetail = () => {
     fetchRecommended();
   }, [handle, product?.node?.id]);
 
+  useEffect(() => {
+    const fetchCustomContent = async () => {
+      if (!product?.node?.id) return;
+      const { data } = await supabase
+        .from("product_content")
+        .select("description, specifications")
+        .eq("shopify_product_id", product.node.id)
+        .maybeSingle();
+      setCustomContent(data || null);
+    };
+    fetchCustomContent();
+  }, [product?.node?.id]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
