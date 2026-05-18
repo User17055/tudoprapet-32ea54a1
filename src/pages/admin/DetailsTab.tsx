@@ -447,8 +447,7 @@ function AssignPanel() {
   const [brandId, setBrandId] = useState<string>("none");
   const [attrs, setAttrs] = useState<ProductAttribute[]>([]);
   const [contentRow, setContentRow] = useState<ProductContentRow | null>(null);
-  const [newKey, setNewKey] = useState<string>(STANDARD_ATTR_KEYS[0]);
-  const [customKey, setCustomKey] = useState("");
+  const [newKey, setNewKey] = useState<string>("");
   const [newValue, setNewValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
@@ -461,7 +460,12 @@ function AssignPanel() {
       setAllValues((data || []) as AttrValue[]);
     })();
   }, []);
-  const activeKey = newKey === "__custom__" ? customKey.trim() : newKey;
+  const registeredKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of allValues) set.add(v.attr_key);
+    return Array.from(set).sort();
+  }, [allValues]);
+  const activeKey = newKey;
   const presetValues = useMemo(
     () => allValues.filter((v) => v.attr_key === activeKey),
     [allValues, activeKey]
