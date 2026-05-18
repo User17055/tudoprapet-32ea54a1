@@ -12,7 +12,7 @@ const navLinks = [
   { label: "Catálogo", href: "/catalogo" },
   { label: "Rações", href: "/catalogo?categoria=racoes" },
   { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
-  { label: "Clube", href: "/clube", icon: true },
+  { label: "Clube", href: "/clube" },
 ];
 
 export const Header = () => {
