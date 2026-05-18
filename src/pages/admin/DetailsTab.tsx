@@ -625,9 +625,9 @@ function AssignPanel() {
                           </Button>
                         </div>
                       ))}
-                      <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto] gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Select value={newKey} onValueChange={setNewKey}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {STANDARD_ATTR_KEYS.map((k) => (
                               <SelectItem key={k} value={k}>{k}</SelectItem>
@@ -640,6 +640,7 @@ function AssignPanel() {
                             placeholder="Rótulo personalizado"
                             value={customKey}
                             onChange={(e) => setCustomKey(e.target.value)}
+                            className="w-[180px]"
                           />
                         )}
                         <Input
@@ -647,7 +648,7 @@ function AssignPanel() {
                           value={newValue}
                           onChange={(e) => setNewValue(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
-                          className={newKey === "__custom__" ? "" : "sm:col-span-1"}
+                          className="flex-1 min-w-[160px]"
                         />
                         <Button onClick={handleAddAttr} size="icon">
                           <Plus className="h-4 w-4" />
