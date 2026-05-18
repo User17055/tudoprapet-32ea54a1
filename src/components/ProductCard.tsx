@@ -76,17 +76,14 @@ export const ProductCard = ({ product }: Props) => {
       }
     }
 
-    await addItem({
-      product,
-      variantId: variant.id,
-      variantTitle: variant.title,
-      price: variant.price,
-      quantity: 1,
-      selectedOptions: variant.selectedOptions || [],
-    });
-    const checkoutUrl = getCheckoutUrl();
+    // Não-assinante: cria carrinho temporário, sem afetar o carrinho do usuário
+    const checkoutUrl = await createInstantCheckoutUrl([
+      { variantId: variant.id, quantity: 1 },
+    ]);
     if (checkoutUrl) {
       window.open(checkoutUrl, "_blank");
+    } else {
+      toast.error("Não foi possível iniciar o checkout.");
     }
     setBuyingNow(false);
   };
