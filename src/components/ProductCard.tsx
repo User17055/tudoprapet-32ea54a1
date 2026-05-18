@@ -1,4 +1,4 @@
-import { ShopifyProduct } from "@/lib/shopify";
+import { ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
@@ -14,7 +14,6 @@ interface Props {
 
 export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
-  const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
@@ -77,17 +76,14 @@ export const ProductCard = ({ product }: Props) => {
       }
     }
 
-    await addItem({
-      product,
-      variantId: variant.id,
-      variantTitle: variant.title,
-      price: variant.price,
-      quantity: 1,
-      selectedOptions: variant.selectedOptions || [],
-    });
-    const checkoutUrl = getCheckoutUrl();
+    // Não-assinante: cria carrinho temporário, sem afetar o carrinho do usuário
+    const checkoutUrl = await createInstantCheckoutUrl([
+      { variantId: variant.id, quantity: 1 },
+    ]);
     if (checkoutUrl) {
       window.open(checkoutUrl, "_blank");
+    } else {
+      toast.error("Não foi possível iniciar o checkout.");
     }
     setBuyingNow(false);
   };

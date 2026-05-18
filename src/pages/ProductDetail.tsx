@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct } from "@/lib/shopify";
+import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -40,7 +40,7 @@ const ProductDetail = () => {
     attributes: { key: string; value: string }[];
   }>({ categories: [], brand: null, attributes: [] });
   const addItem = useCartStore((s) => s.addItem);
-  const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
+  // (carrinho NÃO é tocado pelo botão Comprar Agora)
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
@@ -233,17 +233,14 @@ const ProductDetail = () => {
       }
     }
 
-    await addItem({
-      product,
-      variantId: variant.id,
-      variantTitle: variant.title,
-      price: variant.price,
-      quantity,
-      selectedOptions: variant.selectedOptions || [],
-    });
-    const checkoutUrl = getCheckoutUrl();
+    // Não-assinante: checkout instantâneo sem afetar o carrinho
+    const checkoutUrl = await createInstantCheckoutUrl([
+      { variantId: variant.id, quantity },
+    ]);
     if (checkoutUrl) {
       window.open(checkoutUrl, "_blank");
+    } else {
+      toast.error("Não foi possível iniciar o checkout.");
     }
     setBuyingNow(false);
   };

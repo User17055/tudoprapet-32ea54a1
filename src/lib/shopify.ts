@@ -339,6 +339,24 @@ export async function createShopifyCart(item: CartItem): Promise<{ cartId: strin
   return { cartId: cart.id, checkoutUrl: formatCheckoutUrl(cart.checkoutUrl), lineId };
 }
 
+/**
+ * Cria um carrinho temporário (NÃO afeta o carrinho persistente do usuário)
+ * usado apenas pelo botão "Comprar Agora" para ir direto ao checkout.
+ */
+export async function createInstantCheckoutUrl(
+  items: Array<{ variantId: string; quantity: number }>
+): Promise<string | null> {
+  const data = await storefrontApiRequest(CART_CREATE_MUTATION, {
+    input: { lines: items.map(i => ({ quantity: i.quantity, merchandiseId: i.variantId })) },
+  });
+  if (data?.data?.cartCreate?.userErrors?.length > 0) {
+    console.error('Instant checkout failed:', data.data.cartCreate.userErrors);
+    return null;
+  }
+  const checkoutUrl = data?.data?.cartCreate?.cart?.checkoutUrl;
+  return checkoutUrl ? formatCheckoutUrl(checkoutUrl) : null;
+}
+
 export async function addLineToShopifyCart(cartId: string, item: CartItem): Promise<{ success: boolean; lineId?: string; cartNotFound?: boolean }> {
   const data = await storefrontApiRequest(CART_LINES_ADD_MUTATION, {
     cartId,
