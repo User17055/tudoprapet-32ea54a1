@@ -85,38 +85,73 @@ export default function DetailsTab() {
 }
 
 interface AttrValue { id: string; attr_key: string; attr_value: string; sort_order: number; }
+interface AttrKey { id: string; name: string; sort_order: number; }
 
 function ValuesPanel() {
+  const [keys, setKeys] = useState<AttrKey[]>([]);
   const [items, setItems] = useState<AttrValue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [key, setKey] = useState("");
+  const [newKeyName, setNewKeyName] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [selectedKey, setSelectedKey] = useState<string>("");
   const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [savingValue, setSavingValue] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const { data: vals } = await supabase
-      .from("attribute_values")
-      .select("*")
-      .order("attr_key")
-      .order("sort_order")
-      .order("attr_value");
+    const [{ data: ks }, { data: vals }] = await Promise.all([
+      supabase.from("attribute_keys").select("*").order("sort_order").order("name"),
+      supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
+    ]);
+    setKeys((ks || []) as AttrKey[]);
     setItems((vals || []) as AttrValue[]);
+    if (!selectedKey && ks && ks.length > 0) setSelectedKey((ks[0] as AttrKey).name);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
-  const handleAdd = async () => {
-    const finalKey = key.trim();
-    if (!finalKey || !value.trim()) return toast.error("Preencha o título e o valor");
-    setSaving(true);
+  const handleAddKey = async () => {
+    const name = newKeyName.trim();
+    if (!name) return toast.error("Informe o título");
+    setSavingKey(true);
+    const { error } = await supabase.from("attribute_keys").insert({ name, sort_order: keys.length });
+    setSavingKey(false);
+    if (error) {
+      if (error.code === "23505") return toast.error("Esse título já existe");
+      return toast.error("Erro: " + error.message);
+    }
+    toast.success("Título criado");
+    setNewKeyName("");
+    setSelectedKey(name);
+    load();
+  };
+
+  const handleDelKey = async (k: AttrKey) => {
+    const used = items.some((i) => i.attr_key === k.name);
+    const msg = used
+      ? `Excluir o título "${k.name}"? Todos os valores cadastrados serão removidos.`
+      : `Excluir o título "${k.name}"?`;
+    if (!confirm(msg)) return;
+    if (used) {
+      await supabase.from("attribute_values").delete().eq("attr_key", k.name);
+    }
+    const { error } = await supabase.from("attribute_keys").delete().eq("id", k.id);
+    if (error) return toast.error("Erro: " + error.message);
+    if (selectedKey === k.name) setSelectedKey("");
+    load();
+  };
+
+  const handleAddValue = async () => {
+    if (!selectedKey) return toast.error("Selecione um título");
+    if (!value.trim()) return toast.error("Informe o valor");
+    setSavingValue(true);
     const { error } = await supabase.from("attribute_values").insert({
-      attr_key: finalKey,
+      attr_key: selectedKey,
       attr_value: value.trim(),
-      sort_order: items.filter((i) => i.attr_key === finalKey).length,
+      sort_order: items.filter((i) => i.attr_key === selectedKey).length,
     });
-    setSaving(false);
+    setSavingValue(false);
     if (error) {
       if (error.code === "23505") return toast.error("Esse valor já existe para esse título");
       return toast.error("Erro: " + error.message);
@@ -126,103 +161,128 @@ function ValuesPanel() {
     load();
   };
 
-  const handleDel = async (id: string) => {
+  const handleDelValue = async (id: string) => {
     const { error } = await supabase.from("attribute_values").delete().eq("id", id);
     if (error) return toast.error("Erro");
     load();
   };
 
-  const existingKeys = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) set.add(it.attr_key);
-    return Array.from(set).sort();
-  }, [items]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, AttrValue[]>();
-    for (const it of items) {
-      if (!map.has(it.attr_key)) map.set(it.attr_key, []);
-      map.get(it.attr_key)!.push(it);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [items]);
+  const valuesForSelected = items.filter((i) => i.attr_key === selectedKey);
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader><CardTitle>Cadastrar valor</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Cadastrar título</CardTitle></CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-3">
-            Crie seus próprios títulos (ex.: Pet, Sabor, Tamanho) e os valores correspondentes (ex.: Cachorro, Frango, 1kg). Eles aparecerão como filtros no catálogo e como opções ao atribuir produtos.
+            Crie os títulos dos atributos (ex.: Pet, Sabor, Tamanho, Idade). Depois, abaixo, adicione os valores de cada um.
           </p>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="w-[200px]">
-              <label className="text-xs font-medium mb-1 block">Título</label>
-              <Input
-                list="existing-attr-keys"
-                placeholder="Ex.: Pet"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-              />
-              <datalist id="existing-attr-keys">
-                {existingKeys.map((k) => <option key={k} value={k} />)}
-              </datalist>
-            </div>
-            <div className="flex-1 min-w-[180px]">
-              <label className="text-xs font-medium mb-1 block">Valor</label>
-              <Input
-                placeholder="Ex.: Cachorro"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              />
-            </div>
-            <Button onClick={handleAdd} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-              Adicionar
+          <div className="flex gap-2">
+            <Input
+              placeholder="Ex.: Pet"
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddKey()}
+            />
+            <Button onClick={handleAddKey} disabled={savingKey}>
+              {savingKey ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Adicionar título
             </Button>
           </div>
-          {existingKeys.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5 items-center">
-              <span className="text-xs text-muted-foreground">Reutilizar título:</span>
-              {existingKeys.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setKey(k)}
-                  className="text-xs px-2 py-0.5 rounded-full bg-muted hover:bg-primary/10 hover:text-primary"
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Cadastrar valores</CardTitle></CardHeader>
+        <CardContent>
+          {keys.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Cadastre um título acima para começar.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 items-end">
+                <div className="w-[200px]">
+                  <label className="text-xs font-medium mb-1 block">Título</label>
+                  <Select value={selectedKey} onValueChange={setSelectedKey}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {keys.map((k) => (
+                        <SelectItem key={k.id} value={k.name}>{k.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 min-w-[180px]">
+                  <label className="text-xs font-medium mb-1 block">Valor</label>
+                  <Input
+                    placeholder="Ex.: Cachorro"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddValue()}
+                    disabled={!selectedKey}
+                  />
+                </div>
+                <Button onClick={handleAddValue} disabled={savingValue || !selectedKey}>
+                  {savingValue ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                  Adicionar
+                </Button>
+              </div>
+              {selectedKey && (
+                <div className="mt-4 border border-border rounded-lg p-3">
+                  <div className="font-display font-bold text-sm mb-2">
+                    Valores de "{selectedKey}" ({valuesForSelected.length})
+                  </div>
+                  {valuesForSelected.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum valor ainda.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {valuesForSelected.map((v) => (
+                        <Badge key={v.id} variant="secondary" className="gap-1.5 pl-2 pr-1 py-1">
+                          {v.attr_value}
+                          <button onClick={() => handleDelValue(v.id)} className="hover:text-destructive">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Valores cadastrados</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Títulos cadastrados ({keys.length})</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-          ) : grouped.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhum valor cadastrado ainda.</p>
+          ) : keys.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Nenhum título cadastrado.</p>
           ) : (
-            <div className="space-y-4">
-              {grouped.map(([k, list]) => (
-                <div key={k} className="border border-border rounded-lg p-3">
-                  <div className="font-display font-bold text-sm mb-2">{k}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {list.map((v) => (
-                      <Badge key={v.id} variant="secondary" className="gap-1.5 pl-2 pr-1 py-1">
-                        {v.attr_value}
-                        <button onClick={() => handleDel(v.id)} className="hover:text-destructive">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
+            <div className="space-y-2">
+              {keys.map((k) => {
+                const count = items.filter((i) => i.attr_key === k.name).length;
+                return (
+                  <div
+                    key={k.id}
+                    className="flex items-center justify-between border border-border rounded-lg px-3 py-2"
+                  >
+                    <button
+                      onClick={() => setSelectedKey(k.name)}
+                      className="flex items-center gap-2 text-left flex-1 hover:text-primary"
+                    >
+                      <span className="font-medium">{k.name}</span>
+                      <span className="text-xs text-muted-foreground">{count} valor{count !== 1 ? "es" : ""}</span>
+                    </button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelKey(k)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
