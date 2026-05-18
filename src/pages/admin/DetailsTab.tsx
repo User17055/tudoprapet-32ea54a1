@@ -779,7 +779,7 @@ function AssignPanel() {
                   <div className="mt-6">
                     <label className="text-sm font-medium mb-2 block">Atributos extras</label>
                     <p className="text-xs text-muted-foreground mb-2">
-                      Use os rótulos padrão (Linha, Pet, Idade, Formato, Indicação Veterinária, Raça, Sabor, Tipo) — eles aparecem como filtros no catálogo. Você também pode criar um rótulo personalizado.
+                      Escolha um título e um valor previamente cadastrados na aba <strong>Valores</strong>. Eles aparecem como filtros no catálogo.
                     </p>
                     <div className="space-y-2">
                       {attrs.map((a) => (
@@ -791,58 +791,43 @@ function AssignPanel() {
                           </Button>
                         </div>
                       ))}
-                      <div className="flex flex-wrap gap-2">
-                        <Select value={newKey} onValueChange={(v) => { setNewKey(v); setNewValue(""); }}>
-                          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {STANDARD_ATTR_KEYS.map((k) => (
-                              <SelectItem key={k} value={k}>{k}</SelectItem>
-                            ))}
-                            <SelectItem value="__custom__">Personalizado…</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {newKey === "__custom__" && (
-                          <Input
-                            placeholder="Rótulo personalizado"
-                            value={customKey}
-                            onChange={(e) => setCustomKey(e.target.value)}
-                            className="w-[180px]"
-                          />
-                        )}
-                        {presetValues.length > 0 ? (
-                          <Select value={newValue} onValueChange={setNewValue}>
-                            <SelectTrigger className="flex-1 min-w-[180px]">
-                              <SelectValue placeholder="Selecione um valor cadastrado" />
+                      {registeredKeys.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">
+                          Você ainda não cadastrou nenhum título. Vá à aba "Valores" para criar.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <Select value={newKey} onValueChange={(v) => { setNewKey(v); setNewValue(""); }}>
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Título" />
                             </SelectTrigger>
                             <SelectContent>
-                              {presetValues.map((v) => (
-                                <SelectItem key={v.id} value={v.attr_value}>{v.attr_value}</SelectItem>
+                              {registeredKeys.map((k) => (
+                                <SelectItem key={k} value={k}>{k}</SelectItem>
                               ))}
-                              <SelectItem value="__manual__">Outro (digitar)…</SelectItem>
                             </SelectContent>
                           </Select>
-                        ) : (
-                          <Input
-                            placeholder="Valor (cadastre na aba Valores)"
-                            value={newValue}
-                            onChange={(e) => setNewValue(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
-                            className="flex-1 min-w-[160px]"
-                          />
-                        )}
-                        {newValue === "__manual__" && (
-                          <Input
-                            autoFocus
-                            placeholder="Digite o valor"
-                            onChange={(e) => setNewValue(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleAddAttr()}
-                            className="w-[200px]"
-                          />
-                        )}
-                        <Button onClick={handleAddAttr} size="icon" disabled={!newValue || newValue === "__manual__"}>
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
+                          <Select value={newValue} onValueChange={setNewValue} disabled={!newKey}>
+                            <SelectTrigger className="flex-1 min-w-[180px]">
+                              <SelectValue placeholder={newKey ? "Selecione um valor" : "Escolha o título primeiro"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {presetValues.length === 0 ? (
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                  Nenhum valor cadastrado para "{newKey}".
+                                </div>
+                              ) : (
+                                presetValues.map((v) => (
+                                  <SelectItem key={v.id} value={v.attr_value}>{v.attr_value}</SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <Button onClick={handleAddAttr} size="icon" disabled={!newKey || !newValue}>
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
