@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText, Bold, Italic } from "lucide-react";
+import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText, Bold, Italic, Layers } from "lucide-react";
 import { useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import DetailsTab from "./admin/DetailsTab";
 
 interface SubPrice {
   id: string;
@@ -70,6 +71,7 @@ export default function Admin() {
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" />Usuários</TabsTrigger>
             <TabsTrigger value="prices"><Package className="h-4 w-4 mr-2" />Preços do Clube</TabsTrigger>
             <TabsTrigger value="content"><FileText className="h-4 w-4 mr-2" />Conteúdo</TabsTrigger>
+            <TabsTrigger value="details"><Layers className="h-4 w-4 mr-2" />Detalhes</TabsTrigger>
             <TabsTrigger value="members"><Crown className="h-4 w-4 mr-2" />Membros</TabsTrigger>
           </TabsList>
           <TabsContent value="users" className="mt-4">
@@ -80,6 +82,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="content" className="mt-4">
             <ContentTab />
+          </TabsContent>
+          <TabsContent value="details" className="mt-4">
+            <DetailsTab />
           </TabsContent>
           <TabsContent value="members" className="mt-4">
             <MembersTab />
@@ -750,16 +755,6 @@ function ContentTab() {
               disabled={!productId}
             />
           </div>
-          <div>
-            <label className="text-sm font-medium mb-1 block">Especificações</label>
-            <FormattedTextarea
-              value={specifications}
-              onChange={setSpecifications}
-              placeholder={"Especificações:\n- Peso: 500g\n- Validade: 12 meses\n- Princípio ativo: ..."}
-              rows={8}
-              disabled={!productId}
-            />
-          </div>
           <Button onClick={handleSave} disabled={saving || !productId}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
           </Button>
@@ -779,7 +774,7 @@ function ContentTab() {
                 <TableRow>
                   <TableHead>Produto</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead>Especificações</TableHead>
+                  
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -790,7 +785,7 @@ function ContentTab() {
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{prod?.title || "Produto removido"}</TableCell>
                       <TableCell>{c.description ? "✓" : "—"}</TableCell>
-                      <TableCell>{c.specifications ? "✓" : "—"}</TableCell>
+                      
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" onClick={() => {

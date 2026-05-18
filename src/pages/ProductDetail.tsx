@@ -34,6 +34,11 @@ const ProductDetail = () => {
   const [quantity, setQuantity] = useState(1);
   const [recommended, setRecommended] = useState<ShopifyProduct[]>([]);
   const [customContent, setCustomContent] = useState<{ description: string | null; specifications: string | null } | null>(null);
+  const [productDetails, setProductDetails] = useState<{
+    categories: { id: string; name: string; path: string }[];
+    brand: { id: string; name: string } | null;
+    attributes: { key: string; value: string }[];
+  }>({ categories: [], brand: null, attributes: [] });
   const addItem = useCartStore((s) => s.addItem);
   const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
   const isLoading = useCartStore((s) => s.isLoading);
@@ -104,12 +109,51 @@ const ProductDetail = () => {
   useEffect(() => {
     const fetchCustomContent = async () => {
       if (!product?.node?.id) return;
+      const pid = product.node.id;
       const { data } = await supabase
         .from("product_content")
         .select("description, specifications")
-        .eq("shopify_product_id", product.node.id)
+        .eq("shopify_product_id", pid)
         .maybeSingle();
       setCustomContent(data || null);
+
+      // Fetch categories, brand, attributes
+      const [pcRes, contentRes, attrsRes, catsAllRes, brandsAllRes] = await Promise.all([
+        supabase.from("product_categories").select("category_id").eq("shopify_product_id", pid),
+        supabase.from("product_content").select("brand_id").eq("shopify_product_id", pid).maybeSingle(),
+        supabase.from("product_attributes").select("attr_key, attr_value").eq("shopify_product_id", pid).order("sort_order"),
+        supabase.from("categories").select("id, name, parent_id"),
+        supabase.from("brands").select("id, name"),
+      ]);
+      const allCats = (catsAllRes.data || []) as { id: string; name: string; parent_id: string | null }[];
+      const allBrands = (brandsAllRes.data || []) as { id: string; name: string }[];
+      const linkedIds = ((pcRes.data || []) as { category_id: string }[]).map((r) => r.category_id);
+      const buildPath = (id: string): string => {
+        const cat = allCats.find((c) => c.id === id);
+        if (!cat) return "";
+        const parts = [cat.name];
+        let cur = cat;
+        const seen = new Set([cur.id]);
+        while (cur.parent_id) {
+          const p = allCats.find((c) => c.id === cur.parent_id);
+          if (!p || seen.has(p.id)) break;
+          seen.add(p.id);
+          parts.unshift(p.name);
+          cur = p;
+        }
+        return parts.join(" › ");
+      };
+      const cats = linkedIds.map((id) => {
+        const c = allCats.find((x) => x.id === id);
+        return c ? { id, name: c.name, path: buildPath(id) } : null;
+      }).filter(Boolean) as { id: string; name: string; path: string }[];
+      const bId = (contentRes.data as { brand_id: string | null } | null)?.brand_id;
+      const brand = bId ? allBrands.find((b) => b.id === bId) || null : null;
+      const attributes = ((attrsRes.data || []) as { attr_key: string; attr_value: string }[]).map((a) => ({
+        key: a.attr_key,
+        value: a.attr_value,
+      }));
+      setProductDetails({ categories: cats, brand: brand ? { id: brand.id, name: brand.name } : null, attributes });
     };
     fetchCustomContent();
   }, [product?.node?.id]);
@@ -272,7 +316,7 @@ const ProductDetail = () => {
   };
 
   const descriptionBlocks = parseDescription(customContent?.description || node.description || "");
-  const specBlocks = parseDescription(customContent?.specifications || "");
+  
 
   // Render **bold** and *italic* markers as <strong>/<em>
   const renderInline = (text: string) => {
@@ -619,42 +663,47 @@ const ProductDetail = () => {
           </div>
         </section>
 
-        {/* Specifications section */}
-        {specBlocks.length > 0 && (
+        {/* Details section (categories, brand, attributes) */}
+        {(productDetails.categories.length > 0 ||
+          productDetails.brand ||
+          productDetails.attributes.length > 0) && (
           <section className="mt-10 lg:mt-12 max-w-4xl">
             <div className="border-t border-border pt-10">
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-10 w-1.5 bg-primary rounded-full" />
                 <h2 className="font-display font-900 text-2xl lg:text-3xl">
-                  Especificações
+                  Detalhes
                 </h2>
               </div>
-              <div className="space-y-5">
-                {specBlocks.map((block, idx) => {
-                  if (block.type === "heading") {
-                    return (
-                      <h3 key={idx} className="font-display font-900 text-lg lg:text-xl text-foreground mt-6 first:mt-0">
-                        {renderInline(block.text)}
-                      </h3>
-                    );
-                  }
-                  if (block.type === "list") {
-                    return (
-                      <ul key={idx} className="space-y-2.5">
-                        {block.items.map((item, i) => (
-                          <li key={i} className="flex items-start gap-3 text-base text-foreground/80 leading-relaxed">
-                            <Check className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                            <span>{renderInline(item)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    );
-                  }
-                  return (
-                    <p key={idx} className="text-base leading-relaxed text-foreground/80">{renderInline(block.text)}</p>
-                  );
-                })}
-              </div>
+              <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
+                {productDetails.brand && (
+                  <div className="flex items-start gap-3 py-2 border-b border-border/50">
+                    <dt className="font-semibold text-foreground min-w-[120px]">Marca</dt>
+                    <dd className="text-foreground/80">{productDetails.brand.name}</dd>
+                  </div>
+                )}
+                {productDetails.categories.length > 0 && (
+                  <div className="flex items-start gap-3 py-2 border-b border-border/50 sm:col-span-2">
+                    <dt className="font-semibold text-foreground min-w-[120px]">Categorias</dt>
+                    <dd className="flex flex-wrap gap-2">
+                      {productDetails.categories.map((c) => (
+                        <span
+                          key={c.id}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium"
+                        >
+                          {c.path}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+                {productDetails.attributes.map((a, idx) => (
+                  <div key={idx} className="flex items-start gap-3 py-2 border-b border-border/50">
+                    <dt className="font-semibold text-foreground min-w-[120px]">{a.key}</dt>
+                    <dd className="text-foreground/80">{a.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           </section>
         )}
