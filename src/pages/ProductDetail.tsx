@@ -605,7 +605,7 @@ const ProductDetail = () => {
                       key={idx}
                       className="text-base leading-relaxed text-foreground/80"
                     >
-                      {block.text}
+                      {renderInline(block.text)}
                     </p>
                   );
                 })}
