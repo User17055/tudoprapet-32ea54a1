@@ -19,14 +19,9 @@ export const TrustBadges = () => {
               <div className="flex items-center justify-center h-10 w-10 rounded-full bg-secondary/20 shrink-0">
                 <b.icon className="h-5 w-5 text-secondary" />
               </div>
-              <div className="min-w-0">
-                <p className="font-display font-bold text-xs md:text-sm leading-tight truncate">
-                  {b.label}
-                </p>
-                <p className="text-[10px] md:text-xs opacity-75 leading-tight truncate">
-                  {b.desc}
-                </p>
-              </div>
+              <p className="font-display font-bold text-xs md:text-sm leading-tight truncate">
+                {b.label}
+              </p>
             </div>
           ))}
         </div>
