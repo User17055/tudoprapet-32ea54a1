@@ -8,16 +8,7 @@ import { Loader2, PackageOpen, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const CATEGORIES = [
-  { value: "all", label: "Todas" },
-  { value: "promocoes", label: "Promoções" },
-  { value: "racoes", label: "Rações" },
-  { value: "brinquedos", label: "Brinquedos" },
-  { value: "camas", label: "Camas & Casinhas" },
-  { value: "farmacia", label: "Farmácia" },
-  { value: "higiene", label: "Higiene" },
-];
+import { supabase } from "@/integrations/supabase/client";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Relevância" },
@@ -27,104 +18,165 @@ const SORT_OPTIONS = [
   { value: "name-desc", label: "Z - A" },
 ];
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  parent_id: string | null;
+  sort_order: number;
+}
+interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get("busca") || "");
-  const [category, setCategory] = useState(searchParams.get("categoria") || "all");
+  const [categorySlug, setCategorySlug] = useState(searchParams.get("categoria") || "all");
+  const [brandSlug, setBrandSlug] = useState(searchParams.get("marca") || "all");
+  const [attrFilter, setAttrFilter] = useState(searchParams.get("atributo") || "all");
   const [sort, setSort] = useState("relevance");
   const [showFilters, setShowFilters] = useState(false);
 
+  // DB data
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [productCats, setProductCats] = useState<{ shopify_product_id: string; category_id: string }[]>([]);
+  const [productBrands, setProductBrands] = useState<{ shopify_product_id: string; brand_id: string | null }[]>([]);
+  const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
+
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchAll = async () => {
       setLoading(true);
       try {
         const queryParam = searchParams.get("busca") || undefined;
-        const data = await storefrontApiRequest(PRODUCTS_QUERY, {
-          first: 50,
-          query: queryParam || undefined,
-        });
-        setProducts(data?.data?.products?.edges || []);
+        const [shop, cats, brs, pc, pcontent, pa] = await Promise.all([
+          storefrontApiRequest(PRODUCTS_QUERY, { first: 100, query: queryParam || undefined }),
+          supabase.from("categories").select("*").order("sort_order").order("name"),
+          supabase.from("brands").select("*").order("name"),
+          supabase.from("product_categories").select("shopify_product_id, category_id"),
+          supabase.from("product_content").select("shopify_product_id, brand_id"),
+          supabase.from("product_attributes").select("shopify_product_id, attr_key, attr_value"),
+        ]);
+        setProducts(shop?.data?.products?.edges || []);
+        setCategories((cats.data || []) as Category[]);
+        setBrands((brs.data || []) as Brand[]);
+        setProductCats((pc.data || []) as any);
+        setProductBrands((pcontent.data || []) as any);
+        setProductAttrs((pa.data || []) as any);
       } catch (error) {
         console.error("Failed to fetch products:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchProducts();
+    fetchAll();
   }, [searchParams]);
 
-  // Update URL params
   const applyFilters = () => {
     const params: Record<string, string> = {};
     if (search) params.busca = search;
-    if (category !== "all") params.categoria = category;
+    if (categorySlug !== "all") params.categoria = categorySlug;
+    if (brandSlug !== "all") params.marca = brandSlug;
+    if (attrFilter !== "all") params.atributo = attrFilter;
     setSearchParams(params);
   };
 
   const clearFilters = () => {
     setSearch("");
-    setCategory("all");
+    setCategorySlug("all");
+    setBrandSlug("all");
+    setAttrFilter("all");
     setSort("relevance");
     setSearchParams({});
   };
 
-  // Client-side filtering
+  // helpers
+  const rootCats = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
+  const selectedCat = useMemo(() => categories.find((c) => c.slug === categorySlug), [categories, categorySlug]);
+  const subCats = useMemo(
+    () => (selectedCat ? categories.filter((c) => c.parent_id === selectedCat.id) : []),
+    [categories, selectedCat]
+  );
+  // include category + descendants
+  const expandCategoryIds = (rootId: string): Set<string> => {
+    const ids = new Set<string>([rootId]);
+    let frontier = [rootId];
+    while (frontier.length) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const c of categories) if (c.parent_id === id && !ids.has(c.id)) {
+          ids.add(c.id);
+          next.push(c.id);
+        }
+      }
+      frontier = next;
+    }
+    return ids;
+  };
+
+  // Build unique attribute values per key for filter dropdown
+  const attrOptions = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const a of productAttrs) {
+      if (!map.has(a.attr_key)) map.set(a.attr_key, new Set());
+      map.get(a.attr_key)!.add(a.attr_value);
+    }
+    const out: { value: string; label: string }[] = [];
+    for (const [k, vs] of map) for (const v of vs) out.push({ value: `${k}=${v}`, label: `${k}: ${v}` });
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [productAttrs]);
+
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    // Helper para remover acentos do texto (ex: "Ração" vira "racao")
-    const normalizeText = (str: string) => {
-      return str
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-    };
-
-    // Category filter
-    if (category === "promocoes") {
-      result = result.filter((p) => {
-        const v = p.node.variants.edges[0]?.node;
-        const price = parseFloat(v?.price?.amount || "0");
-        const cmp = v?.compareAtPrice ? parseFloat(v.compareAtPrice.amount) : 0;
-        return cmp > price;
-      });
-    } else if (category !== "all") {
-      const categoryKeywords: Record<string, string[]> = {
-        racoes: ["racoes", "racao", "alimento", "petisco", "ração", "rações"],
-        brinquedos: ["brinquedo", "brinquedos", "toy"],
-        camas: ["cama", "camas", "casinha", "caminha"],
-        farmacia: ["farmacia", "farmácia", "remedio", "medicamento", "antipulgas", "vermifugo"],
-        higiene: ["higiene", "shampoo", "banho", "perfume"],
-      };
-
-      const keywords = (categoryKeywords[category] || []).map(normalizeText);
-      if (keywords.length > 0) {
+    // Category filter (via DB links + descendants)
+    if (categorySlug !== "all") {
+      if (categorySlug === "promocoes") {
         result = result.filter((p) => {
-          const haystack = [
-            ...(p.node.tags || []),
-            p.node.productType || "",
-            p.node.title || "",
-          ]
-            .map(normalizeText)
-            .join(" ");
-          return keywords.some((k) => haystack.includes(k));
+          const v = p.node.variants.edges[0]?.node;
+          const price = parseFloat(v?.price?.amount || "0");
+          const cmp = v?.compareAtPrice ? parseFloat(v.compareAtPrice.amount) : 0;
+          return cmp > price;
         });
+      } else if (selectedCat) {
+        const allowed = expandCategoryIds(selectedCat.id);
+        const productIds = new Set(
+          productCats.filter((pc) => allowed.has(pc.category_id)).map((pc) => pc.shopify_product_id)
+        );
+        result = result.filter((p) => productIds.has(p.node.id));
       }
+    }
+
+    // Brand filter
+    if (brandSlug !== "all") {
+      const brand = brands.find((b) => b.slug === brandSlug);
+      if (brand) {
+        const productIds = new Set(
+          productBrands.filter((pb) => pb.brand_id === brand.id).map((pb) => pb.shopify_product_id)
+        );
+        result = result.filter((p) => productIds.has(p.node.id));
+      }
+    }
+
+    // Attribute filter
+    if (attrFilter !== "all") {
+      const [k, v] = attrFilter.split("=");
+      const productIds = new Set(
+        productAttrs.filter((a) => a.attr_key === k && a.attr_value === v).map((a) => a.shopify_product_id)
+      );
+      result = result.filter((p) => productIds.has(p.node.id));
     }
 
     // Sort
     if (sort === "price-asc") {
-      result.sort(
-        (a, b) =>
-          parseFloat(a.node.priceRange.minVariantPrice.amount) - parseFloat(b.node.priceRange.minVariantPrice.amount),
-      );
+      result.sort((a, b) => parseFloat(a.node.priceRange.minVariantPrice.amount) - parseFloat(b.node.priceRange.minVariantPrice.amount));
     } else if (sort === "price-desc") {
-      result.sort(
-        (a, b) =>
-          parseFloat(b.node.priceRange.minVariantPrice.amount) - parseFloat(a.node.priceRange.minVariantPrice.amount),
-      );
+      result.sort((a, b) => parseFloat(b.node.priceRange.minVariantPrice.amount) - parseFloat(a.node.priceRange.minVariantPrice.amount));
     } else if (sort === "name-asc") {
       result.sort((a, b) => a.node.title.localeCompare(b.node.title));
     } else if (sort === "name-desc") {
@@ -132,15 +184,15 @@ const Catalog = () => {
     }
 
     return result;
-  }, [products, category, sort, search, searchParams]);
+  }, [products, categorySlug, brandSlug, attrFilter, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
 
-  const hasActiveFilters = category !== "all" || search || sort !== "relevance";
+  const hasActiveFilters =
+    categorySlug !== "all" || brandSlug !== "all" || attrFilter !== "all" || search || sort !== "relevance";
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        {/* Page header */}
         <div className="bg-primary/5 border-b border-border">
           <div className="container mx-auto py-8 md:py-12">
             <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Catálogo</h1>
@@ -152,46 +204,60 @@ const Catalog = () => {
           {/* Filters bar */}
           <div className="flex flex-col gap-4 mb-6">
             {/* Desktop filters */}
-            <div className="hidden md:flex items-center gap-3">
-              <div className="relative flex-1 max-w-sm">
+            <div className="hidden md:flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 max-w-sm min-w-[200px]">
                 <Input
                   placeholder="Buscar produtos..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-                  className="rounded-full pr-10"
+                  className="rounded-full"
                 />
               </div>
 
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="w-[180px] rounded-full">
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
+              <Select value={categorySlug} onValueChange={setCategorySlug}>
+                <SelectTrigger className="w-[200px] rounded-full"><SelectValue placeholder="Categoria" /></SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
+                  <SelectItem value="all">Todas as categorias</SelectItem>
+                  <SelectItem value="promocoes">Promoções</SelectItem>
+                  {rootCats.map((c) => (
+                    <SelectItem key={c.id} value={c.slug}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              <Select value={brandSlug} onValueChange={setBrandSlug}>
+                <SelectTrigger className="w-[180px] rounded-full"><SelectValue placeholder="Marca" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as marcas</SelectItem>
+                  {brands.map((b) => (
+                    <SelectItem key={b.id} value={b.slug}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {attrOptions.length > 0 && (
+                <Select value={attrFilter} onValueChange={setAttrFilter}>
+                  <SelectTrigger className="w-[200px] rounded-full"><SelectValue placeholder="Atributo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os atributos</SelectItem>
+                    {attrOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
               <Select value={sort} onValueChange={setSort}>
-                <SelectTrigger className="w-[160px] rounded-full">
-                  <SelectValue placeholder="Ordenar" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[160px] rounded-full"><SelectValue placeholder="Ordenar" /></SelectTrigger>
                 <SelectContent>
                   {SORT_OPTIONS.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              <Button onClick={applyFilters} className="rounded-full">
-                Buscar
-              </Button>
+              <Button onClick={applyFilters} className="rounded-full">Buscar</Button>
 
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
@@ -211,44 +277,53 @@ const Catalog = () => {
                   className="rounded-full"
                 />
               </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full shrink-0"
-                onClick={() => setShowFilters(!showFilters)}
-              >
+              <Button variant="outline" size="icon" className="rounded-full shrink-0" onClick={() => setShowFilters(!showFilters)}>
                 <SlidersHorizontal className="h-4 w-4" />
               </Button>
-              <Button size="sm" onClick={applyFilters} className="rounded-full shrink-0">
-                Buscar
-              </Button>
+              <Button size="sm" onClick={applyFilters} className="rounded-full shrink-0">Buscar</Button>
             </div>
 
             {/* Mobile filters panel */}
             {showFilters && (
               <div className="md:hidden flex flex-col gap-3 p-4 rounded-xl bg-muted/50 border border-border animate-fade-in-up">
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="rounded-full">
-                    <SelectValue placeholder="Categoria" />
-                  </SelectTrigger>
+                <Select value={categorySlug} onValueChange={setCategorySlug}>
+                  <SelectTrigger className="rounded-full"><SelectValue placeholder="Categoria" /></SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.label}
-                      </SelectItem>
+                    <SelectItem value="all">Todas as categorias</SelectItem>
+                    <SelectItem value="promocoes">Promoções</SelectItem>
+                    {rootCats.map((c) => (
+                      <SelectItem key={c.id} value={c.slug}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
+                <Select value={brandSlug} onValueChange={setBrandSlug}>
+                  <SelectTrigger className="rounded-full"><SelectValue placeholder="Marca" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as marcas</SelectItem>
+                    {brands.map((b) => (
+                      <SelectItem key={b.id} value={b.slug}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {attrOptions.length > 0 && (
+                  <Select value={attrFilter} onValueChange={setAttrFilter}>
+                    <SelectTrigger className="rounded-full"><SelectValue placeholder="Atributo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os atributos</SelectItem>
+                      {attrOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
                 <Select value={sort} onValueChange={setSort}>
-                  <SelectTrigger className="rounded-full">
-                    <SelectValue placeholder="Ordenar" />
-                  </SelectTrigger>
+                  <SelectTrigger className="rounded-full"><SelectValue placeholder="Ordenar" /></SelectTrigger>
                   <SelectContent>
                     {SORT_OPTIONS.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -261,22 +336,53 @@ const Catalog = () => {
               </div>
             )}
 
-            {/* Category pills */}
+            {/* Category pills (root) */}
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {CATEGORIES.map((c) => (
+              <button
+                onClick={() => setCategorySlug("all")}
+                className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  categorySlug === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setCategorySlug("promocoes")}
+                className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  categorySlug === "promocoes" ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Promoções
+              </button>
+              {rootCats.map((c) => (
                 <button
-                  key={c.value}
-                  onClick={() => setCategory(c.value)}
+                  key={c.id}
+                  onClick={() => setCategorySlug(c.slug)}
                   className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                    category === c.value
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    categorySlug === c.slug ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
-                  {c.label}
+                  {c.name}
                 </button>
               ))}
             </div>
+
+            {/* Subcategory pills */}
+            {subCats.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {subCats.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCategorySlug(c.slug)}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      categorySlug === c.slug ? "bg-primary/10 border-primary text-primary" : "bg-card border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Results count */}
@@ -287,7 +393,6 @@ const Catalog = () => {
             </p>
           )}
 
-          {/* Product grid */}
           {loading ? (
             <div className="flex justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -298,9 +403,7 @@ const Catalog = () => {
               <h3 className="font-display font-bold text-xl mb-2">Nenhum produto encontrado</h3>
               <p className="text-muted-foreground max-w-md">Tente ajustar os filtros ou buscar por outro termo.</p>
               {hasActiveFilters && (
-                <Button variant="outline" className="mt-4" onClick={clearFilters}>
-                  Limpar filtros
-                </Button>
+                <Button variant="outline" className="mt-4" onClick={clearFilters}>Limpar filtros</Button>
               )}
             </div>
           ) : (
