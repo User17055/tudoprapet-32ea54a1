@@ -273,6 +273,26 @@ const ProductDetail = () => {
   const descriptionBlocks = parseDescription(customContent?.description || node.description || "");
   const specBlocks = parseDescription(customContent?.specifications || "");
 
+  // Render **bold** and *italic* markers as <strong>/<em>
+  const renderInline = (text: string) => {
+    const parts: (string | JSX.Element)[] = [];
+    const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    let key = 0;
+    while ((m = regex.exec(text)) !== null) {
+      if (m.index > lastIndex) parts.push(text.slice(lastIndex, m.index));
+      if (m[2] !== undefined) {
+        parts.push(<strong key={key++} className="font-bold text-foreground">{m[2]}</strong>);
+      } else if (m[3] !== undefined) {
+        parts.push(<em key={key++} className="italic">{m[3]}</em>);
+      }
+      lastIndex = m.index + m[0].length;
+    }
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    return parts;
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
