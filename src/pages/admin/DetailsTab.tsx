@@ -445,6 +445,20 @@ function AssignPanel() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
 
+  // preset values for the current key
+  const [allValues, setAllValues] = useState<AttrValue[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("attribute_values").select("*").order("attr_key").order("sort_order");
+      setAllValues((data || []) as AttrValue[]);
+    })();
+  }, []);
+  const activeKey = newKey === "__custom__" ? customKey.trim() : newKey;
+  const presetValues = useMemo(
+    () => allValues.filter((v) => v.attr_key === activeKey),
+    [allValues, activeKey]
+  );
+
   const reloadAll = async () => {
     const [pc, pcontent, pa] = await Promise.all([
       supabase.from("product_categories").select("*"),
