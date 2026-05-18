@@ -40,7 +40,7 @@ const ProductDetail = () => {
     attributes: { key: string; value: string }[];
   }>({ categories: [], brand: null, attributes: [] });
   const addItem = useCartStore((s) => s.addItem);
-  const getCheckoutUrl = useCartStore((s) => s.getCheckoutUrl);
+  // (carrinho NÃO é tocado pelo botão Comprar Agora)
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
