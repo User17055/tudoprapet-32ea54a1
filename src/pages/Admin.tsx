@@ -785,7 +785,7 @@ function ContentTab() {
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{prod?.title || "Produto removido"}</TableCell>
                       <TableCell>{c.description ? "✓" : "—"}</TableCell>
-                      <TableCell>{c.specifications ? "✓" : "—"}</TableCell>
+                      
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" onClick={() => {
