@@ -413,12 +413,13 @@ function AssignPanel() {
 
   const handleAddAttr = async () => {
     if (!productId) return;
-    if (!newKey.trim() || !newValue.trim()) return toast.error("Preencha rótulo e valor");
+    const finalKey = newKey === "__custom__" ? customKey.trim() : newKey.trim();
+    if (!finalKey || !newValue.trim()) return toast.error("Preencha rótulo e valor");
     const { data, error } = await supabase
       .from("product_attributes")
       .insert({
         shopify_product_id: productId,
-        attr_key: newKey.trim(),
+        attr_key: finalKey,
         attr_value: newValue.trim(),
         sort_order: attrs.length,
       })
@@ -426,7 +427,7 @@ function AssignPanel() {
       .single();
     if (error) return toast.error("Erro: " + error.message);
     setAttrs([...attrs, data as ProductAttribute]);
-    setNewKey("");
+    setCustomKey("");
     setNewValue("");
     await reloadAll();
   };
