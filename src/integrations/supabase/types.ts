@@ -38,6 +38,33 @@ export type Database = {
         }
         Relationships: []
       }
+      product_content: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          shopify_product_id: string
+          specifications: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          shopify_product_id: string
+          specifications?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          shopify_product_id?: string
+          specifications?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
