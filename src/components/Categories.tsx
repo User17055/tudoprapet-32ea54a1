@@ -40,12 +40,8 @@ export const Categories = () => {
               onClick={() => navigate(`/catalogo?categoria=${cat.slug}`)}
               className="group flex flex-col items-center gap-3 p-4 md:p-5 rounded-2xl bg-card border border-border hover:border-secondary hover:-translate-y-1 transition-all duration-300 shadow-sm hover:shadow-xl"
             >
-              {/* Ícone com efeito mais bonito */}
               <div className="relative">
-                {/* Halo dourado por trás */}
-                <span className="absolute inset-0 bg-secondary/30 blur-xl rounded-full group-hover:bg-secondary/50 transition-colors" />
-                {/* Círculo principal */}
-                <div className="relative flex items-center justify-center h-16 w-16 md:h-20 md:w-20 rounded-full bg-gradient-to-br from-primary via-primary to-[hsl(218_70%_18%)] shadow-lg ring-4 ring-secondary/20 group-hover:ring-secondary/50 group-hover:scale-110 transition-all">
+                <div className="relative flex items-center justify-center h-16 w-16 md:h-20 md:w-20 rounded-full bg-gradient-to-br from-primary via-primary to-[hsl(218_70%_18%)] shadow-lg group-hover:scale-110 transition-all">
                   <cat.icon
                     className="h-8 w-8 md:h-10 md:w-10 text-white"
                     strokeWidth={2.2}
