@@ -660,51 +660,6 @@ const ProductDetail = () => {
           </div>
         </section>
 
-        {/* Details section (categories, brand, attributes) */}
-        {(productDetails.categories.length > 0 ||
-          productDetails.brand ||
-          productDetails.attributes.length > 0) && (
-          <section className="mt-10 lg:mt-12 max-w-4xl">
-            <div className="border-t border-border pt-10">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="h-10 w-1.5 bg-primary rounded-full" />
-                <h2 className="font-display font-900 text-2xl lg:text-3xl">
-                  Detalhes
-                </h2>
-              </div>
-              <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
-                {productDetails.brand && (
-                  <div className="flex items-start gap-3 py-2 border-b border-border/50">
-                    <dt className="font-semibold text-foreground min-w-[120px]">Marca</dt>
-                    <dd className="text-foreground/80">{productDetails.brand.name}</dd>
-                  </div>
-                )}
-                {productDetails.categories.length > 0 && (
-                  <div className="flex items-start gap-3 py-2 border-b border-border/50 sm:col-span-2">
-                    <dt className="font-semibold text-foreground min-w-[120px]">Categorias</dt>
-                    <dd className="flex flex-wrap gap-2">
-                      {productDetails.categories.map((c) => (
-                        <span
-                          key={c.id}
-                          className="inline-flex items-center px-2.5 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium"
-                        >
-                          {c.path}
-                        </span>
-                      ))}
-                    </dd>
-                  </div>
-                )}
-                {productDetails.attributes.map((a, idx) => (
-                  <div key={idx} className="flex items-start gap-3 py-2 border-b border-border/50">
-                    <dt className="font-semibold text-foreground min-w-[120px]">{a.key}</dt>
-                    <dd className="text-foreground/80">{a.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          </section>
-        )}
-
         {/* Recommended products */}
         {recommended.length > 0 && (
           <section className="mt-12 lg:mt-16">
