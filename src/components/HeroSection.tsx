@@ -29,7 +29,7 @@ export const HeroSection = () => {
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-7 leading-relaxed">
               Caía no forró das ofertas! Rações, farmácia, brinquedos e
               acessórios com preços de quermesse. Entrega em Presidente Prudente
-              por R$ 10 e frete grátis acima de R$ 99. 🔥
+              por R$ 10 .🔥
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
