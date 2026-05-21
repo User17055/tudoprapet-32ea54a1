@@ -30,7 +30,7 @@ export const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-card shadow-sm border-b border-border">
+    <header className="relative z-50 bg-card shadow-sm border-b border-border">
       <AnnouncementBar />
       <Bandeirinhas />
       <div className="container mx-auto flex items-center justify-between gap-4 py-3">
