@@ -19,14 +19,14 @@ export const ClubBanner = () => {
           <div className="relative grid md:grid-cols-[1.4fr_1fr] gap-6 items-center">
             <div>
               <span className="inline-flex items-center gap-1.5 bg-secondary text-primary text-xs font-900 uppercase tracking-wider px-3 py-1 rounded-full mb-4">
-                <Crown className="h-3.5 w-3.5" /> Clube TudoPraPet
+                <Crown className="h-3.5 w-3.5" /> Clube TudoPraPet 🎪
               </span>
               <h2 className="font-display font-900 text-2xl md:text-4xl leading-tight mb-3">
-                Economize todo mês cuidando do seu pet
+                Caia no forró da economia todo mês 🔥
               </h2>
               <p className="text-sm md:text-base text-white/90 mb-5 max-w-xl">
-                Assine o clube e tenha preços de membro em centenas de produtos.
-                Sem fidelidade, cancele quando quiser.
+                Vire membro do nosso arraiá e tenha preços de quermesse em
+                centenas de produtos. Sem fidelidade, cancele quando quiser.
               </p>
 
               <ul className="space-y-2 mb-6">
