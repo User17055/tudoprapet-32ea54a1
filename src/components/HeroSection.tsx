@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles, Stethoscope, ShoppingBag, Crown, Truck } from "lucide-react";
+import { Sparkles, Stethoscope, ShoppingBag, Crown, Truck, Flame } from "lucide-react";
 import heroPets from "@/assets/hero-petzen.png";
 
 export const HeroSection = () => {
@@ -14,12 +14,12 @@ export const HeroSection = () => {
           {/* Lado esquerdo — Texto */}
           <div className="relative z-10 order-2 lg:order-1 text-center lg:text-left">
             <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary bg-secondary/20 px-3 py-1.5 rounded-full mb-5">
-              <Crown className="h-3.5 w-3.5 text-secondary" />
-              Tudo para o seu melhor amigo
+              <Flame className="h-3.5 w-3.5 text-secondary" />
+              Arraiá TudoPraPet 🌽🎉
             </span>
 
             <h1 className="font-display font-900 text-4xl md:text-5xl lg:text-6xl xl:text-7xl leading-[1.05] text-primary mb-5">
-              O melhor cuidado <br className="hidden md:block" /> para o seu{" "}
+              É festa junina <br className="hidden md:block" /> pro seu{" "}
               <span className="relative inline-block text-secondary">
                 pet
                 <Sparkles className="absolute -top-3 -right-6 h-5 w-5 md:h-6 md:w-6 text-secondary" />
@@ -27,9 +27,9 @@ export const HeroSection = () => {
             </h1>
 
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-7 leading-relaxed">
-              Rações premium, farmácia veterinária, brinquedos e acessórios com
-              os melhores preços. Entrega em Presidente Prudente por apenas R$ 10
-              e frete grátis acima de R$ 99.
+              Caía no forró das ofertas! Rações, farmácia, brinquedos e
+              acessórios com preços de quermesse. Entrega em Presidente Prudente
+              por R$ 10 e frete grátis acima de R$ 99. 🔥
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
@@ -38,7 +38,7 @@ export const HeroSection = () => {
                 className="inline-flex items-center justify-center gap-2 bg-secondary text-primary font-bold px-7 py-3.5 rounded-full hover:bg-secondary/90 hover:-translate-y-0.5 transition-all shadow-lg shadow-secondary/30"
               >
                 <ShoppingBag className="h-5 w-5" />
-                Comprar agora
+                Comprar no arraiá
               </Link>
               <Link
                 to="/clube"
