@@ -10,6 +10,8 @@ import Index from "./pages/Index.tsx";
 import ProductDetail from "./pages/ProductDetail.tsx";
 import Login from "./pages/Login.tsx";
 import Register from "./pages/Register.tsx";
+import ForgotPassword from "./pages/ForgotPassword.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
 import Profile from "./pages/Profile.tsx";
 import Catalog from "./pages/Catalog.tsx";
 import Clube from "./pages/Clube.tsx";
@@ -29,6 +31,8 @@ const AppContent = () => {
         <Route path="/product/:handle" element={<ProductDetail />} />
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />
+        <Route path="/esqueci-senha" element={<ForgotPassword />} />
+        <Route path="/redefinir-senha" element={<ResetPassword />} />
         <Route path="/perfil" element={<Profile />} />
         <Route path="/clube" element={<Clube />} />
         <Route path="/admin" element={<Admin />} />
