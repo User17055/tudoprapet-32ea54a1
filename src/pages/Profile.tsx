@@ -18,6 +18,7 @@ import {
   ShoppingBag,
   Heart,
   Sparkles,
+  PawPrint,
 } from 'lucide-react';
 
 interface OrderSummary {
@@ -96,7 +97,7 @@ const Profile = () => {
                 {initials}
               </div>
               <div className="min-w-0">
-                <p className="text-xs md:text-sm opacity-90">Olá, bem-vindo de volta 🐾</p>
+                <p className="text-xs md:text-sm opacity-90 inline-flex items-center gap-1.5">Olá, bem-vindo de volta <PawPrint className="h-3.5 w-3.5" /></p>
                 <h1 className="font-display font-900 text-2xl md:text-3xl leading-tight truncate">
                   {fullName}
                 </h1>

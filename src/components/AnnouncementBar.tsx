@@ -1,10 +1,10 @@
-import { Flame } from "lucide-react";
+import { Flame, Wheat, Crown } from "lucide-react";
 
 export const AnnouncementBar = () => {
   const items = (
     <>
       <span className="inline-flex items-center gap-1.5 mx-6">
-        <span aria-hidden>🌽</span>
+        <Wheat className="h-3.5 w-3.5 text-secondary" />
         <span>
           <strong>Arraiá TudoPraPet</strong> chegou — ofertas quentes pro seu pet!
         </span>
@@ -18,7 +18,7 @@ export const AnnouncementBar = () => {
       </span>
       <span className="opacity-30 mx-6">•</span>
       <span className="inline-flex items-center gap-1.5 mx-6">
-        <span aria-hidden>👑</span>
+        <Crown className="h-3.5 w-3.5 text-secondary" />
         <span>
           <strong>Clube</strong>: preços de São João
         </span>

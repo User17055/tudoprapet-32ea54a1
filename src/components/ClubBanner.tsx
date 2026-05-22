@@ -1,4 +1,4 @@
-import { Crown, Check } from "lucide-react";
+import { Crown, Check, Tent, Flame } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const perks = [
@@ -19,10 +19,10 @@ export const ClubBanner = () => {
           <div className="relative grid md:grid-cols-[1.4fr_1fr] gap-6 items-center">
             <div>
               <span className="inline-flex items-center gap-1.5 bg-secondary text-primary text-xs font-900 uppercase tracking-wider px-3 py-1 rounded-full mb-4">
-                <Crown className="h-3.5 w-3.5" /> Clube TudoPraPet 🎪
+                <Crown className="h-3.5 w-3.5" /> Clube TudoPraPet <Tent className="h-3.5 w-3.5" />
               </span>
               <h2 className="font-display font-900 text-2xl md:text-4xl leading-tight mb-3">
-                Caia no forró da economia todo mês 🔥
+                Caia no forró da economia todo mês <Flame className="inline h-7 w-7 md:h-9 md:w-9 text-secondary align-[-4px]" />
               </h2>
               <p className="text-sm md:text-base text-white/90 mb-5 max-w-xl">
                 Vire membro do nosso arraiá e tenha preços de quermesse em

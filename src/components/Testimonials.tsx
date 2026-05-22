@@ -1,21 +1,24 @@
-import { Star, Quote } from "lucide-react";
+import { Star, Quote, Dog, Cat, LucideIcon } from "lucide-react";
 
-const testimonials = [
+const testimonials: { name: string; pet: string; icon: LucideIcon; text: string; stars: number }[] = [
   {
     name: "Maria S.",
-    pet: "Tutora da Luna 🐶",
+    pet: "Tutora da Luna",
+    icon: Dog,
     text: "Comprei a ração premium pela metade do preço que encontrava em outras lojas. Minha cachorra amou!",
     stars: 5,
   },
   {
     name: "João P.",
-    pet: "Tutor do Frajola 🐱",
+    pet: "Tutor do Frajola",
+    icon: Cat,
     text: "Entrega super rápida e produtos de excelente qualidade. Minha gatinha ficou muito feliz com o brinquedo novo.",
     stars: 5,
   },
   {
     name: "Ana L.",
-    pet: "Tutora do Thor 🐶",
+    pet: "Tutora do Thor",
+    icon: Dog,
     text: "Melhor custo-benefício! Já comprei várias vezes e sempre fui muito bem atendida. Recomendo demais!",
     stars: 5,
   },
@@ -57,7 +60,9 @@ export const Testimonials = () => {
               <p className="text-foreground text-sm leading-relaxed">"{t.text}"</p>
               <div className="pt-2 border-t border-border">
                 <p className="font-display font-bold text-sm">{t.name}</p>
-                <p className="text-xs text-muted-foreground">{t.pet}</p>
+                <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                  {t.pet} <t.icon className="h-3.5 w-3.5" />
+                </p>
               </div>
             </div>
           ))}

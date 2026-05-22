@@ -116,7 +116,7 @@ const MeusPedidos = () => {
               <Card>
                 <CardContent className="p-5 flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-secondary/10 flex items-center justify-center">
-                    <span className="text-2xl">💰</span>
+                    <PiggyBank className="h-6 w-6 text-secondary" />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Total gasto</p>
