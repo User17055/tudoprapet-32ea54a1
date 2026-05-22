@@ -3,6 +3,7 @@ import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { ShoppingCart, Loader2, Zap, Crown, Plus } from "lucide-react";
+import { Bandeirinhas } from "@/components/Bandeirinhas";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -93,9 +94,12 @@ export const ProductCard = ({ product }: Props) => {
       to={`/product/${node.handle}`}
       className="group relative rounded-xl bg-card border border-border overflow-hidden flex flex-col transition-shadow hover:shadow-lg"
     >
+      {/* Faixa de bandeirinhas juninas no topo */}
+      <Bandeirinhas className="absolute top-0 left-0 right-0 z-20 pointer-events-none" />
+
       {/* Discount badge */}
       {hasDiscount && discountPercent > 0 && (
-        <span className="absolute top-2 left-2 z-10 bg-accent text-accent-foreground text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md shadow-sm">
+        <span className="absolute top-5 left-2 z-10 bg-accent text-accent-foreground text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md shadow-sm">
           {discountPercent}% OFF
         </span>
       )}
