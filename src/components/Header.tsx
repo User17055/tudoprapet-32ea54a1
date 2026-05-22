@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, User, Menu, X, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,21 +19,8 @@ const navLinks = [
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [hidden, setHidden] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y > lastY && y > 120) setHidden(true);
-      else setHidden(false);
-      lastY = y;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   const handleSearch = () => {
     if (search.trim()) {
@@ -43,17 +30,13 @@ export const Header = () => {
   };
 
   return (
-    <header
-      className={`sticky top-0 z-50 bg-card shadow-sm border-b border-border transition-transform duration-300 ${
-        hidden ? "-translate-y-full" : "translate-y-0"
-      }`}
-    >
+    <header className="relative bg-card shadow-sm border-b border-border">
       <AnnouncementBar />
       <Bandeirinhas />
-      <div className="container mx-auto flex items-center justify-between gap-4 py-3">
+      <div className="container mx-auto flex items-center justify-between gap-4 py-2 md:py-3">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
-          <span className="font-display font-900 text-xl md:text-2xl text-foreground">
+          <img src={logo} alt="TudoPraPet" className="h-7 md:h-9 w-auto" />
+          <span className="font-display font-900 text-lg md:text-2xl text-foreground">
             Tudo<span className="text-primary">Pra</span>Pet
           </span>
         </Link>
@@ -107,7 +90,7 @@ export const Header = () => {
         </div>
       </div>
 
-      <div className="md:hidden px-4 pb-3">
+      <div className="md:hidden px-4 pb-2">
         <div className="relative">
           <input
             type="text"
