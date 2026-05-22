@@ -3,10 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
-import { Bandeirinhas } from "@/components/Bandeirinhas";
-import { DogJunino } from "@/components/DogJunino";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
-import { Loader2, PackageOpen, Trash2, Flame, Wheat } from "lucide-react";
+import { Loader2, PackageOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -386,24 +384,10 @@ const Catalog = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        <div className="relative bg-gradient-to-b from-secondary/15 via-primary/5 to-background border-b border-border overflow-hidden">
-          <Bandeirinhas className="absolute top-0 left-0 right-0" />
-
-          {/* Cachorrinho com chapéu de palha — espiando */}
-          <DogJunino className="absolute right-4 md:right-12 bottom-0 w-24 md:w-36 lg:w-44 translate-y-2 drop-shadow-xl pointer-events-none" />
-
-          <div className="container mx-auto py-10 md:py-14 pt-12 md:pt-16 pr-28 md:pr-56">
-            <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary bg-secondary/30 px-3 py-1.5 rounded-full mb-3">
-              <Flame className="h-3.5 w-3.5 text-secondary" />
-              Arraiá TudoPraPet
-              <Wheat className="h-3.5 w-3.5 text-secondary" />
-            </span>
-            <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">
-              Catálogo do Arraiá
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Caía no forró das ofertas — tudo que seu pet precisa, com preço de quermesse!
-            </p>
+        <div className="bg-primary/5 border-b border-border">
+          <div className="container mx-auto py-8 md:py-12">
+            <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Catálogo</h1>
+            <p className="text-muted-foreground mt-2">Encontre tudo que seu pet precisa</p>
           </div>
         </div>
 
