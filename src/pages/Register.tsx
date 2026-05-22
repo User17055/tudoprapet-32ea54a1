@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown, PawPrint } from 'lucide-react';
+import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 const Register = () => {
@@ -99,7 +99,7 @@ const Register = () => {
           <div className="w-full max-w-md mx-auto lg:mx-0 lg:ml-auto">
             <div className="text-center lg:text-left mb-6">
               <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Criar conta</h1>
-              <p className="text-muted-foreground text-base mt-2 inline-flex items-center gap-1.5">É rápido e gratuito <PawPrint className="h-4 w-4" /></p>
+              <p className="text-muted-foreground text-base mt-2">É rápido e gratuito 🐾</p>
             </div>
 
             <form onSubmit={handleSubmit} className="bg-card rounded-3xl shadow-xl border border-border p-6 md:p-8 space-y-5">

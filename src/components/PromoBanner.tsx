@@ -1,4 +1,4 @@
-import { Tag, Pill, Utensils, Sparkles, Flame, Wheat } from "lucide-react";
+import { Tag, Pill, Utensils, Sparkles, Flame } from "lucide-react";
 import { Bandeirinhas } from "@/components/Bandeirinhas";
 
 const items = [
@@ -24,7 +24,7 @@ export const PromoBanner = () => {
               <Flame className="h-3.5 w-3.5" /> Quermesse da semana
             </span>
             <h2 className="font-display font-900 text-3xl md:text-5xl leading-tight">
-              Até <span className="text-primary-foreground bg-primary px-2 rounded-lg">50% OFF</span> <Wheat className="inline h-7 w-7 md:h-10 md:w-10 text-primary align-[-4px]" />
+              Até <span className="text-primary-foreground bg-primary px-2 rounded-lg">50% OFF</span> 🌽
             </h2>
             <p className="font-display font-bold text-base md:text-lg mt-2 text-primary/80">
               em rações, medicamentos e muito mais — no maior arraiá pet
