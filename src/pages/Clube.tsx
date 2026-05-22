@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { Crown, Check, Loader2, Star, MessageCircle } from "lucide-react";
+import { Crown, Check, Loader2, Star, MessageCircle, PartyPopper } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -61,7 +61,7 @@ const ClubePage = () => {
               <div className="space-y-4">
                 <div className="inline-flex items-center gap-2 bg-pet-green/20 rounded-full px-6 py-3">
                   <Star className="h-5 w-5 text-secondary" />
-                  <span className="font-display font-bold">Você é membro do Clube! 🎉</span>
+                  <span className="font-display font-bold inline-flex items-center gap-1.5">Você é membro do Clube! <PartyPopper className="h-4 w-4" /></span>
                 </div>
                 <p className="text-sm opacity-80">
                   Seu desconto é aplicado automaticamente ao finalizar a compra.

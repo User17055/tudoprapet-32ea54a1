@@ -1,4 +1,4 @@
-import { Instagram, Facebook, Mail } from "lucide-react";
+import { Instagram, Facebook, Mail, CreditCard } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -103,7 +103,7 @@ export const Footer = () => {
               <Mail className="h-5 w-5" />
             </a>
           </div>
-          <div className="text-xs opacity-50 pt-2">💳 Visa • Mastercard • Pix • Boleto</div>
+          <div className="text-xs opacity-50 pt-2 inline-flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5" /> Visa • Mastercard • Pix • Boleto</div>
         </div>
       </div>
 
