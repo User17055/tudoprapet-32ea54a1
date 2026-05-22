@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, User, Menu, X, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,21 @@ const navLinks = [
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [hidden, setHidden] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (y > lastY && y > 120) setHidden(true);
+      else setHidden(false);
+      lastY = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const handleSearch = () => {
     if (search.trim()) {
@@ -30,7 +43,11 @@ export const Header = () => {
   };
 
   return (
-    <header className="relative bg-card shadow-sm border-b border-border">
+    <header
+      className={`sticky top-0 z-50 bg-card shadow-sm border-b border-border transition-transform duration-300 ${
+        hidden ? "-translate-y-full" : "translate-y-0"
+      }`}
+    >
       <AnnouncementBar />
       <Bandeirinhas />
       <div className="container mx-auto flex items-center justify-between gap-4 py-2 md:py-3">
