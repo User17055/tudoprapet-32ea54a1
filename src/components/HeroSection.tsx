@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles, Stethoscope, ShoppingBag, Crown, Truck, Flame } from "lucide-react";
+import { Sparkles, Stethoscope, ShoppingBag, Crown, Truck, Flame, Wheat, PartyPopper } from "lucide-react";
 import heroPets from "@/assets/hero-petzen.png";
 
 export const HeroSection = () => {
@@ -15,7 +15,9 @@ export const HeroSection = () => {
           <div className="relative z-10 order-2 lg:order-1 text-center lg:text-left">
             <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary bg-secondary/20 px-3 py-1.5 rounded-full mb-5">
               <Flame className="h-3.5 w-3.5 text-secondary" />
-              Arraiá TudoPraPet 🌽🎉
+              Arraiá TudoPraPet
+              <Wheat className="h-3.5 w-3.5 text-secondary" />
+              <PartyPopper className="h-3.5 w-3.5 text-secondary" />
             </span>
 
             <h1 className="font-display font-900 text-4xl md:text-5xl lg:text-6xl xl:text-7xl leading-[1.05] text-primary mb-5">
@@ -29,7 +31,7 @@ export const HeroSection = () => {
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-7 leading-relaxed">
               Caía no forró das ofertas! Rações, farmácia, brinquedos e
               acessórios com preços de quermesse. Entrega em Presidente Prudente
-              por R$ 10 .🔥
+              por R$ 10. <Flame className="inline h-5 w-5 text-secondary align-[-3px]" />
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
