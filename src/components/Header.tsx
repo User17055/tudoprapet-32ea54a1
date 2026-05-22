@@ -90,7 +90,7 @@ export const Header = () => {
         </div>
       </div>
 
-      <div className="md:hidden px-4 pb-3">
+      <div className="md:hidden px-4 pb-2">
         <div className="relative">
           <input
             type="text"
