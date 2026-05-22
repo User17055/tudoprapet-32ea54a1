@@ -33,10 +33,10 @@ export const Header = () => {
     <header className="relative bg-card shadow-sm border-b border-border">
       <AnnouncementBar />
       <Bandeirinhas />
-      <div className="container mx-auto flex items-center justify-between gap-4 py-3">
+      <div className="container mx-auto flex items-center justify-between gap-4 py-2 md:py-3">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
-          <span className="font-display font-900 text-xl md:text-2xl text-foreground">
+          <img src={logo} alt="TudoPraPet" className="h-7 md:h-9 w-auto" />
+          <span className="font-display font-900 text-lg md:text-2xl text-foreground">
             Tudo<span className="text-primary">Pra</span>Pet
           </span>
         </Link>
