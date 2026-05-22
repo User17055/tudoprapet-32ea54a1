@@ -3,6 +3,7 @@ import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { ShoppingCart, Loader2, Zap, Crown, Plus } from "lucide-react";
+import { Bandeirinhas } from "@/components/Bandeirinhas";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
