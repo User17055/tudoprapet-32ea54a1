@@ -85,16 +85,33 @@ export const Header = () => {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link to={user ? "/perfil" : "/login"}>
-            <Button variant="ghost" size="sm" className="hidden md:flex items-center gap-2">
-              <User className="h-5 w-5" />
-              {user && (
+          {user ? (
+            <Link to="/perfil">
+              <Button variant="ghost" size="sm" className="hidden md:flex items-center gap-2 rounded-full">
+                <User className="h-5 w-5" />
                 <span className="text-sm font-medium max-w-[140px] truncate">
                   {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
                 </span>
-              )}
-            </Button>
-          </Link>
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/login" className="hidden md:block">
+              <Button
+                size="sm"
+                className="rounded-full font-display font-bold px-5 shadow-md btn-bounce bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+              >
+                <User className="h-4 w-4" />
+                Entrar
+              </Button>
+            </Link>
+          )}
+          {!user && (
+            <Link to="/login" className="md:hidden">
+              <Button size="icon" variant="ghost" aria-label="Entrar">
+                <User className="h-5 w-5" />
+              </Button>
+            </Link>
+          )}
           <CartDrawer />
           <Button
             variant="ghost"
