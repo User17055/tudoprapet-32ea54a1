@@ -107,8 +107,13 @@ export const Header = () => {
           )}
           {!user && (
             <Link to="/login" className="md:hidden">
-              <Button size="icon" variant="ghost" aria-label="Entrar">
-                <User className="h-5 w-5" />
+              <Button
+                size="sm"
+                aria-label="Entrar na conta"
+                className="rounded-full font-display font-bold px-3 h-9 shadow-md btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90 gap-1.5 ring-2 ring-secondary/40 animate-pulse"
+              >
+                <User className="h-4 w-4" />
+                <span className="text-xs">Entrar</span>
               </Button>
             </Link>
           )}
