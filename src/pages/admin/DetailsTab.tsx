@@ -783,15 +783,22 @@ function AssignPanel() {
         <CardHeader><CardTitle>Atribuir detalhes a um produto</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-sm font-medium mb-1 block">Produto</label>
+            <label className="text-sm font-medium mb-1 block">
+              Produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>
+            </label>
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
+                {products
+                  .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
+                  .map((p) => (
+                    <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Produtos já configurados ficam ocultos aqui — edite-os pela lista acima.
+            </p>
           </div>
 
           {productId && (
