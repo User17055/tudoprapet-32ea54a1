@@ -15,8 +15,11 @@ const ForgotPassword = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/redefinir-senha`,
+      const normalizedEmail = email.trim().toLowerCase();
+      const siteUrl = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, '');
+
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: `${siteUrl}/redefinir-senha`,
       });
       if (error) {
         toast.error(error.message || 'Não foi possível enviar o e-mail.');
