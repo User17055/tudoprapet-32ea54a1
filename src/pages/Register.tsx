@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { lovable } from '@/integrations/lovable/index';
+import { isInAppBrowser, openInExternalBrowser } from '@/lib/webview';
 
 const Register = () => {
   const [firstName, setFirstName] = useState('');
