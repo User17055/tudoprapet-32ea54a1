@@ -8,21 +8,34 @@ export function isInAppBrowser(): boolean {
     || /FBAN|FBAV|Instagram|Line\/|MicroMessenger|WhatsApp|TikTok|Mobilize|; wv\)/i.test(ua);
 }
 
-// Abre a URL no navegador externo do sistema (Chrome no Android, Safari no iOS).
-export function openInExternalBrowser(url: string) {
-  if (typeof window === 'undefined') return;
+export function getExternalBrowserUrl(url: string): string {
+  if (typeof navigator === 'undefined') return url;
   const ua = navigator.userAgent || '';
   const isAndroid = /Android/i.test(ua);
   const cleanUrl = url.replace(/^https?:\/\//, '');
 
   if (isAndroid) {
-    // Intent obriga o Android a abrir no Chrome
-    window.location.href = `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;end`;
-    return;
+    const fallback = encodeURIComponent(url);
+    return `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
   }
-  // iOS: tenta forçar o Safari
-  window.location.href = `x-safari-https://${cleanUrl}`;
+
+  return url;
+}
+
+// Abre a URL no navegador externo do sistema (Chrome no Android, Safari no iOS).
+export function openInExternalBrowser(url: string) {
+  if (typeof window === 'undefined') return;
+  const externalUrl = getExternalBrowserUrl(url);
+
+  const link = document.createElement('a');
+  link.href = externalUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
   setTimeout(() => {
-    window.location.href = url;
-  }, 800);
+    window.location.href = externalUrl;
+  }, 300);
 }
