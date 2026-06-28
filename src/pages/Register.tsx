@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { lovable } from '@/integrations/lovable/index';
-import { isInAppBrowser, openInExternalBrowser } from '@/lib/webview';
+import { getExternalBrowserUrl, isInAppBrowser, openInExternalBrowser } from '@/lib/webview';
 
 const Register = () => {
   const [firstName, setFirstName] = useState('');
@@ -15,12 +15,14 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showExternalLoginHelp, setShowExternalLoginHelp] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleLogin = async () => {
     if (isInAppBrowser()) {
-      toast.info('Abrindo no navegador externo para login com Google…');
+      setShowExternalLoginHelp(true);
+      toast.info('Toque no botão azul se o navegador não abrir automaticamente.');
       openInExternalBrowser(window.location.origin + '/cadastro');
       return;
     }
@@ -218,6 +220,22 @@ const Register = () => {
                 </svg>
                 Entrar com Google
               </button>
+
+              {showExternalLoginHelp && (
+                <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 text-center space-y-3">
+                  <p className="text-sm font-semibold text-foreground">
+                    O Google precisa abrir fora do app para entrar com segurança.
+                  </p>
+                  <a
+                    href={getExternalBrowserUrl(window.location.origin + '/cadastro')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground shadow-md"
+                  >
+                    Abrir no Chrome/Safari
+                  </a>
+                </div>
+              )}
 
               <Button
                 type="submit"
