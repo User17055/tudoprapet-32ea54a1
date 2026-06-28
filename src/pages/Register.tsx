@@ -19,6 +19,11 @@ const Register = () => {
   const navigate = useNavigate();
 
   const handleGoogleLogin = async () => {
+    if (isInAppBrowser()) {
+      toast.info('Abrindo no navegador externo para login com Google…');
+      openInExternalBrowser(window.location.origin + '/cadastro');
+      return;
+    }
     setLoading(true);
     try {
       const result = await lovable.auth.signInWithOAuth('google', {
