@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { lovable } from '@/integrations/lovable/index';
+import { isInAppBrowser, openInExternalBrowser } from '@/lib/webview';
 
 const Register = () => {
   const [firstName, setFirstName] = useState('');
@@ -18,6 +19,11 @@ const Register = () => {
   const navigate = useNavigate();
 
   const handleGoogleLogin = async () => {
+    if (isInAppBrowser()) {
+      toast.info('Abrindo no navegador externo para login com Google…');
+      openInExternalBrowser(window.location.origin + '/cadastro');
+      return;
+    }
     setLoading(true);
     try {
       const result = await lovable.auth.signInWithOAuth('google', {
