@@ -11,23 +11,23 @@ export const Categories = () => {
   const navigate = useNavigate();
 
   return (
-    <section className="py-2 md:py-4">
+    <section className="py-1 md:py-2">
       <div className="container mx-auto">
-        <div className="grid grid-cols-2 gap-3 md:gap-4 max-w-xs mx-auto">
+        <div className="grid grid-cols-2 gap-1 max-w-[260px] mx-auto">
           {pets.map((p) => (
             <button
               key={p.slug}
-              onClick={() => navigate(`/catalogo?busca=${p.slug}`)}
-              className="group flex flex-col items-center gap-1"
+              onClick={() => navigate(`/catalogo?pet=${p.label}`)}
+              className="group flex flex-col items-center gap-0.5"
             >
-              <div className="w-20 h-20 md:w-24 md:h-24 overflow-hidden rounded-xl bg-white">
+              <div className="w-14 h-14 md:w-16 md:h-16 overflow-hidden rounded-xl bg-white">
                 <img
                   src={p.img}
                   alt={p.label}
                   className="w-full h-full object-contain group-hover:scale-105 transition-transform"
                 />
               </div>
-              <span className="text-sm font-medium text-primary">{p.label}</span>
+              <span className="text-xs font-medium text-primary">{p.label}</span>
             </button>
           ))}
         </div>
