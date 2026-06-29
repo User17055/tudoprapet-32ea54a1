@@ -149,6 +149,7 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
+          desktop_image_path: string | null
           id: string
           image_path: string
           link_url: string | null
@@ -157,6 +158,7 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
+          desktop_image_path?: string | null
           id?: string
           image_path: string
           link_url?: string | null
@@ -165,6 +167,7 @@ export type Database = {
         Update: {
           active?: boolean
           created_at?: string
+          desktop_image_path?: string | null
           id?: string
           image_path?: string
           link_url?: string | null

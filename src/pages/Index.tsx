@@ -4,22 +4,21 @@ import { HeroCarousel } from "@/components/HeroCarousel";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ClubBanner } from "@/components/ClubBanner";
+import { useState } from "react";
 
 import { Footer } from "@/components/Footer";
 
 const Index = () => {
+  const [hasHeroBanners, setHasHeroBanners] = useState(true);
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        {/* Mobile: carrossel de banners gerenciado pelo admin */}
-        <div className="md:hidden">
-          <HeroCarousel />
-        </div>
-        {/* Desktop: hero tradicional */}
-        <div className="hidden md:block">
+        <HeroCarousel onHasBannersChange={setHasHeroBanners} />
+        {!hasHeroBanners && (
           <HeroSection />
-        </div>
+        )}
         <Categories />
 
         <ProductGrid />

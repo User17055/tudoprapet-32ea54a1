@@ -3,15 +3,21 @@ import { Link } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
 
-interface Banner {
+export interface HeroBanner {
   id: string;
   image_path: string;
+  desktop_image_path: string | null;
   link_url: string | null;
   signedUrl?: string;
+  desktopSignedUrl?: string;
 }
 
-export const HeroCarousel = () => {
-  const [banners, setBanners] = useState<Banner[]>([]);
+interface HeroCarouselProps {
+  onHasBannersChange?: (hasBanners: boolean) => void;
+}
+
+export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
+  const [banners, setBanners] = useState<HeroBanner[]>([]);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "center" });
   const [selectedIdx, setSelectedIdx] = useState(0);
 
@@ -22,18 +28,34 @@ export const HeroCarousel = () => {
         .select("*")
         .eq("active", true)
         .order("sort_order", { ascending: true });
-      if (!data) return;
+      if (!data) {
+        onHasBannersChange?.(false);
+        return;
+      }
       const withUrls = await Promise.all(
         data.map(async (b) => {
-          const { data: signed } = await supabase.storage
-            .from("banners")
-            .createSignedUrl(b.image_path, 60 * 60 * 24 * 365);
-          return { ...b, signedUrl: signed?.signedUrl };
+          const [mobile, desktop] = await Promise.all([
+            supabase.storage
+              .from("banners")
+              .createSignedUrl(b.image_path, 60 * 60 * 24 * 365),
+            b.desktop_image_path
+              ? supabase.storage
+                  .from("banners")
+                  .createSignedUrl(b.desktop_image_path, 60 * 60 * 24 * 365)
+              : Promise.resolve({ data: null }),
+          ]);
+          return {
+            ...b,
+            signedUrl: mobile.data?.signedUrl,
+            desktopSignedUrl: desktop.data?.signedUrl,
+          };
         })
       );
-      setBanners(withUrls.filter((b) => b.signedUrl));
+      const visibleBanners = withUrls.filter((b) => b.signedUrl);
+      setBanners(visibleBanners);
+      onHasBannersChange?.(visibleBanners.length > 0);
     })();
-  }, []);
+  }, [onHasBannersChange]);
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -51,19 +73,29 @@ export const HeroCarousel = () => {
   if (banners.length === 0) return null;
 
   return (
-    <section className="py-3">
+    <section className="py-3 md:py-6">
       <div className="overflow-hidden" ref={emblaRef}>
         <div className="flex">
           {banners.map((b) => {
             const content = (
-              <img
-                src={b.signedUrl}
-                alt=""
-                className="w-full aspect-square object-cover rounded-2xl"
-              />
+              <picture>
+                <source
+                  media="(min-width: 768px)"
+                  srcSet={b.desktopSignedUrl || b.signedUrl}
+                  width={1790}
+                  height={600}
+                />
+                <img
+                  src={b.signedUrl}
+                  alt=""
+                  width={656}
+                  height={572}
+                  className="w-full aspect-[656/572] md:aspect-[1790/600] object-cover rounded-2xl md:rounded-3xl"
+                />
+              </picture>
             );
             return (
-              <div key={b.id} className="flex-[0_0_92%] min-w-0 px-2">
+              <div key={b.id} className="flex-[0_0_92%] md:flex-[0_0_100%] min-w-0 px-2 md:px-4">
                 {b.link_url ? (
                   b.link_url.startsWith("http") ? (
                     <a href={b.link_url} target="_blank" rel="noreferrer">{content}</a>
