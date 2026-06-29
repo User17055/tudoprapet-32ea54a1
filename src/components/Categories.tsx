@@ -3,8 +3,8 @@ import pet1 from "@/assets/pet-1.svg.asset.json";
 import pet2 from "@/assets/pet-2.svg.asset.json";
 
 const pets = [
-  { label: "Cachorro", slug: "cachorro", img: pet1.url },
-  { label: "Gato", slug: "gato", img: pet2.url },
+  { label: "Cachorro", slug: "cachorro", img: pet2.url },
+  { label: "Gato", slug: "gato", img: pet1.url },
 ];
 
 export const Categories = () => {
