@@ -2,8 +2,8 @@ import { Flame } from "lucide-react";
 
 const items = [
   <span key="1" className="inline-flex items-center gap-1.5">
-    <span aria-hidden>🌽</span>
-    <span><strong>Arraiá TudoPraPet</strong> chegou — ofertas quentes pro seu pet!</span>
+    <span aria-hidden>🏆</span>
+    <span><strong>Copa TudoPraPet</strong> — seu pet também é da seleção!</span>
   </span>,
   <span key="2" className="inline-flex items-center gap-1.5">
     <Flame className="h-3.5 w-3.5 text-secondary" />
@@ -11,15 +11,15 @@ const items = [
   </span>,
   <span key="3" className="inline-flex items-center gap-1.5">
     <span aria-hidden>👑</span>
-    <span><strong>Clube</strong>: preços de São João</span>
+    <span><strong>Clube</strong>: preços de craque pra assinantes</span>
   </span>,
   <span key="4" className="inline-flex items-center gap-1.5">
-    <span aria-hidden>🎪</span>
-    <span>Quermesse de ofertas: rações, farmácia e brinquedos</span>
+    <span aria-hidden>⚽</span>
+    <span>Gols de desconto em rações, farmácia e brinquedos</span>
   </span>,
   <span key="5" className="inline-flex items-center gap-1.5">
-    <span aria-hidden>🔥</span>
-    <span>Caía no forró das ofertas — só hoje!</span>
+    <span aria-hidden>🇧🇷</span>
+    <span>Tô torcendo: ofertas verde-amarelas só hoje!</span>
   </span>,
 ];
 
