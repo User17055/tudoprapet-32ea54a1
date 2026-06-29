@@ -10,15 +10,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
-  const [isOpen, setIsOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
-  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart } = useCartStore();
+  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
 
-  useEffect(() => { if (isOpen) syncCart(); }, [isOpen, syncCart]);
+  useEffect(() => { if (isCartOpen) syncCart(); }, [isCartOpen, syncCart]);
 
   const handleCheckout = async () => {
     setCheckingOut(true);
@@ -31,7 +30,7 @@ export const CartDrawer = () => {
           if (data?.checkoutUrl) {
             window.open(data.checkoutUrl, '_blank');
             clearCart();
-            setIsOpen(false);
+            setCartOpen(false);
             return;
           }
         } catch (err) {
@@ -42,7 +41,7 @@ export const CartDrawer = () => {
       const checkoutUrl = getCheckoutUrl();
       if (checkoutUrl) {
         window.open(checkoutUrl, '_blank');
-        setIsOpen(false);
+        setCartOpen(false);
       }
     } finally {
       setCheckingOut(false);
@@ -50,7 +49,7 @@ export const CartDrawer = () => {
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+    <Sheet open={isCartOpen} onOpenChange={setCartOpen}>
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-primary/10">
           <ShoppingCart className="h-5 w-5" />
@@ -90,7 +89,7 @@ export const CartDrawer = () => {
                 </div>
                 <h3 className="font-display font-bold text-lg text-foreground">Seu carrinho está vazio</h3>
                 <p className="text-sm text-muted-foreground mt-1 mb-5">Que tal mimar seu pet com algo especial hoje?</p>
-                <Button asChild className="rounded-full font-display font-bold btn-bounce" onClick={() => setIsOpen(false)}>
+                <Button asChild className="rounded-full font-display font-bold btn-bounce" onClick={() => setCartOpen(false)}>
                   <Link to="/catalogo">
                     Ver catálogo <ArrowRight className="h-4 w-4 ml-1" />
                   </Link>
@@ -195,7 +194,7 @@ export const CartDrawer = () => {
                 </Button>
 
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => setCartOpen(false)}
                   className="w-full text-xs text-muted-foreground hover:text-primary font-semibold py-1 transition-colors"
                 >
                   Continuar comprando
