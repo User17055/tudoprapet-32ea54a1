@@ -38,7 +38,11 @@ export const ProductCard = ({ product }: Props) => {
   const subscriberDiscountPercent = hasSubscriberDiscount
     ? Math.round(((price - subscriberPrice) / price) * 100)
     : 0;
-  const badgePercent = hasDiscount ? discountPercent : 0;
+  const badgePercent = hasDiscount
+    ? discountPercent
+    : hasSubscriberDiscount
+    ? subscriberDiscountPercent
+    : 0;
   const showOriginalPrice = hasDiscount;
   const originalPrice = compareAtPrice;
 
