@@ -5,7 +5,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, Eye, EyeOff, ShieldCheck, Truck, Crown } from 'lucide-react';
 import logo from '@/assets/logo.png';
-import { signInWithGoogle } from '@/lib/googleAuth';
 
 const Login = () => {
   const [email, setEmail] = useState('');
