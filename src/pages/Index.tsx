@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
+import { HeroCarousel } from "@/components/HeroCarousel";
 import { TrustBadges } from "@/components/TrustBadges";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -12,7 +13,14 @@ const Index = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        <HeroSection />
+        {/* Mobile: carrossel de banners gerenciado pelo admin */}
+        <div className="md:hidden">
+          <HeroCarousel />
+        </div>
+        {/* Desktop: hero tradicional */}
+        <div className="hidden md:block">
+          <HeroSection />
+        </div>
         <TrustBadges />
         <Categories />
         <ProductGrid />
