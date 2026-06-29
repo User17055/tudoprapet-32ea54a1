@@ -136,14 +136,6 @@ export const ProductGrid = () => {
           </div>
         )}
 
-        <div className="mt-6 text-center md:hidden">
-          <Link
-            to="/catalogo"
-            className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-bold px-6 py-3 rounded-full"
-          >
-            Ver todos os produtos →
-          </Link>
-        </div>
       </div>
     </section>
   );
