@@ -80,7 +80,23 @@ const Catalog = () => {
       }
     };
     fetchAll();
+  useEffect(() => {
+    const pet = searchParams.get("pet");
+    if (pet) {
+      setAttrValues({ Pet: new Set([pet]) });
+    } else {
+      // Se não houver ?pet= na URL, garante que Pet não fique preso do click anterior
+      setAttrValues((prev) => {
+        if (prev.Pet) {
+          const next = { ...prev };
+          delete next.Pet;
+          return next;
+        }
+        return prev;
+      });
+    }
   }, [searchParams]);
+
 
   const applySearch = () => {
     const params: Record<string, string> = {};
