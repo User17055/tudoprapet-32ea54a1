@@ -11,6 +11,7 @@ export interface ShopifyProduct {
     title: string;
     description: string;
     handle: string;
+    vendor?: string;
     tags?: string[];
     productType?: string;
     priceRange: {
@@ -92,6 +93,7 @@ export const PRODUCTS_QUERY = `
           title
           description
           handle
+          vendor
           tags
           productType
           priceRange {
@@ -146,6 +148,7 @@ export const PRODUCT_RECOMMENDATIONS_QUERY = `
       title
       description
       handle
+      vendor
       priceRange {
         minVariantPrice { amount currencyCode }
       }
@@ -176,6 +179,7 @@ export const PRODUCT_BY_HANDLE_QUERY = `
       title
       description
       handle
+      vendor
       priceRange {
         minVariantPrice {
           amount
