@@ -38,9 +38,9 @@ export const ProductCard = ({ product }: Props) => {
   const subscriberDiscountPercent = hasSubscriberDiscount
     ? Math.round(((price - subscriberPrice) / price) * 100)
     : 0;
-  const badgePercent = hasDiscount ? discountPercent : subscriberDiscountPercent;
-  const showOriginalPrice = hasDiscount || hasSubscriberDiscount;
-  const originalPrice = hasDiscount ? compareAtPrice : price;
+  const badgePercent = hasDiscount ? discountPercent : 0;
+  const showOriginalPrice = hasDiscount;
+  const originalPrice = compareAtPrice;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
