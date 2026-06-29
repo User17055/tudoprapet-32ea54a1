@@ -83,7 +83,7 @@ export const ProductCard = ({ product }: Props) => {
             src={image.url}
             alt={image.altText || node.title}
             loading="lazy"
-            className="absolute left-1/2 top-2 z-[1] h-[240px] w-[240px] -translate-x-1/2 object-contain opacity-100 transition-transform duration-500 group-hover:scale-105"
+            className="absolute inset-0 z-[1] h-full w-full object-contain p-2 opacity-100 transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">
