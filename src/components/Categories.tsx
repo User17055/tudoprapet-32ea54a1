@@ -27,7 +27,7 @@ export const Categories = () => {
                   className="w-full h-full object-contain group-hover:scale-105 transition-transform"
                 />
               </div>
-              <span className="text-xs font-medium text-primary">{p.label}</span>
+              <span className="text-xs font-bold text-primary font-[var(--font-body)]">{p.label}</span>
             </button>
           ))}
         </div>
