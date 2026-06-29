@@ -80,6 +80,8 @@ const Catalog = () => {
       }
     };
     fetchAll();
+  }, [searchParams]);
+
   useEffect(() => {
     const pet = searchParams.get("pet");
     if (pet) {
