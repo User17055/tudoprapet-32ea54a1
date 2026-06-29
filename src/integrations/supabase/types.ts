@@ -145,6 +145,33 @@ export type Database = {
         }
         Relationships: []
       }
+      hero_banners: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          image_path: string
+          link_url: string | null
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          image_path: string
+          link_url?: string | null
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          image_path?: string
+          link_url?: string | null
+          sort_order?: number
+        }
+        Relationships: []
+      }
       product_attributes: {
         Row: {
           attr_key: string
