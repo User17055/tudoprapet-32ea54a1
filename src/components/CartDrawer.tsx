@@ -10,9 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
-  const [isOpen, setIsOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
-  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart } = useCartStore();
+  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
