@@ -19,6 +19,7 @@ interface CartStore {
   checkoutUrl: string | null;
   isLoading: boolean;
   isSyncing: boolean;
+  isCartOpen: boolean;
   addItem: (item: Omit<CartItem, 'lineId'>) => Promise<void>;
   updateQuantity: (variantId: string, quantity: number) => Promise<void>;
   removeItem: (variantId: string) => Promise<void>;
@@ -26,6 +27,7 @@ interface CartStore {
   syncCart: () => Promise<void>;
   getCheckoutUrl: () => string | null;
   applyDiscount: (discountCode: string) => Promise<void>;
+  setCartOpen: (open: boolean) => void;
 }
 
 export const useCartStore = create<CartStore>()(
