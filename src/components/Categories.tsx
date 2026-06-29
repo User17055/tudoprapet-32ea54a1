@@ -1,55 +1,43 @@
-import { Utensils, Gamepad2, BedDouble, Pill, Sparkles, Bone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import pet1 from "@/assets/pet-1.svg.asset.json";
+import pet2 from "@/assets/pet-2.svg.asset.json";
 
-const categories = [
-  { icon: Utensils, label: "Rações", slug: "racoes" },
-  { icon: Pill, label: "Farmácia", slug: "farmacia" },
-  { icon: Gamepad2, label: "Brinquedos", slug: "brinquedos" },
-  { icon: BedDouble, label: "Camas", slug: "camas" },
-  { icon: Sparkles, label: "Higiene", slug: "higiene" },
-  { icon: Bone, label: "Petiscos", slug: "petiscos" },
+const pets = [
+  { label: "Cachorro", slug: "cachorro", img: pet1.url },
+  { label: "Gato", slug: "gato", img: pet2.url },
 ];
 
 export const Categories = () => {
   const navigate = useNavigate();
 
   return (
-    <section className="py-10 md:py-14">
+    <section className="py-8 md:py-12">
       <div className="container mx-auto">
-        <div className="flex items-end justify-between mb-6">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-secondary">
-              Compre por categoria
-            </span>
-            <h2 className="font-display font-900 text-2xl md:text-3xl text-foreground">
-              Tudo o que seu pet ama
-            </h2>
-          </div>
-          <button
-            onClick={() => navigate("/catalogo")}
-            className="hidden md:inline text-sm font-bold text-primary hover:underline"
-          >
-            Ver tudo →
-          </button>
+        <div className="text-center mb-6">
+          <span className="text-xs font-bold uppercase tracking-wider text-secondary">
+            Compre por pet
+          </span>
+          <h2 className="font-display font-900 text-2xl md:text-3xl text-foreground">
+            Pra quem é hoje?
+          </h2>
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-5">
-          {categories.map((cat, i) => (
+        <div className="grid grid-cols-2 gap-3 md:gap-6 max-w-3xl mx-auto">
+          {pets.map((p) => (
             <button
-              key={i}
-              onClick={() => navigate(`/catalogo?categoria=${cat.slug}`)}
-              className="group flex flex-col items-center gap-3 p-4 md:p-5 rounded-2xl bg-card border border-border hover:border-secondary hover:-translate-y-1 transition-all duration-300 shadow-sm hover:shadow-xl"
+              key={p.slug}
+              onClick={() => navigate(`/catalogo?busca=${p.slug}`)}
+              className="group flex flex-col items-center gap-2 p-3 md:p-5 rounded-3xl bg-card border-2 border-border hover:border-primary hover:-translate-y-1 transition-all duration-300 shadow-sm hover:shadow-xl"
             >
-              <div className="relative">
-                <div className="relative flex items-center justify-center h-16 w-16 md:h-20 md:w-20 rounded-full bg-gradient-to-br from-primary via-primary to-[hsl(218_70%_18%)] shadow-lg group-hover:scale-110 transition-all">
-                  <cat.icon
-                    className="h-8 w-8 md:h-10 md:w-10 text-white"
-                    strokeWidth={2.2}
-                  />
-                </div>
+              <div className="aspect-square w-full flex items-center justify-center overflow-hidden">
+                <img
+                  src={p.img}
+                  alt={p.label}
+                  className="h-full w-full object-contain group-hover:scale-105 transition-transform"
+                />
               </div>
-              <span className="font-display font-bold text-xs md:text-sm text-center leading-tight text-foreground group-hover:text-primary transition-colors">
-                {cat.label}
+              <span className="font-display font-900 text-lg md:text-2xl text-primary">
+                {p.label}
               </span>
             </button>
           ))}
