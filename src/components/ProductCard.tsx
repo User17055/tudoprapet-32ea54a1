@@ -74,12 +74,6 @@ export const ProductCard = ({ product }: Props) => {
           </span>
         )}
 
-        {node.vendor && (
-          <span className="absolute bottom-3 left-3 z-[2] max-w-[118px] truncate text-[11px] font-semibold uppercase text-[#374151]">
-            {node.vendor}
-          </span>
-        )}
-
         {image ? (
           <img
             src={image.url}
