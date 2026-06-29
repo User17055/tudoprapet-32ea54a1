@@ -7,18 +7,22 @@ const pets = [
   { label: "Gato", slug: "gato", img: pet1.url },
 ];
 
-export const Categories = () => {
+interface CategoriesProps {
+  overlay?: boolean;
+}
+
+export const Categories = ({ overlay = false }: CategoriesProps) => {
   const navigate = useNavigate();
 
   return (
-    <section className="py-1 md:py-2">
-      <div className="max-w-[200px] md:max-w-[240px] mx-auto">
-        <div className="grid grid-cols-2 gap-0.5 mx-auto">
+    <section className={overlay ? "relative z-20 -mt-16 md:-mt-20 pb-4 md:pb-6" : "py-1 md:py-2"}>
+      <div className="max-w-[220px] md:max-w-[280px] mx-auto px-3">
+        <div className="grid grid-cols-2 gap-2 mx-auto rounded-2xl bg-white/90 p-2 shadow-[0_14px_35px_rgba(17,24,39,0.16)] backdrop-blur">
           {pets.map((p) => (
             <button
               key={p.slug}
               onClick={() => navigate(`/catalogo?pet=${p.label}`)}
-              className="group flex flex-col items-center gap-0"
+              className="group flex flex-col items-center gap-0 rounded-xl transition-transform hover:-translate-y-0.5"
             >
               <div className="w-20 h-20 md:w-28 md:h-28 overflow-hidden rounded-xl bg-white">
                 <img

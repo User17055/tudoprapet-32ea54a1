@@ -19,7 +19,7 @@ const Index = () => {
         {!hasHeroBanners && (
           <HeroSection />
         )}
-        <Categories />
+        <Categories overlay={hasHeroBanners} />
 
         <ProductGrid />
         <ClubBanner />

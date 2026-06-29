@@ -21,16 +21,23 @@ interface Banner {
   sort_order: number;
   active: boolean;
   signedUrl?: string;
+  desktopSignedUrl?: string;
 }
 
 const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
+
+const getDesktopPath = (mobilePath: string) =>
+  mobilePath.replace(/\/mobile(\.[^.]+)$/i, "/desktop$1");
 
 export default function BannersTab() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [mobileFile, setMobileFile] = useState<File | null>(null);
+  const [desktopFile, setDesktopFile] = useState<File | null>(null);
+  const mobileFileRef = useRef<HTMLInputElement>(null);
+  const desktopFileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -47,11 +54,23 @@ export default function BannersTab() {
 
     const withUrls = await Promise.all(
       (data || []).map(async (b) => {
-        const { data: signed } = await supabase.storage
-          .from("banners")
-          .createSignedUrl(b.image_path, SIGNED_URL_TTL);
+        const desktopPath = getDesktopPath(b.image_path);
+        const [mobile, desktop] = await Promise.all([
+          supabase.storage
+            .from("banners")
+            .createSignedUrl(b.image_path, SIGNED_URL_TTL),
+          desktopPath !== b.image_path
+            ? supabase.storage
+                .from("banners")
+                .createSignedUrl(desktopPath, SIGNED_URL_TTL)
+            : Promise.resolve({ data: null }),
+        ]);
 
-        return { ...b, signedUrl: signed?.signedUrl };
+        return {
+          ...b,
+          signedUrl: mobile.data?.signedUrl,
+          desktopSignedUrl: desktop.data?.signedUrl,
+        };
       })
     );
 
@@ -63,23 +82,42 @@ export default function BannersTab() {
     load();
   }, []);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const resetForm = () => {
+    setLinkUrl("");
+    setMobileFile(null);
+    setDesktopFile(null);
+    if (mobileFileRef.current) mobileFileRef.current.value = "";
+    if (desktopFileRef.current) desktopFileRef.current.value = "";
+  };
+
+  const handleUpload = async () => {
+    if (!mobileFile || !desktopFile) {
+      toast.error("Selecione a arte mobile e a arte desktop.");
+      return;
+    }
 
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop();
-      const path = `${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("banners")
-        .upload(path, file, { contentType: file.type });
+      const bannerId = crypto.randomUUID();
+      const mobileExt = mobileFile.name.split(".").pop() || "jpg";
+      const mobilePath = `${bannerId}/mobile.${mobileExt}`;
+      const desktopPath = `${bannerId}/desktop.${mobileExt}`;
 
-      if (upErr) throw upErr;
+      const [mobileUpload, desktopUpload] = await Promise.all([
+        supabase.storage.from("banners").upload(mobilePath, mobileFile, {
+          contentType: mobileFile.type,
+        }),
+        supabase.storage.from("banners").upload(desktopPath, desktopFile, {
+          contentType: desktopFile.type,
+        }),
+      ]);
+
+      if (mobileUpload.error) throw mobileUpload.error;
+      if (desktopUpload.error) throw desktopUpload.error;
 
       const nextOrder = (banners[banners.length - 1]?.sort_order ?? 0) + 1;
       const { error: insErr } = await supabase.from("hero_banners").insert({
-        image_path: path,
+        image_path: mobilePath,
         link_url: linkUrl || null,
         sort_order: nextOrder,
       });
@@ -87,8 +125,7 @@ export default function BannersTab() {
       if (insErr) throw insErr;
 
       toast.success("Banner enviado!");
-      setLinkUrl("");
-      if (fileRef.current) fileRef.current.value = "";
+      resetForm();
       await load();
     } catch (err: any) {
       toast.error(err.message);
@@ -100,7 +137,9 @@ export default function BannersTab() {
   const remove = async (b: Banner) => {
     if (!confirm("Remover este banner?")) return;
 
-    await supabase.storage.from("banners").remove([b.image_path]);
+    await supabase.storage
+      .from("banners")
+      .remove([b.image_path, getDesktopPath(b.image_path)]);
     await supabase.from("hero_banners").delete().eq("id", b.id);
     toast.success("Removido");
     load();
@@ -143,20 +182,44 @@ export default function BannersTab() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Imagem (PNG/JPG)</label>
-            <Input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              onChange={handleUpload}
-              disabled={uploading}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Recomendado para desktop: 1790 x 600 px. No mobile, a mesma arte
-              sera enquadrada em 656 x 572 px.
-            </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Arte mobile</label>
+              <Input
+                ref={mobileFileRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => setMobileFile(e.target.files?.[0] ?? null)}
+                disabled={uploading}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Recomendado: 656 x 572 px.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Arte desktop</label>
+              <Input
+                ref={desktopFileRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => setDesktopFile(e.target.files?.[0] ?? null)}
+                disabled={uploading}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Recomendado: 1790 x 600 px.
+              </p>
+            </div>
           </div>
+
+          <Button onClick={handleUpload} disabled={uploading || !mobileFile || !desktopFile}>
+            {uploading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="mr-2 h-4 w-4" />
+            )}
+            Enviar banner
+          </Button>
 
           {uploading && (
             <div className="flex items-center gap-2 text-sm">
@@ -182,13 +245,15 @@ export default function BannersTab() {
               >
                 {b.signedUrl && (
                   <div className="grid gap-2 p-2">
-                    <img
-                      src={b.signedUrl}
-                      alt=""
-                      width={1790}
-                      height={600}
-                      className="w-full aspect-[1790/600] rounded-md object-cover"
-                    />
+                    {b.desktopSignedUrl && (
+                      <img
+                        src={b.desktopSignedUrl}
+                        alt=""
+                        width={1790}
+                        height={600}
+                        className="w-full aspect-[1790/600] rounded-md object-cover"
+                      />
+                    )}
                     <img
                       src={b.signedUrl}
                       alt=""
