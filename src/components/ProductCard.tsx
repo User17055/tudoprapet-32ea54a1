@@ -93,18 +93,18 @@ export const ProductCard = ({ product }: Props) => {
   return (
     <Link
       to={`/product/${node.handle}`}
-      className="group relative rounded-xl bg-card p-2.5 shadow-[0_10px_28px_rgba(17,24,39,0.08)] hover:shadow-[0_14px_32px_rgba(17,24,39,0.14)] transition-shadow flex flex-col"
+      className="group relative rounded-xl bg-white p-2.5 shadow-[0_10px_28px_rgba(17,24,39,0.08)] hover:shadow-[0_14px_32px_rgba(17,24,39,0.14)] transition-shadow flex flex-col"
     >
       {/* Image area */}
-      <div className="relative h-44 sm:h-52 rounded-[10px] border border-border bg-muted/40 overflow-hidden">
+      <div className="relative h-44 sm:h-52 rounded-[10px] border border-[#e9edf3] bg-[#f8fafc] overflow-hidden">
         {hasDiscount && discountPercent > 0 && (
-          <span className="absolute top-2.5 right-2.5 z-[2] inline-flex items-center justify-center min-w-[64px] h-7 px-2.5 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold shadow-md">
+          <span className="absolute top-2.5 right-2.5 z-[2] inline-flex items-center justify-center min-w-[72px] h-[30px] px-2.5 rounded-full bg-[#0054a6] text-white text-[12px] font-semibold leading-none shadow-[0_6px_16px_rgba(0,84,166,0.2)]">
             {discountPercent}% OFF
           </span>
         )}
 
         {vendor && (
-          <span className="absolute left-3 bottom-2 z-[2] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-background/70 backdrop-blur px-1.5 py-0.5 rounded">
+          <span className="absolute left-3 bottom-3 z-[2] text-[11px] font-semibold uppercase tracking-wider text-[#374151]">
             {vendor}
           </span>
         )}
@@ -126,33 +126,35 @@ export const ProductCard = ({ product }: Props) => {
           onClick={handleAddToCart}
           disabled={isLoading || !variant?.availableForSale}
           aria-label="Adicionar ao carrinho"
-          className="absolute bottom-2.5 right-2.5 z-[2] h-10 w-10 rounded-xl bg-foreground text-background flex items-center justify-center shadow-lg hover:bg-primary hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50"
+          className="absolute bottom-3 right-3 z-[2] h-[42px] w-[42px] rounded-xl bg-[#1d1d1f] text-white flex items-center justify-center shadow-lg hover:bg-[#0054a6] hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50"
         >
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" strokeWidth={2.5} />}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-7 w-7" strokeWidth={2.25} />}
         </button>
       </div>
 
-      <h3 className="mt-3 text-xs sm:text-sm font-normal leading-snug text-foreground line-clamp-2 min-h-[2.6em]">
+      {/* Title */}
+      <h3 className="mt-3.5 text-[13px] sm:text-sm font-normal leading-[1.45] text-[#111827] line-clamp-2 min-h-[2.9em]">
         {node.title}
       </h3>
 
-      <div className="mt-3 flex flex-col items-start">
+      {/* Prices */}
+      <div className="mt-4 flex flex-col items-start gap-[3px]">
         {hasDiscount && (
-          <span className="text-[11px] text-muted-foreground line-through tabular-nums">
+          <span className="text-[12px] font-normal text-[#6b7280] line-through tabular-nums leading-none">
             R$ {compareAtPrice.toFixed(2)}
           </span>
         )}
-        <span className="mt-0.5 text-base sm:text-lg font-bold text-foreground tabular-nums leading-none">
+        <span className="text-[16px] font-bold text-[#111827] tabular-nums leading-none">
           R$ {price.toFixed(2)}
         </span>
 
         {subscriberPrice !== null && (
-          <div className="mt-1.5 flex flex-col items-start">
-            <span className="text-base font-bold text-sky-500 tabular-nums leading-none">
+          <div className="flex flex-col items-start gap-[2px] mt-[3px]">
+            <span className="text-[16px] font-bold text-[#0054a6] tabular-nums leading-none">
               R$ {subscriberPrice.toFixed(2)}
             </span>
-            <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-sky-500 font-medium leading-none">
-              <Crown className="h-3 w-3" /> para assinantes
+            <span className="text-[12px] font-normal text-[#0054a6] leading-none">
+              para assinantes
             </span>
           </div>
         )}
