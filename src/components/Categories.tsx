@@ -13,14 +13,14 @@ export const Categories = () => {
   return (
     <section className="py-1 md:py-2">
       <div className="container mx-auto">
-        <div className="grid grid-cols-2 gap-1 max-w-[260px] mx-auto">
+        <div className="grid grid-cols-2 gap-2 mx-auto">
           {pets.map((p) => (
             <button
               key={p.slug}
               onClick={() => navigate(`/catalogo?pet=${p.label}`)}
               className="group flex flex-col items-center gap-0.5"
             >
-              <div className="w-14 h-14 md:w-16 md:h-16 overflow-hidden rounded-xl bg-white">
+              <div className="w-24 h-24 md:w-32 md:h-32 overflow-hidden rounded-xl bg-white">
                 <img
                   src={p.img}
                   alt={p.label}
