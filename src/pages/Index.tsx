@@ -1,7 +1,5 @@
 import { Header } from "@/components/Header";
-import { HeroSection } from "@/components/HeroSection";
 import { HeroCarousel } from "@/components/HeroCarousel";
-import { TrustBadges } from "@/components/TrustBadges";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ClubBanner } from "@/components/ClubBanner";
@@ -21,8 +19,8 @@ const Index = () => {
         <div className="hidden md:block">
           <HeroSection />
         </div>
-        <TrustBadges />
         <Categories />
+
         <ProductGrid />
         <ClubBanner />
       </main>
