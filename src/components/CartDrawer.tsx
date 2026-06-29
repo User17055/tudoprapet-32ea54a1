@@ -49,7 +49,13 @@ export const CartDrawer = () => {
   };
 
   return (
-    <Sheet open={isCartOpen} onOpenChange={setCartOpen}>
+    <Sheet open={isCartOpen} onOpenChange={(open) => {
+      setCartOpen(open);
+      if (!open) {
+        // Fix Radix Dialog leaving body with pointer-events:none, blocking subsequent reopens
+        setTimeout(() => { document.body.style.pointerEvents = ''; }, 100);
+      }
+    }}>
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-primary/10">
           <ShoppingCart className="h-5 w-5" />
