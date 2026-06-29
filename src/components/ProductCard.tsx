@@ -65,7 +65,7 @@ export const ProductCard = ({ product }: Props) => {
   return (
     <Link
       to={`/product/${node.handle}`}
-      className="group relative z-[3] flex w-full max-w-[220px] flex-col overflow-visible rounded-xl bg-white p-2.5"
+      className="group relative z-[3] flex w-full flex-col overflow-visible rounded-xl bg-white p-1.5"
     >
       <div className="relative h-[220px] overflow-hidden rounded-[10px] border border-[#e9edf3] bg-[#f8fafc]">
         {badgePercent > 0 && (
