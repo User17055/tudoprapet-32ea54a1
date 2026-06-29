@@ -31,6 +31,22 @@ const Login = () => {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      const result = await lovable.auth.signInWithOAuth('google', {
+        redirect_uri: window.location.origin,
+      });
+      if (result.error) {
+        toast.error('Erro ao entrar com Google. Tente novamente.');
+      }
+      if (result.redirected) {
+        return;
+      }
+    } catch {
+      toast.error('Erro ao entrar com Google. Tente novamente.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top bar — sempre visível, com botão claro de voltar */}
