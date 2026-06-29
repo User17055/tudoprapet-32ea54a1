@@ -436,7 +436,7 @@ const Catalog = () => {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
                   {filteredProducts.map((product) => (
                     <ProductCard key={product.node.id} product={product} />
                   ))}
