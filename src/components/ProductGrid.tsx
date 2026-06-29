@@ -101,8 +101,7 @@ export const ProductGrid = () => {
                 {products.map((product) => (
                   <div
                     key={product.node.id}
-                    className="flex-shrink-0 flex-grow-0"
-                    style={{ flex: "0 0 46%", maxWidth: "220px" }}
+                    className="flex-shrink-0 flex-grow-0 w-[68%] md:w-[220px]"
                   >
                     <ProductCard product={product} />
                   </div>
