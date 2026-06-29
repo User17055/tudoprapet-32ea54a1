@@ -15,11 +15,11 @@ const Index = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
+        <Categories />
         <HeroCarousel onHasBannersChange={setHasHeroBanners} />
         {!hasHeroBanners && (
           <HeroSection />
         )}
-        <Categories overlay={hasHeroBanners} />
 
         <ProductGrid />
         <ClubBanner />

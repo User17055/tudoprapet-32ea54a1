@@ -7,17 +7,13 @@ const pets = [
   { label: "Gato", slug: "gato", img: pet1.url },
 ];
 
-interface CategoriesProps {
-  overlay?: boolean;
-}
-
-export const Categories = ({ overlay = false }: CategoriesProps) => {
+export const Categories = () => {
   const navigate = useNavigate();
 
   return (
-    <section className={overlay ? "relative z-20 -mt-16 md:-mt-20 pb-4 md:pb-6" : "py-1 md:py-2"}>
+    <section className="py-1 md:py-2">
       <div className="max-w-[220px] md:max-w-[280px] mx-auto px-3">
-        <div className="grid grid-cols-2 gap-2 mx-auto rounded-2xl bg-white/90 p-2 shadow-[0_14px_35px_rgba(17,24,39,0.16)] backdrop-blur">
+        <div className="grid grid-cols-2 gap-2 mx-auto">
           {pets.map((p) => (
             <button
               key={p.slug}
