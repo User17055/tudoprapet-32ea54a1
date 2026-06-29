@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { lovable } from '@/integrations/lovable';
 import { ArrowLeft, Mail, Lock, Eye, EyeOff, ShieldCheck, Truck, Crown } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
