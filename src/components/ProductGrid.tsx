@@ -10,9 +10,9 @@ export const ProductGrid = () => {
   const [loading, setLoading] = useState(true);
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "start",
-    loop: true,
+    loop: false,
     dragFree: true,
-    containScroll: false,
+    containScroll: "trimSnaps",
   });
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(true);
