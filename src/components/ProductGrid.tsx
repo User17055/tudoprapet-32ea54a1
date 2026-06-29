@@ -1,12 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
-import { Loader2, PackageOpen } from "lucide-react";
+import { Loader2, PackageOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import useEmblaCarousel from "embla-carousel-react";
 
 export const ProductGrid = () => {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    align: "start",
+    loop: true,
+    dragFree: true,
+    containScroll: false,
+  });
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(true);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -22,10 +31,26 @@ export const ProductGrid = () => {
     fetchProducts();
   }, []);
 
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setCanScrollPrev(emblaApi.canScrollPrev());
+    setCanScrollNext(emblaApi.canScrollNext());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on("select", onSelect);
+    emblaApi.on("reInit", onSelect);
+  }, [emblaApi, onSelect]);
+
+  const scrollPrev = useCallback(() => emblaApi && emblaApi.scrollPrev(), [emblaApi]);
+  const scrollNext = useCallback(() => emblaApi && emblaApi.scrollNext(), [emblaApi]);
+
   return (
     <section className="py-10 md:py-14 bg-muted/40">
       <div className="container mx-auto">
-        <div className="flex items-end justify-between mb-6">
+        <div className="flex items-end justify-between mb-4">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-secondary">
               Selecionados pra você
@@ -37,12 +62,24 @@ export const ProductGrid = () => {
               Os mais vendidos com os melhores preços
             </p>
           </div>
-          <Link
-            to="/catalogo"
-            className="hidden md:inline text-sm font-bold text-primary hover:underline shrink-0"
-          >
-            Ver todos →
-          </Link>
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              onClick={scrollPrev}
+              disabled={!canScrollPrev}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow border border-border text-primary hover:bg-primary hover:text-white transition disabled:opacity-40"
+              aria-label="Anterior"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              onClick={scrollNext}
+              disabled={!canScrollNext}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow border border-border text-primary hover:bg-primary hover:text-white transition disabled:opacity-40"
+              aria-label="Próximo"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -58,14 +95,48 @@ export const ProductGrid = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
-            {products.map((product) => (
-              <ProductCard key={product.node.id} product={product} />
-            ))}
+          <div className="relative">
+            <div className="overflow-hidden" ref={emblaRef}>
+              <div className="flex gap-2 md:gap-3">
+                {products.map((product) => (
+                  <div
+                    key={product.node.id}
+                    className="flex-shrink-0 flex-grow-0"
+                    style={{ flex: "0 0 46%", maxWidth: "220px" }}
+                  >
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile arrows */}
+            <div className="flex md:hidden items-center justify-center gap-3 mt-4">
+              <button
+                onClick={scrollPrev}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow border border-border text-primary active:bg-primary active:text-white transition"
+                aria-label="Anterior"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <Link
+                to="/catalogo"
+                className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-bold px-5 py-2.5 rounded-full text-sm"
+              >
+                Ver todos
+              </Link>
+              <button
+                onClick={scrollNext}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow border border-border text-primary active:bg-primary active:text-white transition"
+                aria-label="Próximo"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         )}
 
-        <div className="mt-8 text-center md:hidden">
+        <div className="mt-6 text-center md:hidden">
           <Link
             to="/catalogo"
             className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-display font-bold px-6 py-3 rounded-full"
