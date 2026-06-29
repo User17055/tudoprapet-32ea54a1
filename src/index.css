@@ -62,12 +62,6 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
-    background-image:
-      radial-gradient(at 12% 8%, hsl(40 76% 60% / 0.10) 0px, transparent 45%),
-      radial-gradient(at 88% 6%, hsl(218 58% 27% / 0.08) 0px, transparent 50%),
-      radial-gradient(at 92% 88%, hsl(40 76% 60% / 0.10) 0px, transparent 45%),
-      radial-gradient(at 5% 92%, hsl(218 58% 27% / 0.07) 0px, transparent 50%);
-    background-attachment: fixed;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
