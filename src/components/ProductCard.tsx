@@ -88,26 +88,33 @@ export const ProductCard = ({ product }: Props) => {
     setBuyingNow(false);
   };
 
+  const vendor = (node as any).vendor as string | undefined;
+
   return (
     <Link
       to={`/product/${node.handle}`}
-      className="group relative rounded-xl bg-card border border-border overflow-hidden flex flex-col transition-shadow hover:shadow-lg"
+      className="group relative rounded-xl bg-card p-2.5 shadow-[0_10px_28px_rgba(17,24,39,0.08)] hover:shadow-[0_14px_32px_rgba(17,24,39,0.14)] transition-shadow flex flex-col"
     >
-      {/* Discount badge */}
-      {hasDiscount && discountPercent > 0 && (
-        <span className="absolute top-2 left-2 z-10 bg-accent text-accent-foreground text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md shadow-sm">
-          {discountPercent}% OFF
-        </span>
-      )}
+      {/* Image area */}
+      <div className="relative h-44 sm:h-52 rounded-[10px] border border-border bg-muted/40 overflow-hidden">
+        {hasDiscount && discountPercent > 0 && (
+          <span className="absolute top-2.5 right-2.5 z-[2] inline-flex items-center justify-center min-w-[64px] h-7 px-2.5 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold shadow-md">
+            {discountPercent}% OFF
+          </span>
+        )}
 
-      {/* Image + Add to cart button */}
-      <div className="relative aspect-square bg-muted overflow-hidden">
+        {vendor && (
+          <span className="absolute left-3 bottom-2 z-[2] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-background/70 backdrop-blur px-1.5 py-0.5 rounded">
+            {vendor}
+          </span>
+        )}
+
         {image ? (
           <img
             src={image.url}
             alt={image.altText || node.title}
             loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="absolute left-1/2 top-2 -translate-x-1/2 h-[90%] w-[90%] object-contain transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -115,65 +122,49 @@ export const ProductCard = ({ product }: Props) => {
           </div>
         )}
 
-        {/* Floating add-to-cart button */}
         <button
           onClick={handleAddToCart}
           disabled={isLoading || !variant?.availableForSale}
-          className="absolute bottom-2 right-2 z-10 bg-foreground text-background rounded-full w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform disabled:opacity-50"
+          aria-label="Adicionar ao carrinho"
+          className="absolute bottom-2.5 right-2.5 z-[2] h-10 w-10 rounded-xl bg-foreground text-background flex items-center justify-center shadow-lg hover:bg-primary hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50"
         >
-          {isLoading && !buyingNow ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-5 w-5" />
-          )}
+          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" strokeWidth={2.5} />}
         </button>
       </div>
 
-      {/* Info */}
-      <div className="p-3 sm:p-4 flex flex-col flex-1 gap-1.5">
-        <h3 className="font-display font-bold text-xs sm:text-sm leading-tight line-clamp-2 min-h-[2.5em] tracking-tight">
-          {node.title}
-        </h3>
+      <h3 className="mt-3 text-xs sm:text-sm font-normal leading-snug text-foreground line-clamp-2 min-h-[2.6em]">
+        {node.title}
+      </h3>
 
-        <div className="mt-auto pt-1">
-          {hasDiscount && (
-            <p className="font-sans text-[11px] sm:text-sm text-muted-foreground line-through leading-tight tabular-nums">
-              R$ {compareAtPrice.toFixed(2)}
-            </p>
-          )}
-          <p className="font-sans font-bold text-lg sm:text-xl text-foreground leading-none tabular-nums tracking-tight">
-            R$ {price.toFixed(2)}
-          </p>
+      <div className="mt-3 flex flex-col items-start">
+        {hasDiscount && (
+          <span className="text-[11px] text-muted-foreground line-through tabular-nums">
+            R$ {compareAtPrice.toFixed(2)}
+          </span>
+        )}
+        <span className="mt-0.5 text-base sm:text-lg font-bold text-foreground tabular-nums leading-none">
+          R$ {price.toFixed(2)}
+        </span>
 
-          {subscriberPrice !== null && (
-            <div className="mt-1.5">
-              <div className="flex items-center gap-1">
-                <span className="font-sans font-bold text-base sm:text-lg text-sky-500 leading-none tabular-nums tracking-tight">
-                  R$ {subscriberPrice.toFixed(2)}
-                </span>
-                <Crown className="h-3.5 w-3.5 text-sky-500 flex-shrink-0" />
-              </div>
-              <span className="font-sans text-[10px] sm:text-xs text-sky-500/80 font-medium leading-tight">
-                para assinantes
-              </span>
-            </div>
-          )}
-
-          <button
-            onClick={handleBuyNow}
-            disabled={isLoading || buyingNow || subscriptionLoading || !variant?.availableForSale}
-            className="mt-2 w-full flex items-center justify-center gap-1 bg-accent text-accent-foreground font-display font-bold text-xs sm:text-sm py-1.5 sm:py-2 rounded-lg hover:bg-accent/90 active:scale-[0.97] transition-all disabled:opacity-50"
-          >
-            {buyingNow ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Zap className="h-3.5 w-3.5" /> Comprar Agora
-              </>
-            )}
-          </button>
-        </div>
+        {subscriberPrice !== null && (
+          <div className="mt-1.5 flex flex-col items-start">
+            <span className="text-base font-bold text-sky-500 tabular-nums leading-none">
+              R$ {subscriberPrice.toFixed(2)}
+            </span>
+            <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-sky-500 font-medium leading-none">
+              <Crown className="h-3 w-3" /> para assinantes
+            </span>
+          </div>
+        )}
       </div>
+
+      <button
+        onClick={handleBuyNow}
+        disabled={isLoading || buyingNow || subscriptionLoading || !variant?.availableForSale}
+        className="mt-3 w-full flex items-center justify-center gap-1.5 bg-accent text-accent-foreground font-display font-bold text-xs sm:text-sm py-2 rounded-lg hover:bg-accent/90 active:scale-[0.97] transition-all disabled:opacity-50"
+      >
+        {buyingNow ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Zap className="h-3.5 w-3.5" /> Comprar Agora</>)}
+      </button>
     </Link>
   );
 };
