@@ -17,12 +17,10 @@ import { toast } from "sonner";
 interface Banner {
   id: string;
   image_path: string;
-  desktop_image_path: string | null;
   link_url: string | null;
   sort_order: number;
   active: boolean;
   signedUrl?: string;
-  desktopSignedUrl?: string;
 }
 
 const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
@@ -32,10 +30,7 @@ export default function BannersTab() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const [mobileFile, setMobileFile] = useState<File | null>(null);
-  const [desktopFile, setDesktopFile] = useState<File | null>(null);
-  const mobileFileRef = useRef<HTMLInputElement>(null);
-  const desktopFileRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -52,22 +47,11 @@ export default function BannersTab() {
 
     const withUrls = await Promise.all(
       (data || []).map(async (b) => {
-        const [mobile, desktop] = await Promise.all([
-          supabase.storage
-            .from("banners")
-            .createSignedUrl(b.image_path, SIGNED_URL_TTL),
-          b.desktop_image_path
-            ? supabase.storage
-                .from("banners")
-                .createSignedUrl(b.desktop_image_path, SIGNED_URL_TTL)
-            : Promise.resolve({ data: null }),
-        ]);
+        const { data: signed } = await supabase.storage
+          .from("banners")
+          .createSignedUrl(b.image_path, SIGNED_URL_TTL);
 
-        return {
-          ...b,
-          signedUrl: mobile.data?.signedUrl,
-          desktopSignedUrl: desktop.data?.signedUrl,
-        };
+        return { ...b, signedUrl: signed?.signedUrl };
       })
     );
 
@@ -79,50 +63,32 @@ export default function BannersTab() {
     load();
   }, []);
 
-  const uploadFile = async (file: File, prefix: "mobile" | "desktop") => {
-    const ext = file.name.split(".").pop();
-    const path = `${prefix}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("banners").upload(path, file, {
-      contentType: file.type,
-    });
-
-    if (error) throw error;
-    return path;
-  };
-
-  const resetForm = () => {
-    setLinkUrl("");
-    setMobileFile(null);
-    setDesktopFile(null);
-    if (mobileFileRef.current) mobileFileRef.current.value = "";
-    if (desktopFileRef.current) desktopFileRef.current.value = "";
-  };
-
-  const handleUpload = async () => {
-    if (!mobileFile) {
-      toast.error("Selecione a imagem mobile do banner.");
-      return;
-    }
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     setUploading(true);
     try {
-      const [mobilePath, desktopPath] = await Promise.all([
-        uploadFile(mobileFile, "mobile"),
-        desktopFile ? uploadFile(desktopFile, "desktop") : Promise.resolve(null),
-      ]);
+      const ext = file.name.split(".").pop();
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("banners")
+        .upload(path, file, { contentType: file.type });
+
+      if (upErr) throw upErr;
 
       const nextOrder = (banners[banners.length - 1]?.sort_order ?? 0) + 1;
-      const { error } = await supabase.from("hero_banners").insert({
-        image_path: mobilePath,
-        desktop_image_path: desktopPath,
+      const { error: insErr } = await supabase.from("hero_banners").insert({
+        image_path: path,
         link_url: linkUrl || null,
         sort_order: nextOrder,
       });
 
-      if (error) throw error;
+      if (insErr) throw insErr;
 
       toast.success("Banner enviado!");
-      resetForm();
+      setLinkUrl("");
+      if (fileRef.current) fileRef.current.value = "";
       await load();
     } catch (err: any) {
       toast.error(err.message);
@@ -134,8 +100,7 @@ export default function BannersTab() {
   const remove = async (b: Banner) => {
     if (!confirm("Remover este banner?")) return;
 
-    const paths = [b.image_path, b.desktop_image_path].filter(Boolean) as string[];
-    await supabase.storage.from("banners").remove(paths);
+    await supabase.storage.from("banners").remove([b.image_path]);
     await supabase.from("hero_banners").delete().eq("id", b.id);
     toast.success("Removido");
     load();
@@ -168,7 +133,7 @@ export default function BannersTab() {
         <CardTitle>Carrossel de Banners</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
           <div>
             <label className="text-sm font-medium">Link (opcional)</label>
             <Input
@@ -178,44 +143,26 @@ export default function BannersTab() {
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="text-sm font-medium">Imagem mobile</label>
-              <Input
-                ref={mobileFileRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => setMobileFile(e.target.files?.[0] ?? null)}
-                disabled={uploading}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Recomendado: 656 x 572 px.
-              </p>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Imagem desktop</label>
-              <Input
-                ref={desktopFileRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => setDesktopFile(e.target.files?.[0] ?? null)}
-                disabled={uploading}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Recomendado: 1790 x 600 px.
-              </p>
-            </div>
+          <div>
+            <label className="text-sm font-medium">Imagem (PNG/JPG)</label>
+            <Input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={handleUpload}
+              disabled={uploading}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Recomendado para desktop: 1790 x 600 px. No mobile, a mesma arte
+              sera enquadrada em 656 x 572 px.
+            </p>
           </div>
 
-          <Button onClick={handleUpload} disabled={uploading || !mobileFile}>
-            {uploading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="mr-2 h-4 w-4" />
-            )}
-            Enviar banner
-          </Button>
+          {uploading && (
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Enviando...
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -233,26 +180,24 @@ export default function BannersTab() {
                   !b.active ? "opacity-50" : ""
                 }`}
               >
-                <div className="grid gap-2 p-2">
-                  {b.desktopSignedUrl && (
+                {b.signedUrl && (
+                  <div className="grid gap-2 p-2">
                     <img
-                      src={b.desktopSignedUrl}
+                      src={b.signedUrl}
                       alt=""
                       width={1790}
                       height={600}
                       className="w-full aspect-[1790/600] rounded-md object-cover"
                     />
-                  )}
-                  {b.signedUrl && (
                     <img
                       src={b.signedUrl}
                       alt=""
                       width={656}
                       height={572}
-                      className="w-full aspect-[656/572] rounded-md object-cover"
+                      className="w-full aspect-[656/572] rounded-md object-cover md:hidden"
                     />
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <div className="p-2 text-xs">
                   {b.link_url && (

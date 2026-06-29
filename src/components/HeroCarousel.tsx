@@ -1,20 +1,20 @@
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
 
-export interface HeroBanner {
+interface HeroBanner {
   id: string;
   image_path: string;
-  desktop_image_path: string | null;
   link_url: string | null;
   signedUrl?: string;
-  desktopSignedUrl?: string;
 }
 
 interface HeroCarouselProps {
   onHasBannersChange?: (hasBanners: boolean) => void;
 }
+
+const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
 
 export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
   const [banners, setBanners] = useState<HeroBanner[]>([]);
@@ -28,29 +28,22 @@ export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
         .select("*")
         .eq("active", true)
         .order("sort_order", { ascending: true });
+
       if (!data) {
         onHasBannersChange?.(false);
         return;
       }
+
       const withUrls = await Promise.all(
         data.map(async (b) => {
-          const [mobile, desktop] = await Promise.all([
-            supabase.storage
-              .from("banners")
-              .createSignedUrl(b.image_path, 60 * 60 * 24 * 365),
-            b.desktop_image_path
-              ? supabase.storage
-                  .from("banners")
-                  .createSignedUrl(b.desktop_image_path, 60 * 60 * 24 * 365)
-              : Promise.resolve({ data: null }),
-          ]);
-          return {
-            ...b,
-            signedUrl: mobile.data?.signedUrl,
-            desktopSignedUrl: desktop.data?.signedUrl,
-          };
+          const { data: signed } = await supabase.storage
+            .from("banners")
+            .createSignedUrl(b.image_path, SIGNED_URL_TTL);
+
+          return { ...b, signedUrl: signed?.signedUrl };
         })
       );
+
       const visibleBanners = withUrls.filter((b) => b.signedUrl);
       setBanners(visibleBanners);
       onHasBannersChange?.(visibleBanners.length > 0);
@@ -78,36 +71,37 @@ export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
         <div className="flex">
           {banners.map((b) => {
             const content = (
-              <picture>
-                <source
-                  media="(min-width: 768px)"
-                  srcSet={b.desktopSignedUrl || b.signedUrl}
-                  width={1790}
-                  height={600}
-                />
-                <img
-                  src={b.signedUrl}
-                  alt=""
-                  width={656}
-                  height={572}
-                  className="w-full aspect-[656/572] md:aspect-[1790/600] object-cover rounded-2xl md:rounded-3xl"
-                />
-              </picture>
+              <img
+                src={b.signedUrl}
+                alt=""
+                width={1790}
+                height={600}
+                className="w-full aspect-[656/572] md:aspect-[1790/600] object-cover rounded-2xl md:rounded-3xl"
+              />
             );
+
             return (
-              <div key={b.id} className="flex-[0_0_92%] md:flex-[0_0_100%] min-w-0 px-2 md:px-4">
+              <div
+                key={b.id}
+                className="flex-[0_0_92%] md:flex-[0_0_100%] min-w-0 px-2 md:px-4"
+              >
                 {b.link_url ? (
                   b.link_url.startsWith("http") ? (
-                    <a href={b.link_url} target="_blank" rel="noreferrer">{content}</a>
+                    <a href={b.link_url} target="_blank" rel="noreferrer">
+                      {content}
+                    </a>
                   ) : (
                     <Link to={b.link_url}>{content}</Link>
                   )
-                ) : content}
+                ) : (
+                  content
+                )}
               </div>
             );
           })}
         </div>
       </div>
+
       {banners.length > 1 && (
         <div className="flex justify-center gap-1.5 mt-3">
           {banners.map((_, i) => (
