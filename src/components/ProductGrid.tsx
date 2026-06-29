@@ -48,7 +48,7 @@ export const ProductGrid = () => {
   const scrollNext = useCallback(() => emblaApi && emblaApi.scrollNext(), [emblaApi]);
 
   return (
-    <section className="py-10 md:py-14 bg-muted/40">
+    <section className="py-10 md:py-14 bg-white">
       <div className="container mx-auto">
         <div className="flex items-end justify-between mb-4">
           <div>
