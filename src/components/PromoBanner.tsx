@@ -1,5 +1,4 @@
-import { Tag, Pill, Utensils, Sparkles, Flame } from "lucide-react";
-import { Bandeirinhas } from "@/components/Bandeirinhas";
+import { Tag, Pill, Utensils, Sparkles, Trophy } from "lucide-react";
 
 const items = [
   { icon: Utensils, label: "Rações", off: "até 30%" },
@@ -13,7 +12,14 @@ export const PromoBanner = () => {
     <section className="py-10 md:py-14">
       <div className="container mx-auto">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-secondary via-[hsl(40_85%_55%)] to-[hsl(40_90%_48%)] text-primary p-6 md:p-10 shadow-xl">
-          <Bandeirinhas className="absolute top-0 left-0 right-0 opacity-90" />
+          {/* Faixa verde-amarela no topo (Brasil) */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 flex">
+            <div className="flex-1 bg-[hsl(152_60%_38%)]" />
+            <div className="flex-1 bg-secondary" />
+            <div className="flex-1 bg-primary" />
+            <div className="flex-1 bg-[hsl(152_60%_38%)]" />
+            <div className="flex-1 bg-secondary" />
+          </div>
 
           {/* Decorative tags */}
           <Tag className="absolute -top-4 -right-4 h-40 w-40 text-primary/10 rotate-12" />
@@ -21,13 +27,13 @@ export const PromoBanner = () => {
 
           <div className="relative text-center mb-6 md:mb-8 pt-4">
             <span className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-900 uppercase tracking-wider px-3 py-1 rounded-full mb-3">
-              <Flame className="h-3.5 w-3.5" /> Quermesse da semana
+              <Trophy className="h-3.5 w-3.5" /> Pódio da semana
             </span>
             <h2 className="font-display font-900 text-3xl md:text-5xl leading-tight">
-              Até <span className="text-primary-foreground bg-primary px-2 rounded-lg">50% OFF</span> 🌽
+              Até <span className="text-primary-foreground bg-primary px-2 rounded-lg">50% OFF</span> 🏆
             </h2>
             <p className="font-display font-bold text-base md:text-lg mt-2 text-primary/80">
-              em rações, medicamentos e muito mais — no maior arraiá pet
+              em rações, medicamentos e muito mais — gol de placa no seu bolso
             </p>
           </div>
 
