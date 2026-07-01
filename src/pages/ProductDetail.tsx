@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { goToCheckout } from "@/lib/checkout";
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
@@ -226,7 +227,7 @@ const ProductDetail = () => {
         });
         if (error) throw error;
         if (data?.checkoutUrl) {
-          window.open(data.checkoutUrl, "_blank");
+          goToCheckout(data.checkoutUrl);
           setBuyingNow(false);
           return;
         }
@@ -241,7 +242,7 @@ const ProductDetail = () => {
       { variantId: variant.id, quantity },
     ]);
     if (checkoutUrl) {
-      window.open(checkoutUrl, "_blank");
+      goToCheckout(checkoutUrl);
     } else {
       toast.error("Não foi possível iniciar o checkout.");
     }

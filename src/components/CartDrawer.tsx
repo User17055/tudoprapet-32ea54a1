@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { getDisplayOptions } from "@/lib/shopify";
+import { goToCheckout } from "@/lib/checkout";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,9 +71,9 @@ export const CartDrawer = () => {
           const { data, error } = await supabase.functions.invoke("subscriber-checkout", { body: { items: lineItems } });
           if (error) throw error;
           if (data?.checkoutUrl) {
-            window.open(data.checkoutUrl, '_blank');
             clearCart();
             setCartOpen(false);
+            goToCheckout(data.checkoutUrl);
             return;
           }
         } catch (err) {
@@ -82,8 +83,8 @@ export const CartDrawer = () => {
       }
       const checkoutUrl = getCheckoutUrl();
       if (checkoutUrl) {
-        window.open(checkoutUrl, '_blank');
         setCartOpen(false);
+        goToCheckout(checkoutUrl);
       }
     } finally {
       setCheckingOut(false);
@@ -92,7 +93,7 @@ export const CartDrawer = () => {
 
   if (isMobile) {
     return (
-      <Button asChild variant="ghost" size="icon" className="relative rounded-full hover:bg-primary/10">
+      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
         <Link to="/carrinho">
           <ShoppingCart className="h-5 w-5" />
           {totalItems > 0 && (
@@ -115,7 +116,7 @@ export const CartDrawer = () => {
       }
     }}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-primary/10">
+        <Button variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
           <ShoppingCart className="h-5 w-5" />
           {totalItems > 0 && (
             <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">

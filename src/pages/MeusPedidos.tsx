@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Package, PiggyBank, ExternalLink, Crown } from 'lucide-react';
+import { ArrowLeft, Package, PiggyBank, ExternalLink, Crown, Wallet } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 interface OrderLine {
@@ -42,6 +42,26 @@ interface OrdersResponse {
 const formatCurrency = (n: number, currency = 'BRL') =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(n);
 
+const FINANCIAL_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendente',
+  authorized: 'Autorizado',
+  partially_paid: 'Parcialmente pago',
+  paid: 'Pago',
+  partially_refunded: 'Parcialmente reembolsado',
+  refunded: 'Reembolsado',
+  voided: 'Cancelado',
+};
+
+const FINANCIAL_STATUS_STYLES: Record<string, string> = {
+  paid: 'bg-pet-green/10 text-pet-green border-pet-green/20',
+  pending: 'bg-secondary/20 text-secondary-foreground border-secondary/30',
+  authorized: 'bg-secondary/20 text-secondary-foreground border-secondary/30',
+  partially_paid: 'bg-secondary/20 text-secondary-foreground border-secondary/30',
+  refunded: 'bg-destructive/10 text-destructive border-destructive/20',
+  partially_refunded: 'bg-destructive/10 text-destructive border-destructive/20',
+  voided: 'bg-destructive/10 text-destructive border-destructive/20',
+};
+
 const MeusPedidos = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -71,13 +91,13 @@ const MeusPedidos = () => {
   }, [user, authLoading, navigate]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-muted/30">
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <img src={logo} alt="TudoPraPet" className="h-10" />
           </Link>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/perfil')} className="gap-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/perfil')} className="btn-bounce gap-2">
             <ArrowLeft className="h-4 w-4" /> Voltar
           </Button>
         </div>
@@ -116,7 +136,7 @@ const MeusPedidos = () => {
               <Card>
                 <CardContent className="p-5 flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-secondary/10 flex items-center justify-center">
-                    <span className="text-2xl">💰</span>
+                    <Wallet className="h-6 w-6 text-secondary-foreground" />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Total gasto</p>
@@ -124,7 +144,7 @@ const MeusPedidos = () => {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-to-br from-primary to-[#2d5499] text-white border-0">
+              <Card className="bg-gradient-to-br from-primary to-[hsl(218_70%_15%)] text-white border-0">
                 <CardContent className="p-5 flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
                     <Crown className="h-6 w-6 text-white" />
@@ -142,7 +162,7 @@ const MeusPedidos = () => {
                 <CardContent className="py-16 text-center space-y-3">
                   <Package className="h-12 w-12 text-muted-foreground mx-auto" />
                   <p className="text-muted-foreground">Você ainda não tem pedidos.</p>
-                  <Button onClick={() => navigate('/catalogo')}>Ver catálogo</Button>
+                  <Button className="btn-bounce" onClick={() => navigate('/catalogo')}>Ver catálogo</Button>
                 </CardContent>
               </Card>
             ) : (
@@ -161,11 +181,16 @@ const MeusPedidos = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           {order.financial_status && (
-                            <Badge variant="secondary">{order.financial_status}</Badge>
+                            <Badge
+                              variant="outline"
+                              className={FINANCIAL_STATUS_STYLES[order.financial_status] || ''}
+                            >
+                              {FINANCIAL_STATUS_LABELS[order.financial_status] || order.financial_status}
+                            </Badge>
                           )}
                           {order.order_status_url && (
                             <a href={order.order_status_url} target="_blank" rel="noreferrer">
-                              <Button size="sm" variant="outline" className="gap-1">
+                              <Button size="sm" variant="outline" className="btn-bounce gap-1">
                                 <ExternalLink className="h-3 w-3" /> Detalhes
                               </Button>
                             </a>

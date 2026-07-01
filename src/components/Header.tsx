@@ -60,13 +60,28 @@ export const Header = () => {
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
-      <div className="container mx-auto flex items-center justify-between gap-4 pt-3 pb-2">
-        <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
-          <span className="font-display font-900 text-xl md:text-2xl text-foreground">
+      <div className="container mx-auto grid grid-cols-3 items-center gap-2 pt-3 pb-2 md:flex md:justify-between md:gap-4">
+        <div className="flex justify-self-start md:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
+
+        <Link to="/" className="flex items-center gap-2 shrink-0 justify-self-center">
+          <img src={logo} alt="TudoPraPet" className="h-11 w-auto md:h-14" />
+          <span className="font-display font-900 text-2xl md:text-3xl text-foreground">
             Tudo<span className="text-primary">Pra</span>Pet
           </span>
         </Link>
+
+        <div className="flex justify-self-end md:hidden">
+          <CartDrawer />
+        </div>
 
         <form
           role="search"
@@ -86,10 +101,10 @@ export const Header = () => {
           </button>
         </form>
 
-        <div className="flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
           {user ? (
             <Link to="/perfil">
-              <Button variant="ghost" size="sm" className="hidden md:flex items-center gap-2 rounded-full">
+              <Button variant="ghost" size="sm" className="flex items-center gap-2 rounded-full">
                 <User className="h-5 w-5" />
                 <span className="text-sm font-medium max-w-[140px] truncate">
                   {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
@@ -97,7 +112,7 @@ export const Header = () => {
               </Button>
             </Link>
           ) : (
-            <Link to="/login" className="hidden md:block">
+            <Link to="/login">
               <Button
                 size="sm"
                 className="rounded-full font-display font-bold px-5 shadow-md btn-bounce bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
@@ -125,8 +140,8 @@ export const Header = () => {
           <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
           <Link
             to="/clube"
-            className={`border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
-              isClubeActive ? "border-primary text-primary font-semibold" : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+            className={`border-b-2 px-3 py-2 text-base font-semibold transition-colors ${
+              isClubeActive ? "border-primary text-primary" : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
             }`}
           >
             Clube

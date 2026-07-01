@@ -19,6 +19,7 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { supabase } from "@/integrations/supabase/client";
 import { getDisplayOptions } from "@/lib/shopify";
+import { goToCheckout } from "@/lib/checkout";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 
@@ -101,8 +102,8 @@ const Cart = () => {
           );
           if (error) throw error;
           if (data?.checkoutUrl) {
-            window.open(data.checkoutUrl, "_blank");
             clearCart();
+            goToCheckout(data.checkoutUrl);
             return;
           }
         } catch (err) {
@@ -112,7 +113,7 @@ const Cart = () => {
       }
 
       const checkoutUrl = getCheckoutUrl();
-      if (checkoutUrl) window.open(checkoutUrl, "_blank");
+      if (checkoutUrl) goToCheckout(checkoutUrl);
     } finally {
       setCheckingOut(false);
     }

@@ -108,7 +108,7 @@ export const ProductCard = ({ product }: Props) => {
           onClick={handleAddToCart}
           disabled={isLoading || !variant?.availableForSale}
           aria-label="Adicionar ao carrinho"
-          className="absolute bottom-3 right-3 z-[2] flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-[#1d1d1f] text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-[#0054a6] active:scale-95 disabled:opacity-50"
+          className="absolute bottom-2 right-3 z-[2] flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-[#1d1d1f] text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-[#0054a6] active:scale-95 disabled:opacity-50"
         >
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />

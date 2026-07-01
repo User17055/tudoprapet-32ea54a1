@@ -62,9 +62,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
             <Link
               to={`/catalogo?categoria=${item.slug}`}
               onFocus={() => openItem(item)}
-              className={`block border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`block border-b-2 px-3 py-2 text-base font-semibold transition-colors ${
                 active
-                  ? "border-primary text-primary font-semibold"
+                  ? "border-primary text-primary"
                   : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
               }`}
             >
