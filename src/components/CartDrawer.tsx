@@ -177,9 +177,9 @@ export const CartDrawer = () => {
                   {items.map((item) => {
                     const regularPrice = parseFloat(item.price.amount);
                     const subscriberPrice = getSubscriberPrice(item.variantId);
-                    const itemPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
-                      ? subscriberPrice
-                      : regularPrice;
+                    const hasSubscriberPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
+                    const itemPrice = hasSubscriberPrice ? subscriberPrice : regularPrice;
+                    const regularLineTotal = regularPrice * item.quantity;
                     const lineTotal = itemPrice * item.quantity;
                     return (
                       <div
@@ -243,9 +243,21 @@ export const CartDrawer = () => {
                                 <Plus className="h-3 w-3" />
                               </Button>
                             </div>
-                            <p className="font-display font-bold text-primary text-sm sm:text-base whitespace-nowrap">
-                              R$ {lineTotal.toFixed(2).replace('.', ',')}
-                            </p>
+                            <div className="text-right whitespace-nowrap">
+                              {hasSubscriberPrice && (
+                                <p className="text-[11px] leading-none text-muted-foreground line-through">
+                                  R$ {regularLineTotal.toFixed(2).replace('.', ',')}
+                                </p>
+                              )}
+                              <p className="font-display font-bold text-primary text-sm sm:text-base">
+                                R$ {lineTotal.toFixed(2).replace('.', ',')}
+                              </p>
+                              {hasSubscriberPrice && (
+                                <p className="text-[10px] font-semibold leading-none text-primary">
+                                  assinatura
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -265,11 +277,23 @@ export const CartDrawer = () => {
 
               {/* Footer / checkout */}
               <div className="flex-shrink-0 border-t border-border bg-card px-6 py-4 space-y-3 shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.08)]">
-                <div className="flex justify-between items-baseline">
+                <div className="flex justify-between items-baseline gap-3">
                   <span className="text-sm font-medium text-muted-foreground">Subtotal</span>
-                  <span ref={subtotalRef} className="inline-block font-display font-900 text-2xl text-primary">
-                    R$ {displayTotalPrice.toFixed(2).replace('.', ',')}
-                  </span>
+                  <div className="text-right">
+                    {clubDiscount > 0 && (
+                      <span className="block text-sm text-muted-foreground line-through">
+                        R$ {totalPrice.toFixed(2).replace('.', ',')}
+                      </span>
+                    )}
+                    <span ref={subtotalRef} className="inline-block font-display font-900 text-2xl text-primary">
+                      R$ {displayTotalPrice.toFixed(2).replace('.', ',')}
+                    </span>
+                    {clubDiscount > 0 && (
+                      <span className="block text-[11px] font-semibold text-primary">
+                        valor com assinatura
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-[11px] text-muted-foreground -mt-1 flex items-center gap-1.5">
                   {isSyncing ? (

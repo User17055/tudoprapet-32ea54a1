@@ -25,7 +25,6 @@ export const Header = () => {
   const navItems: MegaMenuItem[] = useMemo(
     () => [
       ...rootCats.map((c) => ({ id: c.id, slug: c.slug, label: c.name })),
-      { id: "promocoes", slug: "promocoes", label: "Promoções" },
     ],
     [rootCats],
   );

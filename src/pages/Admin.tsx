@@ -135,9 +135,34 @@ function PricesTab() {
     [products, productId]
   );
 
+  const registeredProductIds = useMemo(
+    () => new Set(prices.map(p => p.shopify_product_id)),
+    [prices]
+  );
+
+  const availableProducts = useMemo(
+    () => products.filter(p => !registeredProductIds.has(p.node.id)),
+    [products, registeredProductIds]
+  );
+
+  useEffect(() => {
+    if (productId && registeredProductIds.has(productId)) {
+      setProductId("");
+      setVariantId("");
+      setPrice("");
+    }
+  }, [productId, registeredProductIds]);
+
   const handleSave = async () => {
     if (!productId || !variantId || !price) {
       toast.error("Preencha todos os campos");
+      return;
+    }
+    if (registeredProductIds.has(productId)) {
+      toast.error("Este produto ja possui preco de assinante cadastrado.");
+      setProductId("");
+      setVariantId("");
+      setPrice("");
       return;
     }
     const numeric = parseFloat(price.replace(",", "."));
@@ -245,11 +270,16 @@ function PricesTab() {
                 <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
-                    {products.map(p => (
+                    {availableProducts.map(p => (
                       <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {!loading && availableProducts.length === 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Todos os produtos carregados ja possuem preco de assinante cadastrado.
+                  </p>
+                )}
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm font-medium mb-1 block">Variante</label>

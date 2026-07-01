@@ -81,19 +81,20 @@ const Profile = () => {
 
   const handleLogout = async () => {
     await logout();
-    toast.success("Sessao encerrada.");
+    toast.success("Sessão encerrada.");
     navigate("/");
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f6f8fb]">
+    <div className="flex min-h-screen flex-col bg-muted/30">
       <Header />
 
       <main className="container mx-auto flex-1 px-4 py-5 md:py-8">
         <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-2xl border border-border bg-background p-5 shadow-sm md:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-2xl font-900 text-primary-foreground shadow-sm">
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-5 shadow-sm md:p-6">
+            <div className="paw-pattern pointer-events-none absolute inset-0" />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[hsl(218_58%_20%)] text-2xl font-900 text-primary-foreground shadow-md">
                 {initials}
               </div>
 
@@ -115,7 +116,7 @@ const Profile = () => {
                     Clube ativo
                   </span>
                 ) : (
-                  <Button asChild className="rounded-full gap-2">
+                  <Button asChild className="rounded-full gap-2 btn-bounce">
                     <Link to="/clube">
                       <Sparkles className="h-4 w-4" />
                       Entrar no Clube
@@ -130,21 +131,21 @@ const Profile = () => {
             <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
               <PiggyBank className="mb-3 h-5 w-5 text-primary" />
               <p className="text-xs text-muted-foreground">Economia</p>
-              <p className="mt-1 truncate font-display text-lg font-900 text-foreground">
+              <p className="mt-1 truncate font-display text-base font-900 text-foreground md:text-lg">
                 {ordersLoading ? "..." : formatCurrency(totalSavings)}
               </p>
             </div>
             <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
               <Package className="mb-3 h-5 w-5 text-primary" />
               <p className="text-xs text-muted-foreground">Pedidos</p>
-              <p className="mt-1 font-display text-lg font-900 text-foreground">
+              <p className="mt-1 font-display text-base font-900 text-foreground md:text-lg">
                 {ordersLoading ? "..." : orderCount}
               </p>
             </div>
             <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
               <Heart className="mb-3 h-5 w-5 text-primary" />
               <p className="text-xs text-muted-foreground">Status</p>
-              <p className="mt-1 truncate font-display text-lg font-900 text-foreground">
+              <p className="mt-1 truncate font-display text-base font-900 text-foreground md:text-lg">
                 {isSubscribed ? "Clube" : "Cliente"}
               </p>
             </div>
@@ -169,19 +170,19 @@ const Profile = () => {
               to: "/catalogo",
               icon: ArrowRight,
               title: "Comprar de novo",
-              text: "Voltar ao catalogo",
+              text: "Voltar ao catálogo",
             },
             {
               to: "/clube",
               icon: Crown,
               title: "Clube TudoPraPet",
-              text: isSubscribed ? "Ver beneficios" : "Assinar e economizar",
+              text: isSubscribed ? "Ver benefícios" : "Assinar e economizar",
             },
           ].map((item) => (
             <Link
               key={item.title}
               to={item.to}
-              className="group rounded-2xl border border-border bg-background p-4 shadow-sm transition hover:border-primary/50 hover:shadow-md"
+              className="group btn-bounce rounded-2xl border border-border bg-background p-4 shadow-sm transition hover:border-primary/50 hover:shadow-md"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                 <item.icon className="h-5 w-5" />
@@ -207,10 +208,10 @@ const Profile = () => {
                   Pedidos recentes
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Ultimas compras feitas com sua conta.
+                  Últimas compras feitas com sua conta.
                 </p>
               </div>
-              <Button asChild variant="ghost" className="rounded-full text-primary">
+              <Button asChild variant="ghost" className="rounded-full btn-bounce text-primary">
                 <Link to="/meus-pedidos">Ver todos</Link>
               </Button>
             </div>
@@ -234,10 +235,10 @@ const Profile = () => {
                     Nenhum pedido ainda
                   </h3>
                   <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-                    Quando voce fizer uma compra, ela aparece aqui para acompanhar
+                    Quando você fizer uma compra, ela aparece aqui para acompanhar
                     com facilidade.
                   </p>
-                  <Button asChild className="mt-4 rounded-full">
+                  <Button asChild className="mt-4 rounded-full btn-bounce">
                     <Link to="/catalogo">Explorar produtos</Link>
                   </Button>
                 </div>
@@ -327,7 +328,7 @@ const Profile = () => {
                     Conta protegida
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Sua sessao esta autenticada pela area segura da TudoPraPet.
+                    Sua sessão está autenticada pela área segura da TudoPraPet.
                   </p>
                 </div>
               </div>
@@ -336,7 +337,7 @@ const Profile = () => {
             <Button
               variant="outline"
               onClick={handleLogout}
-              className="h-12 w-full rounded-xl border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              className="h-12 w-full rounded-xl border-destructive/30 btn-bounce text-destructive hover:bg-destructive hover:text-destructive-foreground"
             >
               <LogOut className="mr-2 h-4 w-4" />
               Sair da conta

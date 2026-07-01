@@ -230,14 +230,7 @@ const Catalog = () => {
     let result = [...products];
 
     if (categorySlug !== "all") {
-      if (categorySlug === "promocoes") {
-        result = result.filter((p) => {
-          const v = p.node.variants.edges[0]?.node;
-          const price = parseFloat(v?.price?.amount || "0");
-          const cmp = v?.compareAtPrice ? parseFloat(v.compareAtPrice.amount) : 0;
-          return cmp > price;
-        });
-      } else if (selectedCat) {
+      if (selectedCat) {
         const allowed = expandCategoryIds(selectedCat.id);
         const productIds = new Set(productCats.filter((pc) => allowed.has(pc.category_id)).map((pc) => pc.shopify_product_id));
         result = result.filter((p) => productIds.has(p.node.id));
@@ -298,7 +291,7 @@ const Catalog = () => {
       return next;
     });
 
-  const categoryChipLabel = categorySlug === "promocoes" ? "Promoções" : selectedCat?.name || categorySlug;
+  const categoryChipLabel = selectedCat?.name || categorySlug;
 
   const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
   if (categorySlug !== "all") {
@@ -425,11 +418,6 @@ const Catalog = () => {
                 checked={categorySlug === "all"}
                 onChange={() => setCategorySlug("all")}
                 label="Todas"
-              />
-              <CheckRow
-                checked={categorySlug === "promocoes"}
-                onChange={() => setCategorySlug("promocoes")}
-                label="Promoções"
               />
               {rootCats.map((c) => (
                 <CategoryNode key={c.id} cat={c} depth={0} />

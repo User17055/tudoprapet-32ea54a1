@@ -176,9 +176,9 @@ const Cart = () => {
               {items.map((item) => {
                 const regularPrice = parseFloat(item.price.amount);
                 const subscriberPrice = getSubscriberPrice(item.variantId);
-                const itemPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
-                  ? subscriberPrice
-                  : regularPrice;
+                const hasSubscriberPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
+                const itemPrice = hasSubscriberPrice ? subscriberPrice : regularPrice;
+                const regularLineTotal = regularPrice * item.quantity;
                 const lineTotal = itemPrice * item.quantity;
                 const image = item.product.node.images?.edges?.[0]?.node;
 
@@ -251,9 +251,21 @@ const Cart = () => {
                           </Button>
                         </div>
 
-                        <p className="whitespace-nowrap font-display text-sm font-bold text-primary">
-                          R$ {lineTotal.toFixed(2).replace(".", ",")}
-                        </p>
+                        <div className="text-right">
+                          {hasSubscriberPrice && (
+                            <p className="whitespace-nowrap text-[11px] leading-none text-muted-foreground line-through">
+                              R$ {regularLineTotal.toFixed(2).replace(".", ",")}
+                            </p>
+                          )}
+                          <p className="whitespace-nowrap font-display text-sm font-bold text-primary">
+                            R$ {lineTotal.toFixed(2).replace(".", ",")}
+                          </p>
+                          {hasSubscriberPrice && (
+                            <p className="whitespace-nowrap text-[10px] font-semibold leading-none text-primary">
+                              assinatura
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -274,13 +286,25 @@ const Cart = () => {
 
           <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-lg space-y-3">
-              <div className="flex items-baseline justify-between">
+              <div className="flex items-baseline justify-between gap-3">
                 <span className="text-sm font-medium text-muted-foreground">
                   Subtotal
                 </span>
-                <span ref={subtotalRef} className="inline-block font-display text-2xl font-900 text-primary">
-                  R$ {displayTotalPrice.toFixed(2).replace(".", ",")}
-                </span>
+                <div className="text-right">
+                  {clubDiscount > 0 && (
+                    <span className="block text-sm text-muted-foreground line-through">
+                      R$ {totalPrice.toFixed(2).replace(".", ",")}
+                    </span>
+                  )}
+                  <span ref={subtotalRef} className="inline-block font-display text-2xl font-900 text-primary">
+                    R$ {displayTotalPrice.toFixed(2).replace(".", ",")}
+                  </span>
+                  {clubDiscount > 0 && (
+                    <span className="block text-[11px] font-semibold text-primary">
+                      valor com assinatura
+                    </span>
+                  )}
+                </div>
               </div>
 
               {isSyncing && (

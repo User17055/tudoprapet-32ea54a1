@@ -82,8 +82,8 @@ const Register = () => {
               <li className="flex gap-3 items-start">
                 <div className="bg-primary/10 text-primary p-2 rounded-xl"><Gift className="h-5 w-5" /></div>
                 <div>
-                  <p className="font-bold text-foreground">Ofertas personalizadas</p>
-                  <p className="text-sm text-muted-foreground">Promoções pensadas para o seu pet.</p>
+                  <p className="font-bold text-foreground">Vantagens personalizadas</p>
+                  <p className="text-sm text-muted-foreground">Benefícios pensados para o seu pet.</p>
                 </div>
               </li>
               <li className="flex gap-3 items-start">

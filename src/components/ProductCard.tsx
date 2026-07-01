@@ -133,7 +133,7 @@ export const ProductCard = ({ product }: Props) => {
           {formatPrice(price)}
         </span>
 
-        {subscriberPrice !== null && (
+        {hasSubscriberDiscount && (
           <div className="mt-[3px] flex flex-col items-start gap-[2px]">
             <span className="text-[16px] font-bold leading-none text-[#0054a6] tabular-nums">
               {formatPrice(subscriberPrice)}

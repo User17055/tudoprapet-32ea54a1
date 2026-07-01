@@ -198,6 +198,7 @@ const ProductDetail = () => {
     ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
     : 0;
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
+  const hasSubscriberDiscount = subscriberPrice !== null && subscriberPrice < price;
   const installment = (price / 2).toFixed(2).replace(".", ",");
 
   const handleAdd = async () => {
@@ -484,7 +485,7 @@ const ProductDetail = () => {
                   R$ {price.toFixed(2).replace(".", ",")}
                 </p>
               </div>
-              {subscriberPrice !== null && (
+              {hasSubscriberDiscount && (
                 <div className="flex items-center gap-1.5 pt-1">
                   <Crown className="h-4 w-4 text-sky-500" />
                   <span className="font-display font-900 text-xl text-sky-500 tabular-nums">

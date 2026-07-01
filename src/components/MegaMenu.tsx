@@ -46,14 +46,13 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       {items.map((item) => {
         const kids = childrenOf.get(item.id) || [];
         const active = isActive(item.slug);
-        const isPromo = item.slug === "promocoes";
         const activeKid = kids.find((k) => k.id === activeChildId);
         const grandkids = activeKid ? childrenOf.get(activeKid.id) || [] : [];
 
         return (
           <div
             key={item.id}
-            className={`relative ${isPromo ? "ml-3" : ""}`}
+            className="relative"
             onMouseEnter={() => openItem(item)}
             onMouseLeave={close}
             onBlur={(e) => {
@@ -64,13 +63,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               to={`/catalogo?categoria=${item.slug}`}
               onFocus={() => openItem(item)}
               className={`block border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
-                isPromo
-                  ? active
-                    ? "border-destructive text-destructive font-semibold"
-                    : "border-transparent text-destructive hover:border-destructive/50"
-                  : active
-                    ? "border-primary text-primary font-semibold"
-                    : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+                active
+                  ? "border-primary text-primary font-semibold"
+                  : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
               }`}
             >
               {item.label}
