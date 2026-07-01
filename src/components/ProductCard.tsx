@@ -46,7 +46,7 @@ export const ProductCard = ({ product }: Props) => {
   const showOriginalPrice = hasDiscount;
   const originalPrice = compareAtPrice;
 
-  const setCartOpen = useCartStore((s) => s.setCartOpen);
+  const openCartOnFirstAdd = useCartStore((s) => s.openCartOnFirstAdd);
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -62,7 +62,7 @@ export const ProductCard = ({ product }: Props) => {
       selectedOptions: variant.selectedOptions || [],
     });
 
-    setCartOpen(true);
+    openCartOnFirstAdd();
 
     toast.success("Adicionado ao carrinho!", {
       description: node.title,

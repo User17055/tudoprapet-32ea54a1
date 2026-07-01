@@ -20,6 +20,7 @@ interface CartStore {
   isLoading: boolean;
   isSyncing: boolean;
   isCartOpen: boolean;
+  hasAutoOpenedCart: boolean;
   addItem: (item: Omit<CartItem, 'lineId'>) => Promise<void>;
   updateQuantity: (variantId: string, quantity: number) => Promise<void>;
   removeItem: (variantId: string) => Promise<void>;
@@ -28,6 +29,7 @@ interface CartStore {
   getCheckoutUrl: () => string | null;
   applyDiscount: (discountCode: string) => Promise<void>;
   setCartOpen: (open: boolean) => void;
+  openCartOnFirstAdd: () => void;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -39,7 +41,12 @@ export const useCartStore = create<CartStore>()(
       isLoading: false,
       isSyncing: false,
       isCartOpen: false,
+      hasAutoOpenedCart: false,
       setCartOpen: (open: boolean) => set({ isCartOpen: open }),
+      openCartOnFirstAdd: () => {
+        if (get().hasAutoOpenedCart) return;
+        set({ isCartOpen: true, hasAutoOpenedCart: true });
+      },
 
       addItem: async (item) => {
         const { items, cartId, clearCart } = get();
@@ -118,7 +125,7 @@ export const useCartStore = create<CartStore>()(
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null }),
+      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, hasAutoOpenedCart: false }),
       getCheckoutUrl: () => get().checkoutUrl,
 
       applyDiscount: async (discountCode: string) => {
@@ -144,7 +151,12 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'shopify-cart',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl }),
+      partialize: (state) => ({
+        items: state.items,
+        cartId: state.cartId,
+        checkoutUrl: state.checkoutUrl,
+        hasAutoOpenedCart: state.hasAutoOpenedCart,
+      }),
     }
   )
 );

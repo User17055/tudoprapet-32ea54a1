@@ -40,6 +40,7 @@ const ProductDetail = () => {
     attributes: { key: string; value: string }[];
   }>({ categories: [], brand: null, attributes: [] });
   const addItem = useCartStore((s) => s.addItem);
+  const openCartOnFirstAdd = useCartStore((s) => s.openCartOnFirstAdd);
   // (carrinho NÃO é tocado pelo botão Comprar Agora)
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
@@ -209,6 +210,7 @@ const ProductDetail = () => {
       quantity,
       selectedOptions: variant.selectedOptions || [],
     });
+    openCartOnFirstAdd();
     toast.success("Adicionado à sacola!", { description: node.title, position: "top-center" });
   };
 
