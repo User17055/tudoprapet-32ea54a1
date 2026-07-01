@@ -127,27 +127,39 @@ const Profile = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
-              <PiggyBank className="mb-3 h-5 w-5 text-primary" />
-              <p className="text-xs text-muted-foreground">Economia</p>
-              <p className="mt-1 truncate font-display text-base font-900 text-foreground md:text-lg">
-                {ordersLoading ? "..." : formatCurrency(totalSavings)}
-              </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 shadow-sm sm:p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <PiggyBank className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Economia</p>
+                <p className="truncate font-display text-base font-900 text-foreground">
+                  {ordersLoading ? "..." : formatCurrency(totalSavings)}
+                </p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
-              <Package className="mb-3 h-5 w-5 text-primary" />
-              <p className="text-xs text-muted-foreground">Pedidos</p>
-              <p className="mt-1 font-display text-base font-900 text-foreground md:text-lg">
-                {ordersLoading ? "..." : orderCount}
-              </p>
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 shadow-sm sm:p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Package className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Pedidos</p>
+                <p className="truncate font-display text-base font-900 text-foreground">
+                  {ordersLoading ? "..." : orderCount}
+                </p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
-              <Heart className="mb-3 h-5 w-5 text-primary" />
-              <p className="text-xs text-muted-foreground">Status</p>
-              <p className="mt-1 truncate font-display text-base font-900 text-foreground md:text-lg">
-                {isSubscribed ? "Clube" : "Cliente"}
-              </p>
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 shadow-sm sm:p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Heart className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Status</p>
+                <p className="truncate font-display text-base font-900 text-foreground">
+                  {isSubscribed ? "Clube" : "Cliente"}
+                </p>
+              </div>
             </div>
           </div>
         </section>
