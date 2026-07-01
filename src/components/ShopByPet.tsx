@@ -61,7 +61,7 @@ export const ShopByPet = () => {
           {pets.map((pet, i) => (
             <button
               key={i}
-              onClick={() => navigate(`/catalogo?busca=${pet.slug}`)}
+              onClick={() => navigate(`/catalogo?categoria=${pet.slug}`)}
               className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${pet.gradient} text-white p-5 md:p-6 text-left shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all`}
             >
               <pet.icon className="absolute -right-3 -bottom-3 h-24 w-24 text-white/10 group-hover:scale-110 transition-transform" />

@@ -17,7 +17,7 @@ export const Categories = () => {
           {pets.map((p) => (
             <button
               key={p.slug}
-              onClick={() => navigate(`/catalogo?pet=${p.label}`)}
+              onClick={() => navigate(`/catalogo?categoria=${p.slug}`)}
               className="group flex flex-col items-center gap-0 rounded-xl transition-transform hover:-translate-y-0.5"
             >
               <div className="w-20 h-20 md:w-28 md:h-28 overflow-hidden rounded-xl bg-white">

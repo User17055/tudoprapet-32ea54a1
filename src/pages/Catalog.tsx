@@ -29,6 +29,15 @@ const PRICE_RANGES = [
   { label: "+ R$ 200,00", min: 200, max: Infinity },
 ];
 
+const normalizeSlug = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 interface Category { id: string; name: string; slug: string; parent_id: string | null; sort_order: number; }
 interface Brand { id: string; name: string; slug: string; }
 interface AttrValue { id: string; attr_key: string; attr_value: string; sort_order: number; }
@@ -83,22 +92,26 @@ const Catalog = () => {
   }, [searchParams]);
 
   useEffect(() => {
+    const category = searchParams.get("categoria");
     const pet = searchParams.get("pet");
-    if (pet) {
-      setAttrValues({ Pet: new Set([pet]) });
-    } else {
-      // Se não houver ?pet= na URL, garante que Pet não fique preso do click anterior
-      setAttrValues((prev) => {
-        if (prev.Pet) {
-          const next = { ...prev };
-          delete next.Pet;
-          return next;
-        }
-        return prev;
-      });
-    }
-  }, [searchParams]);
 
+    if (category) {
+      setCategorySlug(category);
+    } else if (pet) {
+      const petSlug = normalizeSlug(pet);
+      const matchingCategory = categories.find((c) => normalizeSlug(c.slug) === petSlug || normalizeSlug(c.name) === petSlug);
+      setCategorySlug(matchingCategory?.slug || petSlug);
+    } else {
+      setCategorySlug("all");
+    }
+
+    setAttrValues((prev) => {
+      if (!prev.Pet) return prev;
+      const next = { ...prev };
+      delete next.Pet;
+      return next;
+    });
+  }, [searchParams, categories]);
 
   const applySearch = () => {
     const params: Record<string, string> = {};
