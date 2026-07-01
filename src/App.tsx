@@ -14,6 +14,7 @@ import ForgotPassword from "./pages/ForgotPassword.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import Profile from "./pages/Profile.tsx";
 import Catalog from "./pages/Catalog.tsx";
+import Cart from "./pages/Cart.tsx";
 import Clube from "./pages/Clube.tsx";
 import Admin from "./pages/Admin.tsx";
 import MeusPedidos from "./pages/MeusPedidos.tsx";
@@ -28,6 +29,7 @@ const AppContent = () => {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/catalogo" element={<Catalog />} />
+        <Route path="/carrinho" element={<Cart />} />
         <Route path="/product/:handle" element={<ProductDetail />} />
         <Route path="/login" element={<Login />} />
         <Route path="/cadastro" element={<Register />} />

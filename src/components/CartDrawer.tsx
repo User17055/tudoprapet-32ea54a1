@@ -8,11 +8,13 @@ import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export const CartDrawer = () => {
   const [checkingOut, setCheckingOut] = useState(false);
   const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
+  const isMobile = useIsMobile();
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
@@ -48,6 +50,22 @@ export const CartDrawer = () => {
     }
   };
 
+  if (isMobile) {
+    return (
+      <Button asChild variant="ghost" size="icon" className="relative rounded-full hover:bg-primary/10">
+        <Link to="/carrinho">
+          <ShoppingCart className="h-5 w-5" />
+          {totalItems > 0 && (
+            <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
+              {totalItems}
+            </Badge>
+          )}
+          <span className="sr-only">Abrir carrinho</span>
+        </Link>
+      </Button>
+    );
+  }
+
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => {
       setCartOpen(open);
@@ -66,11 +84,11 @@ export const CartDrawer = () => {
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col h-full p-0 gap-0">
+      <SheetContent className="w-full max-w-none sm:max-w-lg flex flex-col h-full p-0 gap-0">
         {/* Header */}
-        <SheetHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border bg-gradient-to-br from-primary/5 to-transparent">
-          <SheetTitle className="font-display text-2xl flex items-center gap-2">
-            <ShoppingCart className="h-6 w-6 text-primary" />
+        <SheetHeader className="flex-shrink-0 px-4 sm:px-6 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-border bg-gradient-to-br from-primary/5 to-transparent text-left">
+          <SheetTitle className="font-display text-xl sm:text-2xl flex items-center gap-2 pr-8">
+            <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             Meu carrinho
           </SheetTitle>
           <SheetDescription className="text-sm">
@@ -78,7 +96,7 @@ export const CartDrawer = () => {
           </SheetDescription>
 
           {isSubscribed && items.length > 0 && (
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-700 dark:text-sky-300 px-3 py-2 text-xs font-semibold">
+            <div className="mt-3 hidden sm:flex items-center gap-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-700 dark:text-sky-300 px-3 py-2 text-xs font-semibold">
               <Crown className="h-4 w-4" />
               Preço de assinante será aplicado no checkout
             </div>
@@ -86,7 +104,7 @@ export const CartDrawer = () => {
         </SheetHeader>
 
         {/* Content */}
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0 bg-muted/25 sm:bg-background">
           {items.length === 0 ? (
             <div className="flex-1 flex items-center justify-center px-6 py-10">
               <div className="text-center max-w-xs">
@@ -104,16 +122,24 @@ export const CartDrawer = () => {
             </div>
           ) : (
             <>
-              <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
-                <div className="space-y-3">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 min-h-0" aria-label="Produtos no carrinho">
+                <div className="mb-3 flex items-center justify-between sm:hidden">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Produtos
+                  </p>
+                  <p className="text-xs font-semibold text-primary">
+                    {totalItems} {totalItems === 1 ? "item" : "itens"}
+                  </p>
+                </div>
+                <div className="space-y-2.5 sm:space-y-3">
                   {items.map((item) => {
                     const lineTotal = parseFloat(item.price.amount) * item.quantity;
                     return (
                       <div
                         key={item.variantId}
-                        className="flex gap-3 p-3 rounded-2xl border border-border bg-card hover:border-primary/30 hover:shadow-sm transition"
+                        className="grid grid-cols-[72px_minmax(0,1fr)_32px] gap-2.5 sm:flex sm:gap-3 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-border bg-background sm:bg-card hover:border-primary/30 hover:shadow-sm transition"
                       >
-                        <div className="w-20 h-20 bg-muted rounded-xl overflow-hidden flex-shrink-0">
+                        <div className="w-[72px] h-[72px] sm:w-20 sm:h-20 bg-muted rounded-lg sm:rounded-xl overflow-hidden flex-shrink-0">
                           {item.product.node.images?.edges?.[0]?.node && (
                             <img
                               src={item.product.node.images.edges[0].node.url}
@@ -123,7 +149,7 @@ export const CartDrawer = () => {
                           )}
                         </div>
                         <div className="flex-1 min-w-0 flex flex-col">
-                          <h4 className="font-bold text-sm leading-tight line-clamp-2 text-foreground">
+                          <h4 className="font-bold text-[13px] sm:text-sm leading-tight line-clamp-2 text-foreground">
                             {item.product.node.title}
                           </h4>
                           {item.selectedOptions.length > 0 && (
@@ -131,7 +157,7 @@ export const CartDrawer = () => {
                               {item.selectedOptions.map(o => o.value).join(' • ')}
                             </p>
                           )}
-                          <div className="flex items-end justify-between mt-auto pt-2">
+                          <div className="flex items-end justify-between gap-2 mt-auto pt-2">
                             <div className="flex items-center gap-1 rounded-full border border-border bg-background p-0.5">
                               <Button
                                 variant="ghost"
@@ -153,7 +179,7 @@ export const CartDrawer = () => {
                                 <Plus className="h-3 w-3" />
                               </Button>
                             </div>
-                            <p className="font-display font-bold text-primary text-base">
+                            <p className="font-display font-bold text-primary text-sm sm:text-base whitespace-nowrap">
                               R$ {lineTotal.toFixed(2).replace('.', ',')}
                             </p>
                           </div>
@@ -171,7 +197,7 @@ export const CartDrawer = () => {
                     );
                   })}
                 </div>
-              </div>
+              </section>
 
               {/* Footer / checkout */}
               <div className="flex-shrink-0 border-t border-border bg-card px-6 py-4 space-y-3 shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.08)]">
