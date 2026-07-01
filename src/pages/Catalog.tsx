@@ -1,15 +1,23 @@
 import { useEffect, useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
-import { Loader2, PackageOpen, Trash2 } from "lucide-react";
+import { ChevronDown, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
@@ -132,10 +140,31 @@ const Catalog = () => {
 
   const rootCats = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
   const selectedCat = useMemo(() => categories.find((c) => c.slug === categorySlug), [categories, categorySlug]);
-  const subCats = useMemo(
-    () => (selectedCat ? categories.filter((c) => c.parent_id === selectedCat.id) : []),
-    [categories, selectedCat]
-  );
+  const childrenOf = useMemo(() => {
+    const map = new Map<string, Category[]>();
+    for (const c of categories) {
+      if (!c.parent_id) continue;
+      if (!map.has(c.parent_id)) map.set(c.parent_id, []);
+      map.get(c.parent_id)!.push(c);
+    }
+    return map;
+  }, [categories]);
+  const ancestorIds = useMemo(() => {
+    const ids = new Set<string>();
+    let cur = selectedCat;
+    while (cur?.parent_id) {
+      ids.add(cur.parent_id);
+      cur = categories.find((c) => c.id === cur!.parent_id);
+    }
+    return ids;
+  }, [selectedCat, categories]);
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const toggleExpandCat = (id: string) =>
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   const expandCategoryIds = (rootId: string): Set<string> => {
     const ids = new Set<string>([rootId]);
     let frontier = [rootId];
@@ -269,13 +298,73 @@ const Catalog = () => {
       return next;
     });
 
+  const categoryChipLabel = categorySlug === "promocoes" ? "Promoções" : selectedCat?.name || categorySlug;
+
+  const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
+  if (categorySlug !== "all") {
+    activeChips.push({ key: `cat-${categorySlug}`, label: categoryChipLabel, onRemove: () => setCategorySlug("all") });
+  }
+  brandSlugs.forEach((slug) => {
+    const brand = brands.find((b) => b.slug === slug);
+    activeChips.push({ key: `brand-${slug}`, label: brand?.name || slug, onRemove: () => toggleSetItem(setBrandSlugs, slug) });
+  });
+  Object.entries(attrValues).forEach(([key, values]) => {
+    values.forEach((value) => {
+      activeChips.push({ key: `attr-${key}-${value}`, label: `${key}: ${value}`, onRemove: () => toggleAttr(key, value) });
+    });
+  });
+  priceRangeIdxs.forEach((idx) => {
+    activeChips.push({ key: `price-${idx}`, label: PRICE_RANGES[idx].label, onRemove: () => toggleSetItem(setPriceRangeIdxs, idx) });
+  });
+  if (search) {
+    activeChips.push({
+      key: "search",
+      label: `Busca: "${search}"`,
+      onRemove: () => {
+        setSearch("");
+        setSearchParams(categorySlug !== "all" ? { categoria: categorySlug } : {});
+      },
+    });
+  }
+
   const CheckRow = ({ checked, onChange, label, count }: { checked: boolean; onChange: () => void; label: string; count?: number }) => (
-    <label className="flex items-center gap-2 py-1.5 cursor-pointer text-sm hover:text-primary">
+    <label className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 -mx-2 cursor-pointer text-sm transition-colors hover:bg-muted hover:text-primary">
       <Checkbox checked={checked} onCheckedChange={onChange} />
-      <span className="flex-1">{label}</span>
-      {count !== undefined && <span className="text-muted-foreground text-xs">({count})</span>}
+      <span className="min-w-0 flex-1 break-words leading-snug">{label}</span>
+      {count !== undefined && <span className="shrink-0 text-muted-foreground text-xs">({count})</span>}
     </label>
   );
+
+  const CategoryNode = ({ cat, depth }: { cat: Category; depth: number }) => {
+    const kids = childrenOf.get(cat.id) || [];
+    const expanded = expandedCats.has(cat.id) || ancestorIds.has(cat.id);
+    return (
+      <div className={depth > 0 ? "ml-3 border-l border-border pl-3" : ""}>
+        <div className="flex items-center gap-0.5">
+          <div className="min-w-0 flex-1">
+            <CheckRow checked={categorySlug === cat.slug} onChange={() => setCategorySlug(cat.slug)} label={cat.name} />
+          </div>
+          {kids.length > 0 && (
+            <button
+              type="button"
+              onClick={() => toggleExpandCat(cat.id)}
+              aria-label={expanded ? `Recolher ${cat.name}` : `Expandir ${cat.name}`}
+              className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+            >
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+            </button>
+          )}
+        </div>
+        {kids.length > 0 && expanded && (
+          <div className="mt-0.5 space-y-0.5">
+            {kids.map((kid) => (
+              <CategoryNode key={kid.id} cat={kid} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Sidebar with all filters
   const FiltersSidebar = (
@@ -305,7 +394,12 @@ const Catalog = () => {
         </div>
       </div>
 
-      <Accordion type="multiple" defaultValue={["preco", "categoria", "marca", ...STANDARD_ATTR_KEYS as unknown as string[]]} className="rounded-xl border border-border bg-card px-4">
+      <Accordion
+        key={loading ? "loading" : "loaded"}
+        type="multiple"
+        defaultValue={["preco", "categoria", "marca", ...STANDARD_ATTR_KEYS as unknown as string[], ...customKeys]}
+        className="rounded-xl border border-border bg-card px-4"
+      >
         <AccordionItem value="preco" className="border-b border-border last:border-0">
           <AccordionTrigger className="font-display font-bold text-sm">Faixa de Preço</AccordionTrigger>
           <AccordionContent>
@@ -326,27 +420,28 @@ const Catalog = () => {
         <AccordionItem value="categoria" className="border-b border-border last:border-0">
           <AccordionTrigger className="font-display font-bold text-sm">Categoria</AccordionTrigger>
           <AccordionContent>
-            <div className="space-y-1">
-              <button onClick={() => setCategorySlug("all")} className={`block w-full text-left text-sm px-2 py-1.5 rounded ${categorySlug === "all" ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>Todas</button>
-              <button onClick={() => setCategorySlug("promocoes")} className={`block w-full text-left text-sm px-2 py-1.5 rounded ${categorySlug === "promocoes" ? "bg-secondary/10 text-secondary font-medium" : "hover:bg-muted"}`}>Promoções</button>
+            <div className="space-y-0.5">
+              <CheckRow
+                checked={categorySlug === "all"}
+                onChange={() => setCategorySlug("all")}
+                label="Todas"
+              />
+              <CheckRow
+                checked={categorySlug === "promocoes"}
+                onChange={() => setCategorySlug("promocoes")}
+                label="Promoções"
+              />
               {rootCats.map((c) => (
-                <button key={c.id} onClick={() => setCategorySlug(c.slug)} className={`block w-full text-left text-sm px-2 py-1.5 rounded ${categorySlug === c.slug ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"}`}>{c.name}</button>
+                <CategoryNode key={c.id} cat={c} depth={0} />
               ))}
             </div>
-            {subCats.length > 0 && (
-              <div className="mt-2 pl-3 border-l border-border space-y-1">
-                {subCats.map((c) => (
-                  <button key={c.id} onClick={() => setCategorySlug(c.slug)} className={`block w-full text-left text-xs px-2 py-1 rounded ${categorySlug === c.slug ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground"}`}>{c.name}</button>
-                ))}
-              </div>
-            )}
           </AccordionContent>
         </AccordionItem>
 
         <AccordionItem value="marca" className="border-b border-border last:border-0">
           <AccordionTrigger className="font-display font-bold text-sm">Marca</AccordionTrigger>
           <AccordionContent>
-            <div className="space-y-0.5 max-h-72 overflow-auto">
+            <div className="space-y-0.5 overflow-x-hidden">
               {brands.length === 0 && <p className="text-xs text-muted-foreground py-2">Nenhuma marca.</p>}
               {brands.map((b) => (
                 <CheckRow
@@ -369,7 +464,7 @@ const Catalog = () => {
             <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
               <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-0.5 max-h-72 overflow-auto">
+                <div className="space-y-0.5 overflow-x-hidden">
                   {values.map((v) => (
                     <CheckRow
                       key={v}
@@ -392,7 +487,7 @@ const Catalog = () => {
             <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
               <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-0.5 max-h-72 overflow-auto">
+                <div className="space-y-0.5 overflow-x-hidden">
                   {values.map((v) => (
                     <CheckRow
                       key={v}
@@ -417,6 +512,33 @@ const Catalog = () => {
       <main className="flex-1">
         <div className="bg-primary/5 border-b border-border">
           <div className="container mx-auto py-8 md:py-12">
+            <Breadcrumb className="mb-3">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link to="/">Início</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  {categorySlug === "all" ? (
+                    <BreadcrumbPage>Catálogo</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink asChild>
+                      <Link to="/catalogo">Catálogo</Link>
+                    </BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+                {categorySlug !== "all" && (
+                  <>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>{categoryChipLabel}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </>
+                )}
+              </BreadcrumbList>
+            </Breadcrumb>
             <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Catálogo</h1>
             <p className="text-muted-foreground mt-2">Encontre tudo que seu pet precisa</p>
           </div>
@@ -426,14 +548,39 @@ const Catalog = () => {
           <div className="grid lg:grid-cols-[260px_1fr] gap-6">
             <div className="hidden lg:block">{FiltersSidebar}</div>
 
-            <details className="lg:hidden rounded-xl border border-border bg-card overflow-hidden">
-              <summary className="cursor-pointer px-4 py-3 font-display font-bold text-sm uppercase tracking-wide flex items-center justify-between">
-                Filtros {hasActiveFilters && <span className="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">Ativos</span>}
+            <details className="group lg:hidden rounded-xl border border-border bg-card overflow-hidden">
+              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden px-4 py-3 font-display font-bold text-sm uppercase tracking-wide flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  Filtros {hasActiveFilters && <span className="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">Ativos</span>}
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
               </summary>
               <div className="p-4 border-t border-border">{FiltersSidebar}</div>
             </details>
 
             <div>
+              {activeChips.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  {activeChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      onClick={chip.onRemove}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium pl-3 pr-2 py-1.5 hover:bg-primary/20 transition-colors"
+                    >
+                      {chip.label}
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                  <button
+                    onClick={clearFilters}
+                    className="text-xs text-muted-foreground hover:text-destructive underline underline-offset-2"
+                  >
+                    Limpar tudo
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                 {!loading && (
                   <p className="text-sm text-muted-foreground">
@@ -467,7 +614,7 @@ const Catalog = () => {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-0.5 md:gap-1">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                   {filteredProducts.map((product) => (
                     <ProductCard key={product.node.id} product={product} />
                   ))}

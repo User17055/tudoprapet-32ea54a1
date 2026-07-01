@@ -31,6 +31,7 @@ export const ProductCard = ({ product }: Props) => {
     hasDiscount && compareAtPrice
       ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
       : 0;
+  const isOutOfStock = !variant?.availableForSale;
 
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
   const hasSubscriberDiscount =
@@ -82,12 +83,20 @@ export const ProductCard = ({ product }: Props) => {
           </span>
         )}
 
+        {isOutOfStock && (
+          <span className="absolute left-2.5 top-2.5 z-[2] inline-flex h-[26px] items-center justify-center rounded-full bg-[#1d1d1f]/85 px-2.5 text-[11px] font-semibold leading-none text-white">
+            Esgotado
+          </span>
+        )}
+
         {image ? (
           <img
             src={image.url}
             alt={image.altText || node.title}
             loading="lazy"
-            className="absolute inset-0 z-[1] h-full w-full object-contain p-2 opacity-100 transition-transform duration-500 group-hover:scale-105"
+            className={`absolute inset-0 z-[1] h-full w-full object-contain p-2 transition-transform duration-500 group-hover:scale-105 ${
+              isOutOfStock ? "opacity-40 grayscale" : "opacity-100"
+            }`}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-muted-foreground">

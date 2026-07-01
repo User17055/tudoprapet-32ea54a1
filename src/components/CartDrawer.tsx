@@ -1,11 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { gsap } from "gsap";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
+import { getDisplayOptions } from "@/lib/shopify";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -14,12 +17,49 @@ export const CartDrawer = () => {
   const [checkingOut, setCheckingOut] = useState(false);
   const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
+  const { getSubscriberPrice } = useSubscriberPrices();
   const isMobile = useIsMobile();
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
+  const clubTotalPrice = items.reduce((sum, item) => {
+    const regularPrice = parseFloat(item.price.amount);
+    const subscriberPrice = getSubscriberPrice(item.variantId);
+    const price = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
+      ? subscriberPrice
+      : regularPrice;
+
+    return sum + price * item.quantity;
+  }, 0);
+  const clubDiscount = isSubscribed ? Math.max(0, totalPrice - clubTotalPrice) : 0;
+  const displayTotalPrice = isSubscribed ? clubTotalPrice : totalPrice;
+
+  const itemsListRef = useRef<HTMLDivElement>(null);
+  const subtotalRef = useRef<HTMLSpanElement>(null);
+  const emptyIconRef = useRef<HTMLDivElement>(null);
+  const prevTotalRef = useRef(displayTotalPrice);
 
   useEffect(() => { if (isCartOpen) syncCart(); }, [isCartOpen, syncCart]);
+
+  useEffect(() => {
+    if (!isCartOpen || !itemsListRef.current) return;
+    const rows = itemsListRef.current.querySelectorAll("[data-cart-row]");
+    gsap.fromTo(rows, { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.35, stagger: 0.06, ease: "power2.out" });
+  }, [isCartOpen]);
+
+  useEffect(() => {
+    if (isCartOpen && items.length === 0 && emptyIconRef.current) {
+      const tween = gsap.to(emptyIconRef.current, { y: -6, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: -1 });
+      return () => { tween.kill(); };
+    }
+  }, [isCartOpen, items.length]);
+
+  useEffect(() => {
+    if (prevTotalRef.current !== displayTotalPrice && subtotalRef.current) {
+      gsap.fromTo(subtotalRef.current, { scale: 1.18 }, { scale: 1, duration: 0.35, ease: "back.out(3)" });
+    }
+    prevTotalRef.current = displayTotalPrice;
+  }, [displayTotalPrice]);
 
   const handleCheckout = async () => {
     setCheckingOut(true);
@@ -92,13 +132,15 @@ export const CartDrawer = () => {
             Meu carrinho
           </SheetTitle>
           <SheetDescription className="text-sm">
-            {totalItems === 0 ? "Seu carrinho está vazio" : `${totalItems} ${totalItems === 1 ? "item" : "itens"} • R$ ${totalPrice.toFixed(2).replace('.', ',')}`}
+            {totalItems === 0 ? "Seu carrinho está vazio" : `${totalItems} ${totalItems === 1 ? "item" : "itens"} • R$ ${displayTotalPrice.toFixed(2).replace('.', ',')}`}
           </SheetDescription>
 
           {isSubscribed && items.length > 0 && (
             <div className="mt-3 hidden sm:flex items-center gap-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-700 dark:text-sky-300 px-3 py-2 text-xs font-semibold">
               <Crown className="h-4 w-4" />
-              Preço de assinante será aplicado no checkout
+              {clubDiscount > 0
+                ? `Plano ativo: voce economiza R$ ${clubDiscount.toFixed(2).replace('.', ',')}`
+                : "Plano ativo: beneficios aplicados no checkout"}
             </div>
           )}
         </SheetHeader>
@@ -108,7 +150,7 @@ export const CartDrawer = () => {
           {items.length === 0 ? (
             <div className="flex-1 flex items-center justify-center px-6 py-10">
               <div className="text-center max-w-xs">
-                <div className="mx-auto w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                <div ref={emptyIconRef} className="mx-auto w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <ShoppingCart className="h-10 w-10 text-primary" />
                 </div>
                 <h3 className="font-display font-bold text-lg text-foreground">Seu carrinho está vazio</h3>
@@ -131,12 +173,18 @@ export const CartDrawer = () => {
                     {totalItems} {totalItems === 1 ? "item" : "itens"}
                   </p>
                 </div>
-                <div className="space-y-2.5 sm:space-y-3">
+                <div ref={itemsListRef} className="space-y-2.5 sm:space-y-3">
                   {items.map((item) => {
-                    const lineTotal = parseFloat(item.price.amount) * item.quantity;
+                    const regularPrice = parseFloat(item.price.amount);
+                    const subscriberPrice = getSubscriberPrice(item.variantId);
+                    const itemPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
+                      ? subscriberPrice
+                      : regularPrice;
+                    const lineTotal = itemPrice * item.quantity;
                     return (
                       <div
                         key={item.variantId}
+                        data-cart-row
                         className="grid grid-cols-[72px_minmax(0,1fr)_32px] gap-2.5 sm:flex sm:gap-3 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-border bg-background sm:bg-card hover:border-primary/30 hover:shadow-sm transition"
                       >
                         <div className="w-[72px] h-[72px] sm:w-20 sm:h-20 bg-muted rounded-lg sm:rounded-xl overflow-hidden flex-shrink-0">
@@ -152,9 +200,9 @@ export const CartDrawer = () => {
                           <h4 className="font-bold text-[13px] sm:text-sm leading-tight line-clamp-2 text-foreground">
                             {item.product.node.title}
                           </h4>
-                          {item.selectedOptions.length > 0 && (
+                          {getDisplayOptions(item.selectedOptions).length > 0 && (
                             <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                              {item.selectedOptions.map(o => o.value).join(' • ')}
+                              {getDisplayOptions(item.selectedOptions).map(o => o.value).join(' • ')}
                             </p>
                           )}
                           <div className="flex items-end justify-between gap-2 mt-auto pt-2">
@@ -162,17 +210,33 @@ export const CartDrawer = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 rounded-full hover:bg-primary hover:text-primary-foreground"
+                                className="h-7 w-7 rounded-full btn-bounce hover:bg-primary hover:text-primary-foreground"
                                 onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
                                 disabled={isLoading}
                               >
                                 <Minus className="h-3 w-3" />
                               </Button>
-                              <span className="w-7 text-center text-sm font-bold">{item.quantity}</span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                key={`qty-${item.variantId}-${item.quantity}`}
+                                defaultValue={item.quantity}
+                                disabled={isLoading}
+                                aria-label={`Quantidade de ${item.product.node.title}`}
+                                onBlur={(e) => {
+                                  const next = parseInt(e.target.value, 10);
+                                  if (!Number.isNaN(next) && next > 0 && next !== item.quantity) {
+                                    updateQuantity(item.variantId, next);
+                                  }
+                                }}
+                                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                                className="w-9 text-center text-sm font-bold bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 rounded-full hover:bg-primary hover:text-primary-foreground"
+                                className="h-7 w-7 rounded-full btn-bounce hover:bg-primary hover:text-primary-foreground"
                                 onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
                                 disabled={isLoading}
                               >
@@ -187,7 +251,7 @@ export const CartDrawer = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full flex-shrink-0"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full btn-bounce flex-shrink-0"
                           onClick={() => removeItem(item.variantId)}
                           aria-label="Remover"
                         >
@@ -203,11 +267,19 @@ export const CartDrawer = () => {
               <div className="flex-shrink-0 border-t border-border bg-card px-6 py-4 space-y-3 shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.08)]">
                 <div className="flex justify-between items-baseline">
                   <span className="text-sm font-medium text-muted-foreground">Subtotal</span>
-                  <span className="font-display font-900 text-2xl text-primary">
-                    R$ {totalPrice.toFixed(2).replace('.', ',')}
+                  <span ref={subtotalRef} className="inline-block font-display font-900 text-2xl text-primary">
+                    R$ {displayTotalPrice.toFixed(2).replace('.', ',')}
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground -mt-1">Frete e descontos calculados no checkout.</p>
+                <p className="text-[11px] text-muted-foreground -mt-1 flex items-center gap-1.5">
+                  {isSyncing ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" /> Atualizando preços…
+                    </>
+                  ) : (
+                    "Frete e descontos calculados no checkout."
+                  )}
+                </p>
 
                 <Button
                   onClick={handleCheckout}

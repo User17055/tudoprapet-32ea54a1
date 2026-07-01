@@ -1,8 +1,14 @@
-import { Instagram, Facebook, Mail } from "lucide-react";
+import { Instagram, Mail, MessageCircle } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { toast } from "sonner";
+
+const WHATSAPP_URL = "https://wa.me/5518996642021";
+const INSTAGRAM_URL = "https://www.instagram.com/tudoprapet_/";
+const CONTACT_EMAIL = "sac@tudoprapet.com.br";
+const CNPJ = "64.017.410/0001-28";
 
 export const Footer = () => {
   const [email, setEmail] = useState("");
@@ -26,7 +32,11 @@ export const Footer = () => {
           <h3 className="font-display font-800 text-2xl">Fique por dentro das novidades!</h3>
           <p className="text-sm opacity-90">Cadastre seu e-mail e receba ofertas exclusivas</p>
           <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+            <label htmlFor="footer-newsletter-email" className="sr-only">
+              Seu e-mail
+            </label>
             <input
+              id="footer-newsletter-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -49,57 +59,100 @@ export const Footer = () => {
             <span className="font-display font-bold text-lg">TudoPraPet</span>
           </div>
           <p className="text-sm opacity-70">O melhor para o seu pet com o menor preço.</p>
+          <p className="text-xs opacity-50">CNPJ {CNPJ}</p>
         </div>
         <div className="space-y-3">
-          <h4 className="font-display font-bold text-sm">Institucional</h4>
+          <h4 className="font-display font-bold text-sm">
+            Navegue
+            <span className="block w-6 h-[3px] rounded-full bg-secondary mt-1.5" />
+          </h4>
           <ul className="space-y-2 text-sm opacity-70">
             <li>
-              <a href="#" className="hover:text-primary transition-colors">
-                Sobre nós
-              </a>
+              <Link to="/catalogo" className="hover:text-primary transition-colors">
+                Catálogo
+              </Link>
             </li>
             <li>
-              <a href="#" className="hover:text-primary transition-colors">
-                Rastrear Pedido
-              </a>
+              <Link to="/catalogo?categoria=racoes" className="hover:text-primary transition-colors">
+                Rações
+              </Link>
             </li>
             <li>
-              <a href="#" className="hover:text-primary transition-colors">
-                Trocas e Devoluções
-              </a>
+              <Link to="/catalogo?categoria=farmacia" className="hover:text-primary transition-colors">
+                Farmácia
+              </Link>
+            </li>
+            <li>
+              <Link to="/clube" className="hover:text-primary transition-colors">
+                Clube
+              </Link>
             </li>
           </ul>
         </div>
         <div className="space-y-3">
-          <h4 className="font-display font-bold text-sm">Atendimento</h4>
+          <h4 className="font-display font-bold text-sm">
+            Minha Conta
+            <span className="block w-6 h-[3px] rounded-full bg-secondary mt-1.5" />
+          </h4>
           <ul className="space-y-2 text-sm opacity-70">
             <li>
-              <a href="#" className="hover:text-primary transition-colors">
-                FAQ
-              </a>
+              <Link to="/login" className="hover:text-primary transition-colors">
+                Entrar / Cadastrar
+              </Link>
             </li>
             <li>
-              <a href="#" className="hover:text-primary transition-colors">
-                Contato
-              </a>
+              <Link to="/meus-pedidos" className="hover:text-primary transition-colors">
+                Meus Pedidos
+              </Link>
             </li>
             <li>
-              <a href="#" className="hover:text-primary transition-colors">
-                Política de Privacidade
-              </a>
+              <Link to="/carrinho" className="hover:text-primary transition-colors">
+                Meu Carrinho
+              </Link>
             </li>
           </ul>
         </div>
         <div className="space-y-3">
-          <h4 className="font-display font-bold text-sm">Redes Sociais</h4>
-          <div className="flex gap-3">
-            <a href="#" className="p-2 rounded-full bg-background/10 hover:bg-primary transition-colors">
+          <h4 className="font-display font-bold text-sm">
+            Atendimento
+            <span className="block w-6 h-[3px] rounded-full bg-secondary mt-1.5" />
+          </h4>
+          <ul className="space-y-2 text-sm opacity-70">
+            <li>
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+                (18) 99664-2021
+              </a>
+            </li>
+            <li>
+              <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-primary transition-colors">
+                {CONTACT_EMAIL}
+              </a>
+            </li>
+          </ul>
+          <div className="flex gap-3 pt-1">
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="WhatsApp"
+              className="hover-lift p-2.5 rounded-full bg-background/10 border border-background/10 hover:bg-secondary hover:border-secondary hover:text-secondary-foreground transition-colors"
+            >
+              <MessageCircle className="h-5 w-5" />
+            </a>
+            <a
+              href={INSTAGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Instagram"
+              className="hover-lift p-2.5 rounded-full bg-background/10 border border-background/10 hover:bg-secondary hover:border-secondary hover:text-secondary-foreground transition-colors"
+            >
               <Instagram className="h-5 w-5" />
             </a>
-            <a href="#" className="p-2 rounded-full bg-background/10 hover:bg-primary transition-colors">
-              <Facebook className="h-5 w-5" />
-            </a>
-            <a href="#" className="p-2 rounded-full bg-background/10 hover:bg-primary transition-colors">
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              aria-label="E-mail"
+              className="hover-lift p-2.5 rounded-full bg-background/10 border border-background/10 hover:bg-secondary hover:border-secondary hover:text-secondary-foreground transition-colors"
+            >
               <Mail className="h-5 w-5" />
             </a>
           </div>
@@ -108,7 +161,7 @@ export const Footer = () => {
       </div>
 
       <div className="border-t border-background/10 py-4 text-center text-xs opacity-50">
-        © 2026 TudoPraPet. Todos os direitos reservados.
+        © {new Date().getFullYear()} TudoPraPet. Todos os direitos reservados.
       </div>
     </footer>
   );

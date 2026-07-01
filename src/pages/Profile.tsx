@@ -1,24 +1,26 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/AuthContext';
-import { useSubscription } from '@/contexts/SubscriptionContext';
-import { supabase } from '@/integrations/supabase/client';
-import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
+  ArrowRight,
+  Crown,
+  ExternalLink,
+  Heart,
   LogOut,
-  User as UserIcon,
+  Mail,
   Package,
   PiggyBank,
-  ChevronRight,
-  ExternalLink,
-  Crown,
+  ShieldCheck,
   ShoppingBag,
-  Heart,
   Sparkles,
-} from 'lucide-react';
+  User as UserIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Footer } from "@/components/Footer";
+import { Header } from "@/components/Header";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface OrderSummary {
   id: number;
@@ -30,8 +32,8 @@ interface OrderSummary {
   order_status_url: string;
 }
 
-const formatCurrency = (n: number, currency = 'BRL') =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(n);
+const formatCurrency = (value: number, currency = "BRL") =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
 
 const Profile = () => {
   const { user, loading, logout } = useAuth();
@@ -43,8 +45,14 @@ const Profile = () => {
   const [ordersLoading, setOrdersLoading] = useState(true);
 
   useEffect(() => {
+    if (!loading && !user) navigate("/login", { replace: true });
+  }, [loading, navigate, user]);
+
+  useEffect(() => {
     if (!user) return;
-    supabase.functions.invoke('customer-orders').then(({ data, error }) => {
+
+    setOrdersLoading(true);
+    supabase.functions.invoke("customer-orders").then(({ data, error }) => {
       if (!error && data) {
         const all = data.orders || [];
         setOrders(all.slice(0, 4));
@@ -55,228 +63,285 @@ const Profile = () => {
     });
   }, [user]);
 
-  if (loading) {
+  if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-9 w-9 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
   }
 
-  if (!user) {
-    navigate('/login');
-    return null;
-  }
-
-  const firstName = user.user_metadata?.first_name || '';
-  const lastName = user.user_metadata?.last_name || '';
-  const fullName = `${firstName} ${lastName}`.trim() || user.email?.split('@')[0] || 'Cliente';
-  const initials =
-    (firstName?.[0] || user.email?.[0] || 'C').toUpperCase() + (lastName?.[0]?.toUpperCase() || '');
+  const firstName = user.user_metadata?.first_name || "";
+  const lastName = user.user_metadata?.last_name || "";
+  const fullName =
+    `${firstName} ${lastName}`.trim() || user.email?.split("@")[0] || "Cliente";
+  const initials = (
+    (firstName?.[0] || user.email?.[0] || "C") + (lastName?.[0] || "")
+  ).toUpperCase();
 
   const handleLogout = async () => {
     await logout();
-    toast.success('Até logo! 👋');
-    navigate('/');
+    toast.success("Sessao encerrada.");
+    navigate("/");
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-screen flex-col bg-[#f6f8fb]">
       <Header />
 
-      <main className="flex-1 container mx-auto px-4 py-6 md:py-10">
-        {/* Hero do perfil */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-[#2d5499] text-primary-foreground p-6 md:p-8 shadow-xl">
-          <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-secondary/20 blur-2xl" aria-hidden />
-          <div className="absolute -left-10 -bottom-12 h-40 w-40 rounded-full bg-white/10 blur-2xl" aria-hidden />
-
-          <div className="relative flex flex-col md:flex-row md:items-center gap-5 md:gap-6">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 md:h-20 md:w-20 rounded-2xl bg-white/15 border border-white/30 backdrop-blur flex items-center justify-center text-2xl md:text-3xl font-display font-900 shadow-lg">
+      <main className="container mx-auto flex-1 px-4 py-5 md:py-8">
+        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-2xl border border-border bg-background p-5 shadow-sm md:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-2xl font-900 text-primary-foreground shadow-sm">
                 {initials}
               </div>
-              <div className="min-w-0">
-                <p className="text-xs md:text-sm opacity-90">Olá, bem-vindo de volta 🐾</p>
-                <h1 className="font-display font-900 text-2xl md:text-3xl leading-tight truncate">
-                  {fullName}
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-primary">Minha conta</p>
+                <h1 className="mt-1 truncate font-display text-2xl font-900 text-foreground md:text-3xl">
+                  Olá, {fullName}
                 </h1>
-                <p className="text-xs md:text-sm opacity-90 truncate">{user.email}</p>
+                <p className="mt-1 flex items-center gap-1.5 truncate text-sm text-muted-foreground">
+                  <Mail className="h-4 w-4 shrink-0" />
+                  {user.email}
+                </p>
+              </div>
+
+              <div className="flex gap-2 sm:flex-col sm:items-end">
+                {isSubscribed ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 px-3 py-1.5 text-xs font-bold text-white">
+                    <Crown className="h-4 w-4" />
+                    Clube ativo
+                  </span>
+                ) : (
+                  <Button asChild className="rounded-full gap-2">
+                    <Link to="/clube">
+                      <Sparkles className="h-4 w-4" />
+                      Entrar no Clube
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
+          </div>
 
-            <div className="md:ml-auto flex flex-wrap gap-2">
-              {isSubscribed ? (
-                <span className="inline-flex items-center gap-1.5 bg-secondary text-secondary-foreground font-bold text-xs px-3 py-1.5 rounded-full shadow">
-                  <Crown className="h-3.5 w-3.5" /> Membro do Clube
-                </span>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
+              <PiggyBank className="mb-3 h-5 w-5 text-primary" />
+              <p className="text-xs text-muted-foreground">Economia</p>
+              <p className="mt-1 truncate font-display text-lg font-900 text-foreground">
+                {ordersLoading ? "..." : formatCurrency(totalSavings)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
+              <Package className="mb-3 h-5 w-5 text-primary" />
+              <p className="text-xs text-muted-foreground">Pedidos</p>
+              <p className="mt-1 font-display text-lg font-900 text-foreground">
+                {ordersLoading ? "..." : orderCount}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border bg-background p-4 shadow-sm">
+              <Heart className="mb-3 h-5 w-5 text-primary" />
+              <p className="text-xs text-muted-foreground">Status</p>
+              <p className="mt-1 truncate font-display text-lg font-900 text-foreground">
+                {isSubscribed ? "Clube" : "Cliente"}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              to: "/meus-pedidos",
+              icon: Package,
+              title: "Meus pedidos",
+              text: "Acompanhar compras",
+            },
+            {
+              to: "/carrinho",
+              icon: ShoppingBag,
+              title: "Carrinho",
+              text: "Finalizar produtos",
+            },
+            {
+              to: "/catalogo",
+              icon: ArrowRight,
+              title: "Comprar de novo",
+              text: "Voltar ao catalogo",
+            },
+            {
+              to: "/clube",
+              icon: Crown,
+              title: "Clube TudoPraPet",
+              text: isSubscribed ? "Ver beneficios" : "Assinar e economizar",
+            },
+          ].map((item) => (
+            <Link
+              key={item.title}
+              to={item.to}
+              className="group rounded-2xl border border-border bg-background p-4 shadow-sm transition hover:border-primary/50 hover:shadow-md"
+            >
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                <item.icon className="h-5 w-5" />
+              </div>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-sm font-bold text-foreground">
+                    {item.title}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.text}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-primary" />
+              </div>
+            </Link>
+          ))}
+        </section>
+
+        <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
+          <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-border p-4 md:p-5">
+              <div>
+                <h2 className="font-display text-lg font-bold text-foreground">
+                  Pedidos recentes
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Ultimas compras feitas com sua conta.
+                </p>
+              </div>
+              <Button asChild variant="ghost" className="rounded-full text-primary">
+                <Link to="/meus-pedidos">Ver todos</Link>
+              </Button>
+            </div>
+
+            <div className="p-3 md:p-4">
+              {ordersLoading ? (
+                <div className="space-y-2">
+                  {[0, 1, 2].map((item) => (
+                    <div
+                      key={item}
+                      className="h-20 animate-pulse rounded-xl bg-muted/60"
+                    />
+                  ))}
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="py-10 text-center">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <ShoppingBag className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-display font-bold text-foreground">
+                    Nenhum pedido ainda
+                  </h3>
+                  <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                    Quando voce fizer uma compra, ela aparece aqui para acompanhar
+                    com facilidade.
+                  </p>
+                  <Button asChild className="mt-4 rounded-full">
+                    <Link to="/catalogo">Explorar produtos</Link>
+                  </Button>
+                </div>
               ) : (
-                <Link
-                  to="/clube"
-                  className="inline-flex items-center gap-1.5 bg-secondary text-secondary-foreground hover:scale-105 transition font-bold text-xs px-3 py-1.5 rounded-full shadow"
-                >
-                  <Sparkles className="h-3.5 w-3.5" /> Entrar no Clube
-                </Link>
+                <div className="space-y-2">
+                  {orders.map((order) => (
+                    <article
+                      key={order.id}
+                      className="grid grid-cols-[1fr_auto] gap-3 rounded-xl border border-border p-3 transition hover:border-primary/40 hover:bg-muted/30 sm:grid-cols-[1fr_auto_auto] sm:items-center"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                          <Package className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-bold text-foreground">
+                            Pedido {order.name}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(order.created_at).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="whitespace-nowrap font-display text-sm font-bold text-foreground">
+                          {formatCurrency(order.total_price, order.currency)}
+                        </p>
+                        {order.savings > 0 && (
+                          <p className="text-xs font-semibold text-sky-500">
+                            -{formatCurrency(order.savings, order.currency)}
+                          </p>
+                        )}
+                      </div>
+
+                      {order.order_status_url && (
+                        <a
+                          href={order.order_status_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs font-bold text-foreground transition hover:bg-primary hover:text-primary-foreground sm:col-span-1"
+                        >
+                          Acompanhar
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </article>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="relative mt-6 grid grid-cols-2 md:grid-cols-3 gap-3">
-            <div className="bg-white/10 backdrop-blur rounded-2xl p-4 border border-white/15">
-              <div className="flex items-center gap-2 opacity-90 text-xs"><PiggyBank className="h-4 w-4" /> Economizou</div>
-              <p className="font-display font-900 text-xl md:text-2xl mt-1 tabular-nums">
-                {ordersLoading ? '...' : formatCurrency(totalSavings)}
-              </p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-2xl p-4 border border-white/15">
-              <div className="flex items-center gap-2 opacity-90 text-xs"><Package className="h-4 w-4" /> Pedidos</div>
-              <p className="font-display font-900 text-xl md:text-2xl mt-1 tabular-nums">
-                {ordersLoading ? '...' : orderCount}
-              </p>
-            </div>
-            <div className="col-span-2 md:col-span-1 bg-white/10 backdrop-blur rounded-2xl p-4 border border-white/15">
-              <div className="flex items-center gap-2 opacity-90 text-xs"><Heart className="h-4 w-4" /> Status</div>
-              <p className="font-display font-900 text-xl md:text-2xl mt-1">
-                {isSubscribed ? 'Clube ativo' : 'Cliente'}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Atalhos rápidos */}
-        <section className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Link
-            to="/meus-pedidos"
-            className="group bg-card border border-border rounded-2xl p-4 hover:border-primary hover:shadow-md transition flex flex-col items-start gap-2"
-          >
-            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <Package className="h-5 w-5" />
-            </div>
-            <p className="font-display font-bold text-sm">Meus pedidos</p>
-            <p className="text-xs text-muted-foreground">Acompanhar entregas</p>
-          </Link>
-
-          <Link
-            to="/catalogo"
-            className="group bg-card border border-border rounded-2xl p-4 hover:border-primary hover:shadow-md transition flex flex-col items-start gap-2"
-          >
-            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <ShoppingBag className="h-5 w-5" />
-            </div>
-            <p className="font-display font-bold text-sm">Continuar comprando</p>
-            <p className="text-xs text-muted-foreground">Voltar ao catálogo</p>
-          </Link>
-
-          <Link
-            to="/clube"
-            className="group bg-card border border-border rounded-2xl p-4 hover:border-primary hover:shadow-md transition flex flex-col items-start gap-2"
-          >
-            <div className="h-10 w-10 rounded-xl bg-secondary/20 text-secondary-foreground flex items-center justify-center">
-              <Crown className="h-5 w-5" />
-            </div>
-            <p className="font-display font-bold text-sm">Clube TudoPraPet</p>
-            <p className="text-xs text-muted-foreground">
-              {isSubscribed ? 'Ver benefícios' : 'Economize com assinatura'}
-            </p>
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="group bg-card border border-border rounded-2xl p-4 hover:border-destructive hover:shadow-md transition flex flex-col items-start gap-2 text-left"
-          >
-            <div className="h-10 w-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center">
-              <LogOut className="h-5 w-5" />
-            </div>
-            <p className="font-display font-bold text-sm">Sair</p>
-            <p className="text-xs text-muted-foreground">Encerrar sessão</p>
-          </button>
-        </section>
-
-        {/* Pedidos recentes */}
-        <section className="mt-6 bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
-          <div className="flex items-center justify-between p-5 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              <h2 className="font-display font-bold text-lg">Pedidos recentes</h2>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/meus-pedidos')}
-              className="gap-1 text-primary hover:text-primary"
-            >
-              Ver todos <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="p-3 md:p-5">
-            {ordersLoading ? (
-              <div className="space-y-2">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-16 rounded-xl bg-muted/40 animate-pulse" />
-                ))}
+          <aside className="space-y-4">
+            <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <UserIcon className="h-5 w-5" />
               </div>
-            ) : orders.length === 0 ? (
-              <div className="text-center py-10">
-                <div className="mx-auto h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-3">
-                  <ShoppingBag className="h-7 w-7 text-muted-foreground" />
+              <h2 className="font-display text-lg font-bold text-foreground">
+                Dados da conta
+              </h2>
+              <div className="mt-4 space-y-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Nome</p>
+                  <p className="font-semibold text-foreground">{fullName}</p>
                 </div>
-                <p className="font-display font-bold text-foreground">Nenhum pedido ainda</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Que tal mimar seu pet hoje?
-                </p>
-                <Button onClick={() => navigate('/catalogo')} className="rounded-xl">
-                  Explorar produtos
-                </Button>
+                <div>
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="break-all font-semibold text-foreground">
+                    {user.email}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {orders.map((o) => (
-                  <div
-                    key={o.id}
-                    className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-2xl border border-border hover:border-primary/40 hover:bg-muted/30 transition"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <Package className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-sm truncate">Pedido {o.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(o.created_at).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-display font-bold text-sm tabular-nums">
-                        {formatCurrency(o.total_price, o.currency)}
-                      </p>
-                      {o.savings > 0 && (
-                        <p className="text-[11px] text-sky-500 font-semibold tabular-nums">
-                          -{formatCurrency(o.savings, o.currency)}
-                        </p>
-                      )}
-                    </div>
-                    {o.order_status_url && (
-                      <a
-                        href={o.order_status_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition shrink-0"
-                        aria-label="Acompanhar pedido"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    )}
-                  </div>
-                ))}
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pet-green/10 text-pet-green">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-display text-base font-bold text-foreground">
+                    Conta protegida
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Sua sessao esta autenticada pela area segura da TudoPraPet.
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              className="h-12 w-full rounded-xl border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair da conta
+            </Button>
+          </aside>
         </section>
       </main>
 

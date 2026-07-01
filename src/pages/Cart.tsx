@@ -1,18 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
+  Crown,
   ExternalLink,
   Loader2,
   Minus,
   Plus,
+  ShieldCheck,
   ShoppingCart,
   Trash2,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { supabase } from "@/integrations/supabase/client";
+import { getDisplayOptions } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 
@@ -30,17 +36,55 @@ const Cart = () => {
     setCartOpen,
   } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
+  const { getSubscriberPrice } = useSubscriberPrices();
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce(
     (sum, item) => sum + parseFloat(item.price.amount) * item.quantity,
     0,
   );
+  const clubTotalPrice = items.reduce((sum, item) => {
+    const regularPrice = parseFloat(item.price.amount);
+    const subscriberPrice = getSubscriberPrice(item.variantId);
+    const price = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
+      ? subscriberPrice
+      : regularPrice;
+
+    return sum + price * item.quantity;
+  }, 0);
+  const clubDiscount = isSubscribed ? Math.max(0, totalPrice - clubTotalPrice) : 0;
+  const displayTotalPrice = isSubscribed ? clubTotalPrice : totalPrice;
+
+  const itemsListRef = useRef<HTMLElement>(null);
+  const subtotalRef = useRef<HTMLSpanElement>(null);
+  const emptyIconRef = useRef<HTMLDivElement>(null);
+  const hasAnimatedRef = useRef(false);
+  const prevTotalRef = useRef(displayTotalPrice);
 
   useEffect(() => {
     setCartOpen(false);
     syncCart();
   }, [setCartOpen, syncCart]);
+
+  useEffect(() => {
+    if (hasAnimatedRef.current || items.length === 0 || !itemsListRef.current) return;
+    hasAnimatedRef.current = true;
+    const rows = itemsListRef.current.querySelectorAll("[data-cart-row]");
+    gsap.fromTo(rows, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.06, ease: "power2.out" });
+  }, [items.length]);
+
+  useEffect(() => {
+    if (items.length !== 0 || !emptyIconRef.current) return;
+    const tween = gsap.to(emptyIconRef.current, { y: -6, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: -1 });
+    return () => { tween.kill(); };
+  }, [items.length]);
+
+  useEffect(() => {
+    if (prevTotalRef.current !== displayTotalPrice && subtotalRef.current) {
+      gsap.fromTo(subtotalRef.current, { scale: 1.18 }, { scale: 1, duration: 0.35, ease: "back.out(3)" });
+    }
+    prevTotalRef.current = displayTotalPrice;
+  }, [displayTotalPrice]);
 
   const handleCheckout = async () => {
     setCheckingOut(true);
@@ -97,10 +141,19 @@ const Cart = () => {
         </div>
       </header>
 
+      {isSubscribed && items.length > 0 && (
+        <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-700 dark:text-sky-300">
+          <Crown className="h-4 w-4" />
+          {clubDiscount > 0
+            ? `Plano ativo: voce economiza R$ ${clubDiscount.toFixed(2).replace(".", ",")}`
+            : "Plano ativo: beneficios aplicados no checkout"}
+        </div>
+      )}
+
       {items.length === 0 ? (
         <main className="flex flex-1 items-center justify-center px-6 py-10">
           <div className="max-w-xs text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+            <div ref={emptyIconRef} className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
               <ShoppingCart className="h-10 w-10 text-primary" />
             </div>
             <h2 className="font-display text-lg font-bold text-foreground">
@@ -119,14 +172,20 @@ const Cart = () => {
       ) : (
         <>
           <main className="flex-1 px-3 py-3 pb-40">
-            <section aria-label="Produtos no carrinho" className="space-y-2.5">
+            <section ref={itemsListRef} aria-label="Produtos no carrinho" className="space-y-2.5">
               {items.map((item) => {
-                const lineTotal = parseFloat(item.price.amount) * item.quantity;
+                const regularPrice = parseFloat(item.price.amount);
+                const subscriberPrice = getSubscriberPrice(item.variantId);
+                const itemPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
+                  ? subscriberPrice
+                  : regularPrice;
+                const lineTotal = itemPrice * item.quantity;
                 const image = item.product.node.images?.edges?.[0]?.node;
 
                 return (
                   <article
                     key={item.variantId}
+                    data-cart-row
                     className="grid grid-cols-[76px_minmax(0,1fr)_32px] gap-3 rounded-xl border border-border bg-background p-2.5 shadow-sm"
                   >
                     <div className="h-[76px] w-[76px] overflow-hidden rounded-lg bg-muted">
@@ -143,9 +202,9 @@ const Cart = () => {
                       <h2 className="line-clamp-2 text-[13px] font-bold leading-tight text-foreground">
                         {item.product.node.title}
                       </h2>
-                      {item.selectedOptions.length > 0 && (
+                      {getDisplayOptions(item.selectedOptions).length > 0 && (
                         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                          {item.selectedOptions.map((option) => option.value).join(" / ")}
+                          {getDisplayOptions(item.selectedOptions).map((option) => option.value).join(" / ")}
                         </p>
                       )}
 
@@ -154,7 +213,7 @@ const Cart = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-full"
+                            className="h-7 w-7 rounded-full btn-bounce"
                             onClick={() =>
                               updateQuantity(item.variantId, item.quantity - 1)
                             }
@@ -162,13 +221,27 @@ const Cart = () => {
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
-                          <span className="w-7 text-center text-sm font-bold">
-                            {item.quantity}
-                          </span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            key={`qty-${item.variantId}-${item.quantity}`}
+                            defaultValue={item.quantity}
+                            disabled={isLoading}
+                            aria-label={`Quantidade de ${item.product.node.title}`}
+                            onBlur={(e) => {
+                              const next = parseInt(e.target.value, 10);
+                              if (!Number.isNaN(next) && next > 0 && next !== item.quantity) {
+                                updateQuantity(item.variantId, next);
+                              }
+                            }}
+                            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                            className="w-9 text-center text-sm font-bold bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-full"
+                            className="h-7 w-7 rounded-full btn-bounce"
                             onClick={() =>
                               updateQuantity(item.variantId, item.quantity + 1)
                             }
@@ -187,7 +260,7 @@ const Cart = () => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      className="h-8 w-8 rounded-full text-muted-foreground btn-bounce hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => removeItem(item.variantId)}
                       aria-label="Remover"
                     >
@@ -205,10 +278,16 @@ const Cart = () => {
                 <span className="text-sm font-medium text-muted-foreground">
                   Subtotal
                 </span>
-                <span className="font-display text-2xl font-900 text-primary">
-                  R$ {totalPrice.toFixed(2).replace(".", ",")}
+                <span ref={subtotalRef} className="inline-block font-display text-2xl font-900 text-primary">
+                  R$ {displayTotalPrice.toFixed(2).replace(".", ",")}
                 </span>
               </div>
+
+              {isSyncing && (
+                <p className="-mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Atualizando preços…
+                </p>
+              )}
 
               <Button
                 onClick={handleCheckout}
@@ -235,6 +314,15 @@ const Cart = () => {
               <Button asChild variant="ghost" className="w-full rounded-full">
                 <Link to="/catalogo">Continuar comprando</Link>
               </Button>
+
+              <div className="flex items-center justify-center gap-4 pt-0.5 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-pet-green" /> Compra segura
+                </span>
+                <span className="flex items-center gap-1">
+                  <Truck className="h-3.5 w-3.5 text-primary" /> Entrega rápida
+                </span>
+              </div>
             </div>
           </footer>
         </>

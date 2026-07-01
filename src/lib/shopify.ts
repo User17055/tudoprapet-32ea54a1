@@ -324,6 +324,12 @@ export interface CartItem {
   selectedOptions: Array<{ name: string; value: string }>;
 }
 
+// Shopify auto-generates a "Title: Default Title" option for products without
+// real variants — not meaningful to shoppers, so it's filtered from display.
+export function getDisplayOptions(options: Array<{ name: string; value: string }>) {
+  return options.filter((o) => o.value !== "Default Title");
+}
+
 export async function createShopifyCart(item: CartItem): Promise<{ cartId: string; checkoutUrl: string; lineId: string } | null> {
   const data = await storefrontApiRequest(CART_CREATE_MUTATION, {
     input: { lines: [{ quantity: item.quantity, merchandiseId: item.variantId }] },

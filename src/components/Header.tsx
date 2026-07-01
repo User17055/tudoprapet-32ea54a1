@@ -1,18 +1,17 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Search, User, Menu, X } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Search, User, Menu, X, MessageCircle, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
+import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCategoryTree } from "@/hooks/useCategoryTree";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import logo from "@/assets/logo.png";
 
-const navLinks = [
-  { label: "Catálogo", href: "/catalogo" },
-  { label: "Rações", href: "/catalogo?categoria=racoes" },
-  { label: "Farmácia", href: "/catalogo?categoria=farmacia" },
-  { label: "Clube", href: "/clube" },
-];
+const WHATSAPP_URL = "https://wa.me/5518996642021";
 
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -20,6 +19,22 @@ export const Header = () => {
   const [hidden, setHidden] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { rootCats, childrenOf, loading: categoriesLoading } = useCategoryTree();
+
+  const navItems: MegaMenuItem[] = useMemo(
+    () => [
+      ...rootCats.map((c) => ({ id: c.id, slug: c.slug, label: c.name })),
+      { id: "promocoes", slug: "promocoes", label: "Promoções" },
+    ],
+    [rootCats],
+  );
+
+  const isCategoryActive = (slug: string) => {
+    if (location.pathname !== "/catalogo") return false;
+    return new URLSearchParams(location.search).get("categoria") === slug;
+  };
+  const isClubeActive = location.pathname === "/clube";
 
   useEffect(() => {
     let lastY = window.scrollY;
@@ -46,7 +61,7 @@ export const Header = () => {
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
-      <div className="container mx-auto flex items-center justify-between gap-4 py-3">
+      <div className="container mx-auto flex items-center justify-between gap-4 pt-3 pb-2">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
           <span className="font-display font-900 text-xl md:text-2xl text-foreground">
@@ -54,31 +69,23 @@ export const Header = () => {
           </span>
         </Link>
 
-        <div className="hidden md:flex flex-1 max-w-lg relative">
+        <form
+          role="search"
+          onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
+          className="hidden md:flex flex-1 max-w-lg relative"
+        >
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="Buscar produtos..."
+            aria-label="Buscar produtos"
             className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
           />
-          <button onClick={handleSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
+          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
             <Search className="h-4 w-4 text-muted-foreground" />
           </button>
-        </div>
-
-        <nav className="hidden lg:flex items-center gap-6">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.href}
-              className="text-sm font-medium transition-colors text-muted-foreground hover:text-primary"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        </form>
 
         <div className="flex items-center gap-2">
           {user ? (
@@ -107,47 +114,137 @@ export const Header = () => {
             size="icon"
             className="lg:hidden"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
         </div>
       </div>
 
+      <div className="hidden lg:block">
+        <div className="container mx-auto flex items-center gap-1 pb-3">
+          <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
+          <Link
+            to="/clube"
+            className={`border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+              isClubeActive ? "border-primary text-primary font-semibold" : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+            }`}
+          >
+            Clube
+          </Link>
+        </div>
+      </div>
+
       <div className="md:hidden px-4 pb-3">
-        <div className="relative">
+        <form
+          role="search"
+          onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
+          className="relative"
+        >
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             placeholder="Buscar produtos..."
+            aria-label="Buscar produtos"
             className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
           />
-          <button onClick={handleSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
+          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
             <Search className="h-4 w-4 text-muted-foreground" />
           </button>
-        </div>
+        </form>
       </div>
 
       {mobileOpen && (
-        <nav className="lg:hidden border-t border-border px-4 py-4 flex flex-col gap-3 animate-fade-in-up">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.href}
-              className="text-sm font-medium transition-colors py-1 text-foreground hover:text-primary"
-            >
-              {link.label}
-            </Link>
-          ))}
-          {user && (
-            <Link
-              to="/perfil"
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
-            >
-              {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
-            </Link>
+        <nav className="lg:hidden border-t border-border px-4 py-2 flex flex-col animate-fade-in-up">
+          {categoriesLoading ? (
+            <div className="flex flex-col gap-3 py-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-4 w-24 rounded-full" />
+              ))}
+            </div>
+          ) : (
+            <Accordion type="single" collapsible>
+              {navItems.map((item) => {
+                const kids = childrenOf.get(item.id) || [];
+                if (kids.length === 0) {
+                  return (
+                    <Link
+                      key={item.id}
+                      to={`/catalogo?categoria=${item.slug}`}
+                      className={`block border-b border-border py-3 text-sm font-medium transition-colors ${
+                        isCategoryActive(item.slug) ? "text-primary font-semibold" : "text-foreground hover:text-primary"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                }
+                return (
+                  <AccordionItem key={item.id} value={item.id}>
+                    <AccordionTrigger className="py-3 text-sm font-medium hover:no-underline">
+                      {item.label}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="flex flex-col gap-1 border-l border-border pl-3">
+                        {kids.map((kid) => (
+                          <Link
+                            key={kid.id}
+                            to={`/catalogo?categoria=${kid.slug}`}
+                            className="py-1.5 text-sm text-muted-foreground transition-colors hover:text-primary"
+                          >
+                            {kid.name}
+                          </Link>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
           )}
+
+          <Link
+            to="/clube"
+            className={`block border-b border-border py-3 text-sm font-medium transition-colors ${
+              isClubeActive ? "text-primary font-semibold" : "text-foreground hover:text-primary"
+            }`}
+          >
+            Clube
+          </Link>
+
+          <div className="mt-2 pt-3 flex flex-col gap-3">
+            {user ? (
+              <Link
+                to="/perfil"
+                className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+              >
+                <User className="h-4 w-4" />
+                {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
+              </Link>
+            ) : (
+              <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-primary py-1">
+                <User className="h-4 w-4" />
+                Entrar / Cadastrar
+              </Link>
+            )}
+            <Link
+              to="/meus-pedidos"
+              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+            >
+              <Package className="h-4 w-4" />
+              Meus Pedidos
+            </Link>
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Fale no WhatsApp
+            </a>
+          </div>
         </nav>
       )}
     </header>
