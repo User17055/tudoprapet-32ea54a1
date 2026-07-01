@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,12 +16,45 @@ interface HeroCarouselProps {
 }
 
 const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
+const BANNER_CACHE_KEY = "hero-banners-v1";
 
 const getDesktopPath = (mobilePath: string) =>
   mobilePath.replace(/\/mobile(\.[^.]+)$/i, "/desktop$1");
 
+const getCachedBanners = (): HeroBanner[] => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(window.localStorage.getItem(BANNER_CACHE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+const cacheBanners = (banners: HeroBanner[]) => {
+  try {
+    window.localStorage.setItem(BANNER_CACHE_KEY, JSON.stringify(banners));
+  } catch {
+    // Storage can be unavailable in private browsing; the banner still renders normally.
+  }
+};
+
+const preloadImage = (src?: string) =>
+  new Promise<void>((resolve) => {
+    if (!src) {
+      resolve();
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+
 export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
-  const [banners, setBanners] = useState<HeroBanner[]>([]);
+  const [banners, setBanners] = useState<HeroBanner[]>(getCachedBanners);
+  const hasCachedBanners = useRef(banners.length > 0);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "center" });
   const [selectedIdx, setSelectedIdx] = useState(0);
 
@@ -61,7 +94,12 @@ export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
       );
 
       const visibleBanners = withUrls.filter((b) => b.signedUrl);
+      if (!hasCachedBanners.current) {
+        await preloadImage(visibleBanners[0]?.desktopSignedUrl || visibleBanners[0]?.signedUrl);
+      }
+
       setBanners(visibleBanners);
+      cacheBanners(visibleBanners);
       onHasBannersChange?.(visibleBanners.length > 0);
     })();
   }, [onHasBannersChange]);
@@ -85,7 +123,7 @@ export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
     <section className="py-3 md:py-6">
       <div className="overflow-hidden" ref={emblaRef}>
         <div className="flex">
-          {banners.map((b) => {
+          {banners.map((b, i) => {
             const content = (
               <picture>
                 <source
@@ -97,6 +135,9 @@ export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
                   alt=""
                   width={656}
                   height={572}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  decoding={i === 0 ? "sync" : "async"}
+                  fetchPriority={i === 0 ? "high" : "auto"}
                   className="w-full aspect-[656/572] md:aspect-[1790/600] object-cover rounded-2xl md:rounded-3xl"
                 />
               </picture>
