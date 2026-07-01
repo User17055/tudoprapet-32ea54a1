@@ -120,7 +120,7 @@ const Cart = () => {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30 flex flex-col">
+    <div className="min-h-dvh bg-muted/30 flex flex-col">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex items-center gap-3 px-4 py-3">
           <Button asChild variant="ghost" size="icon" className="rounded-full">
