@@ -276,27 +276,39 @@ const CART_LINES_REMOVE_MUTATION = `
 const CART_DISCOUNT_CODES_UPDATE_MUTATION = `
   mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) {
     cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
-      cart { id }
+      cart {
+        id
+        discountCodes { code applicable }
+      }
       userErrors { field message }
     }
   }
 `;
 
-export async function applyDiscountToCart(cartId: string, discountCode: string): Promise<boolean> {
+// Passar null remove qualquer cupom aplicado ao carrinho.
+// Shopify aceita códigos inexistentes sem userError, mas marca applicable: false.
+export async function applyDiscountToCart(
+  cartId: string,
+  discountCode: string | null,
+): Promise<{ success: boolean; applicable: boolean }> {
   try {
     const data = await storefrontApiRequest(CART_DISCOUNT_CODES_UPDATE_MUTATION, {
       cartId,
-      discountCodes: [discountCode],
+      discountCodes: discountCode ? [discountCode] : [],
     });
-    const userErrors = data?.data?.cartDiscountCodesUpdate?.userErrors || [];
+    const payload = data?.data?.cartDiscountCodesUpdate;
+    const userErrors = payload?.userErrors || [];
     if (userErrors.length > 0) {
       console.error('Failed to apply discount:', userErrors);
-      return false;
+      return { success: false, applicable: false };
     }
-    return true;
+    if (!discountCode) return { success: true, applicable: true };
+    const codes: { code: string; applicable: boolean }[] = payload?.cart?.discountCodes || [];
+    const applied = codes.find((c) => c.code.toLowerCase() === discountCode.toLowerCase());
+    return { success: true, applicable: Boolean(applied?.applicable) };
   } catch (error) {
     console.error('Failed to apply discount code:', error);
-    return false;
+    return { success: false, applicable: false };
   }
 }
 

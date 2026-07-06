@@ -15,6 +15,7 @@ import {
   Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CouponInput } from "@/components/CouponInput";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { supabase } from "@/integrations/supabase/client";
@@ -287,16 +288,13 @@ const Cart = () => {
 
           <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-lg space-y-3">
+              <CouponInput />
+
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-sm font-medium text-muted-foreground">
                   Subtotal
                 </span>
                 <div className="text-right">
-                  {clubDiscount > 0 && (
-                    <span className="block text-sm text-muted-foreground line-through">
-                      R$ {totalPrice.toFixed(2).replace(".", ",")}
-                    </span>
-                  )}
                   <span ref={subtotalRef} className="inline-block font-display text-2xl font-900 text-primary">
                     R$ {displayTotalPrice.toFixed(2).replace(".", ",")}
                   </span>

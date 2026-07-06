@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
+import { CouponInput } from "@/components/CouponInput";
 import { getDisplayOptions } from "@/lib/shopify";
 import { goToCheckout } from "@/lib/checkout";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -278,14 +279,11 @@ export const CartDrawer = () => {
 
               {/* Footer / checkout */}
               <div className="flex-shrink-0 border-t border-border bg-card px-6 py-4 space-y-3 shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.08)]">
+                <CouponInput />
+
                 <div className="flex justify-between items-baseline gap-3">
                   <span className="text-sm font-medium text-muted-foreground">Subtotal</span>
                   <div className="text-right">
-                    {clubDiscount > 0 && (
-                      <span className="block text-sm text-muted-foreground line-through">
-                        R$ {totalPrice.toFixed(2).replace('.', ',')}
-                      </span>
-                    )}
                     <span ref={subtotalRef} className="inline-block font-display font-900 text-2xl text-primary">
                       R$ {displayTotalPrice.toFixed(2).replace('.', ',')}
                     </span>

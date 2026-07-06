@@ -17,6 +17,7 @@ interface CartStore {
   items: CartItem[];
   cartId: string | null;
   checkoutUrl: string | null;
+  discountCode: string | null;
   isLoading: boolean;
   isSyncing: boolean;
   isCartOpen: boolean;
@@ -27,7 +28,8 @@ interface CartStore {
   clearCart: () => void;
   syncCart: () => Promise<void>;
   getCheckoutUrl: () => string | null;
-  applyDiscount: (discountCode: string) => Promise<void>;
+  applyDiscount: (discountCode: string) => Promise<boolean>;
+  removeDiscount: () => Promise<void>;
   setCartOpen: (open: boolean) => void;
   openCartOnFirstAdd: () => void;
 }
@@ -38,6 +40,7 @@ export const useCartStore = create<CartStore>()(
       items: [],
       cartId: null,
       checkoutUrl: null,
+      discountCode: null,
       isLoading: false,
       isSyncing: false,
       isCartOpen: false,
@@ -125,13 +128,26 @@ export const useCartStore = create<CartStore>()(
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, hasAutoOpenedCart: false }),
+      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, discountCode: null, hasAutoOpenedCart: false }),
       getCheckoutUrl: () => get().checkoutUrl,
 
       applyDiscount: async (discountCode: string) => {
         const { cartId } = get();
-        if (!cartId) return;
-        await applyDiscountToCart(cartId, discountCode);
+        if (!cartId) return false;
+        const result = await applyDiscountToCart(cartId, discountCode);
+        if (result.success && result.applicable) {
+          set({ discountCode });
+          return true;
+        }
+        // Código inválido fica pendurado no carrinho Shopify; remove para não aparecer no checkout
+        if (result.success) await applyDiscountToCart(cartId, null);
+        return false;
+      },
+
+      removeDiscount: async () => {
+        const { cartId } = get();
+        if (cartId) await applyDiscountToCart(cartId, null);
+        set({ discountCode: null });
       },
 
       syncCart: async () => {
@@ -155,6 +171,7 @@ export const useCartStore = create<CartStore>()(
         items: state.items,
         cartId: state.cartId,
         checkoutUrl: state.checkoutUrl,
+        discountCode: state.discountCode,
         hasAutoOpenedCart: state.hasAutoOpenedCart,
       }),
     }
