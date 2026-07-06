@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText, Bold, Italic, Layers, Image as ImageIcon, ListTree } from "lucide-react";
+import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText, Bold, Italic, Layers, Image as ImageIcon, ListTree, Star } from "lucide-react";
 import { useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
+import FeaturedTab from "./admin/FeaturedTab";
 
 interface SubPrice {
   id: string;
@@ -75,6 +76,7 @@ export default function Admin() {
             <TabsTrigger value="content"><FileText className="h-4 w-4 mr-2" />Conteúdo</TabsTrigger>
             <TabsTrigger value="details"><Layers className="h-4 w-4 mr-2" />Detalhes</TabsTrigger>
             <TabsTrigger value="banners"><ImageIcon className="h-4 w-4 mr-2" />Banners</TabsTrigger>
+            <TabsTrigger value="featured"><Star className="h-4 w-4 mr-2" />Destaques</TabsTrigger>
             <TabsTrigger value="categories"><ListTree className="h-4 w-4 mr-2" />Categorias</TabsTrigger>
             <TabsTrigger value="members"><Crown className="h-4 w-4 mr-2" />Membros</TabsTrigger>
           </TabsList>
@@ -92,6 +94,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="banners" className="mt-4">
             <BannersTab />
+          </TabsContent>
+          <TabsContent value="featured" className="mt-4">
+            <FeaturedTab />
           </TabsContent>
           <TabsContent value="categories" className="mt-4">
             <CategoriesTab />

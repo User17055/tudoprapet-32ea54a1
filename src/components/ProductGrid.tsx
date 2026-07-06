@@ -4,6 +4,11 @@ import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shop
 import { ProductCard } from "@/components/ProductCard";
 import { Loader2, PackageOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
+import { supabase } from "@/integrations/supabase/client";
+
+interface FeaturedProduct {
+  shopify_product_id: string;
+}
 
 export const ProductGrid = () => {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
@@ -20,8 +25,38 @@ export const ProductGrid = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const data = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12 });
-        setProducts(data?.data?.products?.edges || []);
+        const [shopifyData, featuredData] = await Promise.all([
+          storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+          supabase
+            .from("featured_products")
+            .select("shopify_product_id")
+            .order("sort_order", { ascending: true }),
+        ]);
+
+        const shopifyProducts = shopifyData?.data?.products?.edges || [];
+        if (featuredData.error) {
+          console.error("Failed to fetch featured products:", featuredData.error);
+          setProducts(shopifyProducts.slice(0, 12));
+          return;
+        }
+
+        const featuredIds = ((featuredData.data || []) as FeaturedProduct[]).map(
+          (item) => item.shopify_product_id
+        );
+
+        if (featuredIds.length === 0) {
+          setProducts(shopifyProducts.slice(0, 12));
+          return;
+        }
+
+        const productById = new Map(
+          shopifyProducts.map((product: ShopifyProduct) => [product.node.id, product])
+        );
+        setProducts(
+          featuredIds
+            .map((id) => productById.get(id))
+            .filter((product): product is ShopifyProduct => Boolean(product))
+        );
       } catch (error) {
         console.error("Failed to fetch products:", error);
       } finally {
