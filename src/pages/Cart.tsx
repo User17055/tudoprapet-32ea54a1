@@ -28,7 +28,6 @@ const Cart = () => {
   const [checkingOut, setCheckingOut] = useState(false);
   const {
     items,
-    discountCode,
     isLoading,
     isSyncing,
     updateQuantity,
@@ -100,15 +99,9 @@ const Cart = () => {
           }));
           const { data, error } = await supabase.functions.invoke(
             "subscriber-checkout",
-            { body: { items: lineItems, discountCode: discountCode || undefined } },
+            { body: { items: lineItems } },
           );
           if (error) throw error;
-          if (data?.couponError) {
-            toast.error(data.couponError, {
-              description: "Remova o cupom para finalizar sem ele.",
-            });
-            return;
-          }
           if (data?.checkoutUrl) {
             clearCart();
             goToCheckout(data.checkoutUrl);

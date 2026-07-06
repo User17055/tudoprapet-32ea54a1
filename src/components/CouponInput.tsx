@@ -2,13 +2,18 @@ import { useState } from "react";
 import { BadgePercent, Loader2, TicketPercent, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 
 export const CouponInput = () => {
   const { discountCode, applyDiscount, removeDiscount } = useCartStore();
+  const { isSubscribed } = useSubscription();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Assinantes do clube têm o próprio desconto; o checkout do clube não aceita cupom
+  if (isSubscribed) return null;
 
   const handleApply = async () => {
     const trimmed = code.trim();
