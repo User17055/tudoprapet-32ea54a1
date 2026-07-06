@@ -145,6 +145,30 @@ export type Database = {
         }
         Relationships: []
       }
+      featured_products: {
+        Row: {
+          created_at: string
+          id: string
+          shopify_product_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          shopify_product_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          shopify_product_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hero_banners: {
         Row: {
           active: boolean
@@ -169,30 +193,6 @@ export type Database = {
           image_path?: string
           link_url?: string | null
           sort_order?: number
-        }
-        Relationships: []
-      }
-      featured_products: {
-        Row: {
-          created_at: string
-          id: string
-          shopify_product_id: string
-          sort_order: number
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          shopify_product_id: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          shopify_product_id?: string
-          sort_order?: number
-          updated_at?: string
         }
         Relationships: []
       }
