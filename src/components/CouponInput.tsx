@@ -1,19 +1,14 @@
 import { useState } from "react";
-import { Check, Loader2, Tag, X } from "lucide-react";
+import { BadgePercent, Loader2, TicketPercent, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 
 export const CouponInput = () => {
   const { discountCode, applyDiscount, removeDiscount } = useCartStore();
-  const { isSubscribed } = useSubscription();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-
-  // O checkout do clube (draft order) não aceita cupom do carrinho
-  if (isSubscribed) return null;
 
   const handleApply = async () => {
     const trimmed = code.trim();
@@ -44,47 +39,58 @@ export const CouponInput = () => {
 
   if (discountCode) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-full border border-pet-green/40 bg-pet-green/10 py-1 pl-3 pr-1">
-        <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-pet-green">
-          <Check className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="truncate">Cupom {discountCode} aplicado</span>
-        </span>
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-pet-green/50 bg-pet-green/10 p-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-pet-green/15">
+            <BadgePercent className="h-[18px] w-[18px] text-pet-green" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-display text-sm font-bold uppercase tracking-wide text-pet-green">
+              {discountCode}
+            </p>
+            <p className="text-[11px] leading-tight text-muted-foreground">
+              Cupom aplicado — desconto no checkout
+            </p>
+          </div>
+        </div>
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 flex-shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          className="h-8 w-8 flex-shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           onClick={handleRemove}
           disabled={busy}
           aria-label="Remover cupom"
         >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative flex-1">
-        <Tag className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    <div className="rounded-xl border border-dashed border-primary/35 bg-primary/5 p-2.5">
+      <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        <TicketPercent className="h-4 w-4 text-primary" />
+        Tem um cupom?
+      </p>
+      <div className="flex items-center gap-2">
         <Input
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === "Enter" && handleApply()}
-          placeholder="Cupom de desconto"
+          placeholder="Digite o código"
           disabled={busy}
-          className="h-9 rounded-full pl-9 text-sm"
+          className="h-9 flex-1 rounded-full bg-background text-sm font-semibold tracking-wide placeholder:font-normal placeholder:tracking-normal"
           aria-label="Cupom de desconto"
         />
+        <Button
+          onClick={handleApply}
+          disabled={busy || !code.trim()}
+          className="h-9 flex-shrink-0 rounded-full px-4 font-display text-sm font-bold btn-bounce"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplicar"}
+        </Button>
       </div>
-      <Button
-        variant="outline"
-        onClick={handleApply}
-        disabled={busy || !code.trim()}
-        className="h-9 rounded-full px-4 font-display text-sm font-bold"
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplicar"}
-      </Button>
     </div>
   );
 };
