@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Category } from "@/hooks/useCategoryTree";
-import { brotliDecompress } from "zlib";
 
 export interface MegaMenuItem {
   id: string;
