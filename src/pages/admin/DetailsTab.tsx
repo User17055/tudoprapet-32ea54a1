@@ -170,10 +170,10 @@ function ValuesPanel() {
   const valuesForSelected = items.filter((i) => i.attr_key === selectedKey);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Cadastrar título</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Cadastrar título</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-0">
           <p className="text-xs text-muted-foreground mb-3">
             Crie os títulos dos atributos (ex.: Pet, Sabor, Tamanho, Idade). Depois, abaixo, adicione os valores de cada um.
           </p>
@@ -193,8 +193,8 @@ function ValuesPanel() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Cadastrar valores</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Cadastrar valores</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-0">
           {keys.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">
               Cadastre um título acima para começar.
@@ -255,8 +255,8 @@ function ValuesPanel() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Títulos cadastrados ({keys.length})</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Títulos cadastrados ({keys.length})</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : keys.length === 0 ? (
@@ -358,10 +358,10 @@ function CategoriesPanel() {
     ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Nova categoria</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Nova categoria</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 p-4 pt-0 md:grid-cols-[1fr_1fr_auto]">
           <div>
             <label className="text-sm font-medium mb-1 block">Nome</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Ração Seca" />
@@ -388,8 +388,8 @@ function CategoriesPanel() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Árvore de categorias ({categories.length})</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Árvore de categorias ({categories.length})</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : categories.length === 0 ? (
@@ -441,10 +441,10 @@ function BrandsPanel() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Nova marca</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-[1fr_auto]">
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Nova marca</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 p-4 pt-0 md:grid-cols-[1fr_auto]">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Royal Canin" onKeyDown={(e) => e.key === "Enter" && handleAdd()} />
           <Button onClick={handleAdd} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
@@ -454,8 +454,8 @@ function BrandsPanel() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Marcas ({brands.length})</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Marcas ({brands.length})</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : brands.length === 0 ? (
@@ -719,10 +719,10 @@ function AssignPanel() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-3 flex-wrap">
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="flex items-center justify-between gap-3 flex-wrap text-base">
             <span>Produtos já configurados ({configuredProducts.length})</span>
             <Input
               placeholder="Filtrar..."
@@ -732,7 +732,7 @@ function AssignPanel() {
             />
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-0">
           {configuredProducts.length === 0 ? (
             <p className="text-muted-foreground text-center py-6 text-sm">
               Nenhum produto configurado ainda. Selecione um abaixo para começar.
@@ -780,8 +780,8 @@ function AssignPanel() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Atribuir detalhes a um produto</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
+        <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Atribuir detalhes a um produto</CardTitle></CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0">
           <div>
             <label className="text-sm font-medium mb-1 block">
               Produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>

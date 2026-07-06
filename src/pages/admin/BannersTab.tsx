@@ -168,10 +168,10 @@ export default function BannersTab() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Carrossel de Banners</CardTitle>
+      <CardHeader className="p-4 pb-3">
+        <CardTitle className="text-base">Carrossel de banners</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 p-4 pt-0">
         <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
           <div>
             <label className="text-sm font-medium">Link (opcional)</label>

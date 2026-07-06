@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Category } from "@/hooks/useCategoryTree";
@@ -77,8 +77,9 @@ export default function CategoriesTab() {
             {cat.name}
           </span>
           <Button
-            size="sm"
+            size="icon"
             variant="ghost"
+            className="h-7 w-7"
             onClick={() => move(siblings, i, -1)}
             disabled={saving || i === 0}
             title="Mover para cima"
@@ -86,8 +87,9 @@ export default function CategoriesTab() {
             <ArrowUp className="h-3.5 w-3.5" />
           </Button>
           <Button
-            size="sm"
+            size="icon"
             variant="ghost"
+            className="h-7 w-7"
             onClick={() => move(siblings, i, 1)}
             disabled={saving || i === siblings.length - 1}
             title="Mover para baixo"
@@ -102,14 +104,14 @@ export default function CategoriesTab() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Ordem das Categorias</CardTitle>
-        <p className="text-sm text-muted-foreground mt-1">
+      <CardHeader className="p-4 pb-3">
+        <CardTitle className="text-base">Ordem das categorias</CardTitle>
+        <CardDescription>
           Use as setas para reordenar. As categorias principais definem a ordem do menu no
           topo do site; as subcategorias, a ordem dentro de cada menu.
-        </p>
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 pt-0">
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />

@@ -1,21 +1,39 @@
-import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Loader2, Crown, Package, Users, Pencil, Check, X, FileText, Bold, Italic, Layers, Image as ImageIcon, ListTree, Star } from "lucide-react";
-import { useRef } from "react";
+import {
+  Trash2,
+  Loader2,
+  Crown,
+  Package,
+  Users,
+  Pencil,
+  Check,
+  X,
+  FileText,
+  Bold,
+  Italic,
+  Layers,
+  Image as ImageIcon,
+  ListTree,
+  Star,
+  Store,
+  type LucideIcon,
+} from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import logo from "@/assets/logo.png";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
@@ -36,9 +54,60 @@ interface Member {
   created_at: string;
 }
 
+type SectionId =
+  | "users"
+  | "members"
+  | "prices"
+  | "content"
+  | "details"
+  | "categories"
+  | "banners"
+  | "featured";
+
+interface SectionDef {
+  id: SectionId;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  component: ComponentType;
+}
+
+const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
+  {
+    label: "Clube",
+    items: [
+      { id: "users", label: "Usuários", description: "Contas cadastradas na loja e seus planos", icon: Users, component: UsersTab },
+      { id: "members", label: "Membros", description: "Membros do clube com benefícios ativos", icon: Crown, component: MembersTab },
+      { id: "prices", label: "Preços do Clube", description: "Preços exclusivos para assinantes", icon: Package, component: PricesTab },
+    ],
+  },
+  {
+    label: "Catálogo",
+    items: [
+      { id: "content", label: "Conteúdo", description: "Descrições personalizadas dos produtos", icon: FileText, component: ContentTab },
+      { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
+      { id: "categories", label: "Ordem do Menu", description: "Ordem das categorias no menu do site", icon: ListTree, component: CategoriesTab },
+    ],
+  },
+  {
+    label: "Vitrine",
+    items: [
+      { id: "banners", label: "Banners", description: "Carrossel de banners da página inicial", icon: ImageIcon, component: BannersTab },
+      { id: "featured", label: "Destaques", description: "Produtos em destaque na página inicial", icon: Star, component: FeaturedTab },
+    ],
+  },
+];
+
+const ALL_SECTIONS = NAV_GROUPS.flatMap((g) => g.items);
+
 export default function Admin() {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useIsAdmin();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const tabParam = searchParams.get("tab");
+  const active = ALL_SECTIONS.find((s) => s.id === tabParam) ?? ALL_SECTIONS[0];
+  const selectSection = (id: SectionId) => setSearchParams({ tab: id });
 
   if (!authLoading && !user) return <Navigate to="/login" replace />;
   if (authLoading || roleLoading) {
@@ -61,52 +130,106 @@ export default function Admin() {
     );
   }
 
+  const ActiveIcon = active.icon;
+  const ActiveComponent = active.component;
+
   return (
-    <div className="min-h-screen flex flex-col bg-muted/20">
-      <Header />
-      <main className="flex-1 container mx-auto py-8 px-4">
-        <div className="mb-6">
-          <h1 className="text-3xl font-display font-bold text-primary">Painel Administrativo</h1>
-          <p className="text-muted-foreground">Gerencie preços do clube e membros assinantes.</p>
+    <div className="min-h-screen bg-muted/30">
+      {/* Barra superior */}
+      <header className="sticky top-0 z-40 flex h-14 items-center gap-2.5 border-b bg-card px-4">
+        <Link to="/" className="flex shrink-0 items-center gap-2">
+          <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
+          <span className="hidden font-display text-lg font-bold leading-none sm:block">
+            Tudo<span className="text-primary">Pra</span>Pet
+          </span>
+        </Link>
+        <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
+          Admin
+        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden max-w-[220px] truncate text-xs text-muted-foreground md:block">
+            {user?.email}
+          </span>
+          <Button asChild size="sm" variant="outline" className="h-8 gap-1.5">
+            <Link to="/">
+              <Store className="h-3.5 w-3.5" />
+              Ver loja
+            </Link>
+          </Button>
         </div>
-        <Tabs defaultValue="users">
-          <TabsList>
-            <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" />Usuários</TabsTrigger>
-            <TabsTrigger value="prices"><Package className="h-4 w-4 mr-2" />Preços do Clube</TabsTrigger>
-            <TabsTrigger value="content"><FileText className="h-4 w-4 mr-2" />Conteúdo</TabsTrigger>
-            <TabsTrigger value="details"><Layers className="h-4 w-4 mr-2" />Detalhes</TabsTrigger>
-            <TabsTrigger value="banners"><ImageIcon className="h-4 w-4 mr-2" />Banners</TabsTrigger>
-            <TabsTrigger value="featured"><Star className="h-4 w-4 mr-2" />Destaques</TabsTrigger>
-            <TabsTrigger value="categories"><ListTree className="h-4 w-4 mr-2" />Categorias</TabsTrigger>
-            <TabsTrigger value="members"><Crown className="h-4 w-4 mr-2" />Membros</TabsTrigger>
-          </TabsList>
-          <TabsContent value="users" className="mt-4">
-            <UsersTab />
-          </TabsContent>
-          <TabsContent value="prices" className="mt-4">
-            <PricesTab />
-          </TabsContent>
-          <TabsContent value="content" className="mt-4">
-            <ContentTab />
-          </TabsContent>
-          <TabsContent value="details" className="mt-4">
-            <DetailsTab />
-          </TabsContent>
-          <TabsContent value="banners" className="mt-4">
-            <BannersTab />
-          </TabsContent>
-          <TabsContent value="featured" className="mt-4">
-            <FeaturedTab />
-          </TabsContent>
-          <TabsContent value="categories" className="mt-4">
-            <CategoriesTab />
-          </TabsContent>
-          <TabsContent value="members" className="mt-4">
-            <MembersTab />
-          </TabsContent>
-        </Tabs>
-      </main>
-      <Footer />
+      </header>
+
+      <div className="flex">
+        {/* Menu lateral (desktop) */}
+        <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 flex-col gap-5 overflow-y-auto border-r bg-card px-3 py-5 lg:flex">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1.5 px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                {group.label}
+              </p>
+              <nav className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = item.id === active.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => selectSection(item.id)}
+                      className={cn(
+                        "flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          ))}
+        </aside>
+
+        <div className="min-w-0 flex-1">
+          {/* Navegação mobile */}
+          <div className="sticky top-14 z-30 border-b bg-card lg:hidden">
+            <div className="scrollbar-hide flex gap-1.5 overflow-x-auto px-3 py-2">
+              {ALL_SECTIONS.map((item) => {
+                const isActive = item.id === active.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => selectSection(item.id)}
+                    className={cn(
+                      "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors",
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground",
+                    )}
+                  >
+                    <item.icon className="h-3.5 w-3.5" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <main className="mx-auto w-full max-w-5xl p-4 md:p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ActiveIcon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="font-display text-lg font-bold leading-tight">{active.label}</h1>
+                <p className="truncate text-sm text-muted-foreground">{active.description}</p>
+              </div>
+            </div>
+            <ActiveComponent />
+          </main>
+        </div>
+      </div>
     </div>
   );
 }
@@ -227,30 +350,33 @@ function PricesTab() {
   const previewSubscriber = price ? parseFloat(price.replace(",", ".")) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Adicionar / atualizar preço de assinante</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-[220px_1fr]">
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Adicionar preço de assinante</CardTitle>
+          <CardDescription>Defina o preço exclusivo que membros do clube pagam.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <div className="grid gap-4 md:grid-cols-[200px_1fr]">
             {/* Preview */}
-            <div className="rounded-xl border border-border bg-muted/30 p-3 flex flex-col gap-2">
-              <div className="aspect-square w-full rounded-lg bg-muted overflow-hidden flex items-center justify-center">
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
+              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
                 {previewImage ? (
                   <img
                     src={previewImage.url}
                     alt={previewImage.altText || selectedProduct?.node.title || ""}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
                   <Package className="h-10 w-10 text-muted-foreground" />
                 )}
               </div>
               <div className="text-xs">
-                <p className="font-bold line-clamp-2 min-h-[2.4em]">
+                <p className="min-h-[2.4em] font-bold line-clamp-2">
                   {selectedProduct?.node.title || "Selecione um produto"}
                 </p>
                 {previewVariant && (
-                  <p className="text-muted-foreground mt-0.5">{previewVariant.title}</p>
+                  <p className="mt-0.5 text-muted-foreground">{previewVariant.title}</p>
                 )}
                 {previewPrice !== null && (
                   <div className="mt-1.5">
@@ -259,7 +385,7 @@ function PricesTab() {
                         R$ {previewCompare.toFixed(2)}
                       </p>
                     )}
-                    <p className="font-bold text-base tabular-nums">R$ {previewPrice.toFixed(2)}</p>
+                    <p className="text-base font-bold tabular-nums">R$ {previewPrice.toFixed(2)}</p>
                     {previewSubscriber !== null && !isNaN(previewSubscriber) && previewSubscriber > 0 && (
                       <div className="mt-1 flex items-center gap-1">
                         <span className="font-bold text-sky-500 tabular-nums">
@@ -274,9 +400,9 @@ function PricesTab() {
             </div>
 
             {/* Form */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid content-start gap-3 md:grid-cols-3">
               <div className="md:col-span-3">
-                <label className="text-sm font-medium mb-1 block">Produto</label>
+                <label className="mb-1 block text-sm font-medium">Produto</label>
                 <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
@@ -292,7 +418,7 @@ function PricesTab() {
                 )}
               </div>
               <div className="md:col-span-2">
-                <label className="text-sm font-medium mb-1 block">Variante</label>
+                <label className="mb-1 block text-sm font-medium">Variante</label>
                 <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
@@ -305,7 +431,7 @@ function PricesTab() {
                 </Select>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Preço assinante (R$)</label>
+                <label className="mb-1 block text-sm font-medium">Preço assinante (R$)</label>
                 <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
               </div>
               <div className="md:col-span-3">
@@ -319,14 +445,16 @@ function PricesTab() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Preços cadastrados ({prices.length})</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Preços cadastrados ({prices.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : prices.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nenhum preço cadastrado.</p>
+            <p className="py-8 text-center text-muted-foreground">Nenhum preço cadastrado.</p>
           ) : (
-            <Table>
+            <Table className="[&_th]:h-9 [&_td]:py-2.5">
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>
@@ -342,9 +470,9 @@ function PricesTab() {
                     <TableRow key={sp.id}>
                       <TableCell className="font-medium">{info.productTitle}</TableCell>
                       <TableCell>{info.variantTitle}</TableCell>
-                      <TableCell className="text-right text-sky-600 font-bold">R$ {sp.subscriber_price.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-bold text-sky-600">R$ {sp.subscriber_price.toFixed(2)}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(sp.id)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(sp.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </TableCell>
@@ -404,16 +532,18 @@ function MembersTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Adicionar membro do clube</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Adicionar membro do clube</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 p-4 pt-0 md:grid-cols-3">
           <div>
-            <label className="text-sm font-medium mb-1 block">E-mail</label>
+            <label className="mb-1 block text-sm font-medium">E-mail</label>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="cliente@email.com" />
           </div>
           <div>
-            <label className="text-sm font-medium mb-1 block">Nome (opcional)</label>
+            <label className="mb-1 block text-sm font-medium">Nome (opcional)</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do cliente" />
           </div>
           <div className="flex items-end">
@@ -425,14 +555,16 @@ function MembersTab() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Membros ({members.length})</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Membros ({members.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : members.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nenhum membro cadastrado.</p>
+            <p className="py-8 text-center text-muted-foreground">Nenhum membro cadastrado.</p>
           ) : (
-            <Table>
+            <Table className="[&_th]:h-9 [&_td]:py-2.5">
               <TableHeader>
                 <TableRow>
                   <TableHead>E-mail</TableHead>
@@ -455,7 +587,7 @@ function MembersTab() {
                       </button>
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(m.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(m.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
@@ -557,120 +689,120 @@ function UsersTab() {
 
   const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id) && !memberEmails.has((p.email || "").toLowerCase()));
 
-
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Usuários cadastrados ({profiles.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <Card>
+      <CardHeader className="p-4 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Usuários cadastrados ({profiles.length})</CardTitle>
+            <CardDescription className="mt-0.5">
+              {withoutPlan.length} sem plano · {filtered.length - withoutPlan.length} com plano ativo
+            </CardDescription>
+          </div>
           <Input
             placeholder="Buscar por nome ou e-mail..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="max-w-sm"
+            className="h-9 w-full sm:w-64"
           />
-          <p className="text-sm text-muted-foreground">
-            {withoutPlan.length} sem plano · {filtered.length - withoutPlan.length} com plano ativo
-          </p>
-          {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-          ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>E-mail</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Plano</TableHead>
-                  <TableHead>Cadastrado em</TableHead>
-                  <TableHead className="w-24">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map(p => {
-                  const hasPlan = subscriberIds.has(p.user_id);
-                  const isMember = memberEmails.has((p.email || "").toLowerCase());
-                  const editing = editId === p.id;
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.email || "—"}</TableCell>
-                      <TableCell>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        ) : filtered.length === 0 ? (
+          <p className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</p>
+        ) : (
+          <Table className="[&_th]:h-9 [&_td]:py-2">
+            <TableHeader>
+              <TableRow>
+                <TableHead>E-mail</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>Plano</TableHead>
+                <TableHead>Cadastrado em</TableHead>
+                <TableHead className="w-24">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(p => {
+                const hasPlan = subscriberIds.has(p.user_id);
+                const isMember = memberEmails.has((p.email || "").toLowerCase());
+                const editing = editId === p.id;
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.email || "—"}</TableCell>
+                    <TableCell>
+                      {editing ? (
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-8"
+                          autoFocus
+                        />
+                      ) : (
+                        p.name || <span className="text-muted-foreground italic">sem nome</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {hasPlan ? (
+                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
+                          Assinante
+                        </span>
+                      ) : isMember ? (
+                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700 inline-flex items-center gap-1">
+                          <Crown className="h-3 w-3" /> Clube
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                          Sem plano
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(p.created_at).toLocaleDateString("pt-BR")}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
                         {editing ? (
-                          <Input
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="h-8"
-                            autoFocus
-                          />
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => saveEdit(p)}>
+                              <Check className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditId(null)}>
+                              <X className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </>
                         ) : (
-                          p.name || <span className="text-muted-foreground italic">sem nome</span>
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(p)} title="Editar nome">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant={isMember ? "outline" : "default"}
+                              size="sm"
+                              disabled={!p.email || togglingEmail === (p.email || "").toLowerCase()}
+                              onClick={() => toggleMembership(p)}
+                              className="h-8 gap-1"
+                            >
+                              {togglingEmail === (p.email || "").toLowerCase() ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Crown className="h-3 w-3" />
+                              )}
+                              {isMember ? "Remover" : "Membro"}
+                            </Button>
+                          </>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {hasPlan ? (
-                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
-                            Assinante
-                          </span>
-                        ) : isMember ? (
-                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700 inline-flex items-center gap-1">
-                            <Crown className="h-3 w-3" /> Clube
-                          </span>
-                        ) : (
-                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                            Sem plano
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(p.created_at).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {editing ? (
-                            <>
-                              <Button variant="ghost" size="icon" onClick={() => saveEdit(p)}>
-                                <Check className="h-4 w-4 text-emerald-600" />
-                              </Button>
-                              <Button variant="ghost" size="icon" onClick={() => setEditId(null)}>
-                                <X className="h-4 w-4 text-muted-foreground" />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button variant="ghost" size="icon" onClick={() => startEdit(p)} title="Editar nome">
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant={isMember ? "outline" : "default"}
-                                size="sm"
-                                disabled={!p.email || togglingEmail === (p.email || "").toLowerCase()}
-                                onClick={() => toggleMembership(p)}
-                                className="h-8 gap-1"
-                              >
-                                {togglingEmail === (p.email || "").toLowerCase() ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Crown className="h-3 w-3" />
-                                )}
-                                {isMember ? "Remover" : "Membro"}
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -769,18 +901,18 @@ function ContentTab() {
   }, [products]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Editar conteúdo do produto</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Editar conteúdo do produto</CardTitle>
+          <CardDescription>
             O conteúdo aqui aparece em "Sobre o produto" na página de detalhes, substituindo o que vem da Shopify.
             Use uma linha por item. Termine uma linha com ":" para criar um título. Linhas iniciadas com "-" viram itens de lista.
-          </p>
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 p-4 pt-0">
           <div>
-            <label className="text-sm font-medium mb-1 block">Produto</label>
+            <label className="mb-1 block text-sm font-medium">Produto</label>
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
@@ -791,7 +923,7 @@ function ContentTab() {
             </Select>
           </div>
           <div>
-            <label className="text-sm font-medium mb-1 block">Descrição</label>
+            <label className="mb-1 block text-sm font-medium">Descrição</label>
             <FormattedTextarea
               value={description}
               onChange={setDescription}
@@ -807,19 +939,20 @@ function ContentTab() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Produtos com conteúdo personalizado ({contents.length})</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Produtos com conteúdo personalizado ({contents.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : contents.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nenhum conteúdo cadastrado.</p>
+            <p className="py-8 text-center text-muted-foreground">Nenhum conteúdo cadastrado.</p>
           ) : (
-            <Table>
+            <Table className="[&_th]:h-9 [&_td]:py-2.5">
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>
                   <TableHead>Descrição</TableHead>
-                  
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -830,16 +963,15 @@ function ContentTab() {
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{prod?.title || "Produto removido"}</TableCell>
                       <TableCell>{c.description ? "✓" : "—"}</TableCell>
-                      
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => {
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                             setProductId(c.shopify_product_id);
                             window.scrollTo({ top: 0, behavior: "smooth" });
                           }}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(c.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>

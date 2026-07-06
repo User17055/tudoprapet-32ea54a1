@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -126,13 +126,13 @@ export default function FeaturedTab() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Destaques da semana</CardTitle>
-        <p className="text-sm text-muted-foreground">
+      <CardHeader className="p-4 pb-3">
+        <CardTitle className="text-base">Destaques da semana</CardTitle>
+        <CardDescription>
           Escolha os produtos que aparecem na seção de destaques da página inicial.
-        </p>
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 p-4 pt-0">
         <div className="grid gap-3 md:grid-cols-[1fr_auto]">
           <Select value={productId} onValueChange={setProductId} disabled={loading}>
             <SelectTrigger>
@@ -165,7 +165,7 @@ export default function FeaturedTab() {
             Nenhum destaque escolhido. Enquanto isso, a home mostra produtos automaticamente.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {featured.map((item, index) => {
               const product = productById.get(item.shopify_product_id);
               const image = product?.images.edges[0]?.node;
@@ -173,9 +173,12 @@ export default function FeaturedTab() {
               return (
                 <div
                   key={item.id}
-                  className="grid gap-3 rounded-lg border bg-card p-3 md:grid-cols-[72px_1fr_auto]"
+                  className="flex items-center gap-3 rounded-lg border bg-card p-2"
                 >
-                  <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-md bg-muted">
+                  <span className="w-6 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                    {index + 1}
+                  </span>
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                     {image ? (
                       <img
                         src={image.url}
@@ -183,21 +186,19 @@ export default function FeaturedTab() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <Package className="h-7 w-7 text-muted-foreground" />
+                      <Package className="h-5 w-5 text-muted-foreground" />
                     )}
                   </div>
 
-                  <div className="min-w-0 self-center">
-                    <p className="font-medium">{product?.title || "Produto removido da Shopify"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Posicao {index + 1}
-                    </p>
-                  </div>
+                  <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {product?.title || "Produto removido da Shopify"}
+                  </p>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <Button
                       size="icon"
                       variant="ghost"
+                      className="h-8 w-8"
                       onClick={() => moveFeatured(index, -1)}
                       disabled={index === 0}
                     >
@@ -206,6 +207,7 @@ export default function FeaturedTab() {
                     <Button
                       size="icon"
                       variant="ghost"
+                      className="h-8 w-8"
                       onClick={() => moveFeatured(index, 1)}
                       disabled={index === featured.length - 1}
                     >
@@ -215,7 +217,7 @@ export default function FeaturedTab() {
                       size="icon"
                       variant="ghost"
                       onClick={() => removeFeatured(item)}
-                      className="text-destructive"
+                      className="h-8 w-8 text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
