@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
-import { ChevronDown, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,9 +22,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
 const SORT_OPTIONS = [
-  { value: "relevance", label: "Relevância" },
-  { value: "price-asc", label: "Menor preço" },
-  { value: "price-desc", label: "Maior preço" },
+  { value: "relevance", label: "Mais relevantes" },
+  { value: "price-asc", label: "Menor preco" },
+  { value: "price-desc", label: "Maior preco" },
   { value: "name-asc", label: "A - Z" },
   { value: "name-desc", label: "Z - A" },
 ];
@@ -292,6 +292,8 @@ const Catalog = () => {
     });
 
   const categoryChipLabel = selectedCat?.name || categorySlug;
+  const pageTitle = categorySlug === "all" ? "Catalogo" : categoryChipLabel;
+  const shelfProducts = filteredProducts.slice(0, 6);
 
   const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
   if (categorySlug !== "all") {
@@ -361,9 +363,9 @@ const Catalog = () => {
 
   // Sidebar with all filters
   const FiltersSidebar = (
-    <aside className="space-y-4">
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
+    <aside className="space-y-6">
+      <div className="border-b border-border pb-3">
+        <div className="flex items-center justify-between mb-2">
           <h3 className="font-display font-bold text-base">Filtrar Produtos</h3>
         </div>
         {hasActiveFilters && (
@@ -373,7 +375,7 @@ const Catalog = () => {
         )}
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="border-b border-border pb-5">
         <h3 className="font-display font-bold text-sm uppercase tracking-wide mb-3">Buscar</h3>
         <div className="flex gap-2">
           <Input
@@ -391,7 +393,7 @@ const Catalog = () => {
         key={loading ? "loading" : "loaded"}
         type="multiple"
         defaultValue={["preco", "categoria", "marca", ...STANDARD_ATTR_KEYS as unknown as string[], ...customKeys]}
-        className="rounded-xl border border-border bg-card px-4"
+        className="border-0"
       >
         <AccordionItem value="preco" className="border-b border-border last:border-0">
           <AccordionTrigger className="font-display font-bold text-sm">Faixa de Preço</AccordionTrigger>
@@ -498,9 +500,9 @@ const Catalog = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        <div className="bg-primary/5 border-b border-border">
-          <div className="container mx-auto py-8 md:py-12">
-            <Breadcrumb className="mb-3">
+        <div className="border-b border-border bg-white">
+          <div className="container mx-auto py-8 md:py-10">
+            <Breadcrumb className="mb-6">
               <BreadcrumbList>
                 <BreadcrumbItem>
                   <BreadcrumbLink asChild>
@@ -527,13 +529,49 @@ const Catalog = () => {
                 )}
               </BreadcrumbList>
             </Breadcrumb>
-            <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Catálogo</h1>
-            <p className="text-muted-foreground mt-2">Encontre tudo que seu pet precisa</p>
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <h1 className="font-display font-900 text-3xl text-foreground">{pageTitle}</h1>
+              <div className="flex items-center gap-4 self-start md:self-auto">
+                <span className="hidden text-sm font-bold text-foreground sm:inline">Ordenar por:</span>
+                <Select value={sort} onValueChange={setSort}>
+                  <SelectTrigger className="h-12 w-[180px] rounded-lg border-[#9ca3af] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SORT_OPTIONS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="container mx-auto py-6 md:py-8">
-          <div className="grid lg:grid-cols-[260px_1fr] gap-6">
+        <div className="container mx-auto py-8">
+          {!loading && shelfProducts.length > 0 && (
+            <section className="mb-12">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="font-display text-2xl font-bold">
+                  Mais comprados em {pageTitle}
+                </h2>
+                <Link
+                  to="/catalogo"
+                  className="hidden h-12 w-12 items-center justify-center rounded-full border border-border text-foreground shadow-sm transition hover:border-primary hover:text-primary md:flex"
+                  aria-label="Ver mais produtos"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
+                {shelfProducts.map((product) => (
+                  <ProductCard key={`shelf-${product.node.id}`} product={product} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <div className="grid lg:grid-cols-[220px_1fr] gap-8">
             <div className="hidden lg:block">{FiltersSidebar}</div>
 
             <details className="group lg:hidden rounded-xl border border-border bg-card overflow-hidden">
@@ -569,23 +607,12 @@ const Catalog = () => {
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
                 {!loading && (
                   <p className="text-sm text-muted-foreground">
                     {filteredProducts.length} produto{filteredProducts.length !== 1 ? "s" : ""} encontrado{filteredProducts.length !== 1 ? "s" : ""}
                   </p>
                 )}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground hidden sm:inline">Ordenar por</span>
-                  <Select value={sort} onValueChange={setSort}>
-                    <SelectTrigger className="w-[180px] rounded-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {SORT_OPTIONS.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               {loading ? (
@@ -602,7 +629,7 @@ const Catalog = () => {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 xl:grid-cols-4">
                   {filteredProducts.map((product) => (
                     <ProductCard key={product.node.id} product={product} />
                   ))}

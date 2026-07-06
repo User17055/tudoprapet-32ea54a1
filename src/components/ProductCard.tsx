@@ -1,7 +1,7 @@
 import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
-import { Loader2, Plus, ShoppingCart } from "lucide-react";
+import { Loader2, Plus, RefreshCw, ShoppingCart } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -14,6 +14,8 @@ const formatPrice = (value: number) =>
     style: "currency",
     currency: "BRL",
   }).format(value);
+
+const TWO_INSTALLMENTS_RATE = 0.0859;
 
 export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
@@ -46,6 +48,7 @@ export const ProductCard = ({ product }: Props) => {
     : 0;
   const showOriginalPrice = hasDiscount;
   const originalPrice = compareAtPrice;
+  const twoInstallmentPrice = price > 0 ? (price * (1 + TWO_INSTALLMENTS_RATE)) / 2 : null;
 
   const openCartOnFirstAdd = useCartStore((s) => s.openCartOnFirstAdd);
 
@@ -74,11 +77,11 @@ export const ProductCard = ({ product }: Props) => {
   return (
     <Link
       to={`/product/${node.handle}`}
-      className="group relative z-[3] flex w-full flex-col overflow-visible rounded-xl bg-white p-1.5"
+      className="group relative z-[3] flex w-full flex-col overflow-visible bg-white"
     >
-      <div className="relative aspect-square overflow-hidden rounded-[10px] border border-[#e9edf3] bg-white">
+      <div className="relative aspect-square overflow-hidden rounded-lg border border-[#e5e7eb] bg-white">
         {badgePercent > 0 && (
-          <span className="absolute right-2.5 top-2.5 z-[2] inline-flex h-[30px] min-w-[72px] items-center justify-center rounded-full bg-[#0054a6] px-2.5 text-[12px] font-semibold leading-none text-white shadow-[0_6px_16px_rgba(0,84,166,0.2)]">
+          <span className="absolute left-0 top-7 z-[2] inline-flex h-9 min-w-[78px] items-center justify-center rounded-r-sm bg-[#ffe9ad] px-3 text-[14px] font-bold leading-none text-[#111827]">
             {badgePercent}% OFF
           </span>
         )}
@@ -94,7 +97,7 @@ export const ProductCard = ({ product }: Props) => {
             src={image.url}
             alt={image.altText || node.title}
             loading="lazy"
-            className={`absolute inset-0 z-[1] h-full w-full object-contain p-2 transition-transform duration-500 group-hover:scale-105 ${
+            className={`absolute inset-0 z-[1] h-full w-full object-contain p-8 transition-transform duration-500 group-hover:scale-105 ${
               isOutOfStock ? "opacity-40 grayscale" : "opacity-100"
             }`}
           />
@@ -108,7 +111,7 @@ export const ProductCard = ({ product }: Props) => {
           onClick={handleAddToCart}
           disabled={isLoading || !variant?.availableForSale}
           aria-label="Adicionar ao carrinho"
-          className="absolute bottom-2 right-3 z-[2] flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-[#1d1d1f] text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-[#0054a6] active:scale-95 disabled:opacity-50"
+          className="absolute bottom-4 right-4 z-[2] flex h-12 w-12 items-center justify-center rounded-full bg-[#171717] text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-primary active:scale-95 disabled:opacity-50"
         >
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -118,25 +121,32 @@ export const ProductCard = ({ product }: Props) => {
         </button>
       </div>
 
-      <h3 className="mt-3.5 line-clamp-2 min-h-[2.9em] text-sm font-normal leading-[1.45] text-[#111827]">
+      <h3 className="mt-4 line-clamp-2 min-h-[2.9em] text-[15px] font-normal leading-[1.35] text-[#202633]">
         {node.title}
       </h3>
 
-      <div className="mt-[18px] flex flex-col items-start gap-[3px]">
+      <div className="mt-4 flex flex-col items-start gap-1">
         {showOriginalPrice && originalPrice && (
-          <span className="text-[12px] font-normal leading-none text-[#6b7280] line-through tabular-nums">
-            {formatPrice(originalPrice)}
+          <span className="text-[13px] font-normal leading-none text-[#777] tabular-nums">
+            A partir de <span className="line-through">{formatPrice(originalPrice)}</span>
           </span>
         )}
 
-        <span className="text-[16px] font-bold leading-none text-[#111827] tabular-nums">
+        <span className="text-[17px] font-bold leading-none text-[#444] tabular-nums">
           {formatPrice(price)}
         </span>
 
+        {twoInstallmentPrice && (
+          <span className="text-[12px] leading-none text-[#7a7f89]">
+            ou 2 vezes de {formatPrice(twoInstallmentPrice)}
+          </span>
+        )}
+
         {hasSubscriberDiscount && (
-          <div className="mt-[3px] flex flex-col items-start gap-[2px]">
-            <span className="text-[16px] font-bold leading-none text-[#0054a6] tabular-nums">
+          <div className="mt-1 flex flex-col items-start gap-[2px]">
+            <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-[#0054a6] tabular-nums">
               {formatPrice(subscriberPrice)}
+              <RefreshCw className="h-3.5 w-3.5" />
             </span>
             <span className="text-[12px] font-normal leading-none text-[#0054a6]">
               para assinantes
