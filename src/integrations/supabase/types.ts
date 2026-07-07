@@ -145,6 +145,33 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_referral_codes: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          employee_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          employee_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          employee_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       featured_products: {
         Row: {
           created_at: string
