@@ -141,6 +141,63 @@ export const PRODUCTS_QUERY = `
   }
 `;
 
+export const BEST_SELLING_PRODUCTS_QUERY = `
+  query GetBestSellingProducts($first: Int!) {
+    products(first: $first, sortKey: BEST_SELLING) {
+      edges {
+        node {
+          id
+          title
+          description
+          handle
+          vendor
+          tags
+          productType
+          priceRange {
+            minVariantPrice {
+              amount
+              currencyCode
+            }
+          }
+          images(first: 5) {
+            edges {
+              node {
+                url
+                altText
+              }
+            }
+          }
+          variants(first: 10) {
+            edges {
+              node {
+                id
+                title
+                price {
+                  amount
+                  currencyCode
+                }
+                compareAtPrice {
+                  amount
+                  currencyCode
+                }
+                availableForSale
+                selectedOptions {
+                  name
+                  value
+                }
+              }
+            }
+          }
+          options {
+            name
+            values
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const PRODUCT_RECOMMENDATIONS_QUERY = `
   query GetRecommendations($productId: ID!) {
     productRecommendations(productId: $productId, intent: RELATED) {

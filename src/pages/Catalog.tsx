@@ -3,7 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
-import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
+import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY, BEST_SELLING_PRODUCTS_QUERY } from "@/lib/shopify";
 import { ChevronDown, ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,7 @@ interface AttrValue { id: string; attr_key: string; attr_value: string; sort_ord
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
+  const [bestSellingProducts, setBestSellingProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get("busca") || "");
   const [categorySlug, setCategorySlug] = useState(searchParams.get("categoria") || "all");
@@ -74,8 +75,9 @@ const Catalog = () => {
       setLoading(true);
       try {
         const queryParam = searchParams.get("busca") || undefined;
-        const [shop, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
+        const [shop, bestSelling, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
           storefrontApiRequest(PRODUCTS_QUERY, { first: 100, query: queryParam || undefined }),
+          storefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
           supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
@@ -84,6 +86,7 @@ const Catalog = () => {
           supabase.from("product_attributes").select("shopify_product_id, attr_key, attr_value"),
         ]);
         setProducts(shop?.data?.products?.edges || []);
+        setBestSellingProducts(bestSelling?.data?.products?.edges || []);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
         setPresetValues((pv.data || []) as AttrValue[]);
@@ -271,6 +274,8 @@ const Catalog = () => {
   }, [products, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
+  const hasRefinementFilters =
+    brandSlugs.size > 0 || totalAttrSelected > 0 || search || priceRangeIdxs.size > 0;
   const hasActiveFilters =
     categorySlug !== "all" || brandSlugs.size > 0 || totalAttrSelected > 0 || search ||
     priceRangeIdxs.size > 0 || sort !== "relevance";
@@ -293,7 +298,27 @@ const Catalog = () => {
 
   const categoryChipLabel = selectedCat?.name || categorySlug;
   const pageTitle = categorySlug === "all" ? "Catalogo" : categoryChipLabel;
-  const shelfProducts = filteredProducts.slice(0, 6);
+  const shelfProducts = useMemo(() => {
+    const filteredIds = new Set(filteredProducts.map((product) => product.node.id));
+    const usedIds = new Set<string>();
+    const productsForShelf: ShopifyProduct[] = [];
+
+    for (const product of bestSellingProducts) {
+      if (!filteredIds.has(product.node.id) || usedIds.has(product.node.id)) continue;
+      productsForShelf.push(product);
+      usedIds.add(product.node.id);
+      if (productsForShelf.length === 6) return productsForShelf;
+    }
+
+    for (const product of filteredProducts) {
+      if (usedIds.has(product.node.id)) continue;
+      productsForShelf.push(product);
+      usedIds.add(product.node.id);
+      if (productsForShelf.length === 6) return productsForShelf;
+    }
+
+    return productsForShelf;
+  }, [bestSellingProducts, filteredProducts]);
 
   const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
   if (categorySlug !== "all") {
@@ -549,7 +574,7 @@ const Catalog = () => {
         </div>
 
         <div className="container mx-auto py-8">
-          {!loading && shelfProducts.length > 0 && (
+          {!loading && !hasRefinementFilters && shelfProducts.length > 0 && (
             <section className="mb-12">
               <div className="mb-6 flex items-center justify-between">
                 <h2 className="font-display text-2xl font-bold">
