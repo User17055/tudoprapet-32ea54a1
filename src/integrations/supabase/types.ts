@@ -150,7 +150,7 @@ export type Database = {
           active: boolean
           code: string
           created_at: string
-          employee_name: string
+          employee_name: string | null
           id: string
           updated_at: string
         }
@@ -158,7 +158,7 @@ export type Database = {
           active?: boolean
           code: string
           created_at?: string
-          employee_name: string
+          employee_name?: string | null
           id?: string
           updated_at?: string
         }
@@ -166,7 +166,7 @@ export type Database = {
           active?: boolean
           code?: string
           created_at?: string
-          employee_name?: string
+          employee_name?: string | null
           id?: string
           updated_at?: string
         }
