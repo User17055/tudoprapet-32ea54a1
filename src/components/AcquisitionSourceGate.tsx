@@ -33,16 +33,26 @@ export const AcquisitionSourceGate = () => {
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [referralErrorEffect, setReferralErrorEffect] = useState(false);
   const [source, setSource] = useState("");
   const [referralCode, setReferralCode] = useState("");
+
+  const getStorageKey = (userId: string) => `tudoprapet:acquisition-source:${userId}`;
 
   useEffect(() => {
     if (loading || !user) {
       setOpen(false);
+      setCompleted(false);
       return;
     }
 
     const checkProfile = async () => {
+      if (localStorage.getItem(getStorageKey(user.id)) === "done") {
+        setOpen(false);
+        return;
+      }
+
       setChecking(true);
       const { data, error } = await supabase
         .from("profiles")
@@ -56,7 +66,9 @@ export const AcquisitionSourceGate = () => {
         return;
       }
 
-      if (!data?.acquisition_source) {
+      if (data?.acquisition_source) {
+        localStorage.setItem(getStorageKey(user.id), "done");
+      } else {
         setOpen(true);
       }
 
@@ -68,12 +80,21 @@ export const AcquisitionSourceGate = () => {
 
   const handleSave = async () => {
     if (!user) return;
+    const showError = (message: string, target?: "referral") => {
+      toast.error(message);
+      if (target === "referral") {
+        setReferralErrorEffect(false);
+        window.setTimeout(() => setReferralErrorEffect(true), 10);
+        window.setTimeout(() => setReferralErrorEffect(false), 650);
+      }
+    };
+
     if (!source) {
-      toast.error("Informe de onde voce conheceu a TudoPraPet.");
+      showError("Informe de onde voce conheceu a TudoPraPet.");
       return;
     }
     if (source === "recomendacao" && !referralCode.trim()) {
-      toast.error("Informe o codigo de quem indicou voce.");
+      showError("Informe o codigo de quem indicou voce.", "referral");
       return;
     }
     const normalizedReferralCode = referralCode.trim().toUpperCase();
@@ -86,7 +107,7 @@ export const AcquisitionSourceGate = () => {
         .maybeSingle();
 
       if (error || !data) {
-        toast.error("Codigo de funcionario invalido ou inativo.");
+        showError("Codigo de funcionario invalido ou inativo.", "referral");
         return;
       }
     }
@@ -105,19 +126,30 @@ export const AcquisitionSourceGate = () => {
 
     setSaving(false);
     if (error) {
-      toast.error("Erro ao salvar origem: " + error.message);
+      showError("Erro ao salvar origem: " + error.message);
       return;
     }
 
+    localStorage.setItem(getStorageKey(user.id), "done");
     toast.success("Obrigado! Informacao salva.");
-    setOpen(false);
+    setCompleted(true);
+    window.setTimeout(() => {
+      setOpen(false);
+      setCompleted(false);
+    }, 450);
   };
 
   if (checking || !user) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(next) => next && setOpen(true)}>
-      <DialogContent className="max-w-md rounded-2xl">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        className={`max-w-md rounded-2xl transition-all duration-300 data-[state=open]:slide-in-from-bottom-4 ${
+          completed
+            ? "scale-95 border-pet-green opacity-0 ring-4 ring-pet-green/20"
+            : "border-border"
+        }`}
+      >
         <DialogHeader>
           <DialogTitle>Antes de continuar</DialogTitle>
           <DialogDescription>
@@ -152,9 +184,16 @@ export const AcquisitionSourceGate = () => {
               </label>
               <input
                 value={referralCode}
-                onChange={(event) => setReferralCode(event.target.value.toUpperCase())}
+                onChange={(event) => {
+                  setReferralCode(event.target.value.toUpperCase());
+                  setReferralErrorEffect(false);
+                }}
                 placeholder="Ex: JOAO10"
-                className="h-12 w-full rounded-xl border border-input bg-background px-4 text-base uppercase outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                className={`h-12 w-full rounded-xl border bg-background px-4 text-base uppercase outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10 ${
+                  referralErrorEffect
+                    ? "animate-[shake-input_0.35s_ease-in-out] border-destructive ring-4 ring-destructive/20"
+                    : "border-input"
+                }`}
               />
             </div>
           )}
