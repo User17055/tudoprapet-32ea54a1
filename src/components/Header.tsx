@@ -74,7 +74,7 @@ export const Header = () => {
 
         <Link to="/" className="flex items-center gap-2 shrink-0 justify-self-center">
           <img src={logo} alt="TudoPraPet" className="h-11 w-auto md:h-14" />
-          <span className="font-display font-900 text-2xl md:text-3xl text-foreground">
+          <span className="hidden font-display font-900 text-2xl text-foreground md:inline md:text-3xl">
             Tudo<span className="text-primary">Pra</span>Pet
           </span>
         </Link>

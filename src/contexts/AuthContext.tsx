@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (input: { firstName: string; lastName: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+  register: (input: { firstName: string; lastName: string; email: string; password: string; acquisitionSource: string; referralCode?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (input: { firstName: string; lastName: string; email: string; password: string }) => {
+  const register = async (input: { firstName: string; lastName: string; email: string; password: string; acquisitionSource: string; referralCode?: string }) => {
     try {
       const { error } = await supabase.auth.signUp({
         email: input.email,
@@ -49,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: {
             first_name: input.firstName,
             last_name: input.lastName,
+            acquisition_source: input.acquisitionSource,
+            referral_code: input.referralCode || '',
           },
         },
       });

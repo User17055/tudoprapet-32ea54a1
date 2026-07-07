@@ -5,12 +5,31 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown, CheckCircle2, Circle } from 'lucide-react';
 import logo from '@/assets/logo.png';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const SOURCE_OPTIONS = [
+  { value: 'google', label: 'Google' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'recomendacao', label: 'Recomendacao' },
+  { value: 'outro', label: 'Outro' },
+];
 
 const Register = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acquisitionSource, setAcquisitionSource] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -30,9 +49,38 @@ const Register = () => {
       toast.error('Crie uma senha segura seguindo todos os requisitos.');
       return;
     }
+    if (!acquisitionSource) {
+      toast.error('Informe de onde voce conheceu a TudoPraPet.');
+      return;
+    }
+    if (acquisitionSource === 'recomendacao' && !referralCode.trim()) {
+      toast.error('Informe o codigo de quem indicou voce.');
+      return;
+    }
+    const normalizedReferralCode = referralCode.trim().toUpperCase();
+    if (acquisitionSource === 'recomendacao') {
+      const { data, error } = await supabase
+        .from('employee_referral_codes')
+        .select('id')
+        .eq('code', normalizedReferralCode)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (error || !data) {
+        toast.error('Codigo de funcionario invalido ou inativo.');
+        return;
+      }
+    }
     setLoading(true);
     try {
-      const result = await register({ firstName, lastName, email, password });
+      const result = await register({
+        firstName,
+        lastName,
+        email,
+        password,
+        acquisitionSource,
+        referralCode: normalizedReferralCode,
+      });
       if (result.success) {
         toast.success('Conta criada! Confira seu e-mail para continuar.');
         navigate('/login');
@@ -157,6 +205,39 @@ const Register = () => {
                   />
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground">Como voce conheceu a TudoPraPet?</label>
+                <Select value={acquisitionSource} onValueChange={setAcquisitionSource}>
+                  <SelectTrigger className="h-[58px] rounded-xl border-2 border-input bg-background px-4 text-base focus:border-primary">
+                    <SelectValue placeholder="Selecione uma opcao" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SOURCE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {acquisitionSource === 'recomendacao' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-foreground">Codigo de indicacao</label>
+                  <input
+                    type="text"
+                    value={referralCode}
+                    onChange={e => setReferralCode(e.target.value.toUpperCase())}
+                    required
+                    placeholder="Ex: JOAO10"
+                    className="w-full rounded-xl border-2 border-input bg-background px-4 py-4 text-base uppercase focus:outline-none focus:border-primary transition"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use o codigo informado por quem indicou voce ou por um funcionario.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground">Senha</label>

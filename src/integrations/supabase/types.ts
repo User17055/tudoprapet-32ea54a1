@@ -145,6 +145,33 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_referral_codes: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          employee_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          employee_name: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          employee_name?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       featured_products: {
         Row: {
           created_at: string
@@ -292,26 +319,32 @@ export type Database = {
       }
       profiles: {
         Row: {
+          acquisition_source: string | null
           created_at: string
           email: string | null
           id: string
           name: string | null
+          referral_code: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          acquisition_source?: string | null
           created_at?: string
           email?: string | null
           id?: string
           name?: string | null
+          referral_code?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          acquisition_source?: string | null
           created_at?: string
           email?: string | null
           id?: string
           name?: string | null
+          referral_code?: string | null
           updated_at?: string
           user_id?: string
         }

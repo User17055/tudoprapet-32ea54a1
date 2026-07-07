@@ -19,6 +19,7 @@ import Clube from "./pages/Clube.tsx";
 import Admin from "./pages/Admin.tsx";
 import MeusPedidos from "./pages/MeusPedidos.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import { AcquisitionSourceGate } from "@/components/AcquisitionSourceGate";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ const AppContent = () => {
         <Route path="/meus-pedidos" element={<MeusPedidos />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      <AcquisitionSourceGate />
     </BrowserRouter>
   );
 };

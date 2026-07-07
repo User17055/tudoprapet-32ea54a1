@@ -3,7 +3,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { HeroCarousel } from "@/components/HeroCarousel";
 import { Categories } from "@/components/Categories";
 import { ProductGrid } from "@/components/ProductGrid";
-import { ClubBanner } from "@/components/ClubBanner";
+import { TrustBadges } from "@/components/TrustBadges";
 import { useState } from "react";
 
 import { Footer } from "@/components/Footer";
@@ -21,8 +21,8 @@ const Index = () => {
           <HeroSection />
         )}
 
+        <TrustBadges />
         <ProductGrid />
-        <ClubBanner />
       </main>
       <Footer />
     </div>

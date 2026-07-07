@@ -24,6 +24,7 @@ import {
   ListTree,
   Star,
   Store,
+  Ticket,
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,7 +63,8 @@ type SectionId =
   | "details"
   | "categories"
   | "banners"
-  | "featured";
+  | "featured"
+  | "referrals";
 
 interface SectionDef {
   id: SectionId;
@@ -79,6 +81,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "users", label: "Usuários", description: "Contas cadastradas na loja e seus planos", icon: Users, component: UsersTab },
       { id: "members", label: "Membros", description: "Membros do clube com benefícios ativos", icon: Crown, component: MembersTab },
       { id: "prices", label: "Preços do Clube", description: "Preços exclusivos para assinantes", icon: Package, component: PricesTab },
+      { id: "referrals", label: "Indicações", description: "Códigos de funcionários e usos por cliente", icon: Ticket, component: ReferralCodesTab },
     ],
   },
   {
@@ -803,6 +806,311 @@ function UsersTab() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface ReferralCodeRow {
+  id: string;
+  code: string;
+  employee_name: string;
+  active: boolean;
+  created_at: string;
+}
+
+interface ReferralUsageRow {
+  id: string;
+  email: string | null;
+  name: string | null;
+  referral_code: string | null;
+  acquisition_source: string | null;
+  created_at: string;
+}
+
+function ReferralCodesTab() {
+  const [codes, setCodes] = useState<ReferralCodeRow[]>([]);
+  const [usages, setUsages] = useState<ReferralUsageRow[]>([]);
+  const [employeeName, setEmployeeName] = useState("");
+  const [code, setCode] = useState("");
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const loadAll = async () => {
+    setLoading(true);
+    const [codeRows, profileRows] = await Promise.all([
+      supabase
+        .from("employee_referral_codes")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("id, email, name, referral_code, acquisition_source, created_at")
+        .eq("acquisition_source", "recomendacao")
+        .not("referral_code", "is", null)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (codeRows.error) toast.error("Erro ao carregar códigos: " + codeRows.error.message);
+    if (profileRows.error) toast.error("Erro ao carregar usos: " + profileRows.error.message);
+
+    setCodes((codeRows.data || []) as ReferralCodeRow[]);
+    setUsages((profileRows.data || []) as ReferralUsageRow[]);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const usageCountByCode = useMemo(() => {
+    const map = new Map<string, number>();
+    usages.forEach((usage) => {
+      if (!usage.referral_code) return;
+      const normalized = usage.referral_code.toUpperCase();
+      map.set(normalized, (map.get(normalized) || 0) + 1);
+    });
+    return map;
+  }, [usages]);
+
+  const selectedUsages = useMemo(() => {
+    if (!selectedCode) return [];
+    return usages.filter((usage) => usage.referral_code?.toUpperCase() === selectedCode);
+  }, [selectedCode, usages]);
+
+  const monthlyUsage = useMemo(() => {
+    const map = new Map<string, number>();
+    selectedUsages.forEach((usage) => {
+      const date = new Date(usage.created_at);
+      const label = date.toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+      });
+      map.set(label, (map.get(label) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([month, total]) => ({ month, total }));
+  }, [selectedUsages]);
+
+  const handleCreate = async () => {
+    const normalizedCode = code.trim().toUpperCase();
+    if (!employeeName.trim() || !normalizedCode) {
+      toast.error("Informe o nome do funcionário e o código.");
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase.from("employee_referral_codes").insert({
+      employee_name: employeeName.trim(),
+      code: normalizedCode,
+    });
+    setSaving(false);
+
+    if (error) {
+      toast.error("Erro ao cadastrar código: " + error.message);
+      return;
+    }
+
+    toast.success("Código cadastrado");
+    setEmployeeName("");
+    setCode("");
+    setSelectedCode(normalizedCode);
+    loadAll();
+  };
+
+  const toggleActive = async (item: ReferralCodeRow) => {
+    const { error } = await supabase
+      .from("employee_referral_codes")
+      .update({ active: !item.active })
+      .eq("id", item.id);
+    if (error) {
+      toast.error("Erro ao atualizar código");
+      return;
+    }
+    loadAll();
+  };
+
+  const removeCode = async (item: ReferralCodeRow) => {
+    if (!confirm(`Remover o código ${item.code}?`)) return;
+    const { error } = await supabase
+      .from("employee_referral_codes")
+      .delete()
+      .eq("id", item.id);
+    if (error) {
+      toast.error("Erro ao remover código");
+      return;
+    }
+    if (selectedCode === item.code) setSelectedCode(null);
+    loadAll();
+  };
+
+  const selectedCodeInfo = codes.find((item) => item.code === selectedCode);
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Cadastrar código de funcionário</CardTitle>
+          <CardDescription>
+            Use este código quando o cliente escolher Recomendação no cadastro.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Funcionário</label>
+            <Input
+              value={employeeName}
+              onChange={(event) => setEmployeeName(event.target.value)}
+              placeholder="Nome do funcionário"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Código</label>
+            <Input
+              value={code}
+              onChange={(event) => setCode(event.target.value.toUpperCase())}
+              placeholder="Ex: MARIA10"
+              className="uppercase"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button onClick={handleCreate} disabled={saving} className="w-full">
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Cadastrar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Códigos cadastrados ({codes.length})</CardTitle>
+            <CardDescription>Clique no código para ver meses e pessoas que utilizaram.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : codes.length === 0 ? (
+              <p className="py-8 text-center text-muted-foreground">Nenhum código cadastrado.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Funcionário</TableHead>
+                    <TableHead className="text-right">Usos</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-24"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {codes.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <button
+                          onClick={() => setSelectedCode(item.code)}
+                          className={`rounded-md px-2 py-1 font-mono text-sm font-bold transition ${
+                            selectedCode === item.code
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-foreground hover:bg-primary/10"
+                          }`}
+                        >
+                          {item.code}
+                        </button>
+                      </TableCell>
+                      <TableCell className="font-medium">{item.employee_name}</TableCell>
+                      <TableCell className="text-right font-bold">
+                        {usageCountByCode.get(item.code) || 0}
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          onClick={() => toggleActive(item)}
+                          className={`rounded-full px-2 py-1 text-xs font-bold ${
+                            item.active
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {item.active ? "Ativo" : "Inativo"}
+                        </button>
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => removeCode(item)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {selectedCode ? `Usos do código ${selectedCode}` : "Usos do código"}
+            </CardTitle>
+            <CardDescription>
+              {selectedCodeInfo
+                ? `Funcionário: ${selectedCodeInfo.employee_name}`
+                : "Selecione um código na tabela."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {!selectedCode ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Clique em um código para ver o histórico.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <h3 className="mb-2 text-sm font-bold">Por mês</h3>
+                  {monthlyUsage.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhum uso registrado.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {monthlyUsage.map((item) => (
+                        <div
+                          key={item.month}
+                          className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm"
+                        >
+                          <span className="capitalize">{item.month}</span>
+                          <span className="font-bold">{item.total}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="mb-2 text-sm font-bold">Pessoas que utilizaram</h3>
+                  {selectedUsages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhuma pessoa usou este código ainda.</p>
+                  ) : (
+                    <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                      {selectedUsages.map((usage) => (
+                        <div key={usage.id} className="rounded-lg border p-3 text-sm">
+                          <p className="font-bold">{usage.name || usage.email || "Cliente sem nome"}</p>
+                          {usage.email && (
+                            <p className="break-all text-xs text-muted-foreground">{usage.email}</p>
+                          )}
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {new Date(usage.created_at).toLocaleDateString("pt-BR")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
