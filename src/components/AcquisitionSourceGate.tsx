@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +31,7 @@ const SOURCE_OPTIONS = [
 
 export const AcquisitionSourceGate = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -39,9 +41,11 @@ export const AcquisitionSourceGate = () => {
   const [referralCode, setReferralCode] = useState("");
 
   const getStorageKey = (userId: string) => `tudoprapet:acquisition-source:${userId}`;
+  const hiddenRoutes = ["/login", "/cadastro", "/esqueci-senha", "/redefinir-senha"];
+  const shouldHideOnRoute = hiddenRoutes.includes(location.pathname);
 
   useEffect(() => {
-    if (loading || !user) {
+    if (loading || !user || shouldHideOnRoute) {
       setOpen(false);
       setCompleted(false);
       return;
@@ -76,7 +80,7 @@ export const AcquisitionSourceGate = () => {
     };
 
     checkProfile();
-  }, [loading, user]);
+  }, [loading, shouldHideOnRoute, user]);
 
   const handleSave = async () => {
     if (!user) return;
