@@ -493,6 +493,7 @@ function PricesTab() {
 
 function MembersTab() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [profileNamesByEmail, setProfileNamesByEmail] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -500,9 +501,20 @@ function MembersTab() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("club_members").select("*").order("created_at", { ascending: false });
-    if (error) toast.error("Erro ao carregar membros");
-    setMembers((data || []) as Member[]);
+    const [memberRows, profileRows] = await Promise.all([
+      supabase.from("club_members").select("*").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("email, name"),
+    ]);
+    if (memberRows.error) toast.error("Erro ao carregar membros");
+    if (profileRows.error) toast.error("Erro ao carregar nomes dos perfis");
+
+    const names = new Map<string, string>();
+    (profileRows.data || []).forEach((profile: { email: string | null; name: string | null }) => {
+      if (profile.email && profile.name) names.set(profile.email.toLowerCase(), profile.name);
+    });
+
+    setProfileNamesByEmail(names);
+    setMembers((memberRows.data || []) as Member[]);
     setLoading(false);
   };
 
@@ -511,9 +523,19 @@ function MembersTab() {
   const handleAdd = async () => {
     if (!email.trim()) return toast.error("E-mail obrigatório");
     setSaving(true);
+    const normalizedEmail = email.trim().toLowerCase();
+    let memberName = name.trim() || null;
+    if (!memberName) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+      memberName = profile?.name || null;
+    }
     const { error } = await supabase.from("club_members").insert({
-      email: email.trim().toLowerCase(),
-      name: name.trim() || null,
+      email: normalizedEmail,
+      name: memberName,
     });
     setSaving(false);
     if (error) return toast.error("Erro: " + error.message);
@@ -580,7 +602,7 @@ function MembersTab() {
                 {members.map(m => (
                   <TableRow key={m.id}>
                     <TableCell className="font-medium">{m.email}</TableCell>
-                    <TableCell>{m.name || "—"}</TableCell>
+                    <TableCell>{m.name || profileNamesByEmail.get(m.email.toLowerCase()) || "—"}</TableCell>
                     <TableCell>
                       <button
                         onClick={() => toggleActive(m)}

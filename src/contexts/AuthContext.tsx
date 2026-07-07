@@ -42,11 +42,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (input: { firstName: string; lastName: string; email: string; password: string; acquisitionSource: string; referralCode?: string }) => {
     try {
+      const fullName = `${input.firstName} ${input.lastName}`.trim();
       const { error } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,
         options: {
           data: {
+            name: fullName,
+            full_name: fullName,
             first_name: input.firstName,
             last_name: input.lastName,
             acquisition_source: input.acquisitionSource,
