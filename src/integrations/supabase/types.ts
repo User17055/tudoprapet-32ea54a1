@@ -319,26 +319,32 @@ export type Database = {
       }
       profiles: {
         Row: {
+          acquisition_source: string | null
           created_at: string
           email: string | null
           id: string
           name: string | null
+          referral_code: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          acquisition_source?: string | null
           created_at?: string
           email?: string | null
           id?: string
           name?: string | null
+          referral_code?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          acquisition_source?: string | null
           created_at?: string
           email?: string | null
           id?: string
           name?: string | null
+          referral_code?: string | null
           updated_at?: string
           user_id?: string
         }
