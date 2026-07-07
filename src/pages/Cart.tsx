@@ -173,7 +173,7 @@ const Cart = () => {
         </main>
       ) : (
         <>
-          <main className="flex-1 px-3 py-3 pb-[22rem] md:pb-40">
+          <main className="flex-1 px-3 py-3 md:pb-40">
             <section ref={itemsListRef} aria-label="Produtos no carrinho" className="space-y-2.5">
               {items.map((item) => {
                 const regularPrice = parseFloat(item.price.amount);
@@ -286,7 +286,7 @@ const Cart = () => {
             </section>
           </main>
 
-          <footer className="fixed inset-x-0 bottom-[86px] z-20 border-t border-border bg-background px-4 py-3 pb-4 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:bottom-0 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <footer className="border-t border-border bg-background px-4 py-3 pb-[calc(7rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:fixed md:inset-x-0 md:bottom-0 md:z-20 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-lg space-y-3">
               <CouponInput />
 
