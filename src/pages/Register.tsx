@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown } from 'lucide-react';
+import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown, CheckCircle2, Circle } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 const Register = () => {
@@ -15,19 +15,27 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
+  const passwordRules = [
+    { label: 'Pelo menos 8 caracteres', valid: password.length >= 8 },
+    { label: 'Uma letra maiuscula', valid: /[A-Z]/.test(password) },
+    { label: 'Uma letra minuscula', valid: /[a-z]/.test(password) },
+    { label: 'Um numero', valid: /\d/.test(password) },
+    { label: 'Um caractere especial, como @, # ou !', valid: /[^A-Za-z0-9]/.test(password) },
+  ];
+  const isPasswordSecure = passwordRules.every((rule) => rule.valid);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
-      toast.error('A senha deve ter pelo menos 6 caracteres.');
+    if (!isPasswordSecure) {
+      toast.error('Crie uma senha segura seguindo todos os requisitos.');
       return;
     }
     setLoading(true);
     try {
       const result = await register({ firstName, lastName, email, password });
       if (result.success) {
-        toast.success('Conta criada com sucesso! 🎉');
-        navigate('/perfil');
+        toast.success('Conta criada! Confira seu e-mail para continuar.');
+        navigate('/login');
       } else {
         toast.error(result.error || 'Erro ao criar conta.');
       }
@@ -160,7 +168,7 @@ const Register = () => {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Senha segura"
                     className="w-full rounded-xl border-2 border-input bg-background pl-12 pr-12 py-4 text-base focus:outline-none focus:border-primary transition"
                   />
                   <button
@@ -172,11 +180,31 @@ const Register = () => {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <div className="rounded-xl bg-muted/40 p-3">
+                  <p className="mb-2 text-xs font-bold text-foreground">Sua senha precisa ter:</p>
+                  <ul className="space-y-1.5">
+                    {passwordRules.map((rule) => (
+                      <li
+                        key={rule.label}
+                        className={`flex items-center gap-2 text-xs ${
+                          rule.valid ? 'text-pet-green' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {rule.valid ? (
+                          <CheckCircle2 className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <Circle className="h-4 w-4 shrink-0" />
+                        )}
+                        <span>{rule.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
 
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !isPasswordSecure}
                 className="w-full rounded-xl font-display font-bold text-base py-6 btn-bounce shadow-md"
               >
                 {loading ? 'Criando conta...' : 'Criar minha conta'}
