@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "EXTERNAL_API_* missing" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const digits = (order.customer?.phone || order.shipping_address?.phone || order.phone || "").replace(/\D/g, "");
+    const digits = (order.customer?.phone || order.shipping_address?.phone || order.billing_address?.phone || order.phone || "").replace(/\D/g, "");
     const phone = digits ? (digits.startsWith("55") ? digits : `55${digits}`) : null;
     if (!phone) return new Response(JSON.stringify({ error: "customer sem telefone", order: { id: order.id, name: order.name } }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
