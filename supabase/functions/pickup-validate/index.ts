@@ -69,8 +69,39 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ code }),
     });
     const text = await resp.text();
-    let json: unknown;
+    let json: any;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
+
+    // Enrich with Shopify line items when we have an order id
+    const orderData = json?.order || json;
+    const shopifyOrderId = String(orderData?.shopify_order_id || orderData?.order_id || "").replace(/\D/g, "");
+    const shopDomain = "petjoy-deals-hb8r9.myshopify.com";
+    const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+    if (resp.ok && shopifyOrderId && adminToken) {
+      try {
+        const orderResp = await fetch(
+          `https://${shopDomain}/admin/api/2025-07/orders/${shopifyOrderId}.json?fields=line_items,order_number,name`,
+          { headers: { "X-Shopify-Access-Token": adminToken } },
+        );
+        if (orderResp.ok) {
+          const { order } = await orderResp.json();
+          const items = (order?.line_items || []).map((li: any) => ({
+            title: li.title,
+            variant_title: li.variant_title,
+            quantity: li.quantity,
+            sku: li.sku,
+          }));
+          if (json?.order) json.order.items = items;
+          else json.items = items;
+          if (!orderData.order_number) {
+            if (json?.order) json.order.order_number = order.order_number || order.name;
+            else json.order_number = order.order_number || order.name;
+          }
+        }
+      } catch (e) {
+        console.error("Shopify enrich failed:", e);
+      }
+    }
 
     return new Response(JSON.stringify(json), {
       status: resp.status,
