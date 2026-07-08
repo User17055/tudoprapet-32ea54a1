@@ -14,17 +14,13 @@ Deno.serve(async (req) => {
 
   const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
   const payload = {
-    event: "pronto_retirada",
-    template: "pronto_retirada",
-    phone: "5518991565604",
-    variables: {
-      customer_name: "andrejunior",
-      order_number: "TESTE-0001",
-      pickup_code: "483920",
-      store_name: "Lis-onTech",
-      store_address: "",
-    },
-    meta: { test: true },
+    dry_run: true,
+    event: "order_ready_for_pickup",
+    order_id: "shopify-1008",
+    order_number: "#1008",
+    customer_name: "Maria Silva",
+    phone: "5511999999999",
+    store_name: "Lis-onTech",
   };
 
   const start = Date.now();
@@ -33,7 +29,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(token ? { "X-API-Key": token } : {}),
       },
       body: JSON.stringify(payload),
     });
