@@ -20,7 +20,8 @@ Deno.serve(async (req) => {
   const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
   const defaults: Record<string, unknown> = {
     event: "order_ready_for_pickup",
-    order_id: "shopify-1008",
+    shopify_order_id: "gid://shopify/Order/1234567890",
+    order_id: "gid://shopify/Order/1234567890",
     order_number: "#1008",
     customer_name: "Maria Silva",
     phone: "5511999999999",

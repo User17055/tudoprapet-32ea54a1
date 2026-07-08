@@ -128,9 +128,12 @@ Deno.serve(async (req) => {
     }
 
     const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
+    const numericId = shopifyOrderId.replace(/\D/g, "");
+    const orderGid = numericId ? `gid://shopify/Order/${numericId}` : shopifyOrderId;
     const outbound: Record<string, unknown> = {
       event: eventName,
-      order_id: `shopify-${shopifyOrderId}`,
+      shopify_order_id: orderGid,
+      order_id: orderGid,
       order_number: orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`,
       customer_name: customerName,
       phone: customerPhone,
