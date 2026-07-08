@@ -137,40 +137,43 @@ export default function Admin() {
   const ActiveComponent = active.component;
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-[#f5f7fb] text-[#0b1736]">
       {/* Barra superior */}
-      <header className="sticky top-0 z-40 flex h-14 items-center gap-2.5 border-b bg-card px-4">
-        <Link to="/" className="flex shrink-0 items-center gap-2">
-          <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
-          <span className="hidden font-display text-lg font-bold leading-none sm:block">
-            Tudo<span className="text-primary">Pra</span>Pet
+      <header className="sticky top-0 z-40 border-b border-[#dce3ef] bg-white/95 shadow-[0_10px_30px_-28px_rgba(15,23,42,0.75)] backdrop-blur">
+        <div className="flex h-16 items-center gap-3 px-4 md:px-6">
+          <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-xl px-1 py-1 transition-colors hover:bg-[#f3f6fb]">
+            <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
+            <span className="hidden font-display text-xl font-bold leading-none sm:block">
+              Tudo<span className="text-primary">Pra</span>Pet
+            </span>
+          </Link>
+          <span className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-foreground shadow-sm">
+            Admin
           </span>
-        </Link>
-        <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground">
-          Admin
-        </span>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="hidden max-w-[220px] truncate text-xs text-muted-foreground md:block">
-            {user?.email}
-          </span>
-          <Button asChild size="sm" variant="outline" className="h-8 gap-1.5">
-            <Link to="/">
-              <Store className="h-3.5 w-3.5" />
-              Ver loja
-            </Link>
-          </Button>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden text-right md:block">
+              <p className="text-xs font-semibold text-[#1f2a44]">Painel administrativo</p>
+              <p className="max-w-[260px] truncate text-xs text-[#667085]">{user?.email}</p>
+            </div>
+            <Button asChild size="sm" variant="outline" className="h-9 gap-1.5 rounded-full border-[#cfd8e6] bg-white px-4 text-[#1f2a44] hover:bg-[#f3f6fb]">
+              <Link to="/">
+                <Store className="h-3.5 w-3.5" />
+                Ver loja
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 
       <div className="flex">
         {/* Menu lateral (desktop) */}
-        <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 flex-col gap-5 overflow-y-auto border-r bg-card px-3 py-5 lg:flex">
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 flex-col gap-6 overflow-y-auto border-r border-[#dce3ef] bg-white px-4 py-6 lg:flex">
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="mb-1.5 px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[#7b8497]">
                 {group.label}
               </p>
-              <nav className="space-y-0.5">
+              <nav className="space-y-1">
                 {group.items.map((item) => {
                   const isActive = item.id === active.id;
                   return (
@@ -178,13 +181,20 @@ export default function Admin() {
                       key={item.id}
                       onClick={() => selectSection(item.id)}
                       className={cn(
-                        "flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-sm font-medium transition-colors",
+                        "group flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          ? "bg-primary text-primary-foreground shadow-[0_14px_26px_-18px_rgba(30,64,175,0.9)]"
+                          : "text-[#4b5870] hover:bg-[#f1f5fb] hover:text-[#10234d]",
                       )}
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+                          isActive ? "bg-white/15" : "bg-[#eef3fa] text-[#64748b] group-hover:bg-white",
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                      </span>
                       <span className="truncate">{item.label}</span>
                     </button>
                   );
@@ -196,8 +206,8 @@ export default function Admin() {
 
         <div className="min-w-0 flex-1">
           {/* Navegação mobile */}
-          <div className="sticky top-14 z-30 border-b bg-card lg:hidden">
-            <div className="scrollbar-hide flex gap-1.5 overflow-x-auto px-3 py-2">
+          <div className="sticky top-16 z-30 border-b border-[#dce3ef] bg-white/95 backdrop-blur lg:hidden">
+            <div className="scrollbar-hide flex gap-2 overflow-x-auto px-3 py-2.5">
               {ALL_SECTIONS.map((item) => {
                 const isActive = item.id === active.id;
                 return (
@@ -205,10 +215,10 @@ export default function Admin() {
                     key={item.id}
                     onClick={() => selectSection(item.id)}
                     className={cn(
-                      "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors",
+                      "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-xs font-semibold transition-colors",
                       isActive
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-muted-foreground",
+                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                        : "border-[#d7dfeb] bg-white text-[#596579]",
                     )}
                   >
                     <item.icon className="h-3.5 w-3.5" />
@@ -219,17 +229,21 @@ export default function Admin() {
             </div>
           </div>
 
-          <main className="mx-auto w-full max-w-5xl p-4 md:p-6">
-            <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <ActiveIcon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="font-display text-lg font-bold leading-tight">{active.label}</h1>
-                <p className="truncate text-sm text-muted-foreground">{active.description}</p>
+          <main className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
+            <div className="mb-6 rounded-3xl border border-[#dce3ef] bg-white px-4 py-4 shadow-[0_18px_46px_-34px_rgba(15,23,42,0.7)] md:px-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
+                  <ActiveIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="font-display text-xl font-bold leading-tight text-[#101828] md:text-2xl">{active.label}</h1>
+                  <p className="mt-1 text-sm text-[#667085]">{active.description}</p>
+                </div>
               </div>
             </div>
-            <ActiveComponent />
+            <div className="[&_.rounded-lg]:rounded-2xl [&_.rounded-xl]:rounded-2xl [&_.border]:border-[#dce3ef] [&_.shadow-sm]:shadow-[0_18px_42px_-34px_rgba(15,23,42,0.75)]">
+              <ActiveComponent />
+            </div>
           </main>
         </div>
       </div>
