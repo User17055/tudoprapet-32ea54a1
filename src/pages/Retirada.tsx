@@ -72,13 +72,11 @@ export default function Retirada() {
         body: { code: trimmed },
       });
       if (error) {
-        // Extract server error body when possible
         let details = error.message;
-        // @ts-expect-error - context available on FunctionsHttpError
-        if (error?.context?.text) {
+        const ctx = (error as { context?: { text?: () => Promise<string> } }).context;
+        if (ctx?.text) {
           try {
-            // @ts-expect-error
-            const txt = await error.context.text();
+            const txt = await ctx.text();
             const parsed = JSON.parse(txt);
             details = parsed.error || parsed.message || txt;
           } catch { /* ignore */ }
@@ -108,11 +106,10 @@ export default function Retirada() {
       });
       if (error) {
         let details = error.message;
-        // @ts-expect-error
-        if (error?.context?.text) {
+        const ctx = (error as { context?: { text?: () => Promise<string> } }).context;
+        if (ctx?.text) {
           try {
-            // @ts-expect-error
-            const txt = await error.context.text();
+            const txt = await ctx.text();
             const parsed = JSON.parse(txt);
             details = parsed.error || parsed.message || txt;
           } catch { /* ignore */ }
