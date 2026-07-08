@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
     const customerName =
       `${customer.first_name || shippingAddress.first_name || ""} ${customer.last_name || shippingAddress.last_name || ""}`.trim()
       || customer.name || "Cliente";
-    const customerPhone = normalizePhone(customer.phone || shippingAddress.phone || payload.phone);
+    const customerPhone = normalizePhone(customer.phone || shippingAddress.phone || (payload as any).billing_address?.phone || payload.phone);
 
     if (!customerPhone) {
       console.warn(`No customer phone for order ${shopifyOrderId}, skipping`);
