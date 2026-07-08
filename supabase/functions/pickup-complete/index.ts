@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+        ...(apiToken ? { "X-API-Key": apiToken } : {}),
       },
       body: JSON.stringify({
         code,
@@ -74,18 +74,6 @@ Deno.serve(async (req) => {
     const text = await resp.text();
     let json: Record<string, unknown>;
     try { json = JSON.parse(text); } catch { json = { raw: text }; }
-
-    // Mirror locally: mark as picked up if success
-    if (resp.ok) {
-      await supabase
-        .from("pickup_codes")
-        .update({
-          status: "picked_up",
-          picked_up_at: new Date().toISOString(),
-          picked_up_by: userId,
-        })
-        .eq("code", code);
-    }
 
     return new Response(JSON.stringify(json), {
       status: resp.status,
