@@ -101,6 +101,12 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "featured", label: "Destaques", description: "Produtos em destaque na página inicial", icon: Star, component: FeaturedTab },
     ],
   },
+  {
+    label: "Operação",
+    items: [
+      { id: "retirada", label: "Retirada", description: "Validar código de retirada do cliente", icon: Package, component: RetiradaTab },
+    ],
+  },
 ];
 
 const ALL_SECTIONS = NAV_GROUPS.flatMap((g) => g.items);
