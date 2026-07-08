@@ -4,7 +4,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-shopify-hmac-sha256, x-shopify-topic, x-shopify-shop-domain",
 };
 
-const STORE_NAME = "Tudoprapet";
+const STORE_NAME = "TudoPraPet";
 const PICKUP_HOURS = "segunda a sexta, das 9h às 18h, e aos sábados até 12h";
 
 async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null, secret: string): Promise<boolean> {

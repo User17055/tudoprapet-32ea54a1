@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     order_number: "#1008",
     customer_name: "Maria Silva",
     phone: "5511999999999",
-    store_name: "Tudoprapet",
+    store_name: "TudoPraPet",
     pickup_hours: "segunda a sexta, das 9h às 18h, e aos sábados até 12h",
   };
   const payload = { ...defaults, ...overrides };
