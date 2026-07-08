@@ -4,7 +4,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-shopify-hmac-sha256, x-shopify-topic, x-shopify-shop-domain",
 };
 
-const STORE_NAME = "Lis-onTech";
+const STORE_NAME = "Tudoprapet";
+const PICKUP_HOURS = "segunda a sexta, das 9h às 18h, e aos sábados até 12h";
 
 async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null, secret: string): Promise<boolean> {
   if (!hmacHeader) return false;
@@ -58,12 +59,15 @@ Deno.serve(async (req) => {
       fulfillmentStatus === "ready_for_pickup" ||
       tags.includes("pronto-retirada") ||
       tags.includes("ready-for-pickup");
+    const isOrderCreated = topic === "orders/create";
 
-    if (!isReadyToPickup) {
-      return new Response(JSON.stringify({ ignored: true, reason: `not ready-to-pickup (topic=${topic} status=${fulfillmentStatus})` }), {
+    if (!isReadyToPickup && !isOrderCreated) {
+      return new Response(JSON.stringify({ ignored: true, reason: `unhandled (topic=${topic} status=${fulfillmentStatus})` }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const eventName = isReadyToPickup ? "order_ready_for_pickup" : "order_created";
 
     const shopifyOrderId = String(payload.order_id || payload.id || "");
     let orderNumber = String(payload.order_number || payload.name || payload.order_id || "");
@@ -124,14 +128,17 @@ Deno.serve(async (req) => {
     }
 
     const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
-    const outbound = {
-      event: "order_ready_for_pickup",
+    const outbound: Record<string, unknown> = {
+      event: eventName,
       order_id: `shopify-${shopifyOrderId}`,
       order_number: orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`,
       customer_name: customerName,
       phone: customerPhone,
       store_name: STORE_NAME,
     };
+    if (eventName === "order_ready_for_pickup") {
+      outbound.pickup_hours = PICKUP_HOURS;
+    }
 
     const resp = await fetch(endpoint, {
       method: "POST",

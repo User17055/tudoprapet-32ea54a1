@@ -14,13 +14,13 @@ Deno.serve(async (req) => {
 
   const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
   const payload = {
-    dry_run: true,
     event: "order_ready_for_pickup",
     order_id: "shopify-1008",
     order_number: "#1008",
     customer_name: "Maria Silva",
     phone: "5511999999999",
-    store_name: "Lis-onTech",
+    store_name: "Tudoprapet",
+    pickup_hours: "segunda a sexta, das 9h às 18h, e aos sábados até 12h",
   };
 
   const start = Date.now();
