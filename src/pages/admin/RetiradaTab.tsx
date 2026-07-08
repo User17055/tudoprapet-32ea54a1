@@ -152,6 +152,29 @@ export default function RetiradaTab() {
                   </div>
                 )}
               </dl>
+              {order.items && order.items.length > 0 && (
+                <div className="mt-3 border-t border-primary/20 pt-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    Itens a entregar ({order.items.reduce((s, i) => s + (i.quantity || 0), 0)})
+                  </p>
+                  <ul className="space-y-1.5 text-sm">
+                    {order.items.map((it, idx) => (
+                      <li key={idx} className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <p className="font-medium leading-tight">{it.title}</p>
+                          {it.variant_title && it.variant_title !== "Default Title" && (
+                            <p className="text-xs text-muted-foreground">{it.variant_title}</p>
+                          )}
+                          {it.sku && <p className="text-[10px] text-muted-foreground">SKU: {it.sku}</p>}
+                        </div>
+                        <span className="shrink-0 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                          {it.quantity}x
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <Button
                 onClick={handleComplete}
                 disabled={confirming}
