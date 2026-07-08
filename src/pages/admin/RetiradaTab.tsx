@@ -6,10 +6,12 @@ import { Loader2, CheckCircle2, XCircle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+type LineItem = { title?: string; variant_title?: string; quantity?: number; sku?: string };
 type ValidatedOrder = {
   order_number?: string;
   customer_name?: string;
   status?: string;
+  items?: LineItem[];
   [k: string]: unknown;
 };
 
