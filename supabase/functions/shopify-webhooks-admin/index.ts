@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     return new Response(await r.text() || JSON.stringify({ status: r.status }), { status: r.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
-  if (action === "trigger_last" || action === "list_orders") {
+  if (action === "trigger_last" || action === "list_orders" || action === "inspect_order") {
     // Fetch last N orders
     const r = await fetch(`${base}/orders.json?limit=5&status=any`, { headers: h });
     const data = await r.json();
@@ -49,10 +49,15 @@ Deno.serve(async (req) => {
         id: o.id, name: o.name, tags: o.tags,
         fulfillment_status: o.fulfillment_status,
         customer: o.customer ? `${o.customer.first_name} ${o.customer.last_name}` : null,
-        phone: o.customer?.phone || o.shipping_address?.phone || o.phone,
+        phone: o.customer?.phone || o.shipping_address?.phone || o.billing_address?.phone || o.phone,
         created_at: o.created_at,
       }));
       return new Response(JSON.stringify(summary, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (action === "inspect_order") {
+      const wid = url.searchParams.get("order_id");
+      const o = wid ? (data.orders || []).find((x: any) => String(x.id) === String(wid)) : (data.orders || [])[0];
+      return new Response(JSON.stringify(o, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // trigger_last: pick specified order id or the first (most recent)
