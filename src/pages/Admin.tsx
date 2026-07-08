@@ -145,17 +145,17 @@ export default function Admin() {
   const ActiveComponent = active.component;
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-[#0b1736]">
+    <div className="min-h-screen bg-[#f7f9fc] text-[#101828]">
       {/* Barra superior */}
-      <header className="sticky top-0 z-40 border-b border-[#dce3ef] bg-white/95 shadow-[0_10px_30px_-28px_rgba(15,23,42,0.75)] backdrop-blur">
-        <div className="flex h-16 items-center gap-3 px-4 md:px-6">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-xl px-1 py-1 transition-colors hover:bg-[#f3f6fb]">
+      <header className="sticky top-0 z-40 bg-white/90 shadow-[0_1px_0_rgba(16,24,40,0.06),0_18px_40px_-34px_rgba(16,24,40,0.55)] backdrop-blur">
+        <div className="flex h-16 items-center gap-3 px-4 md:px-7">
+          <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-2xl px-1 py-1 transition-colors hover:bg-[#f6f8fb]">
             <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
             <span className="hidden font-display text-xl font-bold leading-none sm:block">
               Tudo<span className="text-primary">Pra</span>Pet
             </span>
           </Link>
-          <span className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-foreground shadow-sm">
+          <span className="rounded-full bg-[#e9f0ff] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
             Admin
           </span>
           <div className="ml-auto flex items-center gap-3">
@@ -163,7 +163,7 @@ export default function Admin() {
               <p className="text-xs font-semibold text-[#1f2a44]">Painel administrativo</p>
               <p className="max-w-[260px] truncate text-xs text-[#667085]">{user?.email}</p>
             </div>
-            <Button asChild size="sm" variant="outline" className="h-9 gap-1.5 rounded-full border-[#cfd8e6] bg-white px-4 text-[#1f2a44] hover:bg-[#f3f6fb]">
+            <Button asChild size="sm" variant="ghost" className="h-9 gap-1.5 rounded-full bg-[#f3f6fb] px-4 text-[#1f2a44] hover:bg-[#e9eef7]">
               <Link to="/">
                 <Store className="h-3.5 w-3.5" />
                 Ver loja
@@ -175,7 +175,7 @@ export default function Admin() {
 
       <div className="flex">
         {/* Menu lateral (desktop) */}
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 flex-col gap-6 overflow-y-auto border-r border-[#dce3ef] bg-white px-4 py-6 lg:flex">
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 flex-col gap-6 overflow-y-auto bg-[#fbfcfe] px-4 py-6 shadow-[1px_0_0_rgba(16,24,40,0.05)] lg:flex">
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[#7b8497]">
@@ -191,14 +191,14 @@ export default function Admin() {
                       className={cn(
                         "group flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-[0_14px_26px_-18px_rgba(30,64,175,0.9)]"
-                          : "text-[#4b5870] hover:bg-[#f1f5fb] hover:text-[#10234d]",
+                          ? "bg-primary text-primary-foreground shadow-[0_16px_32px_-20px_rgba(30,64,175,0.95)]"
+                          : "text-[#526071] hover:bg-white hover:text-[#10234d] hover:shadow-[0_10px_26px_-24px_rgba(16,24,40,0.8)]",
                       )}
                     >
                       <span
                         className={cn(
                           "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
-                          isActive ? "bg-white/15" : "bg-[#eef3fa] text-[#64748b] group-hover:bg-white",
+                          isActive ? "bg-white/15" : "bg-transparent text-[#7a8699] group-hover:bg-[#f4f7fb]",
                         )}
                       >
                         <item.icon className="h-4 w-4" />
@@ -214,7 +214,7 @@ export default function Admin() {
 
         <div className="min-w-0 flex-1">
           {/* Navegação mobile */}
-          <div className="sticky top-16 z-30 border-b border-[#dce3ef] bg-white/95 backdrop-blur lg:hidden">
+          <div className="sticky top-16 z-30 bg-white/95 shadow-[0_1px_0_rgba(16,24,40,0.06)] backdrop-blur lg:hidden">
             <div className="scrollbar-hide flex gap-2 overflow-x-auto px-3 py-2.5">
               {ALL_SECTIONS.map((item) => {
                 const isActive = item.id === active.id;
@@ -223,10 +223,10 @@ export default function Admin() {
                     key={item.id}
                     onClick={() => selectSection(item.id)}
                     className={cn(
-                      "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-xs font-semibold transition-colors",
+                      "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-semibold transition-colors",
                       isActive
-                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                        : "border-[#d7dfeb] bg-white text-[#596579]",
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-[#f3f6fb] text-[#596579]",
                     )}
                   >
                     <item.icon className="h-3.5 w-3.5" />
@@ -238,7 +238,7 @@ export default function Admin() {
           </div>
 
           <main className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
-            <div className="mb-6 rounded-3xl border border-[#dce3ef] bg-white px-4 py-4 shadow-[0_18px_46px_-34px_rgba(15,23,42,0.7)] md:px-6">
+            <div className="mb-6 rounded-[28px] bg-white px-4 py-4 shadow-[0_18px_48px_-38px_rgba(16,24,40,0.85)] md:px-6">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
                   <ActiveIcon className="h-5 w-5" />
@@ -249,7 +249,7 @@ export default function Admin() {
                 </div>
               </div>
             </div>
-            <div className="[&_.rounded-lg]:rounded-2xl [&_.rounded-xl]:rounded-2xl [&_.border]:border-[#dce3ef] [&_.shadow-sm]:shadow-[0_18px_42px_-34px_rgba(15,23,42,0.75)]">
+            <div className="[&_.rounded-lg]:rounded-2xl [&_.rounded-xl]:rounded-3xl [&_.rounded-lg.border]:border-transparent [&_.rounded-xl.border]:border-transparent [&_.bg-card]:bg-white [&_.shadow-sm]:shadow-[0_18px_46px_-36px_rgba(16,24,40,0.8)] [&_table]:overflow-hidden [&_thead]:bg-[#f8fafc]">
               <ActiveComponent />
             </div>
           </main>
