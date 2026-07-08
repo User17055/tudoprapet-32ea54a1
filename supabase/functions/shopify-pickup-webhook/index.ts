@@ -62,31 +62,29 @@ Deno.serve(async (req) => {
     const payload = JSON.parse(rawBody);
     console.log(`Shopify webhook topic=${topic} order=${payload.id || payload.order_id}`);
 
-    // Detect ready-for-pickup signal from either topic:
-    // - fulfillment_orders/ready_to_pickup  (native)
-    // - orders/updated  (fallback: check fulfillment_status or tags)
+    // Detect ready-for-pickup from multiple event shapes:
+    // - fulfillments/create | fulfillments/update  → check status === "ready_for_pickup"
+    // - fulfillment_orders/ready_to_pickup          → native
+    // - orders/updated fallback                     → fulfillment_status/tags
+    const fulfillmentStatus = String(payload?.status || payload?.fulfillment_status || "").toLowerCase();
+    const tags = String(payload?.tags || "").toLowerCase();
     const isReadyToPickup =
       topic === "fulfillment_orders/ready_to_pickup" ||
-      payload?.fulfillment_status === "ready_for_pickup" ||
-      String(payload?.tags || "").toLowerCase().includes("pronto-retirada") ||
-      String(payload?.tags || "").toLowerCase().includes("ready-for-pickup");
+      fulfillmentStatus === "ready_for_pickup" ||
+      tags.includes("pronto-retirada") ||
+      tags.includes("ready-for-pickup");
 
     if (!isReadyToPickup) {
-      return new Response(JSON.stringify({ ignored: true, reason: "not a ready-to-pickup event" }), {
+      return new Response(JSON.stringify({ ignored: true, reason: `not ready-to-pickup (topic=${topic} status=${fulfillmentStatus})` }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Extract fields (works for both order webhooks and fulfillment_order webhooks)
+    // Extract fields — works for order and fulfillment payloads
     const shopifyOrderId = String(payload.order_id || payload.id || "");
-    const orderNumber = String(payload.order_number || payload.name || payload.order_id || "");
-    const customer = payload.customer || {};
-    const shippingAddress = payload.shipping_address || {};
-    const customerName =
-      `${customer.first_name || shippingAddress.first_name || ""} ${customer.last_name || shippingAddress.last_name || ""}`.trim()
-      || customer.name || null;
-    const customerEmail = customer.email || payload.email || null;
-    const customerPhone = normalizePhone(customer.phone || shippingAddress.phone || payload.phone);
+    let orderNumber = String(payload.order_number || payload.name || payload.order_id || "");
+    let customer = payload.customer || {};
+    let shippingAddress = payload.shipping_address || payload.destination || {};
 
     if (!shopifyOrderId) {
       return new Response(JSON.stringify({ error: "missing order id" }), {
@@ -94,6 +92,37 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Fulfillment webhooks lack customer/phone — fetch full order via Admin API
+    const needsOrderFetch = !customer?.phone && !shippingAddress?.phone && !customer?.email;
+    if (needsOrderFetch) {
+      const shopDomain = req.headers.get("x-shopify-shop-domain");
+      const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+      if (shopDomain && adminToken) {
+        try {
+          const orderResp = await fetch(
+            `https://${shopDomain}/admin/api/2025-07/orders/${shopifyOrderId}.json`,
+            { headers: { "X-Shopify-Access-Token": adminToken } },
+          );
+          if (orderResp.ok) {
+            const { order } = await orderResp.json();
+            customer = order.customer || customer;
+            shippingAddress = order.shipping_address || shippingAddress;
+            orderNumber = String(order.order_number || order.name || orderNumber);
+          } else {
+            console.error(`Failed to fetch order ${shopifyOrderId}: ${orderResp.status}`);
+          }
+        } catch (e) {
+          console.error("Admin API fetch failed:", e);
+        }
+      }
+    }
+
+    const customerName =
+      `${customer.first_name || shippingAddress.first_name || ""} ${customer.last_name || shippingAddress.last_name || ""}`.trim()
+      || customer.name || null;
+    const customerEmail = customer.email || payload.email || null;
+    const customerPhone = normalizePhone(customer.phone || shippingAddress.phone || payload.phone);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
