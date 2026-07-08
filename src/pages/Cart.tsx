@@ -286,7 +286,7 @@ const Cart = () => {
             </section>
           </main>
 
-          <footer className="border-t border-border bg-background px-4 py-3 pb-[calc(7rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:fixed md:inset-x-0 md:bottom-0 md:z-20 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <footer className="border-t border-border bg-background px-4 py-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:fixed md:inset-x-0 md:bottom-0 md:z-20 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-lg space-y-3">
               <CouponInput />
 
