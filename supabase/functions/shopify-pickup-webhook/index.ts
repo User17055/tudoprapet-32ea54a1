@@ -128,14 +128,17 @@ Deno.serve(async (req) => {
     }
 
     const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
-    const outbound = {
-      event: "order_ready_for_pickup",
+    const outbound: Record<string, unknown> = {
+      event: eventName,
       order_id: `shopify-${shopifyOrderId}`,
       order_number: orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`,
       customer_name: customerName,
       phone: customerPhone,
       store_name: STORE_NAME,
     };
+    if (eventName === "order_ready_for_pickup") {
+      outbound.pickup_hours = PICKUP_HOURS;
+    }
 
     const resp = await fetch(endpoint, {
       method: "POST",
