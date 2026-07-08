@@ -39,6 +39,7 @@ import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
 import FeaturedTab from "./admin/FeaturedTab";
+import RetiradaTab from "./admin/RetiradaTab";
 
 interface SubPrice {
   id: string;
