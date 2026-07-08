@@ -223,6 +223,60 @@ export type Database = {
         }
         Relationships: []
       }
+      pickup_codes: {
+        Row: {
+          code: string
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          id: string
+          picked_up_at: string | null
+          picked_up_by: string | null
+          raw_order: Json | null
+          shopify_order_id: string
+          shopify_order_number: string | null
+          status: string
+          updated_at: string
+          whatsapp_error: string | null
+          whatsapp_sent_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          picked_up_at?: string | null
+          picked_up_by?: string | null
+          raw_order?: Json | null
+          shopify_order_id: string
+          shopify_order_number?: string | null
+          status?: string
+          updated_at?: string
+          whatsapp_error?: string | null
+          whatsapp_sent_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          picked_up_at?: string | null
+          picked_up_by?: string | null
+          raw_order?: Json | null
+          shopify_order_id?: string
+          shopify_order_number?: string | null
+          status?: string
+          updated_at?: string
+          whatsapp_error?: string | null
+          whatsapp_sent_at?: string | null
+        }
+        Relationships: []
+      }
       product_attributes: {
         Row: {
           attr_key: string
