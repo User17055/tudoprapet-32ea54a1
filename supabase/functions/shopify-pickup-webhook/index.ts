@@ -59,12 +59,15 @@ Deno.serve(async (req) => {
       fulfillmentStatus === "ready_for_pickup" ||
       tags.includes("pronto-retirada") ||
       tags.includes("ready-for-pickup");
+    const isOrderCreated = topic === "orders/create";
 
-    if (!isReadyToPickup) {
-      return new Response(JSON.stringify({ ignored: true, reason: `not ready-to-pickup (topic=${topic} status=${fulfillmentStatus})` }), {
+    if (!isReadyToPickup && !isOrderCreated) {
+      return new Response(JSON.stringify({ ignored: true, reason: `unhandled (topic=${topic} status=${fulfillmentStatus})` }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const eventName = isReadyToPickup ? "order_ready_for_pickup" : "order_created";
 
     const shopifyOrderId = String(payload.order_id || payload.id || "");
     let orderNumber = String(payload.order_number || payload.name || payload.order_id || "");
