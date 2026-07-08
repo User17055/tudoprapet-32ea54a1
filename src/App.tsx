@@ -17,7 +17,6 @@ import Catalog from "./pages/Catalog.tsx";
 import Cart from "./pages/Cart.tsx";
 import Clube from "./pages/Clube.tsx";
 import Admin from "./pages/Admin.tsx";
-import Retirada from "./pages/Retirada.tsx";
 import MeusPedidos from "./pages/MeusPedidos.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import { AcquisitionSourceGate } from "@/components/AcquisitionSourceGate";
@@ -40,7 +39,6 @@ const AppContent = () => {
         <Route path="/perfil" element={<Profile />} />
         <Route path="/clube" element={<Clube />} />
         <Route path="/admin" element={<Admin />} />
-        <Route path="/retirada" element={<Retirada />} />
         <Route path="/meus-pedidos" element={<MeusPedidos />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

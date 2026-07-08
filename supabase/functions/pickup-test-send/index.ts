@@ -12,16 +12,22 @@ Deno.serve(async (req) => {
     });
   }
 
+  let overrides: Record<string, unknown> = {};
+  if (req.method === "POST") {
+    try { overrides = await req.json(); } catch { /* ignore */ }
+  }
+
   const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
-  const payload = {
-    dry_run: true,
+  const defaults: Record<string, unknown> = {
     event: "order_ready_for_pickup",
     order_id: "shopify-1008",
     order_number: "#1008",
     customer_name: "Maria Silva",
     phone: "5511999999999",
-    store_name: "Lis-onTech",
+    store_name: "TudoPraPet",
+    pickup_hours: "segunda a sexta, das 9h às 18h, e aos sábados até 12h",
   };
+  const payload = { ...defaults, ...overrides };
 
   const start = Date.now();
   try {

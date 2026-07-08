@@ -39,6 +39,7 @@ import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
 import FeaturedTab from "./admin/FeaturedTab";
+import RetiradaTab from "./admin/RetiradaTab";
 
 interface SubPrice {
   id: string;
@@ -64,7 +65,8 @@ type SectionId =
   | "categories"
   | "banners"
   | "featured"
-  | "referrals";
+  | "referrals"
+  | "retirada";
 
 interface SectionDef {
   id: SectionId;
@@ -97,6 +99,12 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
     items: [
       { id: "banners", label: "Banners", description: "Carrossel de banners da página inicial", icon: ImageIcon, component: BannersTab },
       { id: "featured", label: "Destaques", description: "Produtos em destaque na página inicial", icon: Star, component: FeaturedTab },
+    ],
+  },
+  {
+    label: "Operação",
+    items: [
+      { id: "retirada", label: "Retirada", description: "Validar código de retirada do cliente", icon: Package, component: RetiradaTab },
     ],
   },
 ];
