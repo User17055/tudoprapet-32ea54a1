@@ -65,7 +65,8 @@ type SectionId =
   | "categories"
   | "banners"
   | "featured"
-  | "referrals";
+  | "referrals"
+  | "retirada";
 
 interface SectionDef {
   id: SectionId;
