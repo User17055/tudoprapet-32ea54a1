@@ -185,7 +185,7 @@ export const Header = () => {
                   return (
                     <Link
                       key={item.id}
-                      to={`/catalogo?categoria=${item.slug}`}
+                      to={`/catalogo?categoria=${item.slug}&categoria_id=${item.id}`}
                       className={`block border-b border-border py-3 text-sm font-medium transition-colors ${
                         isCategoryActive(item.slug) ? "text-primary font-semibold" : "text-foreground hover:text-primary"
                       }`}
@@ -204,7 +204,7 @@ export const Header = () => {
                         {kids.map((kid) => (
                           <Link
                             key={kid.id}
-                            to={`/catalogo?categoria=${kid.slug}`}
+                            to={`/catalogo?categoria=${kid.slug}&categoria_id=${kid.id}`}
                             className="py-1.5 text-sm text-muted-foreground transition-colors hover:text-primary"
                           >
                             {kid.name}

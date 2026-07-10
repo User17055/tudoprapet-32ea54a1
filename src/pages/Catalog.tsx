@@ -57,6 +57,7 @@ const Catalog = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get("busca") || "");
   const [categorySlug, setCategorySlug] = useState(searchParams.get("categoria") || "all");
+  const [categoryId, setCategoryId] = useState<string | null>(searchParams.get("categoria_id"));
   // multi-select brand slugs and attribute values
   const [brandSlugs, setBrandSlugs] = useState<Set<string>>(new Set());
   const [attrValues, setAttrValues] = useState<Record<string, Set<string>>>({});
@@ -104,16 +105,23 @@ const Catalog = () => {
 
   useEffect(() => {
     const category = searchParams.get("categoria");
+    const categoryParamId = searchParams.get("categoria_id");
     const pet = searchParams.get("pet");
 
     if (category) {
-      setCategorySlug(category);
+      const matchingCategory =
+        (categoryParamId && categories.find((c) => c.id === categoryParamId)) ||
+        categories.find((c) => c.slug === category);
+      setCategorySlug(matchingCategory?.slug || category);
+      setCategoryId(matchingCategory?.id || categoryParamId);
     } else if (pet) {
       const petSlug = normalizeSlug(pet);
       const matchingCategory = categories.find((c) => normalizeSlug(c.slug) === petSlug || normalizeSlug(c.name) === petSlug);
       setCategorySlug(matchingCategory?.slug || petSlug);
+      setCategoryId(matchingCategory?.id || null);
     } else {
       setCategorySlug("all");
+      setCategoryId(null);
     }
 
     setAttrValues((prev) => {
@@ -128,12 +136,14 @@ const Catalog = () => {
     const params: Record<string, string> = {};
     if (search) params.busca = search;
     if (categorySlug !== "all") params.categoria = categorySlug;
+    if (categoryId) params.categoria_id = categoryId;
     setSearchParams(params);
   };
 
   const clearFilters = () => {
     setSearch("");
     setCategorySlug("all");
+    setCategoryId(null);
     setBrandSlugs(new Set());
     setAttrValues({});
     setPriceRangeIdxs(new Set());
@@ -142,7 +152,10 @@ const Catalog = () => {
   };
 
   const rootCats = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
-  const selectedCat = useMemo(() => categories.find((c) => c.slug === categorySlug), [categories, categorySlug]);
+  const selectedCat = useMemo(
+    () => categories.find((c) => c.id === categoryId) || categories.find((c) => c.slug === categorySlug),
+    [categories, categoryId, categorySlug],
+  );
   const childrenOf = useMemo(() => {
     const map = new Map<string, Category[]>();
     for (const c of categories) {
@@ -322,7 +335,14 @@ const Catalog = () => {
 
   const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
   if (categorySlug !== "all") {
-    activeChips.push({ key: `cat-${categorySlug}`, label: categoryChipLabel, onRemove: () => setCategorySlug("all") });
+    activeChips.push({
+      key: `cat-${categoryId || categorySlug}`,
+      label: categoryChipLabel,
+      onRemove: () => {
+        setCategorySlug("all");
+        setCategoryId(null);
+      },
+    });
   }
   brandSlugs.forEach((slug) => {
     const brand = brands.find((b) => b.slug === slug);
@@ -342,7 +362,11 @@ const Catalog = () => {
       label: `Busca: "${search}"`,
       onRemove: () => {
         setSearch("");
-        setSearchParams(categorySlug !== "all" ? { categoria: categorySlug } : {});
+        setSearchParams(
+          categorySlug !== "all"
+            ? { categoria: categorySlug, ...(categoryId ? { categoria_id: categoryId } : {}) }
+            : {},
+        );
       },
     });
   }
@@ -362,7 +386,14 @@ const Catalog = () => {
       <div className={depth > 0 ? "ml-3 border-l border-border pl-3" : ""}>
         <div className="flex items-center gap-0.5">
           <div className="min-w-0 flex-1">
-            <CheckRow checked={categorySlug === cat.slug} onChange={() => setCategorySlug(cat.slug)} label={cat.name} />
+            <CheckRow
+              checked={selectedCat?.id === cat.id}
+              onChange={() => {
+                setCategorySlug(cat.slug);
+                setCategoryId(cat.id);
+              }}
+              label={cat.name}
+            />
           </div>
           {kids.length > 0 && (
             <button
@@ -443,7 +474,10 @@ const Catalog = () => {
             <div className="space-y-0.5">
               <CheckRow
                 checked={categorySlug === "all"}
-                onChange={() => setCategorySlug("all")}
+                onChange={() => {
+                  setCategorySlug("all");
+                  setCategoryId(null);
+                }}
                 label="Todas"
               />
               {rootCats.map((c) => (
