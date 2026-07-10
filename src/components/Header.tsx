@@ -79,10 +79,6 @@ export const Header = () => {
           </span>
         </Link>
 
-        <div className="flex justify-self-end md:hidden">
-          <CartDrawer />
-        </div>
-
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
@@ -122,7 +118,6 @@ export const Header = () => {
               </Button>
             </Link>
           )}
-          <CartDrawer />
           <Button
             variant="ghost"
             size="icon"
@@ -132,6 +127,10 @@ export const Header = () => {
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
+        </div>
+
+        <div className="col-start-3 row-start-1 flex justify-self-end md:col-auto md:row-auto md:justify-self-auto">
+          <CartDrawer />
         </div>
       </div>
 
