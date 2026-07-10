@@ -46,6 +46,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       {items.map((item) => {
         const kids = childrenOf.get(item.id) || [];
         const active = isActive(item.slug);
+        const isOpen = openId === item.id;
         const activeKid = kids.find((k) => k.id === activeChildId);
         const grandkids = activeKid ? childrenOf.get(activeKid.id) || [] : [];
 
@@ -64,8 +65,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
             <Link
               to={`/catalogo?categoria=${item.slug}`}
               onFocus={() => openItem(item)}
+              aria-expanded={kids.length > 0 ? isOpen : undefined}
               className={`block border-b-2 px-3 py-2 text-base font-semibold transition-colors ${
-                active
+                active || isOpen
                   ? "border-primary text-primary"
                   : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
               }`}
@@ -73,9 +75,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               {item.label}
             </Link>
 
-            {openId === item.id && kids.length > 0 && (
+            {isOpen && kids.length > 0 && (
               <div className="absolute left-0 top-full z-50 pt-2">
-                <div className="flex bg-card shadow-xl overflow-hidden">
+                <div className="flex overflow-hidden border-t-2 border-primary bg-card shadow-xl">
                   <div className="w-52 py-3">
                     {kids.map((kid) => {
                       const kidGrandkids = childrenOf.get(kid.id) || [];
