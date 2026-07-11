@@ -7,6 +7,7 @@ import {
   addLineToShopifyCart,
   updateShopifyCartLine,
   removeLineFromShopifyCart,
+  findShopifyCartLine,
   syncShopifyCart,
   applyDiscountToCart,
 } from '@/lib/shopify';
@@ -140,12 +141,60 @@ export const useCartStore = create<CartStore>()(
       removeItem: async (variantId) => {
         const { items, cartId, clearCart } = get();
         const item = items.find(i => i.variantId === variantId);
-        if (!item?.lineId || !cartId) return;
+        if (!item) return;
 
-        set({ items: items.filter(i => i.variantId !== variantId), isLoading: true });
+        const remainingItems = items.filter(i => i.variantId !== variantId);
+        set({ items: remainingItems, isLoading: true });
         try {
-          const result = await removeLineFromShopifyCart(cartId, item.lineId);
-          if (result.success && get().items.length === 0) clearCart();
+          if (!cartId) {
+            if (remainingItems.length === 0) clearCart();
+            return;
+          }
+
+          let lineId = item.lineId;
+          if (!lineId) {
+            const resolved = await findShopifyCartLine(cartId, variantId);
+            if (!resolved) {
+              set({ items });
+              return;
+            }
+            if (resolved.cartNotFound) {
+              clearCart();
+              return;
+            }
+            lineId = resolved.lineId;
+          }
+
+          // Se a linha já não existe na Shopify, a remoção local está correta.
+          if (!lineId) {
+            if (remainingItems.length === 0) clearCart();
+            return;
+          }
+
+          let result = await removeLineFromShopifyCart(cartId, lineId);
+
+          // Carrinhos antigos podem guardar um lineId obsoleto. Resolve pelo
+          // variantId atual e repete a remoção uma vez com o identificador certo.
+          if (!result.success && !result.cartNotFound) {
+            const resolved = await findShopifyCartLine(cartId, variantId);
+            if (!resolved) {
+              set({ items });
+              return;
+            }
+            if (resolved.cartNotFound) {
+              clearCart();
+              return;
+            }
+            if (!resolved.lineId) {
+              if (remainingItems.length === 0) clearCart();
+              return;
+            }
+            if (resolved.lineId !== lineId) {
+              result = await removeLineFromShopifyCart(cartId, resolved.lineId);
+            }
+          }
+
+          if (result.success && remainingItems.length === 0) clearCart();
           else if (result.cartNotFound) clearCart();
           else if (!result.success) set({ items });
         } catch (error) {

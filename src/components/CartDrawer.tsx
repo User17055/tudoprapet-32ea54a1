@@ -41,6 +41,11 @@ export const CartDrawer = () => {
   const emptyIconRef = useRef<HTMLDivElement>(null);
   const prevTotalRef = useRef(displayTotalPrice);
 
+  const closeCart = () => {
+    setCartOpen(false);
+    window.setTimeout(() => { document.body.style.pointerEvents = ''; }, 100);
+  };
+
   useEffect(() => { if (isCartOpen) syncCart(); }, [isCartOpen, syncCart]);
 
   useEffect(() => {
@@ -109,13 +114,7 @@ export const CartDrawer = () => {
   }
 
   return (
-    <Sheet open={isCartOpen} onOpenChange={(open) => {
-      setCartOpen(open);
-      if (!open) {
-        // Fix Radix Dialog leaving body with pointer-events:none, blocking subsequent reopens
-        setTimeout(() => { document.body.style.pointerEvents = ''; }, 100);
-      }
-    }}>
+    <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
           <ShoppingCart className="h-5 w-5" />
@@ -126,7 +125,11 @@ export const CartDrawer = () => {
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full max-w-none sm:max-w-lg flex flex-col h-full p-0 gap-0">
+      <SheetContent
+        onClose={closeCart}
+        onEscapeKeyDown={closeCart}
+        className="w-full max-w-none sm:max-w-lg flex flex-col h-full p-0 gap-0"
+      >
         {/* Header */}
         <SheetHeader className="flex-shrink-0 px-4 sm:px-6 pt-5 sm:pt-6 pb-3 sm:pb-4 border-b border-border bg-gradient-to-br from-primary/5 to-transparent text-left">
           <SheetTitle className="font-display text-xl sm:text-2xl flex items-center gap-2 pr-8">

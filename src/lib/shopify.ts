@@ -283,7 +283,13 @@ export const PRODUCT_BY_HANDLE_QUERY = `
 // Cart mutations
 const CART_QUERY = `
   query cart($id: ID!) {
-    cart(id: $id) { id totalQuantity }
+    cart(id: $id) {
+      id
+      totalQuantity
+      lines(first: 100) {
+        edges { node { id merchandise { ... on ProductVariant { id } } } }
+      }
+    }
   }
 `;
 
@@ -471,8 +477,27 @@ export async function removeLineFromShopifyCart(cartId: string, lineId: string):
 
   const userErrors = data?.data?.cartLinesRemove?.userErrors || [];
   if (isCartNotFoundError(userErrors)) return { success: false, cartNotFound: true };
-  if (userErrors.length > 0) return { success: false };
+  if (userErrors.length > 0) {
+    console.error('Failed to remove cart line:', userErrors);
+    return { success: false };
+  }
   return { success: true };
+}
+
+export async function findShopifyCartLine(
+  cartId: string,
+  variantId: string,
+): Promise<{ lineId: string | null; cartNotFound: boolean } | null> {
+  const data = await storefrontApiRequest(CART_QUERY, { id: cartId });
+  if (!data) return null;
+
+  const cart = data?.data?.cart;
+  if (!cart) return { lineId: null, cartNotFound: true };
+
+  const line = cart.lines?.edges?.find(
+    (edge: { node: { merchandise?: { id?: string } } }) => edge.node.merchandise?.id === variantId,
+  );
+  return { lineId: line?.node?.id ?? null, cartNotFound: false };
 }
 
 export async function syncShopifyCart(cartId: string): Promise<boolean> {
