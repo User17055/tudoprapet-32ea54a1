@@ -70,8 +70,56 @@
 
 @layer utilities {
   .pet-toast {
+    --toast-accent: #0ea5e9;
     font-family: 'Poppins', sans-serif !important;
     letter-spacing: -0.01em;
+  }
+
+  .pet-toast::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 4px;
+    border-radius: 0 0 22px 22px;
+    background: var(--toast-accent);
+    transform-origin: left center;
+    animation: pet-toast-progress 5s linear forwards;
+  }
+
+  .pet-toast:hover::after {
+    animation-play-state: paused;
+  }
+
+  .pet-toast.toast-success { --toast-accent: #198754; }
+  .pet-toast.toast-error { --toast-accent: #dc3545; }
+  .pet-toast.toast-warning { --toast-accent: #f59e0b; }
+  .pet-toast.toast-info { --toast-accent: #0ea5e9; }
+  .pet-toast.toast-loading { --toast-accent: #2563eb; }
+
+  .pet-toast .pet-toast-icon {
+    color: var(--toast-accent) !important;
+  }
+
+  .pet-toast [data-title]::before {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--toast-accent);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .pet-toast.toast-success [data-title]::before { content: 'Sucesso'; }
+  .pet-toast.toast-error [data-title]::before { content: 'Erro'; }
+  .pet-toast.toast-warning [data-title]::before { content: 'Aten\00e7\00e3o'; }
+  .pet-toast.toast-info [data-title]::before { content: 'Informa\00e7\00e3o'; }
+  .pet-toast.toast-loading [data-title]::before { content: 'Aguarde'; }
+
+  @keyframes pet-toast-progress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
   }
 
   .hover-lift {
