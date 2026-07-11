@@ -75,6 +75,7 @@
     letter-spacing: -0.01em;
   }
 
+  .pet-toast::before,
   .pet-toast::after {
     content: '';
     position: absolute;
@@ -83,9 +84,18 @@
     left: 0;
     height: 4px;
     border-radius: 0 0 22px 22px;
+  }
+
+  .pet-toast::before {
+    background: var(--toast-accent);
+    opacity: 0.16;
+  }
+
+  .pet-toast::after {
     background: var(--toast-accent);
     transform-origin: left center;
     animation: pet-toast-progress 5s linear forwards;
+    will-change: transform;
   }
 
   .pet-toast:hover::after {

@@ -86,7 +86,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         duration: 5000,
         classNames: {
           toast:
-            "group toast pet-toast !w-[min(92vw,390px)] !rounded-[22px] !border !px-4 !py-4 !font-medium !shadow-[0_14px_40px_-12px_rgba(15,23,42,0.30)] backdrop-blur-md",
+            "group toast pet-toast !w-[min(92vw,390px)] !overflow-hidden !rounded-[22px] !border !px-4 !py-4 !font-medium !shadow-[0_14px_40px_-12px_rgba(15,23,42,0.30)] backdrop-blur-md",
           success:
             "toast-success !border-emerald-500/30 !bg-white !text-slate-800 dark:!border-emerald-400/35 dark:!bg-slate-950 dark:!text-slate-100",
           error:
