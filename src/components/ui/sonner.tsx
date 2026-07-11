@@ -10,11 +10,21 @@ const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const animateToast = (toastElement: HTMLElement) => {
       if (toastElement.dataset.gsapAnimated === "true") return;
       toastElement.dataset.gsapAnimated = "true";
+
+      const progressTrack = document.createElement("div");
+      const progressFill = document.createElement("div");
+      progressTrack.className = "pet-toast-progress";
+      progressFill.className = "pet-toast-progress-fill";
+      progressTrack.setAttribute("aria-hidden", "true");
+      progressTrack.appendChild(progressFill);
+      toastElement.appendChild(progressTrack);
+
+      if (prefersReducedMotion) return;
 
       const content = toastElement.querySelector<HTMLElement>("[data-content]");
       const icon = toastElement.querySelector<HTMLElement>("[data-icon]");
