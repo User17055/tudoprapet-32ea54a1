@@ -98,7 +98,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
           loading:
             "toast-loading !border-blue-500/30 !bg-white !text-slate-800 dark:!border-blue-400/35 dark:!bg-slate-950 dark:!text-slate-100",
           title: "!text-[14px] !font-medium !leading-snug !text-slate-600 dark:!text-slate-300",
-          description: "!mt-0.5 !text-sm !font-medium !leading-snug !text-slate-500 dark:!text-slate-400",
+          content: "!min-w-0 !flex-1",
+          description: "!mt-0.5 !block !max-w-[270px] !overflow-hidden !text-ellipsis !whitespace-nowrap !text-sm !font-medium !leading-snug !text-slate-500 dark:!text-slate-400",
           icon: "pet-toast-icon !mr-1 !flex !h-9 !w-9 !shrink-0 !items-center !justify-center !rounded-full !bg-black/[0.035] dark:!bg-white/10",
           closeButton:
             "!right-2 !top-2 !left-auto !translate-x-0 !translate-y-0 !border-current/15 !bg-white/70 !text-current hover:!bg-white dark:!bg-black/30",
