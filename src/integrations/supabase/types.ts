@@ -434,6 +434,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_carts: {
+        Row: {
+          cart_id: string | null
+          checkout_url: string | null
+          created_at: string
+          discount_code: string | null
+          has_auto_opened_cart: boolean
+          items: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cart_id?: string | null
+          checkout_url?: string | null
+          created_at?: string
+          discount_code?: string | null
+          has_auto_opened_cart?: boolean
+          items?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cart_id?: string | null
+          checkout_url?: string | null
+          created_at?: string
+          discount_code?: string | null
+          has_auto_opened_cart?: boolean
+          items?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

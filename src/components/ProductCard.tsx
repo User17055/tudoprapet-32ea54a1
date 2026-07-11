@@ -57,7 +57,7 @@ export const ProductCard = ({ product }: Props) => {
     e.stopPropagation();
     if (!variant) return;
 
-    await addItem({
+    const addPromise = addItem({
       product,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -65,8 +65,8 @@ export const ProductCard = ({ product }: Props) => {
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
-
     openCartOnFirstAdd();
+    await addPromise;
 
     toast.success("Adicionado ao carrinho!", {
       description: node.title,

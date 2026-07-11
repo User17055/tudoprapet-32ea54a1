@@ -204,7 +204,7 @@ const ProductDetail = () => {
 
   const handleAdd = async () => {
     if (!variant) return;
-    await addItem({
+    const addPromise = addItem({
       product,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -213,6 +213,7 @@ const ProductDetail = () => {
       selectedOptions: variant.selectedOptions || [],
     });
     openCartOnFirstAdd();
+    await addPromise;
     toast.success("Adicionado à sacola!", { description: node.title, position: "top-center" });
   };
 

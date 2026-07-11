@@ -32,6 +32,8 @@ interface CartStore {
   removeDiscount: () => Promise<void>;
   setCartOpen: (open: boolean) => void;
   openCartOnFirstAdd: () => void;
+  replaceCart: (cart: Pick<CartStore, 'items' | 'cartId' | 'checkoutUrl' | 'discountCode' | 'hasAutoOpenedCart'>) => void;
+  resetLocalCart: () => void;
 }
 
 export const useCartStore = create<CartStore>()(
@@ -50,12 +52,35 @@ export const useCartStore = create<CartStore>()(
         if (get().hasAutoOpenedCart) return;
         set({ isCartOpen: true, hasAutoOpenedCart: true });
       },
+      replaceCart: (cart) => set({
+        ...cart,
+        isLoading: false,
+        isSyncing: false,
+        isCartOpen: false,
+      }),
+      resetLocalCart: () => set({
+        items: [],
+        cartId: null,
+        checkoutUrl: null,
+        discountCode: null,
+        isLoading: false,
+        isSyncing: false,
+        isCartOpen: false,
+        hasAutoOpenedCart: false,
+      }),
 
       addItem: async (item) => {
         const { items, cartId, clearCart } = get();
         const existingItem = items.find(i => i.variantId === item.variantId);
+        if (existingItem && !existingItem.lineId) return;
 
-        set({ isLoading: true });
+        const optimisticItems: CartItem[] = existingItem
+          ? items.map(i => i.variantId === item.variantId
+            ? { ...i, quantity: i.quantity + item.quantity }
+            : i)
+          : [...items, { ...item, lineId: null }];
+
+        set({ items: optimisticItems, isLoading: true });
         try {
           if (!cartId) {
             const result = await createShopifyCart({ ...item, lineId: null });
@@ -63,28 +88,28 @@ export const useCartStore = create<CartStore>()(
               set({
                 cartId: result.cartId,
                 checkoutUrl: result.checkoutUrl,
-                items: [{ ...item, lineId: result.lineId }],
+                items: get().items.map(i => i.variantId === item.variantId
+                  ? { ...i, lineId: result.lineId }
+                  : i),
               });
-            }
+            } else set({ items });
           } else if (existingItem) {
             const newQuantity = existingItem.quantity + item.quantity;
-            if (!existingItem.lineId) return;
             const result = await updateShopifyCartLine(cartId, existingItem.lineId, newQuantity);
-            if (result.success) {
-              set({ items: get().items.map(i => i.variantId === item.variantId ? { ...i, quantity: newQuantity } : i) });
-            } else if (result.cartNotFound) {
-              clearCart();
-            }
+            if (result.cartNotFound) clearCart();
+            else if (!result.success) set({ items });
           } else {
             const result = await addLineToShopifyCart(cartId, { ...item, lineId: null });
             if (result.success) {
-              set({ items: [...get().items, { ...item, lineId: result.lineId ?? null }] });
-            } else if (result.cartNotFound) {
-              clearCart();
-            }
+              set({ items: get().items.map(i => i.variantId === item.variantId
+                ? { ...i, lineId: result.lineId ?? null }
+                : i) });
+            } else if (result.cartNotFound) clearCart();
+            else set({ items });
           }
         } catch (error) {
           console.error('Failed to add item:', error);
+          set({ items });
         } finally {
           set({ isLoading: false });
         }
@@ -96,14 +121,17 @@ export const useCartStore = create<CartStore>()(
         const item = items.find(i => i.variantId === variantId);
         if (!item?.lineId || !cartId) return;
 
-        set({ isLoading: true });
+        set({
+          items: items.map(i => i.variantId === variantId ? { ...i, quantity } : i),
+          isLoading: true,
+        });
         try {
           const result = await updateShopifyCartLine(cartId, item.lineId, quantity);
-          if (result.success) {
-            set({ items: get().items.map(i => i.variantId === variantId ? { ...i, quantity } : i) });
-          } else if (result.cartNotFound) { clearCart(); }
+          if (result.cartNotFound) clearCart();
+          else if (!result.success) set({ items });
         } catch (error) {
           console.error('Failed to update quantity:', error);
+          set({ items });
         } finally {
           set({ isLoading: false });
         }
@@ -114,15 +142,15 @@ export const useCartStore = create<CartStore>()(
         const item = items.find(i => i.variantId === variantId);
         if (!item?.lineId || !cartId) return;
 
-        set({ isLoading: true });
+        set({ items: items.filter(i => i.variantId !== variantId), isLoading: true });
         try {
           const result = await removeLineFromShopifyCart(cartId, item.lineId);
-          if (result.success) {
-            const newItems = get().items.filter(i => i.variantId !== variantId);
-            newItems.length === 0 ? clearCart() : set({ items: newItems });
-          } else if (result.cartNotFound) { clearCart(); }
+          if (result.success && get().items.length === 0) clearCart();
+          else if (result.cartNotFound) clearCart();
+          else if (!result.success) set({ items });
         } catch (error) {
           console.error('Failed to remove item:', error);
+          set({ items });
         } finally {
           set({ isLoading: false });
         }
