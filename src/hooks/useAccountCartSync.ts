@@ -6,6 +6,7 @@ import type { CartItem } from '@/stores/cartStore';
 import { useCartStore } from '@/stores/cartStore';
 
 const SAVE_DELAY_MS = 400;
+const REFRESH_INTERVAL_MS = 5_000;
 
 type SavedCart = {
   items: CartItem[];
@@ -13,6 +14,14 @@ type SavedCart = {
   checkoutUrl: string | null;
   discountCode: string | null;
   hasAutoOpenedCart: boolean;
+};
+
+type AccountCartRow = {
+  items: Json;
+  cart_id: string | null;
+  checkout_url: string | null;
+  discount_code: string | null;
+  has_auto_opened_cart: boolean;
 };
 
 function getSavedCart(): SavedCart {
@@ -30,13 +39,7 @@ function signature(cart: SavedCart) {
   return JSON.stringify(cart);
 }
 
-function rowToCart(row: {
-  items: Json;
-  cart_id: string | null;
-  checkout_url: string | null;
-  discount_code: string | null;
-  has_auto_opened_cart: boolean;
-}): SavedCart {
+function rowToCart(row: AccountCartRow): SavedCart {
   return {
     items: Array.isArray(row.items) ? row.items as unknown as CartItem[] : [],
     cartId: row.cart_id,
@@ -112,8 +115,20 @@ export function useAccountCartSync() {
   useEffect(() => {
     if (!user) return;
 
+    const applyRemoteCart = (row: AccountCartRow) => {
+      const state = useCartStore.getState();
+      if (!readyRef.current || state.isLoading || state.isSyncing || saveTimerRef.current) return;
+
+      const remoteCart = rowToCart(row);
+      const remoteSignature = signature(remoteCart);
+      if (remoteSignature === lastSignatureRef.current) return;
+
+      lastSignatureRef.current = remoteSignature;
+      useCartStore.getState().replaceCart(remoteCart);
+    };
+
     const refreshFromAccount = async () => {
-      if (document.visibilityState !== 'visible' || !readyRef.current) return;
+      if (!readyRef.current) return;
       const { data, error } = await supabase
         .from('user_carts')
         .select('items, cart_id, checkout_url, discount_code, has_auto_opened_cart')
@@ -125,12 +140,7 @@ export function useAccountCartSync() {
         return;
       }
       if (!data) return;
-
-      const remoteCart = rowToCart(data);
-      const remoteSignature = signature(remoteCart);
-      if (remoteSignature === lastSignatureRef.current) return;
-      lastSignatureRef.current = remoteSignature;
-      useCartStore.getState().replaceCart(remoteCart);
+      applyRemoteCart(data);
     };
 
     const unsubscribe = useCartStore.subscribe((state) => {
@@ -147,13 +157,37 @@ export function useAccountCartSync() {
 
       lastSignatureRef.current = nextSignature;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => { void saveCart(user.id, cart); }, SAVE_DELAY_MS);
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        void saveCart(user.id, cart);
+      }, SAVE_DELAY_MS);
     });
+
+    const realtimeChannel = supabase
+      .channel(`user-cart-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_carts', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          if (payload.eventType !== 'DELETE') applyRemoteCart(payload.new as AccountCartRow);
+        },
+      )
+      .subscribe();
+
+    const refreshInterval = window.setInterval(() => { void refreshFromAccount(); }, REFRESH_INTERVAL_MS);
     document.addEventListener('visibilitychange', refreshFromAccount);
+    window.addEventListener('pageshow', refreshFromAccount);
+    window.addEventListener('focus', refreshFromAccount);
+    window.addEventListener('online', refreshFromAccount);
 
     return () => {
       unsubscribe();
+      void supabase.removeChannel(realtimeChannel);
+      window.clearInterval(refreshInterval);
       document.removeEventListener('visibilitychange', refreshFromAccount);
+      window.removeEventListener('pageshow', refreshFromAccount);
+      window.removeEventListener('focus', refreshFromAccount);
+      window.removeEventListener('online', refreshFromAccount);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [user]);
