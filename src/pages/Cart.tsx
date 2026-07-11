@@ -9,10 +9,8 @@ import {
   Loader2,
   Minus,
   Plus,
-  ShieldCheck,
   ShoppingCart,
   Trash2,
-  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CouponInput } from "@/components/CouponInput";
@@ -286,7 +284,7 @@ const Cart = () => {
             </section>
           </main>
 
-          <footer className="border-t border-border bg-background px-4 py-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:fixed md:inset-x-0 md:bottom-0 md:z-20 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <footer className="border-t border-border bg-background px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:fixed md:inset-x-0 md:bottom-0 md:z-20 md:py-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-lg space-y-3">
               <CouponInput />
 
@@ -338,14 +336,6 @@ const Cart = () => {
                 <Link to="/catalogo">Continuar comprando</Link>
               </Button>
 
-              <div className="flex items-center justify-center gap-4 pt-0.5 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5 text-pet-green" /> Compra segura
-                </span>
-                <span className="flex items-center gap-1">
-                  <Truck className="h-3.5 w-3.5 text-primary" /> Entrega rápida
-                </span>
-              </div>
             </div>
           </footer>
         </>
