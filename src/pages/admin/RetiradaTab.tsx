@@ -149,7 +149,7 @@ export default function RetiradaTab() {
   };
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-2xl space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Código de retirada</CardTitle>
@@ -246,6 +246,74 @@ export default function RetiradaTab() {
                 Novo código
               </Button>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de retiradas
+            </CardTitle>
+            <CardDescription>Últimos pedidos marcados como retirados.</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadHistory}
+            disabled={historyLoading}
+          >
+            {historyLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {historyLoading && history.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+              Carregando...
+            </div>
+          ) : history.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              Nenhuma retirada registrada ainda.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {history.map((h) => (
+                <li key={h.id} className="py-3 flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-sm truncate">
+                        {h.name || `#${h.order_number}`}
+                        <span className="ml-2 text-muted-foreground font-normal">
+                          {h.customer_name}
+                        </span>
+                      </p>
+                      <p className="text-sm font-bold whitespace-nowrap">
+                        {formatCurrency(h.total_price, h.currency)}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(h.fulfilled_at || h.created_at)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {h.items_count} {h.items_count === 1 ? "item" : "itens"}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
