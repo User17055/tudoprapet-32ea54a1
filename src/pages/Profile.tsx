@@ -19,6 +19,7 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ const formatCurrency = (value: number, currency = "BRL") =>
 const Profile = () => {
   const { user, loading, logout } = useAuth();
   const { isSubscribed } = useSubscription();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [totalSavings, setTotalSavings] = useState(0);
@@ -345,6 +347,18 @@ const Profile = () => {
                 </div>
               </div>
             </div>
+
+            {isAdmin && (
+              <Button
+                asChild
+                className="h-12 w-full rounded-xl btn-bounce bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Link to="/admin">
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Acessar painel admin
+                </Link>
+              </Button>
+            )}
 
             <Button
               variant="outline"
