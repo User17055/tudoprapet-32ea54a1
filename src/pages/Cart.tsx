@@ -171,7 +171,7 @@ const Cart = () => {
         </main>
       ) : (
         <>
-          <main className="flex-1 px-3 py-3 md:pb-40">
+          <main className="flex-1 px-3 py-3 md:mx-auto md:grid md:w-full md:max-w-6xl md:grid-cols-[minmax(0,1fr)_360px] md:gap-6 md:px-6 md:py-6">
             <section ref={itemsListRef} aria-label="Produtos no carrinho" className="space-y-2.5">
               {items.map((item) => {
                 const regularPrice = parseFloat(item.price.amount);
