@@ -25,6 +25,7 @@ import {
   Star,
   Store,
   Ticket,
+  PawPrint,
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -145,25 +146,27 @@ export default function Admin() {
   const ActiveComponent = active.component;
 
   return (
-    <div className="min-h-screen bg-[#f7f9fc] text-[#101828]">
+    <div className="min-h-screen bg-[#f4f6f2] text-[#101828]">
       {/* Barra superior */}
-      <header className="sticky top-0 z-40 bg-white/90 shadow-[0_1px_0_rgba(16,24,40,0.06),0_18px_40px_-34px_rgba(16,24,40,0.55)] backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-primary text-primary-foreground shadow-[0_16px_40px_-28px_rgba(11,31,68,0.9)]">
         <div className="flex h-16 items-center gap-3 px-4 md:px-7">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-2xl px-1 py-1 transition-colors hover:bg-[#f6f8fb]">
-            <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
+          <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-2xl px-1 py-1 transition-colors hover:bg-white/10">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+              <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
+            </span>
             <span className="hidden font-display text-xl font-bold leading-none sm:block">
-              Tudo<span className="text-primary">Pra</span>Pet
+              Tudo<span className="text-secondary">Pra</span>Pet
             </span>
           </Link>
-          <span className="rounded-full bg-[#e9f0ff] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
-            Admin
+          <span className="rounded-full border border-secondary/30 bg-secondary/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-secondary">
+            Central admin
           </span>
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right md:block">
-              <p className="text-xs font-semibold text-[#1f2a44]">Painel administrativo</p>
-              <p className="max-w-[260px] truncate text-xs text-[#667085]">{user?.email}</p>
+              <p className="text-xs font-semibold text-white">Painel administrativo</p>
+              <p className="max-w-[260px] truncate text-xs text-white/60">{user?.email}</p>
             </div>
-            <Button asChild size="sm" variant="ghost" className="h-9 gap-1.5 rounded-full bg-[#f3f6fb] px-4 text-[#1f2a44] hover:bg-[#e9eef7]">
+            <Button asChild size="sm" variant="ghost" className="h-9 gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 text-white hover:bg-white/20 hover:text-white">
               <Link to="/">
                 <Store className="h-3.5 w-3.5" />
                 Ver loja
@@ -175,10 +178,15 @@ export default function Admin() {
 
       <div className="flex">
         {/* Menu lateral (desktop) */}
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 flex-col gap-6 overflow-y-auto bg-[#fbfcfe] px-4 py-6 shadow-[1px_0_0_rgba(16,24,40,0.05)] lg:flex">
+        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 flex-col gap-6 overflow-y-auto bg-gradient-to-b from-[#102650] to-[#0a1b3c] px-4 py-6 text-white shadow-[8px_0_34px_-30px_rgba(7,20,46,0.9)] lg:flex">
+          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-4">
+            <PawPrint className="absolute -bottom-3 -right-2 h-16 w-16 rotate-[-18deg] text-secondary/10" />
+            <p className="text-xs font-bold text-secondary">Tudo no lugar</p>
+            <p className="mt-1 max-w-[190px] text-xs leading-relaxed text-white/55">Gerencie loja, clube e operação em um só painel.</p>
+          </div>
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[#7b8497]">
+              <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-white/40">
                 {group.label}
               </p>
               <nav className="space-y-1">
@@ -191,14 +199,14 @@ export default function Admin() {
                       className={cn(
                         "group flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-all",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-[0_16px_32px_-20px_rgba(30,64,175,0.95)]"
-                          : "text-[#526071] hover:bg-white hover:text-[#10234d] hover:shadow-[0_10px_26px_-24px_rgba(16,24,40,0.8)]",
+                          ? "bg-secondary text-secondary-foreground shadow-[0_14px_30px_-18px_rgba(246,199,72,0.95)]"
+                          : "text-white/65 hover:bg-white/10 hover:text-white",
                       )}
                     >
                       <span
                         className={cn(
                           "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors",
-                          isActive ? "bg-white/15" : "bg-transparent text-[#7a8699] group-hover:bg-[#f4f7fb]",
+                          isActive ? "bg-primary/10" : "bg-transparent text-white/45 group-hover:bg-white/10 group-hover:text-secondary",
                         )}
                       >
                         <item.icon className="h-4 w-4" />
@@ -214,7 +222,7 @@ export default function Admin() {
 
         <div className="min-w-0 flex-1">
           {/* Navegação mobile */}
-          <div className="sticky top-16 z-30 bg-white/95 shadow-[0_1px_0_rgba(16,24,40,0.06)] backdrop-blur lg:hidden">
+          <div className="sticky top-16 z-30 border-b border-primary/10 bg-[#f4f6f2]/95 backdrop-blur lg:hidden">
             <div className="scrollbar-hide flex gap-2 overflow-x-auto px-3 py-2.5">
               {ALL_SECTIONS.map((item) => {
                 const isActive = item.id === active.id;
@@ -226,7 +234,7 @@ export default function Admin() {
                       "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-semibold transition-colors",
                       isActive
                         ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-[#f3f6fb] text-[#596579]",
+                        : "border border-primary/10 bg-white text-[#596579]",
                     )}
                   >
                     <item.icon className="h-3.5 w-3.5" />
@@ -238,18 +246,19 @@ export default function Admin() {
           </div>
 
           <main className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
-            <div className="mb-6 rounded-[28px] bg-white px-4 py-4 shadow-[0_18px_48px_-38px_rgba(16,24,40,0.85)] md:px-6">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/10">
+            <div className="paw-pattern relative mb-6 overflow-hidden rounded-[28px] bg-gradient-to-br from-primary via-[#17386f] to-[#102650] px-5 py-5 text-white shadow-[0_24px_52px_-34px_rgba(13,37,82,0.9)] md:px-7 md:py-6">
+              <div className="relative flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground shadow-[0_12px_26px_-16px_rgba(246,199,72,0.9)]">
                   <ActiveIcon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-display text-xl font-bold leading-tight text-[#101828] md:text-2xl">{active.label}</h1>
-                  <p className="mt-1 text-sm text-[#667085]">{active.description}</p>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-secondary">Central TudoPraPet</p>
+                  <h1 className="font-display text-xl font-bold leading-tight text-white md:text-2xl">{active.label}</h1>
+                  <p className="mt-1 text-sm text-white/60">{active.description}</p>
                 </div>
               </div>
             </div>
-            <div className="[&_.rounded-lg]:rounded-2xl [&_.rounded-xl]:rounded-3xl [&_.rounded-lg.border]:border-transparent [&_.rounded-xl.border]:border-transparent [&_.bg-card]:bg-white [&_.shadow-sm]:shadow-[0_18px_46px_-36px_rgba(16,24,40,0.8)] [&_table]:overflow-hidden [&_thead]:bg-[#f8fafc]">
+            <div className="[&_.rounded-lg]:rounded-2xl [&_.rounded-xl]:rounded-3xl [&_.rounded-lg.border]:border-primary/5 [&_.rounded-xl.border]:border-primary/5 [&_.bg-card]:bg-white [&_.shadow-sm]:shadow-[0_18px_46px_-36px_rgba(16,24,40,0.8)] [&_table]:overflow-hidden [&_thead]:bg-[#f7f8f3] [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-secondary/5">
               <ActiveComponent />
             </div>
           </main>
@@ -677,12 +686,12 @@ function UsersTab() {
     if (p.error) toast.error("Erro ao carregar usuários");
     setProfiles((p.data || []) as ProfileRow[]);
     const ids = new Set<string>();
-    (s.data || []).forEach((row: any) => {
+    (s.data || []).forEach((row) => {
       if (row.status === "active") ids.add(row.user_id);
     });
     setSubscriberIds(ids);
     const emails = new Set<string>();
-    (m.data || []).forEach((row: any) => {
+    (m.data || []).forEach((row) => {
       if (row.is_active && row.email) emails.add(row.email.toLowerCase());
     });
     setMemberEmails(emails);

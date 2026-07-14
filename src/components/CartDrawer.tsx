@@ -99,7 +99,7 @@ export const CartDrawer = () => {
 
   if (isMobile) {
     return (
-      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
+      <Button asChild variant="ghost" size="icon" className="relative h-10 w-10 rounded-full text-primary hover:bg-primary/10">
         <Link to="/carrinho">
           <ShoppingCart className="h-5 w-5" />
           {totalItems > 0 && (
@@ -116,7 +116,7 @@ export const CartDrawer = () => {
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
+        <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full border-primary/15 bg-primary/5 text-primary shadow-none hover:bg-primary/10 hover:text-primary">
           <ShoppingCart className="h-5 w-5" />
           {totalItems > 0 && (
             <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">

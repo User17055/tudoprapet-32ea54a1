@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   Sparkles,
   User as UserIcon,
+  PawPrint,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Footer } from "@/components/Footer";
@@ -88,24 +89,25 @@ const Profile = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted/30">
+    <div className="flex min-h-screen flex-col bg-[#f4f6f2]">
       <Header />
 
-      <main className="container mx-auto flex-1 px-4 py-5 md:py-8">
-        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/10 via-background to-background p-5 shadow-sm md:p-6">
+      <main className="container mx-auto max-w-6xl flex-1 px-4 py-5 md:py-8">
+        <section className="grid overflow-hidden rounded-[32px] bg-gradient-to-br from-primary via-[#17386f] to-[#0d224b] shadow-[0_28px_60px_-38px_rgba(11,31,68,0.95)] lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="relative overflow-hidden p-6 md:p-8">
             <div className="paw-pattern pointer-events-none absolute inset-0" />
+            <PawPrint className="pointer-events-none absolute -bottom-9 -right-5 h-36 w-36 rotate-[-18deg] text-white/[0.04]" />
             <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[hsl(218_58%_20%)] text-2xl font-900 text-primary-foreground shadow-md">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-secondary text-2xl font-900 text-secondary-foreground shadow-[0_14px_30px_-18px_rgba(246,199,72,0.95)]">
                 {initials}
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-primary">Minha conta</p>
-                <h1 className="mt-1 truncate font-display text-2xl font-900 text-foreground md:text-3xl">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">Minha conta TudoPraPet</p>
+                <h1 className="mt-1 truncate font-display text-2xl font-900 text-white md:text-3xl">
                   Olá, {fullName}
                 </h1>
-                <p className="mt-1 flex items-center gap-1.5 truncate text-sm text-muted-foreground">
+                <p className="mt-1 flex items-center gap-1.5 truncate text-sm text-white/60">
                   <Mail className="h-4 w-4 shrink-0" />
                   {user.email}
                 </p>
@@ -118,7 +120,7 @@ const Profile = () => {
                     Clube ativo
                   </span>
                 ) : (
-                  <Button asChild className="rounded-full gap-2 btn-bounce">
+                  <Button asChild className="rounded-full gap-2 btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90">
                     <Link to="/clube">
                       <Sparkles className="h-4 w-4" />
                       Entrar no Clube
@@ -129,36 +131,36 @@ const Profile = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 shadow-sm sm:p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <div className="grid grid-cols-1 gap-px border-t border-white/10 bg-white/10 p-4 sm:grid-cols-3 lg:grid-cols-1 lg:border-l lg:border-t-0 lg:p-5">
+            <div className="flex items-center gap-3 rounded-2xl p-3 transition-colors hover:bg-white/[0.06] sm:p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/15 text-secondary">
                 <PiggyBank className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Economia</p>
-                <p className="truncate font-display text-base font-900 text-foreground">
+                <p className="text-xs text-white/50">Economia no Clube</p>
+                <p className="truncate font-display text-base font-900 text-white">
                   {ordersLoading ? "..." : formatCurrency(totalSavings)}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 shadow-sm sm:p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex items-center gap-3 rounded-2xl p-3 transition-colors hover:bg-white/[0.06] sm:p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-400/15 text-sky-300">
                 <Package className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Pedidos</p>
-                <p className="truncate font-display text-base font-900 text-foreground">
+                <p className="text-xs text-white/50">Pedidos feitos</p>
+                <p className="truncate font-display text-base font-900 text-white">
                   {ordersLoading ? "..." : orderCount}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3 shadow-sm sm:p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex items-center gap-3 rounded-2xl p-3 transition-colors hover:bg-white/[0.06] sm:p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pet-green/15 text-emerald-300">
                 <Heart className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Status</p>
-                <p className="truncate font-display text-base font-900 text-foreground">
+                <p className="text-xs text-white/50">Seu status</p>
+                <p className="truncate font-display text-base font-900 text-white">
                   {isSubscribed ? "Clube" : "Cliente"}
                 </p>
               </div>
@@ -166,7 +168,7 @@ const Profile = () => {
           </div>
         </section>
 
-        <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-5 grid gap-2 rounded-[28px] border border-primary/5 bg-white p-3 shadow-[0_18px_46px_-38px_rgba(16,24,40,0.8)] sm:grid-cols-2 md:p-4 lg:grid-cols-4">
           {[
             {
               to: "/meus-pedidos",
@@ -196,7 +198,7 @@ const Profile = () => {
             <Link
               key={item.title}
               to={item.to}
-              className="group btn-bounce rounded-2xl border border-border bg-background p-4 shadow-sm transition hover:border-primary/50 hover:shadow-md"
+              className="group btn-bounce rounded-2xl border border-transparent bg-[#f7f8f3] p-4 transition hover:border-primary/15 hover:bg-primary/[0.04]"
             >
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                 <item.icon className="h-5 w-5" />
@@ -214,8 +216,8 @@ const Profile = () => {
           ))}
         </section>
 
-        <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_360px]">
-          <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+        <section className="mt-5 grid gap-4 lg:grid-cols-[1fr_340px]">
+          <div className="overflow-hidden rounded-[28px] border border-primary/5 bg-background shadow-[0_18px_46px_-38px_rgba(16,24,40,0.8)]">
             <div className="flex items-center justify-between gap-3 border-b border-border p-4 md:p-5">
               <div>
                 <h2 className="font-display text-lg font-bold text-foreground">
@@ -310,8 +312,8 @@ const Profile = () => {
             </div>
           </div>
 
-          <aside className="space-y-4">
-            <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+          <aside className="space-y-3 rounded-[28px] border border-primary/5 bg-white p-4 shadow-[0_18px_46px_-38px_rgba(16,24,40,0.8)]">
+            <div className="rounded-2xl bg-[#f7f8f3] p-5">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <UserIcon className="h-5 w-5" />
               </div>
@@ -332,7 +334,7 @@ const Profile = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+            <div className="rounded-2xl bg-pet-green/5 p-5">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pet-green/10 text-pet-green">
                   <ShieldCheck className="h-5 w-5" />
