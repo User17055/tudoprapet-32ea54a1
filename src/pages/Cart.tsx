@@ -282,9 +282,56 @@ const Cart = () => {
                 );
               })}
             </section>
+
+            <aside className="hidden md:block">
+              <div className="sticky top-20 space-y-3 rounded-2xl border border-border bg-background p-4 shadow-sm">
+                <h2 className="font-display text-base font-bold text-foreground">Resumo do pedido</h2>
+                <CouponInput />
+
+                <div className="flex items-baseline justify-between gap-3 border-t border-border pt-3">
+                  <span className="text-sm font-medium text-muted-foreground">Subtotal</span>
+                  <div className="text-right">
+                    <span className="inline-block font-display text-2xl font-900 text-primary">
+                      R$ {displayTotalPrice.toFixed(2).replace(".", ",")}
+                    </span>
+                    {clubDiscount > 0 && (
+                      <span className="block text-[11px] font-semibold text-primary">
+                        valor com assinatura
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {isSyncing && (
+                  <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Atualizando preços…
+                  </p>
+                )}
+
+                <Button
+                  onClick={handleCheckout}
+                  className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
+                  size="lg"
+                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || checkingOut}
+                >
+                  {checkingOut || isLoading || isSyncing ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      Finalizar compra
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+
+                <Button asChild variant="ghost" className="w-full rounded-full">
+                  <Link to="/catalogo">Continuar comprando</Link>
+                </Button>
+              </div>
+            </aside>
           </main>
 
-          <footer className="border-t border-border bg-background px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:fixed md:inset-x-0 md:bottom-0 md:z-20 md:py-3 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <footer className="border-t border-border bg-background px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] md:hidden">
             <div className="mx-auto max-w-lg space-y-3">
               <CouponInput />
 
@@ -314,13 +361,7 @@ const Cart = () => {
                 onClick={handleCheckout}
                 className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
                 size="lg"
-                disabled={
-                  items.length === 0 ||
-                  isLoading ||
-                  isSyncing ||
-                  subscriptionLoading ||
-                  checkingOut
-                }
+                disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || checkingOut}
               >
                 {checkingOut || isLoading || isSyncing ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -335,9 +376,9 @@ const Cart = () => {
               <Button asChild variant="ghost" className="w-full rounded-full">
                 <Link to="/catalogo">Continuar comprando</Link>
               </Button>
-
             </div>
           </footer>
+
         </>
       )}
     </div>
