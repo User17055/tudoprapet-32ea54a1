@@ -118,6 +118,7 @@ export const Header = () => {
               </Button>
             </Link>
           )}
+          <CartDrawer />
           <Button
             variant="ghost"
             size="icon"
@@ -129,9 +130,10 @@ export const Header = () => {
           </Button>
         </div>
 
-        <div className="col-start-3 row-start-1 flex justify-self-end md:col-auto md:row-auto md:justify-self-auto">
+        <div className="col-start-3 row-start-1 flex justify-self-end md:hidden">
           <CartDrawer />
         </div>
+
       </div>
 
       <div className="hidden lg:block">
