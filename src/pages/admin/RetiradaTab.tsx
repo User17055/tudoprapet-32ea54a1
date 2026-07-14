@@ -59,6 +59,32 @@ export default function RetiradaTab() {
   const [order, setOrder] = useState<ValidatedOrder | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pickup-history");
+      if (error) {
+        toast.error(await extractError(error));
+        return;
+      }
+      if (data?.error) {
+        toast.error(String(data.error));
+        return;
+      }
+      setHistory((data?.history || []) as HistoryItem[]);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   const reset = () => {
     setCode("");
