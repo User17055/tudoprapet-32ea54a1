@@ -39,6 +39,7 @@ const formatCurrency = (value: number, currency = "BRL") =>
 const Profile = () => {
   const { user, loading, logout } = useAuth();
   const { isSubscribed } = useSubscription();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [totalSavings, setTotalSavings] = useState(0);
