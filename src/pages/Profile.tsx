@@ -348,6 +348,18 @@ const Profile = () => {
               </div>
             </div>
 
+            {isAdmin && (
+              <Button
+                asChild
+                className="h-12 w-full rounded-xl btn-bounce bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Link to="/admin">
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Acessar painel admin
+                </Link>
+              </Button>
+            )}
+
             <Button
               variant="outline"
               onClick={handleLogout}
