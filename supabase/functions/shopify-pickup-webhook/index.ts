@@ -56,6 +56,9 @@ Deno.serve(async (req) => {
     const tags = String(payload?.tags || "").toLowerCase();
     const isReadyToPickup =
       topic === "fulfillment_orders/ready_to_pickup" ||
+      topic === "fulfillment_orders/line_items_prepared_for_pickup" ||
+      topic === "fulfillments/create" ||
+      topic === "fulfillments/update" ||
       fulfillmentStatus === "ready_for_pickup" ||
       tags.includes("pronto-retirada") ||
       tags.includes("ready-for-pickup");

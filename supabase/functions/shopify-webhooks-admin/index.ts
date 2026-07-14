@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   }
 
   if (action === "register") {
-    const topics = ["orders/create", "fulfillment_orders/ready_to_pickup"];
+    const topics = ["orders/create", "fulfillments/create", "fulfillments/update", "fulfillment_orders/line_items_prepared_for_pickup"];
     const results: unknown[] = [];
     for (const topic of topics) {
       const r = await fetch(`${base}/webhooks.json`, {
