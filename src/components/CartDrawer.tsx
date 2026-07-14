@@ -99,7 +99,7 @@ export const CartDrawer = () => {
 
   if (isMobile) {
     return (
-      <Button asChild variant="ghost" size="icon" className="relative h-10 w-10 rounded-full text-primary hover:bg-primary/10">
+      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
         <Link to="/carrinho">
           <ShoppingCart className="h-5 w-5" />
           {totalItems > 0 && (

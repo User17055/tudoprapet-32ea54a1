@@ -65,10 +65,10 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               to={`/catalogo?categoria=${item.slug}&categoria_id=${item.id}`}
               onFocus={() => openItem(item)}
               aria-expanded={kids.length > 0 ? openId === item.id : undefined}
-              className={`block border-b-2 px-3 py-2 text-base font-semibold transition-colors ${
+              className={`block rounded-full px-3 py-2 text-base font-semibold transition-all duration-200 ${
                 active
-                  ? "border-primary text-primary"
-                  : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+                  ? "bg-primary/10 text-primary"
+                  : "text-foreground hover:-translate-y-0.5 hover:bg-primary/5 hover:text-primary"
               }`}
             >
               {item.label}

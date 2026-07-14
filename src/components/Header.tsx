@@ -60,9 +60,22 @@ export const Header = () => {
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
-      <div className="container mx-auto flex items-center gap-2 py-2.5 md:gap-4 md:py-3">
-        <Link to="/" className="flex shrink-0 items-center gap-2" aria-label="TudoPraPet - início">
-          <img src={logo} alt="TudoPraPet" className="h-10 w-auto md:h-14" />
+      <div className="container mx-auto grid grid-cols-3 items-center gap-2 pb-2 pt-3 md:flex md:justify-between md:gap-4">
+        <div className="flex justify-self-start md:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-primary hover:bg-primary/10"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
+
+        <Link to="/" className="flex shrink-0 items-center justify-self-center gap-2" aria-label="TudoPraPet - início">
+          <img src={logo} alt="TudoPraPet" className="h-11 w-auto md:h-14" />
           <span className="hidden font-display font-900 text-2xl text-foreground md:inline md:text-3xl">
             Tudo<span className="text-primary">Pra</span>Pet
           </span>
@@ -86,7 +99,7 @@ export const Header = () => {
           </button>
         </form>
 
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           {user ? (
             <Link to="/perfil">
               <Button variant="outline" size="sm" className="h-10 max-w-[180px] gap-2 rounded-full border-primary/15 bg-primary/5 px-4 text-primary hover:bg-primary/10">
@@ -108,21 +121,10 @@ export const Header = () => {
             </Link>
           )}
           <CartDrawer />
-        </div>
-
-        <div className="ml-auto flex items-center gap-0.5 md:hidden">
-          <Link
-            to={user ? "/perfil" : "/login"}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10"
-            aria-label={user ? "Abrir meu perfil" : "Entrar na conta"}
-          >
-            <User className="h-5 w-5" />
-          </Link>
-          <CartDrawer />
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 rounded-full text-primary hover:bg-primary/10"
+            className="rounded-full text-primary hover:bg-primary/10 lg:hidden"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileOpen}
@@ -131,15 +133,18 @@ export const Header = () => {
           </Button>
         </div>
 
+        <div className="col-start-3 row-start-1 flex justify-self-end md:hidden">
+          <CartDrawer />
+        </div>
       </div>
 
-      <div className="hidden border-t border-border/60 md:block">
-        <div className="scrollbar-hide container mx-auto flex items-center gap-1 overflow-x-auto py-1.5">
+      <div className="hidden lg:block">
+        <div className="container mx-auto flex items-center gap-1 pb-3">
           <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
           <Link
             to="/clube"
-            className={`border-b-2 px-3 py-2 text-base font-semibold transition-colors ${
-              isClubeActive ? "border-primary text-primary" : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+            className={`rounded-full px-3 py-2 text-base font-semibold transition-all duration-200 ${
+              isClubeActive ? "bg-primary/10 text-primary" : "text-foreground hover:-translate-y-0.5 hover:bg-primary/5 hover:text-primary"
             }`}
           >
             Clube
@@ -168,7 +173,7 @@ export const Header = () => {
       </div>
 
       {mobileOpen && (
-        <nav className="border-t border-border px-4 py-2 flex flex-col animate-fade-in-up md:hidden">
+        <nav className="border-t border-border px-4 py-2 flex flex-col animate-fade-in-up lg:hidden">
           {categoriesLoading ? (
             <div className="flex flex-col gap-3 py-3">
               {Array.from({ length: 3 }).map((_, i) => (
