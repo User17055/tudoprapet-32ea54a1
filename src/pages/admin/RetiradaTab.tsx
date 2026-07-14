@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, CheckCircle2, XCircle, RotateCcw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RotateCcw, History, Package, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -13,6 +13,30 @@ type ValidatedOrder = {
   status?: string;
   items?: LineItem[];
   [k: string]: unknown;
+};
+
+type HistoryItem = {
+  id: number;
+  order_number: string | number;
+  name: string;
+  customer_name: string;
+  created_at: string;
+  fulfilled_at: string | null;
+  total_price: number;
+  currency: string;
+  items_count: number;
+  items: LineItem[];
+};
+
+const formatCurrency = (v: number, c = "BRL") =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: c }).format(v);
+
+const formatDate = (iso: string | null) => {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 };
 
 async function extractError(error: unknown): Promise<string> {
@@ -35,6 +59,32 @@ export default function RetiradaTab() {
   const [order, setOrder] = useState<ValidatedOrder | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pickup-history");
+      if (error) {
+        toast.error(await extractError(error));
+        return;
+      }
+      if (data?.error) {
+        toast.error(String(data.error));
+        return;
+      }
+      setHistory((data?.history || []) as HistoryItem[]);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   const reset = () => {
     setCode("");
@@ -90,6 +140,7 @@ export default function RetiradaTab() {
       }
       setCompleted(true);
       toast.success("Retirada confirmada!");
+      loadHistory();
     } catch (err) {
       toast.error(String(err));
     } finally {
@@ -98,7 +149,7 @@ export default function RetiradaTab() {
   };
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-2xl space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Código de retirada</CardTitle>
@@ -195,6 +246,74 @@ export default function RetiradaTab() {
                 Novo código
               </Button>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de retiradas
+            </CardTitle>
+            <CardDescription>Últimos pedidos marcados como retirados.</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadHistory}
+            disabled={historyLoading}
+          >
+            {historyLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {historyLoading && history.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+              Carregando...
+            </div>
+          ) : history.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              Nenhuma retirada registrada ainda.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {history.map((h) => (
+                <li key={h.id} className="py-3 flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-sm truncate">
+                        {h.name || `#${h.order_number}`}
+                        <span className="ml-2 text-muted-foreground font-normal">
+                          {h.customer_name}
+                        </span>
+                      </p>
+                      <p className="text-sm font-bold whitespace-nowrap">
+                        {formatCurrency(h.total_price, h.currency)}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(h.fulfilled_at || h.created_at)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {h.items_count} {h.items_count === 1 ? "item" : "itens"}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
