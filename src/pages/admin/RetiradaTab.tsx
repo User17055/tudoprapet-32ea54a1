@@ -140,6 +140,7 @@ export default function RetiradaTab() {
       }
       setCompleted(true);
       toast.success("Retirada confirmada!");
+      loadHistory();
     } catch (err) {
       toast.error(String(err));
     } finally {
