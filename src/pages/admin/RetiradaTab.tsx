@@ -15,6 +15,30 @@ type ValidatedOrder = {
   [k: string]: unknown;
 };
 
+type HistoryItem = {
+  id: number;
+  order_number: string | number;
+  name: string;
+  customer_name: string;
+  created_at: string;
+  fulfilled_at: string | null;
+  total_price: number;
+  currency: string;
+  items_count: number;
+  items: LineItem[];
+};
+
+const formatCurrency = (v: number, c = "BRL") =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: c }).format(v);
+
+const formatDate = (iso: string | null) => {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+};
+
 async function extractError(error: unknown): Promise<string> {
   const err = error as { message?: string; context?: { text?: () => Promise<string> } };
   let details = err?.message || "Erro desconhecido";
