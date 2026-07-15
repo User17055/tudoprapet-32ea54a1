@@ -693,14 +693,14 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     const [p, s, m] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("subscribers").select("user_id, status"),
       supabase.from("club_members").select("email, is_active"),
     ]);
-    if (p.error) toast.error("Erro ao carregar usuários");
+    if (p.error && !silent) toast.error("Erro ao carregar usuários");
     setProfiles((p.data || []) as ProfileRow[]);
     const ids = new Set<string>();
     (s.data || []).forEach((row) => {
@@ -712,10 +712,24 @@ function UsersTab() {
       if (row.is_active && row.email) emails.add(row.email.toLowerCase());
     });
     setMemberEmails(emails);
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const onFocus = () => load(true);
+    window.addEventListener("focus", onFocus);
+    const channel = supabase
+      .channel("admin-users-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "subscribers" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "club_members" }, () => load(true))
+      .subscribe();
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const startEdit = (p: ProfileRow) => {
     setEditId(p.id);
