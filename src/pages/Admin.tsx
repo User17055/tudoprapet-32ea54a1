@@ -246,7 +246,8 @@ export default function Admin() {
           </div>
 
           <main className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
-            <div className="paw-pattern relative mb-6 overflow-hidden rounded-[28px] bg-gradient-to-br from-primary via-[#17386f] to-[#102650] px-5 py-5 text-white shadow-[0_24px_52px_-34px_rgba(13,37,82,0.9)] md:px-7 md:py-6">
+            <div className="relative mb-6 overflow-hidden rounded-[28px] bg-gradient-to-br from-primary via-[#17386f] to-[#102650] px-5 py-5 text-white shadow-[0_24px_52px_-34px_rgba(13,37,82,0.9)] md:px-7 md:py-6">
+              <div className="paw-pattern pointer-events-none absolute inset-0 opacity-60" />
               <div className="relative flex items-center gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground shadow-[0_12px_26px_-16px_rgba(246,199,72,0.9)]">
                   <ActiveIcon className="h-5 w-5" />
@@ -254,7 +255,7 @@ export default function Admin() {
                 <div className="min-w-0">
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-secondary">Central TudoPraPet</p>
                   <h1 className="font-display text-xl font-bold leading-tight text-white md:text-2xl">{active.label}</h1>
-                  <p className="mt-1 text-sm text-white/60">{active.description}</p>
+                  <p className="mt-1 text-sm text-white/80">{active.description}</p>
                 </div>
               </div>
             </div>
@@ -297,13 +298,19 @@ function PricesTab() {
 
   useEffect(() => {
     loadAll();
-    // Atualiza em segundo plano sem indicar carregamento
-    const interval = setInterval(() => loadAll(true), 30000);
     const onFocus = () => loadAll(true);
     window.addEventListener("focus", onFocus);
+    const channel = supabase
+      .channel("admin-subscriber-prices")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "subscriber_prices" },
+        () => loadAll(true),
+      )
+      .subscribe();
     return () => {
-      clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -686,14 +693,14 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     const [p, s, m] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("subscribers").select("user_id, status"),
       supabase.from("club_members").select("email, is_active"),
     ]);
-    if (p.error) toast.error("Erro ao carregar usuários");
+    if (p.error && !silent) toast.error("Erro ao carregar usuários");
     setProfiles((p.data || []) as ProfileRow[]);
     const ids = new Set<string>();
     (s.data || []).forEach((row) => {
@@ -705,10 +712,24 @@ function UsersTab() {
       if (row.is_active && row.email) emails.add(row.email.toLowerCase());
     });
     setMemberEmails(emails);
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const onFocus = () => load(true);
+    window.addEventListener("focus", onFocus);
+    const channel = supabase
+      .channel("admin-users-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "subscribers" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "club_members" }, () => load(true))
+      .subscribe();
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const startEdit = (p: ProfileRow) => {
     setEditId(p.id);
