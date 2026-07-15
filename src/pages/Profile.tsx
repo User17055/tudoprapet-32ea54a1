@@ -28,11 +28,14 @@ interface OrderSummary {
   id: number;
   name: string;
   created_at: string;
+  cancelled_at: string | null;
+  financial_status: string | null;
   total_price: number;
   currency: string;
   savings: number;
   order_status_url: string;
 }
+
 
 const formatCurrency = (value: number, currency = "BRL") =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
