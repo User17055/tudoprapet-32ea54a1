@@ -68,14 +68,15 @@ Deno.serve(async (req) => {
     const ordersData = await ordersResp.json();
     const rawOrders = ordersData.orders || [];
 
-    // Only show orders that were actually validated (paid, refunded, or cancelled after placement).
-    // Skip abandoned/unpaid orders (pending/authorized without capture and no cancellation).
+    // Only show orders that were actually completed (paid/partially paid).
+    // Exclude cancelled, refunded, pending and unpaid orders entirely.
     const validatedRaw = rawOrders.filter((o: any) => {
       const fs = (o.financial_status || "").toLowerCase();
-      const validFinancial = ["paid", "partially_paid", "refunded", "partially_refunded"].includes(fs);
+      const validFinancial = ["paid", "partially_paid"].includes(fs);
       const wasCancelled = !!o.cancelled_at;
-      return validFinancial || wasCancelled;
+      return validFinancial && !wasCancelled;
     });
+
 
     const orders = validatedRaw.map((o: any) => {
       let savings = 0;
