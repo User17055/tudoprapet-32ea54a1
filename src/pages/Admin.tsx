@@ -364,7 +364,7 @@ function PricesTab() {
     }
     toast.success("Preço salvo!");
     setProductId(""); setVariantId(""); setPrice("");
-    loadAll();
+    loadAll(true);
   };
 
   const handleDelete = async (id: string) => {
