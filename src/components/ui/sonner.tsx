@@ -94,7 +94,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       toastOptions={{
         duration: 4000,
-        closeButtonAriaLabel: "Fechar notificação",
+
         classNames: {
           toast:
             "group toast pet-toast !w-[min(92vw,390px)] !overflow-hidden !rounded-2xl !border !px-4 !py-3.5 !gap-3 !font-sans !shadow-[0_14px_40px_-12px_rgba(15,23,42,0.28)] backdrop-blur-md",
