@@ -65,6 +65,9 @@ const FINANCIAL_STATUS_STYLES: Record<string, string> = {
   voided: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
+const CANCELLED_BADGE = 'bg-destructive/10 text-destructive border-destructive/20';
+
+
 const MeusPedidos = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
