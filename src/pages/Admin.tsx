@@ -298,13 +298,19 @@ function PricesTab() {
 
   useEffect(() => {
     loadAll();
-    // Atualiza em segundo plano sem indicar carregamento
-    const interval = setInterval(() => loadAll(true), 30000);
     const onFocus = () => loadAll(true);
     window.addEventListener("focus", onFocus);
+    const channel = supabase
+      .channel("admin-subscriber-prices")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "subscriber_prices" },
+        () => loadAll(true),
+      )
+      .subscribe();
     return () => {
-      clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      supabase.removeChannel(channel);
     };
   }, []);
 
