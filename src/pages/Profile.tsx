@@ -28,11 +28,14 @@ interface OrderSummary {
   id: number;
   name: string;
   created_at: string;
+  cancelled_at: string | null;
+  financial_status: string | null;
   total_price: number;
   currency: string;
   savings: number;
   order_status_url: string;
 }
+
 
 const formatCurrency = (value: number, currency = "BRL") =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
@@ -280,19 +283,29 @@ const Profile = () => {
                               year: "numeric",
                             })}
                           </p>
+                          {(order.cancelled_at || order.financial_status === "refunded" || order.financial_status === "partially_refunded") && (
+                            <span className="mt-1 inline-flex items-center rounded-full border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-[10px] font-bold text-destructive">
+                              {order.cancelled_at
+                                ? "Cancelado"
+                                : order.financial_status === "refunded"
+                                ? "Reembolsado"
+                                : "Parc. reembolsado"}
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       <div className="text-right">
-                        <p className="whitespace-nowrap font-display text-sm font-bold text-foreground">
+                        <p className={`whitespace-nowrap font-display text-sm font-bold ${order.cancelled_at || order.financial_status === "refunded" ? "text-muted-foreground line-through" : "text-foreground"}`}>
                           {formatCurrency(order.total_price, order.currency)}
                         </p>
-                        {order.savings > 0 && (
+                        {order.savings > 0 && !order.cancelled_at && order.financial_status !== "refunded" && (
                           <p className="text-xs font-semibold text-sky-500">
                             -{formatCurrency(order.savings, order.currency)}
                           </p>
                         )}
                       </div>
+
 
                       {order.order_status_url && (
                         <a
