@@ -186,14 +186,27 @@ const MeusPedidos = () => {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {order.financial_status && (
+                          {order.cancelled_at ? (
+                            <Badge variant="outline" className={CANCELLED_BADGE}>
+                              Cancelado
+                            </Badge>
+                          ) : order.financial_status === 'refunded' ? (
+                            <Badge variant="outline" className={CANCELLED_BADGE}>
+                              Reembolsado
+                            </Badge>
+                          ) : order.financial_status === 'partially_refunded' ? (
+                            <Badge variant="outline" className={CANCELLED_BADGE}>
+                              Parcialmente reembolsado
+                            </Badge>
+                          ) : order.financial_status ? (
                             <Badge
                               variant="outline"
                               className={FINANCIAL_STATUS_STYLES[order.financial_status] || ''}
                             >
                               {FINANCIAL_STATUS_LABELS[order.financial_status] || order.financial_status}
                             </Badge>
-                          )}
+                          ) : null}
+
                           {order.order_status_url && (
                             <a href={order.order_status_url} target="_blank" rel="noreferrer">
                               <Button size="sm" variant="outline" className="btn-bounce gap-1">
