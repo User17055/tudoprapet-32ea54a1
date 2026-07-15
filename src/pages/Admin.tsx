@@ -277,8 +277,8 @@ function PricesTab() {
   const [variantId, setVariantId] = useState("");
   const [price, setPrice] = useState("");
 
-  const loadAll = async () => {
-    setLoading(true);
+  const loadAll = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [shop, sub] = await Promise.all([
         storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
@@ -288,14 +288,24 @@ function PricesTab() {
       if (sub.error) throw sub.error;
       setPrices((sub.data || []) as SubPrice[]);
     } catch (e) {
-      toast.error("Erro ao carregar dados");
+      if (!silent) toast.error("Erro ao carregar dados");
       console.error(e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    loadAll();
+    // Atualiza em segundo plano sem indicar carregamento
+    const interval = setInterval(() => loadAll(true), 30000);
+    const onFocus = () => loadAll(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   const selectedProduct = useMemo(
     () => products.find(p => p.node.id === productId),
