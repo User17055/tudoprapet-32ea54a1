@@ -246,7 +246,8 @@ export default function Admin() {
           </div>
 
           <main className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
-            <div className="paw-pattern relative mb-6 overflow-hidden rounded-[28px] bg-gradient-to-br from-primary via-[#17386f] to-[#102650] px-5 py-5 text-white shadow-[0_24px_52px_-34px_rgba(13,37,82,0.9)] md:px-7 md:py-6">
+            <div className="relative mb-6 overflow-hidden rounded-[28px] bg-gradient-to-br from-primary via-[#17386f] to-[#102650] px-5 py-5 text-white shadow-[0_24px_52px_-34px_rgba(13,37,82,0.9)] md:px-7 md:py-6">
+              <div className="paw-pattern pointer-events-none absolute inset-0 opacity-60" />
               <div className="relative flex items-center gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground shadow-[0_12px_26px_-16px_rgba(246,199,72,0.9)]">
                   <ActiveIcon className="h-5 w-5" />
@@ -254,7 +255,7 @@ export default function Admin() {
                 <div className="min-w-0">
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-secondary">Central TudoPraPet</p>
                   <h1 className="font-display text-xl font-bold leading-tight text-white md:text-2xl">{active.label}</h1>
-                  <p className="mt-1 text-sm text-white/60">{active.description}</p>
+                  <p className="mt-1 text-sm text-white/80">{active.description}</p>
                 </div>
               </div>
             </div>
