@@ -23,6 +23,8 @@ interface Order {
   order_number: number | string;
   name: string;
   created_at: string;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
   total_price: number;
   currency: string;
   financial_status: string;
@@ -31,6 +33,7 @@ interface Order {
   savings: number;
   line_items: OrderLine[];
 }
+
 
 interface OrdersResponse {
   orders: Order[];
