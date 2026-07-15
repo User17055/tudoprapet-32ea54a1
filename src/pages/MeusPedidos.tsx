@@ -23,6 +23,8 @@ interface Order {
   order_number: number | string;
   name: string;
   created_at: string;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
   total_price: number;
   currency: string;
   financial_status: string;
@@ -31,6 +33,7 @@ interface Order {
   savings: number;
   line_items: OrderLine[];
 }
+
 
 interface OrdersResponse {
   orders: Order[];
@@ -61,6 +64,9 @@ const FINANCIAL_STATUS_STYLES: Record<string, string> = {
   partially_refunded: 'bg-destructive/10 text-destructive border-destructive/20',
   voided: 'bg-destructive/10 text-destructive border-destructive/20',
 };
+
+const CANCELLED_BADGE = 'bg-destructive/10 text-destructive border-destructive/20';
+
 
 const MeusPedidos = () => {
   const { user, loading: authLoading } = useAuth();
@@ -180,14 +186,27 @@ const MeusPedidos = () => {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {order.financial_status && (
+                          {order.cancelled_at ? (
+                            <Badge variant="outline" className={CANCELLED_BADGE}>
+                              Cancelado
+                            </Badge>
+                          ) : order.financial_status === 'refunded' ? (
+                            <Badge variant="outline" className={CANCELLED_BADGE}>
+                              Reembolsado
+                            </Badge>
+                          ) : order.financial_status === 'partially_refunded' ? (
+                            <Badge variant="outline" className={CANCELLED_BADGE}>
+                              Parcialmente reembolsado
+                            </Badge>
+                          ) : order.financial_status ? (
                             <Badge
                               variant="outline"
                               className={FINANCIAL_STATUS_STYLES[order.financial_status] || ''}
                             >
                               {FINANCIAL_STATUS_LABELS[order.financial_status] || order.financial_status}
                             </Badge>
-                          )}
+                          ) : null}
+
                           {order.order_status_url && (
                             <a href={order.order_status_url} target="_blank" rel="noreferrer">
                               <Button size="sm" variant="outline" className="btn-bounce gap-1">

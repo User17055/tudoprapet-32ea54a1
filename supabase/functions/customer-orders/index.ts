@@ -68,7 +68,16 @@ Deno.serve(async (req) => {
     const ordersData = await ordersResp.json();
     const rawOrders = ordersData.orders || [];
 
-    const orders = rawOrders.map((o: any) => {
+    // Only show orders that were actually validated (paid, refunded, or cancelled after placement).
+    // Skip abandoned/unpaid orders (pending/authorized without capture and no cancellation).
+    const validatedRaw = rawOrders.filter((o: any) => {
+      const fs = (o.financial_status || "").toLowerCase();
+      const validFinancial = ["paid", "partially_paid", "refunded", "partially_refunded"].includes(fs);
+      const wasCancelled = !!o.cancelled_at;
+      return validFinancial || wasCancelled;
+    });
+
+    const orders = validatedRaw.map((o: any) => {
       let savings = 0;
       const lineItems = (o.line_items || []).map((li: any) => {
         const price = Number(li.price || 0);
@@ -100,11 +109,20 @@ Deno.serve(async (req) => {
       const extraOrderDiscount = Math.max(0, orderDiscounts - lineDiscountsSum);
       savings += extraOrderDiscount;
 
+      const fs = (o.financial_status || "").toLowerCase();
+      const cancelled = !!o.cancelled_at;
+      const refunded = fs === "refunded";
+      // Effective totals: refunded/cancelled orders no longer count as "spent" or "saved"
+      const effectiveSpent = cancelled || refunded ? 0 : Number(o.total_price || 0);
+      const effectiveSavings = cancelled || refunded ? 0 : Number(savings.toFixed(2));
+
       return {
         id: o.id,
         order_number: o.order_number || o.name,
         name: o.name,
         created_at: o.created_at,
+        cancelled_at: o.cancelled_at || null,
+        cancel_reason: o.cancel_reason || null,
         total_price: Number(o.total_price || 0),
         subtotal_price: Number(o.subtotal_price || 0),
         currency: o.currency,
@@ -112,18 +130,21 @@ Deno.serve(async (req) => {
         fulfillment_status: o.fulfillment_status,
         order_status_url: o.order_status_url,
         savings: Number(savings.toFixed(2)),
+        effective_spent: effectiveSpent,
+        effective_savings: effectiveSavings,
         line_items: lineItems,
       };
     });
 
     const totalSavings = orders.reduce(
-      (s: number, o: any) => s + (o.savings || 0),
+      (s: number, o: any) => s + (o.effective_savings || 0),
       0
     );
     const totalSpent = orders.reduce(
-      (s: number, o: any) => s + (o.total_price || 0),
+      (s: number, o: any) => s + (o.effective_spent || 0),
       0
     );
+
 
     return new Response(
       JSON.stringify({
