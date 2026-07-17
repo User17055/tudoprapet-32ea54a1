@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     // For fulfillment_orders topics, `id` is the fulfillment_order id, not the order id.
     // Prefer explicit order_id fields; fall back to nested shapes; only use payload.id for orders/create & fulfillments/*.
     const isFulfillmentOrdersTopic = topic.startsWith("fulfillment_orders/");
-    const shopifyOrderId = String(
+    const resolvedOrderId = String(
       payload.order_id ||
       fo.order_id ||
       lifo.fulfillment_order_id && fo.order_id ||
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
 
 
     // If we only have a fulfillment_order id, resolve the underlying order_id via Admin API
-    let resolvedOrderId = shopifyOrderId;
+    let resolvedOrderId = resolvedOrderId;
     if (!resolvedOrderId && isFulfillmentOrdersTopic) {
       const foId = String(fo.id || payload.id || lifo.fulfillment_order_id || "");
       const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       if (shopDomain && adminToken) {
         try {
           const orderResp = await fetch(
-            `https://${shopDomain}/admin/api/2025-07/orders/${shopifyOrderId}.json`,
+            `https://${shopDomain}/admin/api/2025-07/orders/${resolvedOrderId}.json`,
             { headers: { "X-Shopify-Access-Token": adminToken } },
           );
           if (orderResp.ok) {
@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
             shippingAddress = order.shipping_address || shippingAddress;
             orderNumber = String(order.order_number || order.name || orderNumber);
           } else {
-            console.error(`Failed to fetch order ${shopifyOrderId}: ${orderResp.status}`);
+            console.error(`Failed to fetch order ${resolvedOrderId}: ${orderResp.status}`);
           }
         } catch (e) {
           console.error("Admin API fetch failed:", e);
@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
     const customerPhone = normalizePhone(customer.phone || shippingAddress.phone || (payload as any).billing_address?.phone || payload.phone);
 
     if (!customerPhone) {
-      console.warn(`No customer phone for order ${shopifyOrderId}, skipping`);
+      console.warn(`No customer phone for order ${resolvedOrderId}, skipping`);
       return new Response(JSON.stringify({ error: "cliente sem telefone" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -169,8 +169,8 @@ Deno.serve(async (req) => {
     }
 
     const endpoint = `${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`;
-    const numericId = shopifyOrderId.replace(/\D/g, "");
-    const orderGid = numericId ? `gid://shopify/Order/${numericId}` : shopifyOrderId;
+    const numericId = resolvedOrderId.replace(/\D/g, "");
+    const orderGid = numericId ? `gid://shopify/Order/${numericId}` : resolvedOrderId;
     const outbound: Record<string, unknown> = {
       event: eventName,
       shopify_order_id: orderGid,
