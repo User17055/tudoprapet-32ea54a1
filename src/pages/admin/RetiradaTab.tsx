@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, CheckCircle2, XCircle, RotateCcw, History, Package, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RotateCcw, History, Package, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -61,6 +61,21 @@ export default function RetiradaTab() {
   const [completed, setCompleted] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const handleResendLast = async () => {
+    setResending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pickup-resend-last", { body: {} });
+      if (error) { toast.error(await extractError(error)); return; }
+      if (data?.error) { toast.error(String(data.error)); return; }
+      toast.success(`Código reenviado para ${data?.customer_name || "cliente"} (${data?.order_number || ""})`);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setResending(false);
+    }
+  };
 
   const loadHistory = async () => {
     setHistoryLoading(true);
@@ -151,9 +166,21 @@ export default function RetiradaTab() {
   return (
     <div className="max-w-2xl space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Código de retirada</CardTitle>
-          <CardDescription>O cliente recebeu o código por WhatsApp.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Código de retirada</CardTitle>
+            <CardDescription>O cliente recebeu o código por WhatsApp.</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResendLast}
+            disabled={resending}
+            title="Reenviar código do último pedido"
+          >
+            {resending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+            Reenviar último
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleValidate} className="flex gap-2">
