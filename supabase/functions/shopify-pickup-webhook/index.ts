@@ -89,12 +89,38 @@ Deno.serve(async (req) => {
     let shippingAddress = payload.shipping_address || payload.destination || fo.destination || {};
 
 
-    if (!shopifyOrderId) {
+    // If we only have a fulfillment_order id, resolve the underlying order_id via Admin API
+    let resolvedOrderId = shopifyOrderId;
+    if (!resolvedOrderId && isFulfillmentOrdersTopic) {
+      const foId = String(fo.id || payload.id || lifo.fulfillment_order_id || "");
+      const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+      if (foId && shopDomain && adminToken) {
+        try {
+          const foResp = await fetch(
+            `https://${shopDomain}/admin/api/2025-07/fulfillment_orders/${foId}.json`,
+            { headers: { "X-Shopify-Access-Token": adminToken } },
+          );
+          if (foResp.ok) {
+            const { fulfillment_order } = await foResp.json();
+            resolvedOrderId = String(fulfillment_order?.order_id || "");
+            console.log(`Resolved fulfillment_order ${foId} -> order ${resolvedOrderId}`);
+          } else {
+            console.error(`Failed to fetch fulfillment_order ${foId}: ${foResp.status}`);
+          }
+        } catch (e) {
+          console.error("fulfillment_order fetch failed:", e);
+        }
+      }
+    }
+
+    if (!resolvedOrderId) {
+      console.error(`missing order id topic=${topic} payload=${rawBody.slice(0, 500)}`);
       return new Response(JSON.stringify({ error: "missing order id" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     // Fulfillment webhooks lack customer/phone — fetch full order via Admin API
     const needsOrderFetch = !customer?.phone && !shippingAddress?.phone && !customer?.email;
