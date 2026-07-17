@@ -77,13 +77,7 @@ Deno.serve(async (req) => {
     // For fulfillment_orders topics, `id` is the fulfillment_order id, not the order id.
     // Prefer explicit order_id fields; fall back to nested shapes; only use payload.id for orders/create & fulfillments/*.
     const isFulfillmentOrdersTopic = topic.startsWith("fulfillment_orders/");
-    const resolvedOrderId = String(
-      payload.order_id ||
-      fo.order_id ||
-      lifo.fulfillment_order_id && fo.order_id ||
-      (!isFulfillmentOrdersTopic ? payload.id : "") ||
-      ""
-    );
+
     let orderNumber = String(payload.order_number || payload.name || fo.order_name || "");
     let customer = payload.customer || {};
     let shippingAddress = payload.shipping_address || payload.destination || fo.destination || {};
