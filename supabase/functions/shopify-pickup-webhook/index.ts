@@ -46,9 +46,15 @@ Deno.serve(async (req) => {
     }
 
     const payload = JSON.parse(rawBody);
-    console.log(`Shopify webhook topic=${topic} order=${payload.id || payload.order_id}`);
+    // Normalize: some fulfillment_orders topics wrap data in `fulfillment_order`
+    // or send `line_items_by_fulfillment_order: [{ fulfillment_order_id, ... }]`
+    const fo = payload.fulfillment_order || {};
+    const lifo = Array.isArray(payload.line_items_by_fulfillment_order)
+      ? payload.line_items_by_fulfillment_order[0] || {}
+      : {};
+    console.log(`Shopify webhook topic=${topic} payload_keys=${Object.keys(payload).join(",")} order=${payload.order_id || payload.id || fo.order_id}`);
 
-    const fulfillmentStatus = String(payload?.status || payload?.fulfillment_status || "").toLowerCase();
+    const fulfillmentStatus = String(payload?.status || payload?.fulfillment_status || fo?.status || "").toLowerCase();
     const tags = String(payload?.tags || "").toLowerCase();
     const isReadyToPickup =
       topic === "fulfillment_orders/ready_to_pickup" ||
@@ -68,10 +74,20 @@ Deno.serve(async (req) => {
 
     const eventName = isReadyToPickup ? "order_ready_for_pickup" : "order_created";
 
-    const shopifyOrderId = String(payload.order_id || payload.id || "");
-    let orderNumber = String(payload.order_number || payload.name || payload.order_id || "");
+    // For fulfillment_orders topics, `id` is the fulfillment_order id, not the order id.
+    // Prefer explicit order_id fields; fall back to nested shapes; only use payload.id for orders/create & fulfillments/*.
+    const isFulfillmentOrdersTopic = topic.startsWith("fulfillment_orders/");
+    const shopifyOrderId = String(
+      payload.order_id ||
+      fo.order_id ||
+      lifo.fulfillment_order_id && fo.order_id ||
+      (!isFulfillmentOrdersTopic ? payload.id : "") ||
+      ""
+    );
+    let orderNumber = String(payload.order_number || payload.name || fo.order_name || "");
     let customer = payload.customer || {};
-    let shippingAddress = payload.shipping_address || payload.destination || {};
+    let shippingAddress = payload.shipping_address || payload.destination || fo.destination || {};
+
 
     if (!shopifyOrderId) {
       return new Response(JSON.stringify({ error: "missing order id" }), {
