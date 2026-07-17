@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const shopDomain = Deno.env.get("SHOPIFY_SHOP_DOMAIN") || "saofranciscopet.myshopify.com";
+    const shopDomain = Deno.env.get("SHOPIFY_SHOP_DOMAIN") || "petjoy-deals-hb8r9.myshopify.com";
     const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
     const baseUrl = Deno.env.get("EXTERNAL_API_BASE_URL");
     const apiToken = Deno.env.get("EXTERNAL_API_TOKEN");
