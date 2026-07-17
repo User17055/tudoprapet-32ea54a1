@@ -90,7 +90,13 @@ Deno.serve(async (req) => {
 
 
     // If we only have a fulfillment_order id, resolve the underlying order_id via Admin API
-    let resolvedOrderId = resolvedOrderId;
+    let resolvedOrderId = String(
+      payload.order_id ||
+      fo.order_id ||
+      ""
+    );
+    if (!resolvedOrderId && !isFulfillmentOrdersTopic) resolvedOrderId = String(payload.id || "");
+
     if (!resolvedOrderId && isFulfillmentOrdersTopic) {
       const foId = String(fo.id || payload.id || lifo.fulfillment_order_id || "");
       const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
