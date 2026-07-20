@@ -142,7 +142,6 @@ export default function Admin() {
     );
   }
 
-  const ActiveIcon = active.icon;
   const ActiveComponent = active.component;
 
   return (
