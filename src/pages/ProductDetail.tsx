@@ -235,7 +235,7 @@ const ProductDetail = () => {
   const hasSubscriberDiscount = !hasFranchiseDiscount && subscriberPrice !== null && subscriberPrice < price;
   const installment = (price / 2).toFixed(2).replace(".", ",");
 
-  const allowedAudience = product ? isVisibleTo(product.node.id, isFranchisee) : true;
+  
 
   const handleAdd = async () => {
     if (!variant) return;
