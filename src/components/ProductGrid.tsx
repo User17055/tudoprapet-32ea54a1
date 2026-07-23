@@ -4,6 +4,8 @@ import { ProductCard } from "@/components/ProductCard";
 import { Loader2, PackageOpen } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useProductAudience } from "@/hooks/useProductAudience";
+import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 
 interface FeaturedProduct {
   shopify_product_id: string;
@@ -12,6 +14,8 @@ interface FeaturedProduct {
 export const ProductGrid = () => {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const { isVisibleTo, loading: audienceLoading } = useProductAudience();
+  const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const [emblaRef] = useEmblaCarousel({
     align: "start",
     loop: false,
