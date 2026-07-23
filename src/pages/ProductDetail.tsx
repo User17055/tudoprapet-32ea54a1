@@ -215,6 +215,9 @@ const ProductDetail = () => {
         <Footer />
       </div>
     );
+  }
+
+
 
   const { node } = product;
   const variant = node.variants.edges[selectedVariantIdx]?.node;
