@@ -1,7 +1,8 @@
 import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
-import { Loader2, Plus, RefreshCw, ShoppingCart } from "lucide-react";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { Loader2, Plus, RefreshCw, ShoppingCart, Store } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -21,6 +22,7 @@ export const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((s) => s.addItem);
   const isLoading = useCartStore((s) => s.isLoading);
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice, isFranchisee } = useFranchisePrices();
   const { node } = product;
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
@@ -36,13 +38,21 @@ export const ProductCard = ({ product }: Props) => {
   const isOutOfStock = !variant?.availableForSale;
 
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
+  const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
+  const hasFranchiseDiscount =
+    isFranchisee && franchisePrice !== null && franchisePrice < price;
+  const franchiseDiscountPercent = hasFranchiseDiscount && franchisePrice !== null
+    ? Math.round(((price - franchisePrice) / price) * 100)
+    : 0;
   const hasSubscriberDiscount =
-    subscriberPrice !== null && subscriberPrice < price;
+    !hasFranchiseDiscount && subscriberPrice !== null && subscriberPrice < price;
   const subscriberDiscountPercent = hasSubscriberDiscount
     ? Math.round(((price - subscriberPrice) / price) * 100)
     : 0;
   const badgePercent = hasDiscount
     ? discountPercent
+    : hasFranchiseDiscount
+    ? franchiseDiscountPercent
     : hasSubscriberDiscount
     ? subscriberDiscountPercent
     : 0;
@@ -140,6 +150,18 @@ export const ProductCard = ({ product }: Props) => {
           <span className="text-[12px] leading-none text-[#7a7f89]">
             ou 2 vezes de {formatPrice(twoInstallmentPrice)}
           </span>
+        )}
+
+        {hasFranchiseDiscount && franchisePrice !== null && (
+          <div className="mt-1 flex flex-col items-start gap-[2px]">
+            <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-emerald-600 tabular-nums">
+              {formatPrice(franchisePrice)}
+              <Store className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-[12px] font-normal leading-none text-emerald-600">
+              preço franquia
+            </span>
+          </div>
         )}
 
         {hasSubscriberDiscount && (
