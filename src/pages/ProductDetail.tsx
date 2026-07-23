@@ -5,6 +5,8 @@ import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useProductAudience } from "@/hooks/useProductAudience";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -46,6 +48,8 @@ const ProductDetail = () => {
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice, isFranchisee } = useFranchisePrices();
+  const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);
@@ -188,6 +192,33 @@ const ProductDetail = () => {
     );
   }
 
+  // Block access if product audience doesn't match viewer
+  const productAllowed = isVisibleTo(product.node.id, isFranchisee);
+  if (!audienceLoading && !productAllowed) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-xl font-display">Produto indisponível</p>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Este produto não está disponível para o seu perfil.
+            </p>
+            <Link to="/catalogo">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Ver catálogo
+              </Button>
+            </Link>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+
+
   const { node } = product;
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
@@ -199,8 +230,12 @@ const ProductDetail = () => {
     ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
     : 0;
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
-  const hasSubscriberDiscount = subscriberPrice !== null && subscriberPrice < price;
+  const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
+  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null && franchisePrice < price;
+  const hasSubscriberDiscount = !hasFranchiseDiscount && subscriberPrice !== null && subscriberPrice < price;
   const installment = (price / 2).toFixed(2).replace(".", ",");
+
+  
 
   const handleAdd = async () => {
     if (!variant) return;
@@ -221,7 +256,22 @@ const ProductDetail = () => {
     if (!variant) return;
     setBuyingNow(true);
 
-    if (isSubscribed) {
+    if (isFranchisee) {
+      try {
+        const { data, error } = await supabase.functions.invoke("franchise-checkout", {
+          body: { items: [{ variantId: variant.id, quantity }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          goToCheckout(data.checkoutUrl);
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Franchise checkout failed:", err);
+        toast.error("Erro ao aplicar preço de franquia.");
+      }
+    } else if (isSubscribed) {
       try {
         const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
           body: { items: [{ variantId: variant.id, quantity }] },
@@ -238,7 +288,7 @@ const ProductDetail = () => {
       }
     }
 
-    // Não-assinante: checkout instantâneo sem afetar o carrinho
+    // Fallback: checkout instantâneo sem afetar o carrinho
     const checkoutUrl = await createInstantCheckoutUrl([
       { variantId: variant.id, quantity },
     ]);
@@ -487,6 +537,15 @@ const ProductDetail = () => {
                   R$ {price.toFixed(2).replace(".", ",")}
                 </p>
               </div>
+              {hasFranchiseDiscount && franchisePrice !== null && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <Crown className="h-4 w-4 text-emerald-600" />
+                  <span className="font-display font-900 text-xl text-emerald-600 tabular-nums">
+                    R$ {franchisePrice.toFixed(2).replace(".", ",")}
+                  </span>
+                  <span className="text-xs text-emerald-600/80 font-medium">preço franquia</span>
+                </div>
+              )}
               {hasSubscriberDiscount && (
                 <div className="flex items-center gap-1.5 pt-1">
                   <Crown className="h-4 w-4 text-sky-500" />

@@ -1,40 +1,52 @@
-# Refinar Página de Produto
+## Objetivo
+Permitir marcar cada produto (no admin) como visível para **cliente**, **franquia** ou **ambos**, ocultar os "franquia" de clientes normais, e definir preço especial de franquia.
 
-Vamos deixar a página de detalhe do produto (`src/pages/ProductDetail.tsx`) mais organizada e parecida com as referências enviadas, mantendo a identidade da TudoPraPet (azul marinho da marca, não o azul do Defenza — esse é só inspiração de organização).
+## Banco de dados (migration)
 
-## O que muda
+1. **`profiles`**: adicionar coluna `is_franchisee boolean default false`.
+2. **`product_audience`** (nova tabela):
+   - `shopify_product_id text primary key`
+   - `audience text not null check (audience in ('cliente','franquia','ambos'))` — default `'cliente'`
+   - `created_at`, `updated_at`
+   - RLS: leitura pública (anon+authenticated); escrita apenas admin (`has_role`).
+   - GRANTs padrão.
+3. **`franchise_prices`** (nova tabela, espelho de `subscriber_prices`):
+   - `shopify_variant_id text primary key`
+   - `shopify_product_id text not null`
+   - `price numeric not null`
+   - `created_at`, `updated_at`
+   - RLS: leitura só para franqueado logado (`profiles.is_franchisee = true`) ou admin; escrita só admin.
+   - GRANTs.
 
-### 1. Galeria desktop — fim do scroll feio nas miniaturas
-Hoje as miniaturas têm `max-h-[500px] overflow-y-auto`, o que mostra uma barra de scroll vertical desagradável quando há muitas imagens.
+## Frontend — Admin
 
-Substituir por uma coluna de miniaturas com:
-- Tamanho um pouco menor e espaçamento consistente
-- Setas ▲ ▼ no topo e na base (visíveis só quando há overflow) para navegar
-- `overflow: hidden` (sem barra de scroll nativa)
-- Scroll programático suave ao clicar nas setas
-- Miniatura selecionada com borda azul marinho da marca + leve sombra
+4. Nova aba **"Franquia"** (ou seção dentro de "Detalhes") no painel admin:
+   - Lista de produtos Shopify com seletor de audiência (Cliente / Franquia / Ambos) — grava em `product_audience`.
+   - Campo de preço de franquia por variante — grava em `franchise_prices`.
+5. Na aba de **usuários/perfis** (Detalhes), adicionar toggle "Franqueado" que atualiza `profiles.is_franchisee`.
 
-### 2. Imagem principal
-- Manter fundo branco e bordas arredondadas (já está)
-- Garantir `object-contain` com padding para a foto respirar
-- Badges (`25% OFF`, `Imagens ilustrativas`) com estilo mais clean, alinhados como nas referências
+## Frontend — Loja
 
-### 3. Coluna de compra (buy box)
-- Manter o botão **Comprar agora** (conforme pedido)
-- Manter bloco de preço atual + preço de assinante com a coroa
-- Pequenos ajustes de espaçamento para ficar mais "respirado" como na referência
-- Card "Assine pra não faltar" mantido com a borda azul clara (já está bom)
-
-### 4. Mobile
-- Carrossel já está OK; só pequenos ajustes nos dots e badges para combinar visualmente.
-
-## Arquivo afetado
-- `src/pages/ProductDetail.tsx` (somente apresentação/CSS — sem mudanças de lógica, dados ou checkout)
+6. Novo hook `useProductAudience()` (carrega mapa `product_id → audience` uma vez).
+7. Novo contexto/hook `useIsFranchisee()` lendo `profiles.is_franchisee` do usuário logado.
+8. Filtro de produtos aplicado em:
+   - `ProductGrid` (destaques)
+   - `Catalog` (catálogo)
+   - `ProductDetail` (bloquear/redirecionar se não permitido)
+   
+   Regra:
+   - Não-franqueado → mostra `cliente` e `ambos`
+   - Franqueado → mostra `franquia` e `ambos`
+9. Novo hook `useFranchisePrices()` análogo a `useSubscriberPrices`. Em `ProductCard` e `ProductDetail`, se usuário é franqueado e existe preço de franquia, exibir com destaque próprio (badge "Preço Franquia", cor diferente do sky do clube — sugiro `emerald`).
+10. Checkout: função edge `franchise-checkout` (baseada em `subscriber-checkout`) que cria Draft Order aplicando preço de franquia quando o usuário logado é franqueado.
 
 ## Detalhes técnicos
-- Usar `useRef` na coluna de miniaturas para fazer `scrollBy({ top: ±height, behavior: 'smooth' })` ao clicar nas setas
-- Detectar overflow com `scrollHeight > clientHeight` para decidir se mostra as setas
-- Cores via tokens semânticos do design system (primary = azul marinho da marca), sem cores hardcoded
-- Sem mudanças em `shopify.ts`, stores, ou edge functions
+- Filtragem client-side (mesma abordagem já usada com `featured_products`).
+- Preço de franquia é exclusivo — não empilha com preço de clube. Precedência: franqueado > clube > varejo.
+- `has_role(auth.uid(),'admin')` continua sendo o gate de escrita.
 
-Confirma que é só ajuste visual da página de produto (sem mexer em filtro/catálogo)?
+## Fora do escopo
+- Sincronização automática com tags da Shopify (você marca manualmente no admin).
+- Cadastro em massa de preços de franquia (fazer 1 a 1 na UI; posso adicionar import CSV depois se quiser).
+
+Confirma que posso seguir?
