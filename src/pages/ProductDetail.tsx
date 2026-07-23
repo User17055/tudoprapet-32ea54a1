@@ -537,6 +537,15 @@ const ProductDetail = () => {
                   R$ {price.toFixed(2).replace(".", ",")}
                 </p>
               </div>
+              {hasFranchiseDiscount && franchisePrice !== null && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <Crown className="h-4 w-4 text-emerald-600" />
+                  <span className="font-display font-900 text-xl text-emerald-600 tabular-nums">
+                    R$ {franchisePrice.toFixed(2).replace(".", ",")}
+                  </span>
+                  <span className="text-xs text-emerald-600/80 font-medium">preço franquia</span>
+                </div>
+              )}
               {hasSubscriberDiscount && (
                 <div className="flex items-center gap-1.5 pt-1">
                   <Crown className="h-4 w-4 text-sky-500" />
