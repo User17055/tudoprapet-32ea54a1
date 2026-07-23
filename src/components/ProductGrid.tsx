@@ -83,32 +83,38 @@ export const ProductGrid = () => {
           </p>
         </div>
 
-        {loading ? (
+        {loading || audienceLoading || franchiseeLoading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : products.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <PackageOpen className="mb-4 h-16 w-16 text-muted-foreground" />
-            <h3 className="font-display mb-2 text-xl font-bold">Nenhum produto encontrado</h3>
-            <p className="max-w-md text-muted-foreground">
-              A loja ainda nao tem produtos cadastrados.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden" ref={emblaRef}>
-            <div className="flex gap-2 md:gap-3">
-              {products.map((product) => (
-                <div
-                  key={product.node.id}
-                  className="w-[45%] flex-shrink-0 flex-grow-0 md:w-[200px]"
-                >
-                  <ProductCard product={product} />
-                </div>
-              ))}
+        ) : (() => {
+          const visible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
+          if (visible.length === 0) {
+            return (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <PackageOpen className="mb-4 h-16 w-16 text-muted-foreground" />
+                <h3 className="font-display mb-2 text-xl font-bold">Nenhum produto encontrado</h3>
+                <p className="max-w-md text-muted-foreground">
+                  A loja ainda nao tem produtos cadastrados.
+                </p>
+              </div>
+            );
+          }
+          return (
+            <div className="overflow-hidden" ref={emblaRef}>
+              <div className="flex gap-2 md:gap-3">
+                {visible.map((product) => (
+                  <div
+                    key={product.node.id}
+                    className="w-[45%] flex-shrink-0 flex-grow-0 md:w-[200px]"
+                  >
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </section>
   );
