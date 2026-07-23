@@ -684,6 +684,14 @@ function UsersTab() {
     setTogglingEmail(null);
   };
 
+  const toggleFranchisee = async (p: ProfileRow) => {
+    const next = !p.is_franchisee;
+    const { error } = await supabase.from("profiles").update({ is_franchisee: next }).eq("id", p.id);
+    if (error) return toast.error("Erro: " + error.message);
+    setProfiles((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_franchisee: next } : x)));
+    toast.success(next ? "Marcado como franqueado" : "Franquia removida");
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return profiles;
@@ -796,6 +804,16 @@ function UsersTab() {
                                 <Crown className="h-3 w-3" />
                               )}
                               {isMember ? "Remover" : "Membro"}
+                            </Button>
+                            <Button
+                              variant={p.is_franchisee ? "outline" : "secondary"}
+                              size="sm"
+                              onClick={() => toggleFranchisee(p)}
+                              className="h-8 gap-1"
+                              title={p.is_franchisee ? "Remover franqueado" : "Marcar como franqueado"}
+                            >
+                              <Store className="h-3 w-3" />
+                              {p.is_franchisee ? "Franq. ✓" : "Franquia"}
                             </Button>
                           </>
                         )}
