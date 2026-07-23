@@ -192,6 +192,30 @@ const ProductDetail = () => {
     );
   }
 
+  // Block access if product audience doesn't match viewer
+  const productAllowed = isVisibleTo(product.node.id, isFranchisee);
+  if (!audienceLoading && !productAllowed) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-xl font-display">Produto indisponível</p>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Este produto não está disponível para o seu perfil.
+            </p>
+            <Link to="/catalogo">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Ver catálogo
+              </Button>
+            </Link>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+
   const { node } = product;
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
@@ -229,7 +253,22 @@ const ProductDetail = () => {
     if (!variant) return;
     setBuyingNow(true);
 
-    if (isSubscribed) {
+    if (isFranchisee) {
+      try {
+        const { data, error } = await supabase.functions.invoke("franchise-checkout", {
+          body: { items: [{ variantId: variant.id, quantity }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          goToCheckout(data.checkoutUrl);
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Franchise checkout failed:", err);
+        toast.error("Erro ao aplicar preço de franquia.");
+      }
+    } else if (isSubscribed) {
       try {
         const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
           body: { items: [{ variantId: variant.id, quantity }] },
@@ -246,7 +285,7 @@ const ProductDetail = () => {
       }
     }
 
-    // Não-assinante: checkout instantâneo sem afetar o carrinho
+    // Fallback: checkout instantâneo sem afetar o carrinho
     const checkoutUrl = await createInstantCheckoutUrl([
       { variantId: variant.id, quantity },
     ]);
