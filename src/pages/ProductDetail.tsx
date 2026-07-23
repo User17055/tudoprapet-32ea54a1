@@ -5,6 +5,8 @@ import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useProductAudience } from "@/hooks/useProductAudience";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -46,6 +48,8 @@ const ProductDetail = () => {
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice, isFranchisee } = useFranchisePrices();
+  const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);
@@ -199,8 +203,12 @@ const ProductDetail = () => {
     ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
     : 0;
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
-  const hasSubscriberDiscount = subscriberPrice !== null && subscriberPrice < price;
+  const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
+  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null && franchisePrice < price;
+  const hasSubscriberDiscount = !hasFranchiseDiscount && subscriberPrice !== null && subscriberPrice < price;
   const installment = (price / 2).toFixed(2).replace(".", ",");
+
+  const allowedAudience = product ? isVisibleTo(product.node.id, isFranchisee) : true;
 
   const handleAdd = async () => {
     if (!variant) return;
