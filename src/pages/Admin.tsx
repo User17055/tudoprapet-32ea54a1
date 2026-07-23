@@ -41,6 +41,7 @@ import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
 import FeaturedTab from "./admin/FeaturedTab";
 import RetiradaTab from "./admin/RetiradaTab";
+import FranquiaTab from "./admin/FranquiaTab";
 
 interface SubPrice {
   id: string;
@@ -67,7 +68,8 @@ type SectionId =
   | "banners"
   | "featured"
   | "referrals"
-  | "retirada";
+  | "retirada"
+  | "franquia";
 
 interface SectionDef {
   id: SectionId;
@@ -93,6 +95,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "content", label: "Conteúdo", description: "Descrições personalizadas dos produtos", icon: FileText, component: ContentTab },
       { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
       { id: "categories", label: "Ordem do Menu", description: "Ordem das categorias no menu do site", icon: ListTree, component: CategoriesTab },
+      { id: "franquia", label: "Franquia", description: "Visibilidade e preços exclusivos para franqueados", icon: Store, component: FranquiaTab },
     ],
   },
   {
@@ -596,6 +599,7 @@ interface ProfileRow {
   email: string | null;
   name: string | null;
   created_at: string;
+  is_franchisee?: boolean | null;
 }
 
 function UsersTab() {
