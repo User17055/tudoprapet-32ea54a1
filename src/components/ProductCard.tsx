@@ -152,7 +152,7 @@ export const ProductCard = ({ product }: Props) => {
           </span>
         )}
 
-        {hasFranchiseDiscount && franchisePrice !== null && (
+        {hasFranchiseDiscount && franchisePrice !== null ? (
           <div className="mt-1 flex flex-col items-start gap-[2px]">
             <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-emerald-600 tabular-nums">
               {formatPrice(franchisePrice)}
@@ -162,9 +162,7 @@ export const ProductCard = ({ product }: Props) => {
               preço franquia
             </span>
           </div>
-        )}
-
-        {hasSubscriberDiscount && (
+        ) : hasSubscriberDiscount ? (
           <div className="mt-1 flex flex-col items-start gap-[2px]">
             <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-[#0054a6] tabular-nums">
               {formatPrice(subscriberPrice)}
@@ -174,7 +172,7 @@ export const ProductCard = ({ product }: Props) => {
               para assinantes
             </span>
           </div>
-        )}
+        ) : null}
       </div>
     </Link>
   );
