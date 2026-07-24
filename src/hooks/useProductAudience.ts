@@ -41,11 +41,12 @@ export function useProductAudience() {
 
   const audienceMap = new Map(rows.map((r) => [r.shopify_product_id, r.audience]));
 
-  const getAudience = (productId: string): ProductAudience =>
-    audienceMap.get(productId) || "cliente";
+  const getAudience = (productId: string): ProductAudience | null =>
+    audienceMap.get(productId) ?? null;
 
   const isVisibleTo = (productId: string, isFranchisee: boolean): boolean => {
     const a = getAudience(productId);
+    if (!a) return false; // produto sem marcação não aparece
     if (a === "ambos") return true;
     return isFranchisee ? a === "franquia" : a === "cliente";
   };
