@@ -629,26 +629,28 @@ const ProductDetail = () => {
             </div>
 
             {/* Subscriber Club Card */}
-            <div className="rounded-2xl border-2 border-sky-400/40 bg-sky-50/50 dark:bg-sky-950/20 p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <Crown className="h-5 w-5 text-sky-500" />
-                <h3 className="font-display font-900 text-base text-sky-600 dark:text-sky-400">
-                  Assine pra não faltar
-                </h3>
+            {!isFranchisee && (
+              <div className="rounded-2xl border-2 border-sky-400/40 bg-sky-50/50 dark:bg-sky-950/20 p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Crown className="h-5 w-5 text-sky-500" />
+                  <h3 className="font-display font-900 text-base text-sky-600 dark:text-sky-400">
+                    Assine pra não faltar
+                  </h3>
+                </div>
+                <p className="text-sm font-semibold text-foreground leading-snug">
+                  Assine para benefícios exclusivos
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Receba na frequência que seu pet precisa, sem custo de envio, com descontos especiais e prioridade no atendimento. Cancele quando quiser.
+                </p>
+                <Link
+                  to="/clube"
+                  className="inline-flex items-center gap-1 text-sm font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400"
+                >
+                  Assinar agora →
+                </Link>
               </div>
-              <p className="text-sm font-semibold text-foreground leading-snug">
-                Assine para benefícios exclusivos
-              </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Receba na frequência que seu pet precisa, sem custo de envio, com descontos especiais e prioridade no atendimento. Cancele quando quiser.
-              </p>
-              <Link
-                to="/clube"
-                className="inline-flex items-center gap-1 text-sm font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400"
-              >
-                Assinar agora →
-              </Link>
-            </div>
+            )}
 
             {/* Trust badges */}
             <div className="grid grid-cols-3 gap-2 pt-3">
