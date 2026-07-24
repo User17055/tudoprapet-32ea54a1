@@ -89,7 +89,7 @@ function AudiencePanel() {
           <div>
             <CardTitle className="text-base">Visibilidade por produto</CardTitle>
             <CardDescription className="mt-0.5">
-              Defina quem pode ver cada produto na loja. Padrão: Cliente.
+              Só aparecem na loja produtos marcados como Cliente, Franquia ou Ambos. Sem marcação = oculto.
             </CardDescription>
           </div>
           <Input
@@ -115,18 +115,25 @@ function AudiencePanel() {
             </TableHeader>
             <TableBody>
               {filtered.map((p) => {
-                const current = audienceMap.get(p.node.id) || "cliente";
+                const current = audienceMap.get(p.node.id);
                 return (
                   <TableRow key={p.node.id}>
-                    <TableCell className="font-medium">{p.node.title}</TableCell>
+                    <TableCell className="font-medium">
+                      {p.node.title}
+                      {!current && (
+                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
+                          Oculto
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Select
-                          value={current}
+                          value={current ?? ""}
                           onValueChange={(v) => handleChange(p.node.id, v as ProductAudience)}
                           disabled={savingId === p.node.id}
                         >
-                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-8"><SelectValue placeholder="Não exibir" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="cliente">Cliente</SelectItem>
                             <SelectItem value="franquia">Franquia</SelectItem>
