@@ -26,6 +26,8 @@ import {
   Store,
   Ticket,
   PawPrint,
+  Menu,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -119,10 +121,14 @@ export default function Admin() {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useIsAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const tabParam = searchParams.get("tab");
   const active = ALL_SECTIONS.find((s) => s.id === tabParam) ?? ALL_SECTIONS[0];
-  const selectSection = (id: SectionId) => setSearchParams({ tab: id });
+  const selectSection = (id: SectionId) => {
+    setSearchParams({ tab: id });
+    setMobileNavOpen(false);
+  };
 
   if (!authLoading && !user) return <Navigate to="/login" replace />;
   if (authLoading || roleLoading) {
@@ -146,43 +152,134 @@ export default function Admin() {
   }
 
   const ActiveComponent = active.component;
+  const ActiveIcon = active.icon;
 
   return (
-    <div>
-      <header>
-        <Link to="/">TudoPraPet</Link>
-        <span> — Painel Admin</span>
-        <span> ({user?.email})</span>
-        <Button asChild size="sm" variant="ghost">
-          <Link to="/">Ver loja</Link>
-        </Button>
+    <div className="min-h-screen bg-[#f4f6fa] text-[#1c2333]">
+      <header className="sticky top-0 z-50 flex h-20 items-center justify-between gap-4 bg-[#112f5f] px-4 text-white shadow-lg sm:px-7">
+        <Link to="/" className="flex min-w-0 items-center gap-3" aria-label="TudoPraPet">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
+            <img src={logo} alt="" className="h-full w-full object-contain" />
+          </span>
+          <span className="hidden text-xl font-extrabold tracking-tight sm:inline">
+            Tudo<span className="text-[#f1c548]">Pra</span>Pet
+          </span>
+        </Link>
+
+        <div className="pointer-events-none absolute inset-x-1/3 top-0 hidden h-full overflow-hidden lg:block" aria-hidden="true">
+          {[12, 32, 52, 72, 92].map((left, index) => (
+            <PawPrint
+              key={left}
+              className="absolute h-5 w-5 text-[#f1c548]/45"
+              style={{
+                left: `${left}%`,
+                top: `${index % 2 === 0 ? 18 : 52}%`,
+                transform: `rotate(${index % 2 === 0 ? -24 : 20}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="relative flex min-w-0 items-center gap-2 sm:gap-4">
+          <div className="hidden min-w-0 text-right md:block">
+            <p className="text-sm font-semibold">Painel Administrativo</p>
+            <p className="max-w-64 truncate text-xs text-white/65">{user?.email}</p>
+          </div>
+          <Button asChild size="sm" variant="secondary" className="h-9 gap-2 bg-[#f1c548] text-[#0a1931] hover:bg-[#e0b23f]">
+            <Link to="/">
+              <span className="hidden sm:inline">Ver loja</span>
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="text-white hover:bg-white/10 hover:text-white lg:hidden"
+            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
       </header>
 
-      <nav>
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <p>{group.label}</p>
-            <ul>
-              {group.items.map((item) => (
-                <li key={item.id}>
-                  <button
-                    onClick={() => selectSection(item.id)}
-                    disabled={item.id === active.id}
-                  >
-                    {item.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </nav>
+      <div className="flex min-h-[calc(100vh-5rem)] items-start">
+        {mobileNavOpen && (
+          <button
+            type="button"
+            className="fixed inset-0 top-20 z-30 bg-[#0a1931]/45 backdrop-blur-[1px] lg:hidden"
+            aria-label="Fechar menu"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
 
-      <main>
-        <h1>{active.label}</h1>
-        <p>{active.description}</p>
-        <ActiveComponent />
-      </main>
+        <aside
+          className={cn(
+            "fixed bottom-0 left-0 top-20 z-40 w-[280px] overflow-y-auto bg-[#ddac42] p-4 transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-[calc(100vh-5rem)] lg:w-64 lg:translate-x-0",
+            mobileNavOpen ? "translate-x-0" : "-translate-x-full",
+          )}
+        >
+          <nav className="min-h-full rounded-xl border border-black/5 bg-white p-3 shadow-[-8px_10px_0_rgba(10,25,49,0.16)]">
+            <div className="mb-3 border-b pb-3 md:hidden">
+              <p className="text-xs font-bold text-[#112f5f]">Painel Administrativo</p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{user?.email}</p>
+            </div>
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="mb-4 last:mb-0">
+                <p className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#0a1931]/65">
+                  {group.label}
+                </p>
+                <ul className="space-y-1">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const selected = item.id === active.id;
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectSection(item.id)}
+                          aria-current={selected ? "page" : undefined}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                            selected
+                              ? "bg-[#112f5f] font-bold text-white shadow-sm"
+                              : "text-[#152642] hover:bg-[#f4f6fa]",
+                          )}
+                        >
+                          <Icon className={cn("h-4 w-4 shrink-0", selected ? "text-[#f1c548]" : "text-[#112f5f]")} />
+                          <span>{item.label}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        </aside>
+
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-[1440px]">
+            <div className="mb-6 flex items-start gap-3">
+              <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112f5f] text-[#f1c548] shadow-sm">
+                <ActiveIcon className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b17c15]">
+                  {NAV_GROUPS.find((group) => group.items.some((item) => item.id === active.id))?.label}
+                </p>
+                <h1 className="text-2xl font-extrabold tracking-tight text-[#0a1931]">{active.label}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
+              </div>
+            </div>
+            <section key={active.id} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+              <ActiveComponent />
+            </section>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -701,16 +798,21 @@ function UsersTab() {
     );
   }, [profiles, search]);
 
-  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id) && !memberEmails.has((p.email || "").toLowerCase()));
+  const hasActivePlan = (profile: ProfileRow) =>
+    subscriberIds.has(profile.user_id) ||
+    memberEmails.has((profile.email || "").toLowerCase());
+  const totalWithPlan = profiles.filter(hasActivePlan).length;
+  const totalWithoutPlan = profiles.length - totalWithPlan;
+  const totalFranchisees = profiles.filter((profile) => profile.is_franchisee).length;
 
   return (
     <Card>
       <CardHeader className="p-4 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Usuários cadastrados ({profiles.length})</CardTitle>
+            <CardTitle className="text-base">Usuários cadastrados</CardTitle>
             <CardDescription className="mt-0.5">
-              {withoutPlan.length} sem plano · {filtered.length - withoutPlan.length} com plano ativo
+              Informações sincronizadas com as contas e planos da plataforma.
             </CardDescription>
           </div>
           <Input
@@ -720,6 +822,24 @@ function UsersTab() {
             className="h-9 w-full sm:w-64"
           />
         </div>
+        <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-wrap">
+          {[
+            { label: "Total", value: profiles.length },
+            { label: "Com plano", value: totalWithPlan },
+            { label: "Sem plano", value: totalWithoutPlan },
+            { label: "Franqueados", value: totalFranchisees },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border bg-[#f8f9fc] px-3 py-2 sm:min-w-28">
+              <p className="text-lg font-extrabold tabular-nums text-[#112f5f]">{item.value}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</p>
+            </div>
+          ))}
+        </div>
+        {search.trim() && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            {filtered.length} {filtered.length === 1 ? "resultado encontrado" : "resultados encontrados"}
+          </p>
+        )}
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {loading ? (
