@@ -25,7 +25,6 @@ import {
   Star,
   Store,
   Ticket,
-  PawPrint,
   Menu,
   ExternalLink,
   type LucideIcon,
@@ -166,15 +165,18 @@ export default function Admin() {
           </span>
         </Link>
 
-        <div className="pointer-events-none absolute inset-x-1/3 top-0 hidden h-full overflow-hidden lg:block" aria-hidden="true">
-          {[12, 32, 52, 72, 92].map((left, index) => (
-            <PawPrint
+        <div className="pointer-events-none absolute inset-x-[28%] top-0 hidden h-full overflow-hidden lg:block" aria-hidden="true">
+          {[4, 19, 34, 49, 64, 79, 94].map((left, index) => (
+            <img
               key={left}
-              className="absolute h-5 w-5 text-[#f1c548]/45"
+              src="/admin-decor/pataamarela.png"
+              alt=""
+              className="admin-paw-pulse absolute h-11 w-[72px] object-contain"
               style={{
                 left: `${left}%`,
-                top: `${index % 2 === 0 ? 18 : 52}%`,
-                transform: `rotate(${index % 2 === 0 ? -24 : 20}deg)`,
+                top: `${index % 2 === 0 ? -3 : 34}px`,
+                transform: `rotate(${index % 2 === 0 ? -70 : -88}deg)`,
+                animationDelay: `${(6 - index) * 0.15}s`,
               }}
             />
           ))}
@@ -221,7 +223,7 @@ export default function Admin() {
             mobileNavOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <nav className="min-h-full rounded-xl border border-black/5 bg-white p-3 shadow-[-8px_10px_0_rgba(10,25,49,0.16)]">
+          <nav className="min-h-full rounded-xl border border-black/5 bg-white p-3 pb-52 shadow-[-8px_10px_0_rgba(10,25,49,0.16)] lg:pb-56">
             <div className="mb-3 border-b pb-3 md:hidden">
               <p className="text-xs font-bold text-[#112f5f]">Painel Administrativo</p>
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{user?.email}</p>
@@ -258,6 +260,12 @@ export default function Admin() {
               </div>
             ))}
           </nav>
+          <img
+            src="/admin-decor/semfundo.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-[-20px] z-20 w-[285px] max-w-none drop-shadow-[0_10px_12px_rgba(10,25,49,0.22)]"
+          />
         </aside>
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

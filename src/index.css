@@ -149,6 +149,11 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+  .admin-paw-pulse {
+    opacity: 1;
+    animation: admin-paw-walk 4.8s ease-in-out infinite;
+  }
+
   /* Pequenas patinhas decorativas no fundo das seções */
   .paw-pattern {
     background-image:
@@ -157,6 +162,18 @@
       radial-gradient(circle at 30% 80%, hsl(var(--primary) / 0.04) 0 5px, transparent 6px),
       radial-gradient(circle at 65% 25%, hsl(var(--secondary) / 0.05) 0 7px, transparent 8px);
     background-size: 220px 220px;
+  }
+}
+
+@keyframes admin-paw-walk {
+  0%, 45% { opacity: 1; }
+  60%, 80% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-paw-pulse {
+    animation: none;
   }
 }
 
