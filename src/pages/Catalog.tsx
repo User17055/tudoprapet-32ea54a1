@@ -627,8 +627,8 @@ const Catalog = () => {
         </div>
 
         <div className="container mx-auto py-8">
-          {!loading && !hasRefinementFilters && shelfProducts.length > 0 && (
-            <section className="mb-12">
+          {!catalogLoading && !hasRefinementFilters && shelfProducts.length > 0 && (
+            <section className="mb-12 hidden md:block">
               <div className="mb-6 flex items-center justify-between">
                 <h2 className="font-display text-2xl font-bold">
                   Mais comprados em {pageTitle}
