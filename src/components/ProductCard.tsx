@@ -45,7 +45,9 @@ export const ProductCard = ({ product }: Props) => {
     ? Math.round(((price - franchisePrice) / price) * 100)
     : 0;
   const hasSubscriberDiscount =
-    !hasFranchiseDiscount && subscriberPrice !== null && subscriberPrice < price;
+    !isFranchisee &&
+    subscriberPrice !== null &&
+    subscriberPrice < price;
   const subscriberDiscountPercent = hasSubscriberDiscount
     ? Math.round(((price - subscriberPrice) / price) * 100)
     : 0;
