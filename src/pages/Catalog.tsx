@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
+import { useProductAudience } from "@/hooks/useProductAudience";
+import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -242,8 +244,12 @@ const Catalog = () => {
   const attrCount = (key: string, value: string) =>
     productAttrs.filter((a) => a.attr_key === key && a.attr_value === value).length;
 
+  const { isVisibleTo, rows: audienceRows } = useProductAudience();
+  const { isFranchisee } = useIsFranchisee();
+
   const filteredProducts = useMemo(() => {
-    let result = [...products];
+    let result = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
+
 
     if (categorySlug !== "all") {
       if (selectedCat) {
@@ -284,7 +290,7 @@ const Catalog = () => {
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [products, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
+  }, [products, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, audienceRows, isFranchisee]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =
