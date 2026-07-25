@@ -48,7 +48,11 @@ const ProductDetail = () => {
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
-  const { getFranchisePrice, isFranchisee } = useFranchisePrices();
+  const {
+    getFranchisePrice,
+    isFranchisee,
+    loading: franchiseAccessLoading,
+  } = useFranchisePrices();
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
@@ -164,7 +168,7 @@ const ProductDetail = () => {
     fetchCustomContent();
   }, [product?.node?.id]);
 
-  if (loading) {
+  if (loading || audienceLoading || franchiseAccessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -194,7 +198,7 @@ const ProductDetail = () => {
 
   // Block access if product audience doesn't match viewer
   const productAllowed = isVisibleTo(product.node.id, isFranchisee);
-  if (!audienceLoading && !productAllowed) {
+  if (!productAllowed) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -222,6 +226,9 @@ const ProductDetail = () => {
   const { node } = product;
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
+  const visibleRecommended = recommended.filter((item) =>
+    isVisibleTo(item.node.id, isFranchisee),
+  );
   const mainImage = images[selectedImageIdx]?.node || images[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
@@ -727,7 +734,7 @@ const ProductDetail = () => {
         </section>
 
         {/* Recommended products */}
-        {recommended.length > 0 && (
+        {visibleRecommended.length > 0 && (
           <section className="mt-12 lg:mt-16">
             <div className="flex items-center gap-3 mb-6">
               <div className="h-10 w-1.5 bg-accent rounded-full" />
@@ -736,7 +743,7 @@ const ProductDetail = () => {
               </h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {recommended.map((p) => (
+              {visibleRecommended.map((p) => (
                 <ProductCard key={p.node.id} product={p} />
               ))}
             </div>

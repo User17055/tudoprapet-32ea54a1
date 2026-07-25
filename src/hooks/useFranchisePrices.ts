@@ -35,22 +35,25 @@ export function invalidateFranchisePricesCache() {
 }
 
 export function useFranchisePrices() {
-  const { isFranchisee } = useIsFranchisee();
+  const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const [prices, setPrices] = useState<FranchisePrice[]>(cached || []);
-  const [loading, setLoading] = useState(isFranchisee && !cached);
+  const [pricesLoading, setPricesLoading] = useState(isFranchisee && !cached);
 
   useEffect(() => {
-    if (!isFranchisee) {
-      setPrices([]);
-      setLoading(false);
+    if (franchiseeLoading) {
       return;
     }
-    setLoading(!cached);
+    if (!isFranchisee) {
+      setPrices([]);
+      setPricesLoading(false);
+      return;
+    }
+    setPricesLoading(!cached);
     fetchPrices()
       .then(setPrices)
       .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [isFranchisee]);
+      .finally(() => setPricesLoading(false));
+  }, [franchiseeLoading, isFranchisee]);
 
   const getFranchisePrice = (variantId: string): number | null => {
     if (!isFranchisee) return null;
@@ -58,5 +61,10 @@ export function useFranchisePrices() {
     return found ? found.price : null;
   };
 
-  return { isFranchisee, prices, loading, getFranchisePrice };
+  return {
+    isFranchisee,
+    prices,
+    loading: franchiseeLoading || pricesLoading,
+    getFranchisePrice,
+  };
 }

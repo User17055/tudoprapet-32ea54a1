@@ -89,7 +89,7 @@ function AudiencePanel() {
           <div>
             <CardTitle className="text-base">Visibilidade por produto</CardTitle>
             <CardDescription className="mt-0.5">
-              Só aparecem na loja produtos marcados como Cliente, Franquia ou Ambos. Sem marcação = oculto.
+              Somente produtos marcados como Cliente, Franquia ou Ambos aparecem na loja. Sem configuração = oculto.
             </CardDescription>
           </div>
           <Input

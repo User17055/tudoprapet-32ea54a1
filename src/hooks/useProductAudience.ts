@@ -3,6 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type ProductAudience = "cliente" | "franquia" | "ambos";
 
+export function isAudienceVisibleTo(
+  audience: ProductAudience | null,
+  isFranchisee: boolean,
+): boolean {
+  // Fail closed: an unconfigured product must never be rendered while
+  // audience data is missing or incomplete.
+  if (!audience) return false;
+  if (audience === "ambos") return true;
+  return isFranchisee ? audience === "franquia" : audience === "cliente";
+}
+
 interface AudienceRow {
   shopify_product_id: string;
   audience: ProductAudience;
@@ -45,10 +56,7 @@ export function useProductAudience() {
     audienceMap.get(productId) ?? null;
 
   const isVisibleTo = (productId: string, isFranchisee: boolean): boolean => {
-    const a = getAudience(productId);
-    if (!a) return false; // produto sem marcação não aparece
-    if (a === "ambos") return true;
-    return isFranchisee ? a === "franquia" : a === "cliente";
+    return isAudienceVisibleTo(getAudience(productId), isFranchisee);
   };
 
   return { rows, loading, getAudience, isVisibleTo };

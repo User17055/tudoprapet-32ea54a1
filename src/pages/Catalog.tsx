@@ -72,6 +72,9 @@ const Catalog = () => {
   const [productCats, setProductCats] = useState<{ shopify_product_id: string; category_id: string }[]>([]);
   const [productBrands, setProductBrands] = useState<{ shopify_product_id: string; brand_id: string | null }[]>([]);
   const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
+  const { isVisibleTo, rows: audienceRows, loading: audienceLoading } = useProductAudience();
+  const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
+  const catalogLoading = loading || audienceLoading || franchiseeLoading;
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -198,6 +201,14 @@ const Catalog = () => {
   // For simplicity & performance, counts are based on the unfiltered product set.
   const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
   const productById = useMemo(() => new Map(products.map((p) => [p.node.id, p])), [products]);
+  const audienceVisibleProducts = useMemo(() => {
+    if (audienceLoading || franchiseeLoading) return [];
+    return products.filter((product) => isVisibleTo(product.node.id, isFranchisee));
+  }, [products, audienceRows, isFranchisee, audienceLoading, franchiseeLoading]);
+  const audienceVisibleIds = useMemo(
+    () => new Set(audienceVisibleProducts.map((product) => product.node.id)),
+    [audienceVisibleProducts],
+  );
 
   // Build per-key value list (union of preset values + values used on products)
   const valuesByKey = useMemo(() => {
@@ -228,27 +239,29 @@ const Catalog = () => {
     productBrands.forEach((pb) => { if (pb.brand_id) productBrandMap.set(pb.shopify_product_id, pb.brand_id); });
     for (const b of brands) {
       let n = 0;
-      for (const p of products) if (productBrandMap.get(p.node.id) === b.id) n++;
+      for (const p of audienceVisibleProducts) if (productBrandMap.get(p.node.id) === b.id) n++;
       m.set(b.slug, n);
     }
     return m;
-  }, [brands, productBrands, products]);
+  }, [brands, productBrands, audienceVisibleProducts]);
 
   const priceCount = useMemo(() => {
-    return PRICE_RANGES.map((r) => products.filter((p) => {
+    return PRICE_RANGES.map((r) => audienceVisibleProducts.filter((p) => {
       const price = productPrice(p);
       return price >= r.min && price <= r.max;
     }).length);
-  }, [products]);
+  }, [audienceVisibleProducts]);
 
   const attrCount = (key: string, value: string) =>
-    productAttrs.filter((a) => a.attr_key === key && a.attr_value === value).length;
-
-  const { isVisibleTo, rows: audienceRows } = useProductAudience();
-  const { isFranchisee } = useIsFranchisee();
+    productAttrs.filter(
+      (a) =>
+        audienceVisibleIds.has(a.shopify_product_id) &&
+        a.attr_key === key &&
+        a.attr_value === value,
+    ).length;
 
   const filteredProducts = useMemo(() => {
-    let result = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
+    let result = [...audienceVisibleProducts];
 
 
     if (categorySlug !== "all") {
@@ -290,7 +303,7 @@ const Catalog = () => {
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [products, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, audienceRows, isFranchisee]);
+  }, [audienceVisibleProducts, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =
@@ -673,14 +686,14 @@ const Catalog = () => {
               )}
 
               <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
-                {!loading && (
+                {!catalogLoading && (
                   <p className="text-sm text-muted-foreground">
                     {filteredProducts.length} produto{filteredProducts.length !== 1 ? "s" : ""} encontrado{filteredProducts.length !== 1 ? "s" : ""}
                   </p>
                 )}
               </div>
 
-              {loading ? (
+              {catalogLoading ? (
                 <div className="flex justify-center py-20">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
