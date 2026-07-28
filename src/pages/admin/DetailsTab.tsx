@@ -10,6 +10,7 @@ import { Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks } from "
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
 interface Category {
@@ -547,11 +548,11 @@ function AssignPanel() {
       setLoading(true);
       try {
         const [shop, cats, brs] = await Promise.all([
-          storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+          fetchAllShopifyProducts(),
           supabase.from("categories").select("*").order("name"),
           supabase.from("brands").select("*").order("name"),
         ]);
-        setProducts(shop?.data?.products?.edges || []);
+        setProducts(shop);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
         await reloadAll();

@@ -3,7 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
-import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY, BEST_SELLING_PRODUCTS_QUERY } from "@/lib/shopify";
+import { ShopifyProduct, storefrontApiRequest, BEST_SELLING_PRODUCTS_QUERY, fetchAllShopifyProducts } from "@/lib/shopify";
 import { ChevronDown, ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,7 +82,7 @@ const Catalog = () => {
       try {
         const queryParam = searchParams.get("busca") || undefined;
         const [shop, bestSelling, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
-          storefrontApiRequest(PRODUCTS_QUERY, { first: 100, query: queryParam || undefined }),
+          fetchAllShopifyProducts(queryParam || undefined),
           storefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
@@ -91,7 +91,7 @@ const Catalog = () => {
           supabase.from("product_content").select("shopify_product_id, brand_id"),
           supabase.from("product_attributes").select("shopify_product_id, attr_key, attr_value"),
         ]);
-        setProducts(shop?.data?.products?.edges || []);
+        setProducts(shop);
         setBestSellingProducts(bestSelling?.data?.products?.edges || []);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);

@@ -36,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import logo from "@/assets/logo.png";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
@@ -305,10 +306,10 @@ function PricesTab() {
     if (!silent) setLoading(true);
     try {
       const [shop, sub] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
       ]);
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (sub.error) throw sub.error;
       setPrices((sub.data || []) as SubPrice[]);
     } catch (e) {
@@ -1283,10 +1284,10 @@ function ContentTab() {
     setLoading(true);
     try {
       const [shop, cnt] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("product_content").select("*").order("updated_at", { ascending: false }),
       ]);
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (cnt.error) throw cnt.error;
       setContents((cnt.data || []) as ProductContent[]);
     } catch (e) {
