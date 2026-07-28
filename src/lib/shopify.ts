@@ -85,8 +85,9 @@ export async function storefrontApiRequest(query: string, variables: Record<stri
 }
 
 export const PRODUCTS_QUERY = `
-  query GetProducts($first: Int!, $query: String) {
-    products(first: $first, query: $query) {
+  query GetProducts($first: Int!, $query: String, $after: String) {
+    products(first: $first, query: $query, after: $after) {
+      pageInfo { hasNextPage endCursor }
       edges {
         node {
           id
@@ -140,6 +141,28 @@ export const PRODUCTS_QUERY = `
     }
   }
 `;
+
+/**
+ * Busca TODOS os produtos da loja paginando via cursor (250 por página).
+ * Necessário porque `first: 100` deixava produtos de fora quando o catálogo cresce.
+ */
+export async function fetchAllShopifyProducts(searchQuery?: string): Promise<ShopifyProduct[]> {
+  const all: ShopifyProduct[] = [];
+  let after: string | null = null;
+  for (let i = 0; i < 20; i++) {
+    const data = await storefrontApiRequest(PRODUCTS_QUERY, {
+      first: 250,
+      query: searchQuery,
+      after,
+    });
+    const conn = data?.data?.products;
+    if (!conn) break;
+    all.push(...conn.edges);
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return all;
+}
 
 export const BEST_SELLING_PRODUCTS_QUERY = `
   query GetBestSellingProducts($first: Int!) {
