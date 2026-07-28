@@ -4,13 +4,7 @@ import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib
 import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ProductPicker } from "@/components/admin/ProductPicker";
 import { ArrowDown, ArrowUp, Loader2, Package, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
