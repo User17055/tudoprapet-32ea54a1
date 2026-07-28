@@ -36,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import logo from "@/assets/logo.png";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";

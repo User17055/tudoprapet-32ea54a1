@@ -9,6 +9,7 @@ import { Trash2, Loader2, Store, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { invalidateAudienceCache, type ProductAudience } from "@/hooks/useProductAudience";
 import { invalidateFranchisePricesCache } from "@/hooks/useFranchisePrices";
 
