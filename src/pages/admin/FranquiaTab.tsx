@@ -32,12 +32,16 @@ interface AudienceRow {
   audience: ProductAudience;
 }
 
+type AudienceFilter = "todos" | ProductAudience | "oculto";
+const HIDDEN_AUDIENCE_VALUE = "oculto";
+
 function AudiencePanel() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [audienceRows, setAudienceRows] = useState<AudienceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>("todos");
 
   const load = async () => {
     setLoading(true);
@@ -60,11 +64,19 @@ function AudiencePanel() {
     return m;
   }, [audienceRows]);
 
-  const handleChange = async (productId: string, audience: ProductAudience) => {
+  const handleChange = async (
+    productId: string,
+    audience: ProductAudience | typeof HIDDEN_AUDIENCE_VALUE,
+  ) => {
     setSavingId(productId);
-    const { error } = await supabase
-      .from("product_audience")
-      .upsert({ shopify_product_id: productId, audience }, { onConflict: "shopify_product_id" });
+    const { error } = audience === HIDDEN_AUDIENCE_VALUE
+      ? await supabase
+          .from("product_audience")
+          .delete()
+          .eq("shopify_product_id", productId)
+      : await supabase
+          .from("product_audience")
+          .upsert({ shopify_product_id: productId, audience }, { onConflict: "shopify_product_id" });
     setSavingId(null);
     if (error) {
       toast.error("Erro ao salvar: " + error.message);
@@ -73,16 +85,24 @@ function AudiencePanel() {
     invalidateAudienceCache();
     setAudienceRows((prev) => {
       const other = prev.filter((r) => r.shopify_product_id !== productId);
-      return [...other, { shopify_product_id: productId, audience }];
+      return audience === HIDDEN_AUDIENCE_VALUE
+        ? other
+        : [...other, { shopify_product_id: productId, audience }];
     });
-    toast.success("Visibilidade atualizada");
+    toast.success(audience === HIDDEN_AUDIENCE_VALUE ? "Produto ocultado" : "Visibilidade atualizada");
   };
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) => p.node.title.toLowerCase().includes(q));
-  }, [products, filter]);
+    return products.filter((p) => {
+      const matchesName = !q || p.node.title.toLowerCase().includes(q);
+      const audience = audienceMap.get(p.node.id);
+      const matchesAudience =
+        audienceFilter === "todos"
+        || (audienceFilter === HIDDEN_AUDIENCE_VALUE ? !audience : audience === audienceFilter);
+      return matchesName && matchesAudience;
+    });
+  }, [products, filter, audienceFilter, audienceMap]);
 
   return (
     <Card>
@@ -91,15 +111,29 @@ function AudiencePanel() {
           <div>
             <CardTitle className="text-base">Visibilidade por produto</CardTitle>
             <CardDescription className="mt-0.5">
-              Somente produtos marcados como Cliente, Franquia ou Ambos aparecem na loja. Sem configuração = oculto.
+              Escolha quem pode ver cada produto ou marque como oculto para removê-lo das duas lojas.
             </CardDescription>
           </div>
-          <Input
-            placeholder="Filtrar produto..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="h-9 w-full sm:w-64"
-          />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Input
+              placeholder="Filtrar produto..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="h-9 w-full sm:w-64"
+            />
+            <Select value={audienceFilter} onValueChange={(value) => setAudienceFilter(value as AudienceFilter)}>
+              <SelectTrigger className="h-9 w-full sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="ambos">Ambos</SelectItem>
+                <SelectItem value="cliente">Só cliente</SelectItem>
+                <SelectItem value="franquia">Só franquia</SelectItem>
+                <SelectItem value={HIDDEN_AUDIENCE_VALUE}>Ocultos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0">
@@ -143,14 +177,18 @@ function AudiencePanel() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Select
-                          value={current ?? ""}
-                          onValueChange={(v) => handleChange(p.node.id, v as ProductAudience)}
+                          value={current ?? HIDDEN_AUDIENCE_VALUE}
+                          onValueChange={(value) => handleChange(
+                            p.node.id,
+                            value as ProductAudience | typeof HIDDEN_AUDIENCE_VALUE,
+                          )}
                           disabled={savingId === p.node.id}
                         >
-                          <SelectTrigger className="h-8"><SelectValue placeholder="Não exibir" /></SelectTrigger>
+                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="cliente">Cliente</SelectItem>
-                            <SelectItem value="franquia">Franquia</SelectItem>
+                            <SelectItem value={HIDDEN_AUDIENCE_VALUE}>Não exibir</SelectItem>
+                            <SelectItem value="cliente">Só cliente</SelectItem>
+                            <SelectItem value="franquia">Só franquia</SelectItem>
                             <SelectItem value="ambos">Ambos</SelectItem>
                           </SelectContent>
                         </Select>
