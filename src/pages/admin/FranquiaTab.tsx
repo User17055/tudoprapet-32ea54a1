@@ -40,7 +40,7 @@ function AudiencePanel() {
   const load = async () => {
     setLoading(true);
     const [shop, aud] = await Promise.all([
-      storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+      fetchAllShopifyProducts(),
       supabase.from("product_audience").select("shopify_product_id, audience"),
     ]);
     setProducts(shop?.data?.products?.edges || []);
@@ -172,7 +172,7 @@ function FranchisePricesPanel() {
   const load = async () => {
     setLoading(true);
     const [shop, rows] = await Promise.all([
-      storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+      fetchAllShopifyProducts(),
       supabase.from("franchise_prices").select("*").order("updated_at", { ascending: false }),
     ]);
     setProducts(shop?.data?.products?.edges || []);

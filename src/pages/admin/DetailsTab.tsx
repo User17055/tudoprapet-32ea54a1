@@ -547,7 +547,7 @@ function AssignPanel() {
       setLoading(true);
       try {
         const [shop, cats, brs] = await Promise.all([
-          storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+          fetchAllShopifyProducts(),
           supabase.from("categories").select("*").order("name"),
           supabase.from("brands").select("*").order("name"),
         ]);

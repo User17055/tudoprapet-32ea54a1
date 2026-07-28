@@ -30,7 +30,7 @@ export default function FeaturedTab() {
     setLoading(true);
     try {
       const [shop, highlights] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("featured_products").select("*").order("sort_order", { ascending: true }),
       ]);
 

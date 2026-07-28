@@ -305,7 +305,7 @@ function PricesTab() {
     if (!silent) setLoading(true);
     try {
       const [shop, sub] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
       ]);
       setProducts(shop?.data?.products?.edges || []);
@@ -1283,7 +1283,7 @@ function ContentTab() {
     setLoading(true);
     try {
       const [shop, cnt] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("product_content").select("*").order("updated_at", { ascending: false }),
       ]);
       setProducts(shop?.data?.products?.edges || []);

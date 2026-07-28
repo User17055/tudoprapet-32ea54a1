@@ -27,7 +27,7 @@ export const ProductGrid = () => {
     const fetchProducts = async () => {
       try {
         const [shopifyData, featuredData] = await Promise.all([
-          storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+          fetchAllShopifyProducts(),
           supabase
             .from("featured_products")
             .select("shopify_product_id")
