@@ -706,7 +706,6 @@ function AssignPanel() {
   const renderCatTree = (pid: string | null, depth = 0): JSX.Element[] => {
     const items = pid === null ? rootCats : childrenOf(pid);
     return items.flatMap((c) => [
-      ...renderCatTree(c.id, depth + 1),
       <label
         key={c.id}
         className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-muted/50 px-2 rounded"
@@ -720,6 +719,7 @@ function AssignPanel() {
         />
         <span className="text-sm">{c.name}</span>
       </label>,
+      ...renderCatTree(c.id, depth + 1),
     ]);
   };
 
