@@ -118,15 +118,27 @@ function AudiencePanel() {
             <TableBody>
               {filtered.map((p) => {
                 const current = audienceMap.get(p.node.id);
+                const img = p.node.images.edges[0]?.node;
                 return (
                   <TableRow key={p.node.id}>
                     <TableCell className="font-medium">
-                      {p.node.title}
-                      {!current && (
-                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
-                          Oculto
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                          {img ? (
+                            <img src={img.url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                          )}
                         </span>
-                      )}
+                        <span className="min-w-0">
+                          {p.node.title}
+                          {!current && (
+                            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
+                              Oculto
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
