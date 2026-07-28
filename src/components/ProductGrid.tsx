@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { Loader2, PackageOpen } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
@@ -27,14 +28,14 @@ export const ProductGrid = () => {
     const fetchProducts = async () => {
       try {
         const [shopifyData, featuredData] = await Promise.all([
-          storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+          fetchAllShopifyProducts(),
           supabase
             .from("featured_products")
             .select("shopify_product_id")
             .order("sort_order", { ascending: true }),
         ]);
 
-        const shopifyProducts = shopifyData?.data?.products?.edges || [];
+        const shopifyProducts = shopifyData || [];
         if (featuredData.error) {
           console.error("Failed to fetch featured products:", featuredData.error);
           setProducts(shopifyProducts.slice(0, 12));

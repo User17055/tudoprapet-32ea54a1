@@ -5,10 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Loader2, Store, Tag } from "lucide-react";
+import { Trash2, Loader2, Store, Tag, Package } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
+import { ProductPicker } from "@/components/admin/ProductPicker";
 import { invalidateAudienceCache, type ProductAudience } from "@/hooks/useProductAudience";
 import { invalidateFranchisePricesCache } from "@/hooks/useFranchisePrices";
 
@@ -40,10 +42,10 @@ function AudiencePanel() {
   const load = async () => {
     setLoading(true);
     const [shop, aud] = await Promise.all([
-      storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+      fetchAllShopifyProducts(),
       supabase.from("product_audience").select("shopify_product_id, audience"),
     ]);
-    setProducts(shop?.data?.products?.edges || []);
+    setProducts(shop);
     setAudienceRows((aud.data || []) as AudienceRow[]);
     setLoading(false);
   };
@@ -116,15 +118,27 @@ function AudiencePanel() {
             <TableBody>
               {filtered.map((p) => {
                 const current = audienceMap.get(p.node.id);
+                const img = p.node.images.edges[0]?.node;
                 return (
                   <TableRow key={p.node.id}>
                     <TableCell className="font-medium">
-                      {p.node.title}
-                      {!current && (
-                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
-                          Oculto
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                          {img ? (
+                            <img src={img.url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                          )}
                         </span>
-                      )}
+                        <span className="min-w-0">
+                          {p.node.title}
+                          {!current && (
+                            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
+                              Oculto
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -172,10 +186,10 @@ function FranchisePricesPanel() {
   const load = async () => {
     setLoading(true);
     const [shop, rows] = await Promise.all([
-      storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+      fetchAllShopifyProducts(),
       supabase.from("franchise_prices").select("*").order("updated_at", { ascending: false }),
     ]);
-    setProducts(shop?.data?.products?.edges || []);
+    setProducts(shop);
     setPrices(((rows.data || []) as { shopify_product_id: string; shopify_variant_id: string; price: number }[]).map((r) => ({
       shopify_product_id: r.shopify_product_id,
       shopify_variant_id: r.shopify_variant_id,
@@ -234,14 +248,12 @@ function FranchisePricesPanel() {
         <CardContent className="grid gap-3 p-4 pt-0 md:grid-cols-3">
           <div className="md:col-span-3">
             <label className="mb-1 block text-sm font-medium">Produto</label>
-            <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ProductPicker
+              products={products}
+              value={productId}
+              onChange={(v) => { setProductId(v); setVariantId(""); }}
+              placeholder="Selecione um produto..."
+            />
           </div>
           <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium">Variante</label>
