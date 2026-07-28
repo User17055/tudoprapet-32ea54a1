@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
+import { useProductVariations } from "@/hooks/useProductVariations";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -72,9 +73,13 @@ const Catalog = () => {
   const [productCats, setProductCats] = useState<{ shopify_product_id: string; category_id: string }[]>([]);
   const [productBrands, setProductBrands] = useState<{ shopify_product_id: string; brand_id: string | null }[]>([]);
   const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
-  const { isVisibleTo, rows: audienceRows, loading: audienceLoading } = useProductAudience();
+  const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
-  const catalogLoading = loading || audienceLoading || franchiseeLoading;
+  const {
+    getVariations,
+    loading: variationsLoading,
+  } = useProductVariations();
+  const catalogLoading = loading || audienceLoading || franchiseeLoading || variationsLoading;
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -202,9 +207,23 @@ const Catalog = () => {
   const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
   const productById = useMemo(() => new Map(products.map((p) => [p.node.id, p])), [products]);
   const audienceVisibleProducts = useMemo(() => {
-    if (audienceLoading || franchiseeLoading) return [];
-    return products.filter((product) => isVisibleTo(product.node.id, isFranchisee));
-  }, [products, audienceRows, isFranchisee, audienceLoading, franchiseeLoading]);
+    if (audienceLoading || franchiseeLoading || variationsLoading) return [];
+    const visible = products.filter((product) => isVisibleTo(product.node.id, isFranchisee));
+    const visibleIds = new Set(visible.map((product) => product.node.id));
+    return visible.filter((product) => {
+      const group = getVariations(product.node.id);
+      const representative = group.find((item) => visibleIds.has(item.shopify_product_id));
+      return !representative || representative.shopify_product_id === product.node.id;
+    });
+  }, [
+    products,
+    isFranchisee,
+    audienceLoading,
+    franchiseeLoading,
+    variationsLoading,
+    getVariations,
+    isVisibleTo,
+  ]);
   const audienceVisibleIds = useMemo(
     () => new Set(audienceVisibleProducts.map((product) => product.node.id)),
     [audienceVisibleProducts],
@@ -643,7 +662,7 @@ const Catalog = () => {
               </div>
               <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
                 {shelfProducts.map((product) => (
-                  <ProductCard key={`shelf-${product.node.id}`} product={product} />
+                  <ProductCard key={`shelf-${product.node.id}`} product={product} products={products} />
                 ))}
               </div>
             </section>
@@ -709,7 +728,7 @@ const Catalog = () => {
               ) : (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 xl:grid-cols-4">
                   {filteredProducts.map((product) => (
-                    <ProductCard key={product.node.id} product={product} />
+                    <ProductCard key={product.node.id} product={product} products={products} />
                   ))}
                 </div>
               )}

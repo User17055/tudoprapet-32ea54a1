@@ -7,6 +7,7 @@ import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
+import { useProductVariations } from "@/hooks/useProductVariations";
 
 interface FeaturedProduct {
   shopify_product_id: string;
@@ -14,9 +15,14 @@ interface FeaturedProduct {
 
 export const ProductGrid = () => {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
+  const [allProducts, setAllProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
+  const {
+    getVariations,
+    loading: variationsLoading,
+  } = useProductVariations();
   const [emblaRef] = useEmblaCarousel({
     align: "start",
     loop: false,
@@ -36,6 +42,7 @@ export const ProductGrid = () => {
         ]);
 
         const shopifyProducts = shopifyData || [];
+        setAllProducts(shopifyProducts);
         if (featuredData.error) {
           console.error("Failed to fetch featured products:", featuredData.error);
           setProducts(shopifyProducts.slice(0, 12));
@@ -84,12 +91,18 @@ export const ProductGrid = () => {
           </p>
         </div>
 
-        {loading || audienceLoading || franchiseeLoading ? (
+        {loading || audienceLoading || franchiseeLoading || variationsLoading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (() => {
-          const visible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
+          const audienceVisible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
+          const visibleIds = new Set(audienceVisible.map((product) => product.node.id));
+          const visible = audienceVisible.filter((product) => {
+            const group = getVariations(product.node.id);
+            const representative = group.find((item) => visibleIds.has(item.shopify_product_id));
+            return !representative || representative.shopify_product_id === product.node.id;
+          });
           if (visible.length === 0) {
             return (
               <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -109,7 +122,7 @@ export const ProductGrid = () => {
                     key={product.node.id}
                     className="w-[45%] flex-shrink-0 flex-grow-0 md:w-[200px]"
                   >
-                    <ProductCard product={product} />
+                    <ProductCard product={product} products={allProducts} />
                   </div>
                 ))}
               </div>

@@ -7,6 +7,7 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { useProductAudience } from "@/hooks/useProductAudience";
+import { useProductVariations } from "@/hooks/useProductVariations";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ const ProductDetail = () => {
     loading: franchiseAccessLoading,
   } = useFranchisePrices();
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
+  const { getVariations } = useProductVariations();
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);
@@ -76,6 +78,9 @@ const ProductDetail = () => {
 
   useEffect(() => {
     const fetchProduct = async () => {
+      setLoading(true);
+      setSelectedVariantIdx(0);
+      setSelectedImageIdx(0);
       try {
         const data = await storefrontApiRequest(PRODUCT_BY_HANDLE_QUERY, { handle });
         const p = data?.data?.productByHandle;
@@ -224,6 +229,9 @@ const ProductDetail = () => {
 
 
   const { node } = product;
+  const productVariations = getVariations(node.id).filter((item) =>
+    isVisibleTo(item.shopify_product_id, isFranchisee),
+  );
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
   const visibleRecommended = recommended.filter((item) =>
@@ -566,6 +574,32 @@ const ProductDetail = () => {
                 </div>
               )}
             </div>
+
+            {productVariations.length > 1 && (
+              <div className="space-y-2">
+                <p className="font-medium text-sm text-foreground">Tamanho:</p>
+                <div className="flex flex-wrap gap-2">
+                  {productVariations.map((item) => {
+                    const active = item.shopify_product_id === node.id;
+                    return (
+                      <Link
+                        key={item.id}
+                        to={`/product/${item.shopify_product_handle}`}
+                        title={item.shopify_product_title}
+                        aria-current={active ? "page" : undefined}
+                        className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold transition-all ${
+                          active
+                            ? "border-[#171717] bg-[#171717] text-white"
+                            : "border-border bg-background text-foreground hover:border-primary/60"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Variant selector */}
             {node.variants.edges.length > 1 && (

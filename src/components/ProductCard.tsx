@@ -2,12 +2,16 @@ import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useProductAudience } from "@/hooks/useProductAudience";
+import { useProductVariations } from "@/hooks/useProductVariations";
 import { Loader2, Plus, RefreshCw, ShoppingCart, Store } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 interface Props {
   product: ShopifyProduct;
+  products?: ShopifyProduct[];
 }
 
 const formatPrice = (value: number) =>
@@ -18,12 +22,24 @@ const formatPrice = (value: number) =>
 
 const TWO_INSTALLMENTS_RATE = 0.0859;
 
-export const ProductCard = ({ product }: Props) => {
+export const ProductCard = ({ product, products = [] }: Props) => {
+  const navigate = useNavigate();
+  const [selectedProduct, setSelectedProduct] = useState(product);
+
+  useEffect(() => {
+    setSelectedProduct(product);
+  }, [product]);
+
   const addItem = useCartStore((s) => s.addItem);
   const isLoading = useCartStore((s) => s.isLoading);
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice, isFranchisee } = useFranchisePrices();
-  const { node } = product;
+  const { isVisibleTo } = useProductAudience();
+  const { getVariations } = useProductVariations();
+  const { node } = selectedProduct;
+  const variationItems = getVariations(node.id).filter((item) =>
+    isVisibleTo(item.shopify_product_id, isFranchisee),
+  );
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
@@ -70,7 +86,7 @@ export const ProductCard = ({ product }: Props) => {
     if (!variant) return;
 
     const addPromise = addItem({
-      product,
+      product: selectedProduct,
       variantId: variant.id,
       variantTitle: variant.title,
       price: variant.price,
@@ -132,6 +148,41 @@ export const ProductCard = ({ product }: Props) => {
           )}
         </button>
       </div>
+
+      {variationItems.length > 1 && (
+        <div className="mt-3 flex min-h-9 flex-wrap gap-2">
+          {variationItems.map((item) => {
+            const active = item.shopify_product_id === node.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                title={item.shopify_product_title}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (active) return;
+                  const nextProduct = products.find(
+                    (candidate) => candidate.node.id === item.shopify_product_id,
+                  );
+                  if (nextProduct) {
+                    setSelectedProduct(nextProduct);
+                  } else {
+                    navigate(`/product/${item.shopify_product_handle}`);
+                  }
+                }}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold leading-none transition-colors ${
+                  active
+                    ? "border-[#171717] bg-[#171717] text-white"
+                    : "border-[#d7d9dd] bg-white text-[#51545a] hover:border-primary hover:text-primary"
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <h3 className="mt-4 line-clamp-2 min-h-[2.9em] text-[15px] font-normal leading-[1.35] text-[#202633]">
         {node.title}
