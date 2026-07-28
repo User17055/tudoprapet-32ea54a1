@@ -300,6 +300,21 @@ function FranchisePricesPanel() {
                   placeholder="Selecione um produto..."
                 />
               </div>
+              {selectedProduct && (
+                <div className="md:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <p className="text-sm font-medium text-emerald-900 mb-2">Variações disponíveis:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedProduct.node.variants.edges.map((variant) => (
+                      <span
+                        key={variant.node.id}
+                        className={`text-xs rounded px-2 py-1 ${variantId === variant.node.id ? 'bg-emerald-600 text-white border border-emerald-600' : 'bg-white border border-emerald-300 text-emerald-800'}`}
+                      >
+                        {variant.node.title} • R$ {parseFloat(variant.node.price.amount).toFixed(2)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium">Variante</label>
                 <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
