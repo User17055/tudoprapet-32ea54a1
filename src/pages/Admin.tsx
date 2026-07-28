@@ -1369,30 +1369,53 @@ function ContentTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Produto</label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {products.map(p => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid gap-4 md:grid-cols-[150px_1fr]">
+            {/* Preview */}
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
+              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+                {selectedProduct?.node.images.edges[0]?.node ? (
+                  <img
+                    src={selectedProduct.node.images.edges[0].node.url}
+                    alt={selectedProduct.node.images.edges[0].node.altText || selectedProduct.node.title || ""}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Package className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <p className="min-h-[2.4em] text-xs font-bold line-clamp-2">
+                {selectedProduct?.node.title || "Selecione um produto"}
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Produto</label>
+                <Select value={productId} onValueChange={setProductId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Descrição</label>
+                <FormattedTextarea
+                  value={description}
+                  onChange={setDescription}
+                  placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
+                  rows={8}
+                  disabled={!productId}
+                />
+              </div>
+              <Button onClick={handleSave} disabled={saving || !productId}>
+                {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Descrição</label>
-            <FormattedTextarea
-              value={description}
-              onChange={setDescription}
-              placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
-              rows={10}
-              disabled={!productId}
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving || !productId}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
-          </Button>
         </CardContent>
       </Card>
 

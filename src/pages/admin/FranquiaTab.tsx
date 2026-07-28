@@ -238,6 +238,12 @@ function FranchisePricesPanel() {
     return m;
   }, [products]);
 
+  const previewImage = selectedProduct?.node.images.edges[0]?.node;
+  const previewVariant = selectedProduct?.node.variants.edges.find((v) => v.node.id === variantId)?.node
+    || selectedProduct?.node.variants.edges[0]?.node;
+  const previewPrice = previewVariant ? parseFloat(previewVariant.price.amount) : null;
+  const previewFranchise = price ? parseFloat(price.replace(",", ".")) : null;
+
   return (
     <div className="space-y-4">
       <Card>
@@ -245,37 +251,78 @@ function FranchisePricesPanel() {
           <CardTitle className="text-base">Adicionar preço de franquia</CardTitle>
           <CardDescription>Preço exclusivo pago por franqueados.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 p-4 pt-0 md:grid-cols-3">
-          <div className="md:col-span-3">
-            <label className="mb-1 block text-sm font-medium">Produto</label>
-            <ProductPicker
-              products={products}
-              value={productId}
-              onChange={(v) => { setProductId(v); setVariantId(""); }}
-              placeholder="Selecione um produto..."
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium">Variante</label>
-            <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {selectedProduct?.node.variants.edges.map((v) => (
-                  <SelectItem key={v.node.id} value={v.node.id}>
-                    {v.node.title} — R$ {parseFloat(v.node.price.amount).toFixed(2)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Preço franquia (R$)</label>
-            <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
-          </div>
-          <div className="md:col-span-3">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
-            </Button>
+        <CardContent className="p-4 pt-0">
+          <div className="grid gap-4 md:grid-cols-[200px_1fr]">
+            {/* Preview */}
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
+              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+                {previewImage ? (
+                  <img
+                    src={previewImage.url}
+                    alt={previewImage.altText || selectedProduct?.node.title || ""}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Package className="h-10 w-10 text-muted-foreground" />
+                )}
+              </div>
+              <div className="text-xs">
+                <p className="min-h-[2.4em] font-bold line-clamp-2">
+                  {selectedProduct?.node.title || "Selecione um produto"}
+                </p>
+                {previewVariant && (
+                  <p className="mt-0.5 text-muted-foreground">{previewVariant.title}</p>
+                )}
+                {previewPrice !== null && (
+                  <div className="mt-1.5">
+                    <p className="text-base font-bold tabular-nums">R$ {previewPrice.toFixed(2)}</p>
+                    {previewFranchise !== null && !isNaN(previewFranchise) && previewFranchise > 0 && (
+                      <div className="mt-1 flex items-center gap-1">
+                        <span className="font-bold text-emerald-600 tabular-nums">
+                          R$ {previewFranchise.toFixed(2)}
+                        </span>
+                        <Store className="h-3.5 w-3.5 text-emerald-600" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="grid content-start gap-3 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium">Produto</label>
+                <ProductPicker
+                  products={products}
+                  value={productId}
+                  onChange={(v) => { setProductId(v); setVariantId(""); }}
+                  placeholder="Selecione um produto..."
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Variante</label>
+                <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {selectedProduct?.node.variants.edges.map((v) => (
+                      <SelectItem key={v.node.id} value={v.node.id}>
+                        {v.node.title} — R$ {parseFloat(v.node.price.amount).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Preço franquia (R$)</label>
+                <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
+              </div>
+              <div className="md:col-span-2">
+                <Button onClick={handleSave} disabled={saving} className="w-full">
+                  {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
