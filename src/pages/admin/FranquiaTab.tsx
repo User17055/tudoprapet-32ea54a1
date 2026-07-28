@@ -5,11 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Loader2, Store, Tag } from "lucide-react";
+import { Trash2, Loader2, Store, Tag, Package } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
+import { ProductPicker } from "@/components/admin/ProductPicker";
 import { invalidateAudienceCache, type ProductAudience } from "@/hooks/useProductAudience";
 import { invalidateFranchisePricesCache } from "@/hooks/useFranchisePrices";
 
