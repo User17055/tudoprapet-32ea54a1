@@ -532,6 +532,22 @@ function AssignPanel() {
     () => allValues.filter((v) => v.attr_key === activeKey),
     [allValues, activeKey]
   );
+  const configuredIds = useMemo(
+    () =>
+      new Set<string>([
+        ...allProductCats.map((x) => x.shopify_product_id),
+        ...allProductContent.filter((x) => x.brand_id).map((x) => x.shopify_product_id),
+        ...allProductAttrs.map((x) => x.shopify_product_id),
+      ]),
+    [allProductAttrs, allProductCats, allProductContent],
+  );
+  const filteredProductsForSelect = useMemo(() => {
+    const q = searchProduct.trim().toLowerCase();
+    if (!q) return products.filter((p) => p.node.id === productId || !configuredIds.has(p.node.id));
+    return products
+      .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
+      .filter((p) => p.node.title.toLowerCase().includes(q));
+  }, [products, productId, configuredIds, searchProduct]);
 
   const reloadAll = async () => {
     const [pc, pcontent, pa] = await Promise.all([
@@ -695,13 +711,6 @@ function AssignPanel() {
   const selectedProduct = products.find((p) => p.node.id === productId);
   const rootCats = categories.filter((c) => !c.parent_id);
   const childrenOf = (pid: string) => categories.filter((c) => c.parent_id === pid);
-  const filteredProductsForSelect = useMemo(() => {
-    const q = searchProduct.trim().toLowerCase();
-    if (!q) return products.filter((p) => p.node.id === productId || !configuredIds.has(p.node.id));
-    return products
-      .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
-      .filter((p) => p.node.title.toLowerCase().includes(q));
-  }, [products, productId, configuredIds, searchProduct]);
 
   const renderCatTree = (pid: string | null, depth = 0): JSX.Element[] => {
     const items = pid === null ? rootCats : childrenOf(pid);
@@ -724,11 +733,6 @@ function AssignPanel() {
   };
 
   // Build summary of configured products
-  const configuredIds = new Set<string>([
-    ...allProductCats.map((x) => x.shopify_product_id),
-    ...allProductContent.filter((x) => x.brand_id).map((x) => x.shopify_product_id),
-    ...allProductAttrs.map((x) => x.shopify_product_id),
-  ]);
   const configuredProducts = products.filter((p) => configuredIds.has(p.node.id));
   const filteredConfigured = configuredProducts.filter((p) =>
     !filter.trim() ? true : p.node.title.toLowerCase().includes(filter.toLowerCase())
