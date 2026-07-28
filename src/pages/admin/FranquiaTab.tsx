@@ -43,7 +43,7 @@ function AudiencePanel() {
       fetchAllShopifyProducts(),
       supabase.from("product_audience").select("shopify_product_id, audience"),
     ]);
-    setProducts(shop?.data?.products?.edges || []);
+    setProducts(shop);
     setAudienceRows((aud.data || []) as AudienceRow[]);
     setLoading(false);
   };
@@ -175,7 +175,7 @@ function FranchisePricesPanel() {
       fetchAllShopifyProducts(),
       supabase.from("franchise_prices").select("*").order("updated_at", { ascending: false }),
     ]);
-    setProducts(shop?.data?.products?.edges || []);
+    setProducts(shop);
     setPrices(((rows.data || []) as { shopify_product_id: string; shopify_variant_id: string; price: number }[]).map((r) => ({
       shopify_product_id: r.shopify_product_id,
       shopify_variant_id: r.shopify_variant_id,

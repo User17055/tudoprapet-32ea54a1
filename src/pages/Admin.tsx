@@ -308,7 +308,7 @@ function PricesTab() {
         fetchAllShopifyProducts(),
         supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
       ]);
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (sub.error) throw sub.error;
       setPrices((sub.data || []) as SubPrice[]);
     } catch (e) {
@@ -1286,7 +1286,7 @@ function ContentTab() {
         fetchAllShopifyProducts(),
         supabase.from("product_content").select("*").order("updated_at", { ascending: false }),
       ]);
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (cnt.error) throw cnt.error;
       setContents((cnt.data || []) as ProductContent[]);
     } catch (e) {

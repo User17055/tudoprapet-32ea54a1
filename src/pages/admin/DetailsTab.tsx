@@ -551,7 +551,7 @@ function AssignPanel() {
           supabase.from("categories").select("*").order("name"),
           supabase.from("brands").select("*").order("name"),
         ]);
-        setProducts(shop?.data?.products?.edges || []);
+        setProducts(shop);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
         await reloadAll();

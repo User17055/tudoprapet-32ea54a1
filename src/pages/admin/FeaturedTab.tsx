@@ -34,7 +34,7 @@ export default function FeaturedTab() {
         supabase.from("featured_products").select("*").order("sort_order", { ascending: true }),
       ]);
 
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (highlights.error) throw highlights.error;
       setFeatured((highlights.data || []) as FeaturedProduct[]);
     } catch (error: any) {
