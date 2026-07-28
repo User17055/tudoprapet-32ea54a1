@@ -219,11 +219,11 @@ export default function Admin() {
 
         <aside
           className={cn(
-            "fixed bottom-0 left-0 top-20 z-40 w-[280px] overflow-y-auto bg-[#ddac42] p-4 transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-[calc(100vh-5rem)] lg:w-64 lg:translate-x-0",
+            "fixed bottom-0 left-0 top-20 z-40 flex w-[280px] flex-col bg-[#ddac42] p-4 transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-[calc(100vh-5rem)] lg:w-64 lg:translate-x-0",
             mobileNavOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <nav className="min-h-full rounded-xl border border-black/5 bg-white p-3 pb-52 shadow-[-8px_10px_0_rgba(10,25,49,0.16)] lg:pb-56">
+          <nav className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-black/5 bg-white p-3 pb-16 shadow-[-8px_10px_0_rgba(10,25,49,0.16)] lg:pb-20">
             <div className="mb-3 border-b pb-3 md:hidden">
               <p className="text-xs font-bold text-[#112f5f]">Painel Administrativo</p>
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{user?.email}</p>
