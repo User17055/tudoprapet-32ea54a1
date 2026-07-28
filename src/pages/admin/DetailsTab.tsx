@@ -587,10 +587,26 @@ function AssignPanel() {
     })();
   }, [productId]);
 
+  const getParentIds = (id: string): string[] => {
+    const parents: string[] = [];
+    let current = categories.find((c) => c.id === id);
+    while (current?.parent_id) {
+      parents.push(current.parent_id);
+      current = categories.find((c) => c.id === current?.parent_id);
+    }
+    return parents;
+  };
+
   const toggleCategory = (id: string) => {
     setSelectedCats((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        // Auto-select all parents
+        getParentIds(id).forEach((parentId) => next.add(parentId));
+      }
       return next;
     });
   };
@@ -687,6 +703,7 @@ function AssignPanel() {
   const renderCatTree = (pid: string | null, depth = 0): JSX.Element[] => {
     const items = pid === null ? rootCats : childrenOf(pid);
     return items.flatMap((c) => [
+      ...renderCatTree(c.id, depth + 1),
       <label
         key={c.id}
         className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-muted/50 px-2 rounded"
@@ -700,7 +717,6 @@ function AssignPanel() {
         />
         <span className="text-sm">{c.name}</span>
       </label>,
-      ...renderCatTree(c.id, depth + 1),
     ]);
   };
 
