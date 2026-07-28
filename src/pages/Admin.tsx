@@ -265,7 +265,7 @@ export default function Admin() {
             src="/admin-decor/semfundo.png"
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-[-20px] z-20 w-[285px] max-w-none drop-shadow-[0_10px_12px_rgba(10,25,49,0.22)]"
+            className="pointer-events-none absolute bottom-0 left-[-20px] z-0 w-[285px] max-w-none drop-shadow-[0_10px_12px_rgba(10,25,49,0.22)]"
           />
         </aside>
 
