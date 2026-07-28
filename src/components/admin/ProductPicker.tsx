@@ -49,7 +49,7 @@ export function ProductPicker({
           disabled={disabled}
           className="h-10 w-full justify-between px-3 font-normal"
         >
-          <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
               {selected?.images.edges[0]?.node ? (
                 <img
@@ -61,7 +61,7 @@ export function ProductPicker({
                 <Package className="h-4 w-4 text-muted-foreground" />
               )}
             </span>
-            <span className="truncate">
+            <span className="min-w-0 flex-1 truncate text-left" title={selected?.title}>
               {selected?.title || <span className="text-muted-foreground">{placeholder}</span>}
             </span>
           </span>

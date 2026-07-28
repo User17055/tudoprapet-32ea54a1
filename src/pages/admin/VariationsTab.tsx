@@ -73,6 +73,10 @@ export default function VariationsTab() {
     ]),
     [items, pending],
   );
+  const selectedProduct = useMemo(
+    () => products.find((item) => item.node.id === productId)?.node,
+    [products, productId],
+  );
 
   const handleProductChange = (nextProductId: string) => {
     setProductId(nextProductId);
@@ -182,6 +186,27 @@ export default function VariationsTab() {
                 onChange={handleProductChange}
                 excludeIds={unavailableIds}
               />
+              {selectedProduct && (
+                <div className="mt-2 flex items-center gap-2 rounded-md border bg-muted/30 p-2">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                    {selectedProduct.images.edges[0]?.node ? (
+                      <img
+                        src={selectedProduct.images.edges[0].node.url}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <Boxes className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Produto selecionado</p>
+                    <p className="break-words text-sm font-semibold text-foreground">
+                      {selectedProduct.title}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">Nome da opção</label>
@@ -207,7 +232,9 @@ export default function VariationsTab() {
                     <span className="mr-2 rounded-md bg-primary px-2 py-1 text-xs font-bold text-primary-foreground">
                       {item.label}
                     </span>
-                    <span className="text-sm text-muted-foreground">{item.shopify_product_title}</span>
+                    <span className="break-words text-sm font-semibold text-foreground">
+                      {item.shopify_product_title}
+                    </span>
                   </div>
                   <Button
                     type="button"
@@ -254,7 +281,7 @@ export default function VariationsTab() {
                       .map((item) => (
                         <span key={item.id} className="rounded-lg border bg-muted/40 px-3 py-1.5 text-sm">
                           <strong>{item.label}</strong>
-                          <span className="ml-2 text-xs text-muted-foreground">{item.shopify_product_title}</span>
+                          <span className="ml-2 font-medium text-foreground">{item.shopify_product_title}</span>
                         </span>
                       ))}
                   </div>
