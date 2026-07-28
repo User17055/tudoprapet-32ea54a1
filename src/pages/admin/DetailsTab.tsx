@@ -590,8 +590,11 @@ function AssignPanel() {
   const getParentIds = (id: string): string[] => {
     const parents: string[] = [];
     let current = categories.find((c) => c.id === id);
+    const seen = new Set<string>([id]);
     while (current?.parent_id) {
+      if (seen.has(current.parent_id)) break; // Prevent infinite loop
       parents.push(current.parent_id);
+      seen.add(current.parent_id);
       current = categories.find((c) => c.id === current?.parent_id);
     }
     return parents;
