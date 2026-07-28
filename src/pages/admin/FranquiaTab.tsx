@@ -248,14 +248,12 @@ function FranchisePricesPanel() {
         <CardContent className="grid gap-3 p-4 pt-0 md:grid-cols-3">
           <div className="md:col-span-3">
             <label className="mb-1 block text-sm font-medium">Produto</label>
-            <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ProductPicker
+              products={products}
+              value={productId}
+              onChange={(v) => { setProductId(v); setVariantId(""); }}
+              placeholder="Selecione um produto..."
+            />
           </div>
           <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium">Variante</label>
