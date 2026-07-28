@@ -512,6 +512,7 @@ function AssignPanel() {
   const [newValue, setNewValue] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
+  const [searchProduct, setSearchProduct] = useState("");
 
   // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
@@ -675,6 +676,13 @@ function AssignPanel() {
   const selectedProduct = products.find((p) => p.node.id === productId);
   const rootCats = categories.filter((c) => !c.parent_id);
   const childrenOf = (pid: string) => categories.filter((c) => c.parent_id === pid);
+  const filteredProductsForSelect = useMemo(() => {
+    const q = searchProduct.trim().toLowerCase();
+    if (!q) return products.filter((p) => p.node.id === productId || !configuredIds.has(p.node.id));
+    return products
+      .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
+      .filter((p) => p.node.title.toLowerCase().includes(q));
+  }, [products, productId, configuredIds, searchProduct]);
 
   const renderCatTree = (pid: string | null, depth = 0): JSX.Element[] => {
     const items = pid === null ? rootCats : childrenOf(pid);
@@ -784,17 +792,21 @@ function AssignPanel() {
         <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Atribuir detalhes a um produto</CardTitle></CardHeader>
         <CardContent className="space-y-4 p-4 pt-0">
           <div>
-            <label className="text-sm font-medium mb-1 block">
-              Produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>
+            <label className="text-sm font-medium mb-2 block">
+              Buscar e selecionar produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>
             </label>
+            <Input
+              placeholder="Digite o nome do produto..."
+              value={searchProduct}
+              onChange={(e) => setSearchProduct(e.target.value)}
+              className="mb-2 h-9"
+            />
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
-                {products
-                  .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
-                  .map((p) => (
-                    <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                  ))}
+                {filteredProductsForSelect.map((p) => (
+                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">

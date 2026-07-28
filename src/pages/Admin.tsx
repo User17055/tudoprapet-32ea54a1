@@ -1279,6 +1279,7 @@ function ContentTab() {
   const [productId, setProductId] = useState("");
   const [description, setDescription] = useState("");
   const [specifications, setSpecifications] = useState("");
+  const [searchProduct, setSearchProduct] = useState("");
 
   const loadAll = async () => {
     setLoading(true);
@@ -1358,6 +1359,12 @@ function ContentTab() {
     return map;
   }, [products]);
 
+  const filteredProducts = useMemo(() => {
+    const q = searchProduct.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(p => p.node.title.toLowerCase().includes(q));
+  }, [products, searchProduct]);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -1391,11 +1398,20 @@ function ContentTab() {
             {/* Form */}
             <div className="space-y-3">
               <div>
+                <label className="mb-1 block text-sm font-medium">Buscar produto</label>
+                <Input
+                  placeholder="Digite o nome do produto..."
+                  value={searchProduct}
+                  onChange={(e) => setSearchProduct(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
                 <label className="mb-1 block text-sm font-medium">Produto</label>
                 <Select value={productId} onValueChange={setProductId}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
-                    {products.map(p => (
+                    {filteredProducts.map(p => (
                       <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
                     ))}
                   </SelectContent>
