@@ -35,7 +35,7 @@ export const ProductGrid = () => {
             .order("sort_order", { ascending: true }),
         ]);
 
-        const shopifyProducts = shopifyData?.data?.products?.edges || [];
+        const shopifyProducts = shopifyData || [];
         if (featuredData.error) {
           console.error("Failed to fetch featured products:", featuredData.error);
           setProducts(shopifyProducts.slice(0, 12));
