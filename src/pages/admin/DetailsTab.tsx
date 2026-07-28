@@ -804,6 +804,24 @@ function AssignPanel() {
 
           {productId && (
             <>
+              {/* Preview */}
+              <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 mb-6 md:w-48">
+                <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+                  {selectedProduct?.node.images.edges[0]?.node ? (
+                    <img
+                      src={selectedProduct.node.images.edges[0].node.url}
+                      alt={selectedProduct.node.images.edges[0].node.altText || selectedProduct.node.title || ""}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Package className="h-10 w-10 text-muted-foreground" />
+                  )}
+                </div>
+                <p className="text-xs font-bold line-clamp-3">
+                  {selectedProduct?.node.title}
+                </p>
+              </div>
+
               <div className="grid gap-6 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Categorias</label>
