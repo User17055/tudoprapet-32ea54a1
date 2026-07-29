@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, User, Menu, X, MessageCircle, Package } from "lucide-react";
+import { Search, User, Menu, X, MessageCircle, Package, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
@@ -9,18 +9,35 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCategoryTree } from "@/hooks/useCategoryTree";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { searchShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { isAudienceVisibleTo, useProductAudience } from "@/hooks/useProductAudience";
+import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import logo from "@/assets/tpp-logo.svg";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
+const formatPrice = (amount: string) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(Number(amount));
 
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<ShopifyProduct[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchPreviewOpen, setSearchPreviewOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const { user } = useAuth();
+  const { rows: audienceRows, loading: audienceLoading } = useProductAudience();
+  const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const navigate = useNavigate();
   const location = useLocation();
   const { rootCats, childrenOf, loading: categoriesLoading } = useCategoryTree();
+  const audienceMap = useMemo(
+    () => new Map(audienceRows.map((row) => [row.shopify_product_id, row.audience])),
+    [audienceRows],
+  );
 
   const navItems: MegaMenuItem[] = useMemo(
     () => [
@@ -47,11 +64,135 @@ export const Header = () => {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    const term = search.trim();
+    if (term.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchPreviewOpen(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchLoading(true);
+    setSearchPreviewOpen(true);
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const products = await searchShopifyProducts(term, 10);
+        if (cancelled) return;
+
+        const availableProducts = products
+          .filter((product) =>
+            product.node.variants.edges.some((variant) => variant.node.availableForSale),
+          )
+          .filter((product) =>
+            isAudienceVisibleTo(
+              audienceMap.get(product.node.id) ?? null,
+              isFranchisee,
+            ),
+          )
+          .slice(0, 6);
+
+        setSearchResults(availableProducts);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load search preview:", error);
+          setSearchResults([]);
+        }
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [search, audienceMap, isFranchisee]);
+
   const handleSearch = () => {
     if (search.trim()) {
       navigate(`/catalogo?busca=${encodeURIComponent(search.trim())}`);
       setSearch("");
+      setSearchPreviewOpen(false);
     }
+  };
+
+  const closeSearchPreview = () => setSearchPreviewOpen(false);
+
+  const openProduct = () => {
+    setSearch("");
+    closeSearchPreview();
+  };
+
+  const renderSearchPreview = () => {
+    if (!searchPreviewOpen || search.trim().length < 2) return null;
+    const waitingForAudience = audienceLoading || franchiseeLoading;
+    const loading = searchLoading || waitingForAudience;
+
+    return (
+      <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] overflow-hidden rounded-lg border border-border bg-card shadow-[0_18px_45px_-16px_rgba(15,23,42,0.35)]">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 px-5 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            Buscando produtos...
+          </div>
+        ) : searchResults.length > 0 ? (
+          <>
+            <div className="max-h-[420px] overflow-y-auto p-2">
+              {searchResults.map((product) => {
+                const image = product.node.images.edges[0]?.node;
+                const price = product.node.priceRange.minVariantPrice.amount;
+
+                return (
+                  <Link
+                    key={product.node.id}
+                    to={`/product/${product.node.handle}`}
+                    onClick={openProduct}
+                    className="flex items-center gap-4 rounded-md px-3 py-3 transition-colors hover:bg-muted"
+                  >
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white">
+                      {image ? (
+                        <img
+                          src={image.url}
+                          alt={image.altText || product.node.title}
+                          loading="lazy"
+                          className="h-full w-full object-contain p-1"
+                        />
+                      ) : (
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+                        {product.node.title}
+                      </p>
+                      <p className="mt-1 text-sm font-extrabold text-primary">
+                        {formatPrice(price)}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+            <Link
+              to={`/catalogo?busca=${encodeURIComponent(search.trim())}`}
+              onClick={openProduct}
+              className="flex items-center justify-center border-t border-border px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-muted"
+            >
+              Ver todos os resultados
+            </Link>
+          </>
+        ) : (
+          <div className="px-5 py-8 text-center">
+            <Package className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
+            <p className="text-sm font-semibold text-foreground">Nenhum produto disponível</p>
+            <p className="mt-1 text-xs text-muted-foreground">Tente buscar por outro nome.</p>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -82,11 +223,17 @@ export const Header = () => {
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
           className="relative hidden min-w-0 flex-1 md:flex"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
+          }}
         >
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => {
+              if (search.trim().length >= 2) setSearchPreviewOpen(true);
+            }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
             className="h-14 w-full rounded-md border-0 bg-muted/70 px-6 pr-14 text-base shadow-none transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -98,6 +245,7 @@ export const Header = () => {
           >
             <Search className="h-5 w-5" />
           </button>
+          {renderSearchPreview()}
         </form>
 
         <div className="hidden items-center gap-2 md:flex">
@@ -161,11 +309,17 @@ export const Header = () => {
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
           className="relative"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
+          }}
         >
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => {
+              if (search.trim().length >= 2) setSearchPreviewOpen(true);
+            }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
             className="h-14 w-full rounded-md border-0 bg-muted/70 px-5 pr-14 text-base transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -177,6 +331,7 @@ export const Header = () => {
           >
             <Search className="h-5 w-5" />
           </button>
+          {renderSearchPreview()}
         </form>
       </div>
 

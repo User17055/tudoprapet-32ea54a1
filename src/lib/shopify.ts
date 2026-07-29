@@ -217,6 +217,23 @@ export async function fetchAllShopifyProducts(searchQuery?: string): Promise<Sho
   return pending;
 }
 
+export async function searchShopifyProducts(
+  searchQuery: string,
+  first = 8,
+): Promise<ShopifyProduct[]> {
+  const term = searchQuery.trim();
+  if (term.length < 2) return [];
+
+  const data = await cachedStorefrontApiRequest(PRODUCTS_QUERY, {
+    first,
+    query: term,
+    after: null,
+  });
+  const products = (data?.data?.products?.edges || []) as ShopifyProduct[];
+  products.forEach((product) => productByHandleCache.set(product.node.handle, product));
+  return products;
+}
+
 async function fetchAllShopifyProductsUncached(searchQuery?: string): Promise<ShopifyProduct[]> {
   const all: ShopifyProduct[] = [];
   let after: string | null = null;
