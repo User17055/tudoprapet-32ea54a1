@@ -132,7 +132,7 @@ export const CartDrawer = () => {
     return (
       <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 bg-transparent text-primary hover:bg-transparent hover:text-primary">
         <Link to="/carrinho">
-          <ShoppingCart className="h-5 w-5" />
+          <ShoppingCart className="h-6 w-6" />
           {totalItems > 0 && (
             <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
               {totalItems}
@@ -147,8 +147,8 @@ export const CartDrawer = () => {
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-12 w-10 bg-transparent text-primary shadow-none hover:bg-transparent hover:text-primary">
-          <ShoppingCart className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="relative h-12 w-12 bg-transparent text-primary shadow-none hover:bg-transparent hover:text-primary">
+          <ShoppingCart className="h-7 w-7" />
           {totalItems > 0 && (
             <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
               {totalItems}

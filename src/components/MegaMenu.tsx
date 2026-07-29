@@ -79,9 +79,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       })}
 
       {openItemData && activeChild && (
-        <div className="absolute left-0 top-full z-50 w-[min(820px,calc(100vw-2rem))]">
-          <div className="grid min-h-[300px] grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)] overflow-hidden rounded-b-xl border border-t-0 border-border bg-card shadow-[0_20px_45px_-18px_rgba(15,23,42,0.35)]">
-            <div className="border-r border-border/70 p-5">
+        <div className="absolute left-0 top-full z-50 w-[min(680px,calc(100vw-2rem))] animate-in fade-in-0 slide-in-from-top-2 duration-200">
+          <div className="grid min-h-[260px] grid-cols-[minmax(240px,0.9fr)_minmax(240px,1.1fr)] overflow-hidden rounded-b-lg border border-t-0 border-border bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
+            <div className="border-r border-border/70 p-4">
               <div className="space-y-1">
                 {openChildren.map((child) => {
                   const grandchildren = childrenOf.get(child.id) || [];
@@ -94,7 +94,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
                       onMouseEnter={() => setActiveChildId(child.id)}
                       onFocus={() => setActiveChildId(child.id)}
                       onClick={close}
-                      className={`flex min-h-11 items-center justify-between gap-3 rounded-md px-4 py-2.5 text-[15px] transition-colors ${
+                      className={`flex min-h-10 items-center justify-between gap-3 rounded-md px-3.5 py-2 text-sm transition-colors duration-200 ${
                         isSelected
                           ? "bg-primary/10 font-bold text-primary"
                           : "text-foreground hover:bg-muted hover:text-primary"
@@ -108,8 +108,11 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               </div>
             </div>
 
-            <div className="p-7">
-              <h3 className="mb-4 text-sm font-extrabold uppercase tracking-wide text-primary">
+            <div
+              key={activeChild.id}
+              className="animate-in fade-in-0 slide-in-from-left-1 p-5 duration-150"
+            >
+              <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-primary">
                 {activeChild.name}
               </h3>
               <div className="space-y-1">
@@ -118,7 +121,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
                     key={grandchild.id}
                     to={`/catalogo?categoria=${grandchild.slug}&categoria_id=${grandchild.id}`}
                     onClick={close}
-                    className="block rounded-md px-2 py-2.5 text-[15px] text-foreground transition-colors hover:bg-muted hover:text-primary"
+                    className="block rounded-md px-2 py-2 text-sm text-foreground transition-colors duration-200 hover:bg-muted hover:text-primary"
                   >
                     {grandchild.name}
                   </Link>
@@ -126,7 +129,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
                 <Link
                   to={`/catalogo?categoria=${activeChild.slug}&categoria_id=${activeChild.id}`}
                   onClick={close}
-                  className="mt-2 block px-2 py-2.5 text-[15px] font-extrabold text-primary hover:underline"
+                  className="mt-2 block px-2 py-2 text-sm font-extrabold text-primary hover:underline"
                 >
                   Ver todos
                 </Link>

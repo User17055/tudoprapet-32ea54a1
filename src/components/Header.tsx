@@ -216,13 +216,13 @@ export const Header = () => {
         </div>
 
         <Link to="/" className="flex shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
-          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-12 md:w-auto" />
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-10 md:w-auto" />
         </Link>
 
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="relative hidden min-w-0 flex-1 md:flex"
+          className="relative hidden min-w-0 flex-1 md:flex md:max-w-2xl"
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
           }}
@@ -236,11 +236,11 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-md border-0 bg-muted/70 px-6 pr-14 text-base shadow-none transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="h-12 w-full rounded-md border-0 bg-muted/70 px-5 pr-12 text-sm shadow-none transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           <button
             type="submit"
-            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
+            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
             <Search className="h-5 w-5" />
@@ -251,9 +251,9 @@ export const Header = () => {
         <div className="hidden items-center gap-2 md:flex">
           {user ? (
             <Link to="/perfil">
-              <Button variant="ghost" size="sm" className="h-12 max-w-[180px] gap-2 bg-transparent px-2 text-foreground shadow-none hover:bg-transparent hover:text-primary">
-                <User className="h-5 w-5" />
-                <span className="text-sm font-medium max-w-[140px] truncate">
+              <Button variant="ghost" size="sm" className="h-12 max-w-[190px] gap-2 bg-transparent px-2 text-foreground shadow-none hover:bg-transparent hover:text-primary">
+                <User className="h-6 w-6 shrink-0" />
+                <span className="max-w-[145px] truncate text-base font-semibold">
                   {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
                 </span>
               </Button>
@@ -263,9 +263,9 @@ export const Header = () => {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-12 gap-2 bg-transparent px-2 font-display font-bold text-foreground shadow-none hover:bg-transparent hover:text-primary"
+                className="h-12 gap-2 bg-transparent px-2 font-display text-base font-bold text-foreground shadow-none hover:bg-transparent hover:text-primary"
               >
-                <User className="h-4 w-4" />
+                <User className="h-6 w-6" />
                 Entrar
               </Button>
             </Link>
