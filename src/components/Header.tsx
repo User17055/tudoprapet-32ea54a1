@@ -21,6 +21,31 @@ const formatPrice = (amount: string) =>
     currency: "BRL",
   }).format(Number(amount));
 
+const buildSearchSuggestions = (term: string, products: ShopifyProduct[]) => {
+  const base = term.trim().toLocaleLowerCase("pt-BR");
+  const priorityWords = [
+    "gato", "gatos", "cão", "cães", "cachorro", "cachorros",
+    "filhote", "filhotes", "adulto", "adultos", "ração", "rações",
+  ];
+  const ignoredWords = new Set(["para", "com", "sem", "dos", "das", "uma", "kg"]);
+  const productWords = products.flatMap((product) =>
+    product.node.title.toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]+/gu) || [],
+  );
+  const orderedWords = [
+    ...priorityWords.filter((word) => productWords.includes(word)),
+    ...productWords.filter((word) => word.length >= 4 && !ignoredWords.has(word)),
+  ];
+  const suggestions = [base];
+
+  for (const word of orderedWords) {
+    if (base.includes(word) || suggestions.some((item) => item.endsWith(` ${word}`))) continue;
+    suggestions.push(`${base} ${word}`);
+    if (suggestions.length === 3) break;
+  }
+
+  return suggestions;
+};
+
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -130,6 +155,7 @@ export const Header = () => {
     if (!searchPreviewOpen || search.trim().length < 2) return null;
     const waitingForAudience = audienceLoading || franchiseeLoading;
     const loading = searchLoading || waitingForAudience;
+    const suggestions = buildSearchSuggestions(search, searchResults);
 
     return (
       <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] overflow-hidden rounded-lg border border-border bg-card shadow-[0_18px_45px_-16px_rgba(15,23,42,0.35)]">
@@ -139,43 +165,84 @@ export const Header = () => {
             Buscando produtos...
           </div>
         ) : searchResults.length > 0 ? (
-          <>
-            <div className="max-h-[420px] overflow-y-auto p-2">
-              {searchResults.map((product) => {
+          <div className="max-h-[min(620px,72vh)] overflow-y-auto">
+            <div className="divide-y divide-border/70">
+              {suggestions.map((suggestion) => (
+                <Link
+                  key={suggestion}
+                  to={`/catalogo?busca=${encodeURIComponent(suggestion)}`}
+                  onClick={openProduct}
+                  className="flex items-center gap-3 px-4 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Search className="h-4 w-4 shrink-0" />
+                  <span>{suggestion}</span>
+                </Link>
+              ))}
+            </div>
+
+            <div className="bg-muted/60 px-4 py-2.5 text-sm font-bold text-foreground">
+              Produtos sugeridos
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+              {searchResults.slice(0, 4).map((product) => {
                 const image = product.node.images.edges[0]?.node;
-                const price = product.node.priceRange.minVariantPrice.amount;
+                const variant =
+                  product.node.variants.edges.find((item) => item.node.availableForSale)?.node ||
+                  product.node.variants.edges[0]?.node;
+                const price = variant?.price.amount || product.node.priceRange.minVariantPrice.amount;
+                const compareAtPrice = variant?.compareAtPrice?.amount;
+                const hasDiscount =
+                  Boolean(compareAtPrice) && Number(compareAtPrice) > Number(price);
+                const discount = hasDiscount
+                  ? Math.round((1 - Number(price) / Number(compareAtPrice)) * 100)
+                  : 0;
 
                 return (
                   <Link
                     key={product.node.id}
                     to={`/product/${product.node.handle}`}
                     onClick={openProduct}
-                    className="flex items-center gap-4 rounded-md px-3 py-3 transition-colors hover:bg-muted"
+                    className="min-w-0 rounded-xl border border-border bg-white p-3 transition-all hover:border-primary/30 hover:shadow-md"
                   >
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white">
-                      {image ? (
-                        <img
-                          src={image.url}
-                          alt={image.altText || product.node.title}
-                          loading="lazy"
-                          className="h-full w-full object-contain p-1"
-                        />
-                      ) : (
-                        <Package className="h-6 w-6 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
-                        {product.node.title}
-                      </p>
-                      <p className="mt-1 text-sm font-extrabold text-primary">
-                        {formatPrice(price)}
-                      </p>
+                    <p className="truncate text-xs font-medium text-foreground" title={product.node.title}>
+                      {product.node.title}
+                    </p>
+                    <div className="mt-3 flex min-w-0 items-center gap-3">
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden bg-white">
+                        {image ? (
+                          <img
+                            src={image.url}
+                            alt={image.altText || product.node.title}
+                            loading="lazy"
+                            className="h-full w-full object-contain p-1"
+                          />
+                        ) : (
+                          <Package className="h-7 w-7 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {hasDiscount && (
+                          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground line-through">
+                              {formatPrice(compareAtPrice!)}
+                            </span>
+                            <span className="rounded-md bg-[#fff2db] px-1.5 py-0.5 text-[11px] font-bold text-[#d66a00]">
+                              -{discount}%
+                            </span>
+                          </div>
+                        )}
+                        <span className="text-[11px] text-muted-foreground">A partir de</span>
+                        <p className="mt-0.5 text-base font-extrabold text-foreground">
+                          {formatPrice(price)}
+                        </p>
+                      </div>
                     </div>
                   </Link>
                 );
               })}
             </div>
+
             <Link
               to={`/catalogo?busca=${encodeURIComponent(search.trim())}`}
               onClick={openProduct}
@@ -183,7 +250,7 @@ export const Header = () => {
             >
               Ver todos os resultados
             </Link>
-          </>
+          </div>
         ) : (
           <div className="px-5 py-8 text-center">
             <Package className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />

@@ -23,19 +23,8 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
 
   const openItem = (item: MegaMenuItem) => {
     const children = childrenOf.get(item.id) || [];
-    const categoryName = `${item.slug} ${item.label}`.toLocaleLowerCase("pt-BR");
-    const isDogCategory =
-      categoryName.includes("cachorr") ||
-      categoryName.includes("cães") ||
-      categoryName.includes("caes");
-    const pharmacy = isDogCategory
-      ? children.find((child) =>
-          `${child.slug} ${child.name}`.toLocaleLowerCase("pt-BR").includes("farm"),
-        )
-      : undefined;
-
     setOpenId(children.length > 0 ? item.id : null);
-    setActiveChildId(pharmacy?.id ?? children[0]?.id ?? null);
+    setActiveChildId(null);
   };
 
   const close = () => {
@@ -55,7 +44,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
 
   const openItemData = items.find((item) => item.id === openId);
   const openChildren = openItemData ? childrenOf.get(openItemData.id) || [] : [];
-  const activeChild = openChildren.find((child) => child.id === activeChildId) || openChildren[0];
+  const activeChild = openChildren.find((child) => child.id === activeChildId);
   const activeGrandchildren = activeChild ? childrenOf.get(activeChild.id) || [] : [];
 
   return (
@@ -89,9 +78,21 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
         );
       })}
 
-      {openItemData && activeChild && (
-        <div className="absolute left-0 top-full z-50 w-[min(680px,calc(100vw-2rem))] animate-in fade-in-0 slide-in-from-top-2 duration-200">
-          <div className="grid min-h-[260px] grid-cols-[minmax(240px,0.9fr)_minmax(240px,1.1fr)] overflow-hidden rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
+      {openItemData && openChildren.length > 0 && (
+        <div
+          className={`absolute left-0 top-full z-50 animate-in fade-in-0 slide-in-from-top-2 transition-[width] duration-200 ${
+            activeChild
+              ? "w-[min(680px,calc(100vw-2rem))]"
+              : "w-[min(300px,calc(100vw-2rem))]"
+          }`}
+        >
+          <div
+            className={`grid min-h-[260px] overflow-hidden rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)] transition-[grid-template-columns] duration-200 ${
+              activeChild
+                ? "grid-cols-[minmax(240px,0.9fr)_minmax(240px,1.1fr)]"
+                : "grid-cols-1"
+            }`}
+          >
             <div className="p-4">
               <div className="space-y-1">
                 {openChildren.map((child) => {
@@ -119,33 +120,35 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               </div>
             </div>
 
-            <div
-              key={activeChild.id}
-              className="animate-in fade-in-0 slide-in-from-left-1 p-5 duration-150"
-            >
-              <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-primary">
-                {activeChild.name}
-              </h3>
-              <div className="space-y-1">
-                {activeGrandchildren.map((grandchild) => (
+            {activeChild && (
+              <div
+                key={activeChild.id}
+                className="animate-in fade-in-0 slide-in-from-left-1 p-5 duration-150"
+              >
+                <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-primary">
+                  {activeChild.name}
+                </h3>
+                <div className="space-y-1">
+                  {activeGrandchildren.map((grandchild) => (
+                    <Link
+                      key={grandchild.id}
+                      to={`/catalogo?categoria=${grandchild.slug}&categoria_id=${grandchild.id}`}
+                      onClick={close}
+                      className="block rounded-md px-2 py-2 text-sm text-foreground transition-colors duration-200 hover:bg-muted hover:text-primary"
+                    >
+                      {grandchild.name}
+                    </Link>
+                  ))}
                   <Link
-                    key={grandchild.id}
-                    to={`/catalogo?categoria=${grandchild.slug}&categoria_id=${grandchild.id}`}
+                    to={`/catalogo?categoria=${activeChild.slug}&categoria_id=${activeChild.id}`}
                     onClick={close}
-                    className="block rounded-md px-2 py-2 text-sm text-foreground transition-colors duration-200 hover:bg-muted hover:text-primary"
+                    className="mt-2 block px-2 py-2 text-sm font-extrabold text-primary hover:underline"
                   >
-                    {grandchild.name}
+                    Ver todos
                   </Link>
-                ))}
-                <Link
-                  to={`/catalogo?categoria=${activeChild.slug}&categoria_id=${activeChild.id}`}
-                  onClick={close}
-                  className="mt-2 block px-2 py-2 text-sm font-extrabold text-primary hover:underline"
-                >
-                  Ver todos
-                </Link>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
