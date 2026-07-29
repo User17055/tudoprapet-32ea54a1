@@ -22,6 +22,32 @@ const formatPrice = (amount: string) =>
     currency: "BRL",
   }).format(Number(amount));
 
+const buildSearchSuggestions = (term: string, products: ShopifyProduct[]) => {
+  const base = term.trim().toLocaleLowerCase("pt-BR");
+  const priorityWords = [
+    "gato", "gatos", "cão", "cães", "cachorro", "cachorros",
+    "filhote", "filhotes", "adulto", "adultos",
+  ];
+  const productWords = products.flatMap((product) =>
+    product.node.title.toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]+/gu) || [],
+  );
+  const suggestions = [base];
+  const fallbackWords = productWords.filter(
+    (word) => word.length >= 4 && !["para", "ração", "rações", "adultos"].includes(word),
+  );
+
+  for (const word of [
+    ...priorityWords.filter((item) => productWords.includes(item)),
+    ...fallbackWords,
+  ]) {
+    if (base.includes(word) || suggestions.some((item) => item.endsWith(` ${word}`))) continue;
+    suggestions.push(`${base} ${word}`);
+    if (suggestions.length === 3) break;
+  }
+
+  return suggestions;
+};
+
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -132,6 +158,7 @@ export const Header = () => {
     if (!searchPreviewOpen || search.trim().length < 2) return null;
     const waitingForAudience = audienceLoading || franchiseeLoading || subscriberPricesLoading;
     const loading = searchLoading || waitingForAudience;
+    const suggestions = buildSearchSuggestions(search, searchResults);
 
     return (
       <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] overflow-hidden rounded-lg border border-border bg-card shadow-[0_18px_45px_-16px_rgba(15,23,42,0.35)]">
@@ -142,6 +169,20 @@ export const Header = () => {
           </div>
         ) : searchResults.length > 0 ? (
           <div className="max-h-[min(620px,72vh)] overflow-y-auto">
+            <div className="px-2 py-2">
+              {suggestions.map((suggestion) => (
+                <Link
+                  key={suggestion}
+                  to={`/catalogo?busca=${encodeURIComponent(suggestion)}`}
+                  onClick={openProduct}
+                  className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Search className="h-4 w-4 shrink-0" />
+                  <span>{suggestion}</span>
+                </Link>
+              ))}
+            </div>
+
             <div className="px-5 py-4 text-base font-extrabold text-foreground">
               Produtos sugeridos
             </div>
@@ -243,7 +284,7 @@ export const Header = () => {
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="relative z-10 hidden min-w-0 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[56vw] 2xl:w-[min(56vw,860px)]"
+          className="relative z-10 hidden min-w-0 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[48vw] 2xl:w-[min(48vw,720px)]"
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
           }}
@@ -257,20 +298,19 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-12 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-12 text-sm shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
+            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
-            <Search className="h-6 w-6" />
+            <Search className="h-5 w-5" />
           </button>
           {renderSearchPreview()}
         </form>
 
         <div className="relative z-20 ml-auto hidden items-center gap-2 md:flex lg:gap-3">
-          <CartDrawer />
           {user ? (
             <Link to="/perfil">
               <Button variant="ghost" size="sm" className="h-14 max-w-[205px] gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
@@ -298,6 +338,7 @@ export const Header = () => {
               </Button>
             </Link>
           )}
+          <CartDrawer />
           <Button
             variant="ghost"
             size="icon"
