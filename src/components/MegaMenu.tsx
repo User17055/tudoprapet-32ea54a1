@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Cat, ChevronRight, Dog } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Category } from "@/hooks/useCategoryTree";
 
@@ -23,8 +23,19 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
 
   const openItem = (item: MegaMenuItem) => {
     const children = childrenOf.get(item.id) || [];
+    const categoryName = `${item.slug} ${item.label}`.toLocaleLowerCase("pt-BR");
+    const isDogCategory =
+      categoryName.includes("cachorr") ||
+      categoryName.includes("cães") ||
+      categoryName.includes("caes");
+    const pharmacy = isDogCategory
+      ? children.find((child) =>
+          `${child.slug} ${child.name}`.toLocaleLowerCase("pt-BR").includes("farm"),
+        )
+      : undefined;
+
     setOpenId(children.length > 0 ? item.id : null);
-    setActiveChildId(children[0]?.id ?? null);
+    setActiveChildId(pharmacy?.id ?? children[0]?.id ?? null);
   };
 
   const close = () => {
@@ -58,12 +69,6 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       {items.map((item) => {
         const kids = childrenOf.get(item.id) || [];
         const selected = isActive(item.slug) || openId === item.id;
-        const categoryName = `${item.slug} ${item.label}`.toLocaleLowerCase("pt-BR");
-        const isDogCategory =
-          categoryName.includes("cachorr") ||
-          categoryName.includes("cães") ||
-          categoryName.includes("caes");
-        const isCatCategory = categoryName.includes("gato");
 
         return (
           <div key={item.id} className="flex items-stretch" onMouseEnter={() => openItem(item)}>
@@ -72,18 +77,12 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               onFocus={() => openItem(item)}
               onClick={close}
               aria-expanded={kids.length > 0 ? openId === item.id : undefined}
-              className={`relative flex h-14 items-center gap-2.5 whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 ${
+              className={`relative flex h-14 items-center whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 ${
                 selected
                   ? "text-primary"
                   : "text-foreground hover:text-primary"
               }`}
             >
-              {isDogCategory && (
-                <Dog className="h-7 w-7 shrink-0 text-primary" strokeWidth={2.25} />
-              )}
-              {isCatCategory && (
-                <Cat className="h-7 w-7 shrink-0 text-[#d5aa00]" strokeWidth={2.25} />
-              )}
               {item.label}
             </Link>
           </div>
@@ -92,8 +91,8 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
 
       {openItemData && activeChild && (
         <div className="absolute left-0 top-full z-50 w-[min(680px,calc(100vw-2rem))] animate-in fade-in-0 slide-in-from-top-2 duration-200">
-          <div className="grid min-h-[260px] grid-cols-[minmax(240px,0.9fr)_minmax(240px,1.1fr)] overflow-hidden rounded-b-lg border border-t-0 border-border bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
-            <div className="border-r border-border/70 p-4">
+          <div className="grid min-h-[260px] grid-cols-[minmax(240px,0.9fr)_minmax(240px,1.1fr)] overflow-hidden rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
+            <div className="p-4">
               <div className="space-y-1">
                 {openChildren.map((child) => {
                   const grandchildren = childrenOf.get(child.id) || [];
