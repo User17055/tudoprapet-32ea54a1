@@ -97,7 +97,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               <div className="space-y-1">
                 {openChildren.map((child) => {
                   const grandchildren = childrenOf.get(child.id) || [];
-                  const isSelected = activeChild.id === child.id;
+                  const isSelected = activeChild?.id === child.id;
 
                   return (
                     <Link
