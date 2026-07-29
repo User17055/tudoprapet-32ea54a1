@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight, Store } from "lucide-react";
+import { ShoppingBag, ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight, Store } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { CouponInput } from "@/components/CouponInput";
 import { getDisplayOptions } from "@/lib/shopify";
@@ -132,7 +132,7 @@ export const CartDrawer = () => {
     return (
       <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 bg-transparent text-[#d5aa00] hover:bg-transparent hover:text-[#b89000]">
         <Link to="/carrinho">
-          <ShoppingCart className="h-7 w-7" strokeWidth={2.2} />
+          <ShoppingBag className="h-7 w-7" strokeWidth={2.1} />
           {totalItems > 0 && (
             <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}
@@ -147,8 +147,8 @@ export const CartDrawer = () => {
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-12 w-12 bg-transparent text-[#d5aa00] shadow-none hover:bg-transparent hover:text-[#b89000]">
-          <ShoppingCart className="h-8 w-8" strokeWidth={2.2} />
+        <Button variant="ghost" size="icon" className="relative h-12 w-11 bg-transparent text-[#1c2333] shadow-none hover:bg-transparent hover:text-primary">
+          <ShoppingBag className="h-8 w-8" strokeWidth={2} />
           {totalItems > 0 && (
             <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}

@@ -79,20 +79,8 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       })}
 
       {openItemData && openChildren.length > 0 && (
-        <div
-          className={`absolute left-0 top-full z-50 animate-in fade-in-0 slide-in-from-top-2 transition-[width] duration-200 ${
-            activeChild
-              ? "w-[min(680px,calc(100vw-2rem))]"
-              : "w-[min(300px,calc(100vw-2rem))]"
-          }`}
-        >
-          <div
-            className={`grid min-h-[260px] overflow-hidden rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)] transition-[grid-template-columns] duration-200 ${
-              activeChild
-                ? "grid-cols-[minmax(240px,0.9fr)_minmax(240px,1.1fr)]"
-                : "grid-cols-1"
-            }`}
-          >
+        <div className="absolute left-0 top-full z-50 w-[min(300px,calc(100vw-2rem))] animate-in fade-in-0 slide-in-from-top-2 duration-200">
+          <div className="relative min-h-[260px] rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
             <div className="p-4">
               <div className="space-y-1">
                 {openChildren.map((child) => {
@@ -123,7 +111,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
             {activeChild && (
               <div
                 key={activeChild.id}
-                className="animate-in fade-in-0 slide-in-from-left-1 p-5 duration-150"
+                className="absolute left-full top-0 min-h-full w-[min(380px,calc(100vw-332px))] animate-in fade-in-0 bg-card p-5 shadow-[14px_18px_38px_-24px_rgba(15,23,42,0.32)] duration-150"
               >
                 <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-primary">
                   {activeChild.name}

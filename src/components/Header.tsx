@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Search, User, Menu, X, MessageCircle, Package, Loader2 } from "lucide-react";
+import { Heart, Loader2, Menu, MessageCircle, Package, Phone, Search, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
@@ -268,7 +268,7 @@ export const Header = () => {
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
-      <div className="container mx-auto grid grid-cols-3 items-center gap-2 pb-2 pt-3 md:flex md:gap-3">
+      <div className="container relative mx-auto grid grid-cols-3 items-center gap-2 pb-2 pt-3 md:flex md:gap-3">
         <div className="flex justify-self-start md:hidden">
           <Button
             variant="ghost"
@@ -282,14 +282,14 @@ export const Header = () => {
           </Button>
         </div>
 
-        <Link to="/" className="flex shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
+        <Link to="/" className="relative z-20 flex shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
           <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-10 md:w-auto" />
         </Link>
 
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="relative hidden min-w-0 flex-1 md:flex md:max-w-2xl"
+          className="relative z-10 hidden min-w-0 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[44vw] 2xl:w-[min(46vw,680px)]"
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
           }}
@@ -303,11 +303,11 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-12 w-full rounded-md border border-[#59616c] bg-white px-5 pr-12 text-sm shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-14 w-full rounded-md border border-[#59616c] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
+            className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
             <Search className="h-5 w-5" />
@@ -315,13 +315,33 @@ export const Header = () => {
           {renderSearchPreview()}
         </form>
 
-        <div className="ml-auto hidden items-center gap-4 md:flex">
+        <div className="relative z-20 ml-auto hidden items-center gap-2 md:flex lg:gap-3">
+          <a
+            href={WHATSAPP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Falar pelo WhatsApp"
+            className="hidden h-12 w-10 items-center justify-center text-[#1c2333] transition-colors hover:text-primary lg:flex"
+          >
+            <Phone className="h-7 w-7" strokeWidth={2.1} />
+          </a>
+          <Link
+            to="/catalogo"
+            aria-label="Ver produtos favoritos"
+            className="hidden h-12 w-10 items-center justify-center text-[#1c2333] transition-colors hover:text-primary lg:flex"
+          >
+            <Heart className="h-8 w-8" strokeWidth={2} />
+          </Link>
+          <CartDrawer />
           {user ? (
             <Link to="/perfil">
-              <Button variant="ghost" size="sm" className="h-12 max-w-[190px] gap-2 bg-transparent px-2 text-foreground shadow-none hover:bg-transparent hover:text-primary">
-                <User className="h-7 w-7 shrink-0 text-primary" strokeWidth={2.2} />
-                <span className="max-w-[145px] truncate text-base font-semibold">
-                  {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
+              <Button variant="ghost" size="sm" className="h-14 max-w-[205px] gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
+                <User className="h-8 w-8 shrink-0" strokeWidth={2} />
+                <span className="hidden max-w-[155px] flex-col items-start truncate text-sm font-bold leading-tight xl:flex">
+                  <span className="max-w-full truncate">
+                    {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
+                  </span>
+                  <span className="font-semibold">Minha conta</span>
                 </span>
               </Button>
             </Link>
@@ -330,14 +350,16 @@ export const Header = () => {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-12 gap-2 bg-transparent px-2 font-display text-base font-bold text-foreground shadow-none hover:bg-transparent hover:text-primary"
+                className="h-14 gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
               >
-                <User className="h-7 w-7 text-primary" strokeWidth={2.2} />
-                Entrar
+                <User className="h-8 w-8" strokeWidth={2} />
+                <span className="hidden flex-col items-start text-sm font-bold leading-tight xl:flex">
+                  <span>Entrar</span>
+                  <span className="font-semibold">Cadastre-se</span>
+                </span>
               </Button>
             </Link>
           )}
-          <CartDrawer />
           <Button
             variant="ghost"
             size="icon"
