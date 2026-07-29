@@ -227,11 +227,8 @@ export const ProductCard = ({ product, products = [] }: Props) => {
           </div>
         ) : hasSubscriberDiscount ? (
           <div className="mt-1.5 flex flex-col items-start gap-1">
-            <span className="inline-flex items-center gap-2 text-[18px] font-extrabold leading-none text-[#0054a6] tabular-nums">
+            <span className="text-[18px] font-extrabold leading-none text-[#0054a6] tabular-nums">
               {formatPrice(subscriberPrice)}
-              <span className="rounded-md bg-[#00a896] px-2 py-1 text-[10px] font-black leading-none tracking-wide text-white shadow-sm">
-                PIX
-              </span>
             </span>
             <span className="text-[12px] font-medium leading-none text-[#0054a6]">
               No <strong className="font-black uppercase text-[#00a896]">Pix</strong> para assinantes
