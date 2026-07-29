@@ -270,14 +270,14 @@ export const Header = () => {
           </Button>
         </div>
 
-        <Link to="/" className="relative z-20 flex shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
-          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-10 md:w-auto" />
+        <Link to="/" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-[52px] md:w-auto" />
         </Link>
 
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="relative z-10 hidden min-w-0 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[48vw] 2xl:w-[min(48vw,720px)]"
+          className="relative z-10 hidden min-w-0 translate-y-1 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[48vw] 2xl:w-[min(48vw,720px)]"
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
           }}
@@ -291,7 +291,7 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-14 w-full rounded-xl border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
@@ -340,7 +340,7 @@ export const Header = () => {
       </div>
 
       <div className="hidden lg:block">
-        <div className="container mx-auto flex items-stretch gap-7">
+        <div className="container mx-auto flex items-stretch gap-7 lg:pl-16 xl:pl-24">
           <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
           <Link
             to="/clube"
