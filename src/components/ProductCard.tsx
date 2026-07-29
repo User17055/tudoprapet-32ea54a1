@@ -149,44 +149,54 @@ export const ProductCard = ({ product, products = [] }: Props) => {
         </button>
       </div>
 
-      {variationItems.length > 1 && (
-        <div className="mt-3 flex min-h-9 flex-wrap gap-2">
-          {variationItems.map((item) => {
-            const active = item.shopify_product_id === node.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                title={item.shopify_product_title}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (active) return;
-                  const nextProduct = products.find(
-                    (candidate) => candidate.node.id === item.shopify_product_id,
-                  );
-                  if (nextProduct) {
-                    setSelectedProduct(nextProduct);
-                  } else {
-                    navigate(`/product/${item.shopify_product_handle}`);
-                  }
-                }}
-                className={`rounded-lg border px-3 py-2 text-sm font-semibold leading-none transition-colors ${
-                  active
-                    ? "border-[#171717] bg-[#171717] text-white"
-                    : "border-[#d7d9dd] bg-white text-[#51545a] hover:border-primary hover:text-primary"
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <div className="mt-4 min-h-[2.9em]">
+        <h3
+          className={`line-clamp-2 text-[15px] font-normal leading-[1.35] text-[#202633] ${
+            variationItems.length > 1
+              ? "group-hover:hidden"
+              : ""
+          }`}
+        >
+          {node.title}
+        </h3>
 
-      <h3 className="mt-4 line-clamp-2 min-h-[2.9em] text-[15px] font-normal leading-[1.35] text-[#202633]">
-        {node.title}
-      </h3>
+        {variationItems.length > 1 && (
+          <div className="hidden h-[2.9em] items-center gap-2 overflow-x-auto pr-1 group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {variationItems.map((item) => {
+              const active = item.shopify_product_id === node.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  title={`${item.label} — ${item.shopify_product_title}`}
+                  aria-label={`Selecionar ${item.label}`}
+                  aria-pressed={active}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (active) return;
+                    const nextProduct = products.find(
+                      (candidate) => candidate.node.id === item.shopify_product_id,
+                    );
+                    if (nextProduct) {
+                      setSelectedProduct(nextProduct);
+                    } else {
+                      navigate(`/product/${item.shopify_product_handle}`);
+                    }
+                  }}
+                  className={`h-10 shrink-0 rounded-xl border px-3.5 text-[15px] font-bold uppercase leading-none transition-colors ${
+                    active
+                      ? "border-[#171717] bg-[#171717] text-white"
+                      : "border-[#d7d9dd] bg-white text-[#51545a] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="mt-4 flex flex-col items-start gap-1">
         {showOriginalPrice && originalPrice && (
