@@ -587,6 +587,7 @@ export type Database = {
         Returns: boolean
       }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      validate_referral_code: { Args: { _code: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user"

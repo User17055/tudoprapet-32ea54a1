@@ -103,12 +103,9 @@ export const AcquisitionSourceGate = () => {
     }
     const normalizedReferralCode = referralCode.trim().toUpperCase();
     if (source === "recomendacao") {
-      const { data, error } = await supabase
-        .from("employee_referral_codes")
-        .select("id")
-        .eq("code", normalizedReferralCode)
-        .eq("active", true)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc("validate_referral_code", {
+        _code: normalizedReferralCode,
+      });
 
       if (error || !data) {
         showError("Codigo de funcionario invalido ou inativo.", "referral");
