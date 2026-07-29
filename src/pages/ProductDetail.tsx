@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { goToCheckout } from "@/lib/checkout";
+import { ProductImage } from "@/components/ProductImage";
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
@@ -409,9 +410,9 @@ const ProductDetail = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-[#f6f7f9]">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-6 lg:py-10">
+      <main className="container mx-auto flex-1 px-4 py-5 lg:py-8">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary mb-6 transition-colors"
@@ -419,12 +420,12 @@ const ProductDetail = () => {
           <ArrowLeft className="h-4 w-4" /> Voltar para a loja
         </Link>
 
-        <div className="grid lg:grid-cols-[1fr_420px] gap-8 lg:gap-12">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:gap-8">
           {/* Gallery */}
-          <div>
+          <div className="rounded-3xl border border-border/70 bg-white p-3 shadow-sm sm:p-5">
             {/* Mobile: Carousel */}
             <div className="lg:hidden">
-              <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-border">
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-white">
                 {hasDiscount && (
                   <span className="absolute top-3 left-3 z-10 bg-accent text-accent-foreground text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm">
                     {discountPercent}% OFF
@@ -446,10 +447,11 @@ const ProductDetail = () => {
                       key={i}
                       className="flex-shrink-0 w-full h-full snap-center"
                     >
-                      <img
+                      <ProductImage
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-cover"
+                        targetFill={0.82}
+                        className="h-full w-full object-contain transition-transform duration-300"
                       />
                     </div>
                   ))}
@@ -497,10 +499,11 @@ const ProductDetail = () => {
                           : "border-border hover:border-primary/50"
                       }`}
                     >
-                      <img
+                      <ProductImage
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-contain p-2"
+                        targetFill={0.78}
+                        className="h-full w-full object-contain transition-transform duration-300"
                       />
                     </button>
                   ))}
@@ -515,7 +518,7 @@ const ProductDetail = () => {
                   </button>
                 )}
               </div>
-              <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-border">
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-white">
                 {hasDiscount && (
                   <span className="absolute top-4 left-4 z-10 bg-accent text-accent-foreground text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
                     {discountPercent}% OFF
@@ -525,10 +528,11 @@ const ProductDetail = () => {
                   Imagens ilustrativas
                 </span>
                 {mainImage && (
-                  <img
+                  <ProductImage
                     src={mainImage.url}
                     alt={mainImage.altText || node.title}
-                    className="w-full h-full object-cover"
+                    targetFill={0.82}
+                    className="h-full w-full object-contain transition-transform duration-300"
                   />
                 )}
               </div>
@@ -536,7 +540,7 @@ const ProductDetail = () => {
           </div>
 
           {/* Buy Box */}
-          <div className="space-y-5">
+          <div className="space-y-5 rounded-3xl border border-border/70 bg-white p-5 shadow-sm lg:sticky lg:top-24 lg:p-6">
             <div>
               <h1 className="font-display font-900 text-2xl lg:text-3xl leading-tight">
                 {node.title}
@@ -716,8 +720,8 @@ const ProductDetail = () => {
         </div>
 
         {/* Description section */}
-        <section className="mt-12 lg:mt-16 max-w-4xl">
-          <div className="border-t border-border pt-10">
+        <section className="mt-10 max-w-4xl rounded-3xl border border-border/70 bg-white p-5 shadow-sm lg:mt-12 lg:p-8">
+          <div>
             <div className="flex items-center gap-3 mb-6">
               <div className="h-10 w-1.5 bg-primary rounded-full" />
               <h2 className="font-display font-900 text-2xl lg:text-3xl">

@@ -8,6 +8,7 @@ import { Loader2, Plus, ShoppingCart, Store } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { ProductImage } from "@/components/ProductImage";
 
 interface Props {
   product: ShopifyProduct;
@@ -121,11 +122,12 @@ export const ProductCard = ({ product, products = [] }: Props) => {
         )}
 
         {image ? (
-          <img
+          <ProductImage
             src={image.url}
             alt={image.altText || node.title}
             loading="lazy"
-            className={`absolute inset-0 z-[1] h-full w-full object-contain p-8 transition-transform duration-500 group-hover:scale-105 ${
+            targetFill={0.74}
+            className={`absolute inset-0 z-[1] h-full w-full object-contain transition-transform duration-300 ${
               isOutOfStock ? "opacity-40 grayscale" : "opacity-100"
             }`}
           />
