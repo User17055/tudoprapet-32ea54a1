@@ -257,14 +257,14 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-md border border-[#59616c] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-14 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
             className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
-            <Search className="h-5 w-5" />
+            <Search className="h-6 w-6" />
           </button>
           {renderSearchPreview()}
         </form>
@@ -274,7 +274,7 @@ export const Header = () => {
           {user ? (
             <Link to="/perfil">
               <Button variant="ghost" size="sm" className="h-14 max-w-[205px] gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
-                <User className="h-8 w-8 shrink-0" strokeWidth={2} />
+                <User className="h-9 w-9 shrink-0" strokeWidth={2} />
                 <span className="hidden max-w-[155px] flex-col items-start truncate text-sm font-bold leading-tight xl:flex">
                   <span className="max-w-full truncate">
                     {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
@@ -290,7 +290,7 @@ export const Header = () => {
                 variant="ghost"
                 className="h-14 gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
               >
-                <User className="h-8 w-8" strokeWidth={2} />
+                <User className="h-9 w-9" strokeWidth={2} />
                 <span className="hidden flex-col items-start text-sm font-bold leading-tight xl:flex">
                   <span>Entrar</span>
                   <span className="font-semibold">Cadastre-se</span>
@@ -349,14 +349,14 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-md border border-[#59616c] bg-white px-5 pr-14 text-base transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-14 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-14 text-base transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
             className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
-            <Search className="h-5 w-5" />
+            <Search className="h-6 w-6" />
           </button>
           {renderSearchPreview()}
         </form>
