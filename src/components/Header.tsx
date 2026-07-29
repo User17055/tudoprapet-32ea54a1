@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { searchShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { isAudienceVisibleTo, useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
+import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import logo from "@/assets/tpp-logo.svg";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
@@ -20,31 +21,6 @@ const formatPrice = (amount: string) =>
     style: "currency",
     currency: "BRL",
   }).format(Number(amount));
-
-const buildSearchSuggestions = (term: string, products: ShopifyProduct[]) => {
-  const base = term.trim().toLocaleLowerCase("pt-BR");
-  const priorityWords = [
-    "gato", "gatos", "cão", "cães", "cachorro", "cachorros",
-    "filhote", "filhotes", "adulto", "adultos", "ração", "rações",
-  ];
-  const ignoredWords = new Set(["para", "com", "sem", "dos", "das", "uma", "kg"]);
-  const productWords = products.flatMap((product) =>
-    product.node.title.toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]+/gu) || [],
-  );
-  const orderedWords = [
-    ...priorityWords.filter((word) => productWords.includes(word)),
-    ...productWords.filter((word) => word.length >= 4 && !ignoredWords.has(word)),
-  ];
-  const suggestions = [base];
-
-  for (const word of orderedWords) {
-    if (base.includes(word) || suggestions.some((item) => item.endsWith(` ${word}`))) continue;
-    suggestions.push(`${base} ${word}`);
-    if (suggestions.length === 3) break;
-  }
-
-  return suggestions;
-};
 
 export const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -56,6 +32,7 @@ export const Header = () => {
   const { user } = useAuth();
   const { rows: audienceRows, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
+  const { getSubscriberPrice, loading: subscriberPricesLoading } = useSubscriberPrices();
   const navigate = useNavigate();
   const location = useLocation();
   const { rootCats, childrenOf, loading: categoriesLoading } = useCategoryTree();
@@ -153,9 +130,8 @@ export const Header = () => {
 
   const renderSearchPreview = () => {
     if (!searchPreviewOpen || search.trim().length < 2) return null;
-    const waitingForAudience = audienceLoading || franchiseeLoading;
+    const waitingForAudience = audienceLoading || franchiseeLoading || subscriberPricesLoading;
     const loading = searchLoading || waitingForAudience;
-    const suggestions = buildSearchSuggestions(search, searchResults);
 
     return (
       <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] overflow-hidden rounded-lg border border-border bg-card shadow-[0_18px_45px_-16px_rgba(15,23,42,0.35)]">
@@ -166,77 +142,55 @@ export const Header = () => {
           </div>
         ) : searchResults.length > 0 ? (
           <div className="max-h-[min(620px,72vh)] overflow-y-auto">
-            <div className="divide-y divide-border/70">
-              {suggestions.map((suggestion) => (
-                <Link
-                  key={suggestion}
-                  to={`/catalogo?busca=${encodeURIComponent(suggestion)}`}
-                  onClick={openProduct}
-                  className="flex items-center gap-3 px-4 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <Search className="h-4 w-4 shrink-0" />
-                  <span>{suggestion}</span>
-                </Link>
-              ))}
-            </div>
-
-            <div className="bg-muted/60 px-4 py-2.5 text-sm font-bold text-foreground">
+            <div className="px-5 py-4 text-base font-extrabold text-foreground">
               Produtos sugeridos
             </div>
 
-            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 bg-muted/25 p-4 xl:grid-cols-2">
               {searchResults.slice(0, 4).map((product) => {
                 const image = product.node.images.edges[0]?.node;
                 const variant =
                   product.node.variants.edges.find((item) => item.node.availableForSale)?.node ||
                   product.node.variants.edges[0]?.node;
                 const price = variant?.price.amount || product.node.priceRange.minVariantPrice.amount;
-                const compareAtPrice = variant?.compareAtPrice?.amount;
-                const hasDiscount =
-                  Boolean(compareAtPrice) && Number(compareAtPrice) > Number(price);
-                const discount = hasDiscount
-                  ? Math.round((1 - Number(price) / Number(compareAtPrice)) * 100)
-                  : 0;
+                const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
+                const hasSubscriberPrice =
+                  subscriberPrice !== null && subscriberPrice < Number(price);
 
                 return (
                   <Link
                     key={product.node.id}
                     to={`/product/${product.node.handle}`}
                     onClick={openProduct}
-                    className="min-w-0 rounded-xl border border-border bg-white p-3 transition-all hover:border-primary/30 hover:shadow-md"
+                    className="flex min-h-[170px] min-w-0 items-center gap-4 rounded-xl border border-border bg-white p-4 transition-shadow hover:shadow-md"
                   >
-                    <p className="truncate text-xs font-medium text-foreground" title={product.node.title}>
-                      {product.node.title}
-                    </p>
-                    <div className="mt-3 flex min-w-0 items-center gap-3">
-                      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden bg-white">
-                        {image ? (
-                          <img
-                            src={image.url}
-                            alt={image.altText || product.node.title}
-                            loading="lazy"
-                            className="h-full w-full object-contain p-1"
-                          />
-                        ) : (
-                          <Package className="h-7 w-7 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        {hasDiscount && (
-                          <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                            <span className="text-xs text-muted-foreground line-through">
-                              {formatPrice(compareAtPrice!)}
-                            </span>
-                            <span className="rounded-md bg-[#fff2db] px-1.5 py-0.5 text-[11px] font-bold text-[#d66a00]">
-                              -{discount}%
-                            </span>
-                          </div>
-                        )}
-                        <span className="text-[11px] text-muted-foreground">A partir de</span>
-                        <p className="mt-0.5 text-base font-extrabold text-foreground">
-                          {formatPrice(price)}
-                        </p>
-                      </div>
+                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden bg-white">
+                      {image ? (
+                        <img
+                          src={image.url}
+                          alt={image.altText || product.node.title}
+                          loading="lazy"
+                          className="h-full w-full object-contain p-1"
+                        />
+                      ) : (
+                        <Package className="h-8 w-8 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground" title={product.node.title}>
+                        {product.node.title}
+                      </p>
+                      <p className="mt-2 text-lg font-extrabold text-foreground">
+                        {formatPrice(price)}
+                      </p>
+                      {hasSubscriberPrice && (
+                        <div className="mt-4 text-primary">
+                          <p className="text-lg font-extrabold">
+                            {formatPrice(String(subscriberPrice))}
+                          </p>
+                          <p className="text-xs font-medium">para assinantes</p>
+                        </div>
+                      )}
                     </div>
                   </Link>
                 );
@@ -289,7 +243,7 @@ export const Header = () => {
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="relative z-10 hidden min-w-0 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[44vw] 2xl:w-[min(46vw,680px)]"
+          className="relative z-10 hidden min-w-0 flex-1 md:flex md:max-w-lg lg:absolute lg:left-1/2 lg:w-[38vw] lg:max-w-none lg:-translate-x-1/2 xl:w-[56vw] 2xl:w-[min(56vw,860px)]"
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSearchPreview();
           }}

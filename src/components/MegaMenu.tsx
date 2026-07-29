@@ -97,7 +97,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
                       className={`flex min-h-10 items-center justify-between gap-3 rounded-md px-3.5 py-2 text-sm transition-colors duration-200 ${
                         isSelected
                           ? "bg-primary/10 font-bold text-primary"
-                          : "text-foreground hover:bg-muted hover:text-primary"
+                          : "text-foreground hover:bg-primary/10 hover:text-primary"
                       }`}
                     >
                       <span>{child.name}</span>
@@ -111,18 +111,15 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
             {activeChild && (
               <div
                 key={activeChild.id}
-                className="absolute left-full top-0 min-h-full w-[min(380px,calc(100vw-332px))] animate-in fade-in-0 bg-card p-5 shadow-[14px_18px_38px_-24px_rgba(15,23,42,0.32)] duration-150"
+                className="absolute left-full top-0 min-h-full w-[min(380px,calc(100vw-332px))] animate-in fade-in-0 rounded-b-lg bg-card p-5 shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)] duration-150"
               >
-                <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-primary">
-                  {activeChild.name}
-                </h3>
                 <div className="space-y-1">
                   {activeGrandchildren.map((grandchild) => (
                     <Link
                       key={grandchild.id}
                       to={`/catalogo?categoria=${grandchild.slug}&categoria_id=${grandchild.id}`}
                       onClick={close}
-                      className="block rounded-md px-2 py-2 text-sm text-foreground transition-colors duration-200 hover:bg-muted hover:text-primary"
+                      className="block rounded-md px-3.5 py-2 text-sm text-foreground transition-colors duration-200 hover:bg-primary/10 hover:text-primary"
                     >
                       {grandchild.name}
                     </Link>
