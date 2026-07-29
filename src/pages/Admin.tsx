@@ -38,7 +38,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/tpp-logo.svg";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
@@ -161,12 +161,9 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-[#f4f6fa] text-[#1c2333]">
       <header className="sticky top-0 z-50 flex h-20 items-center justify-between gap-4 bg-[#112f5f] px-4 text-white shadow-lg sm:px-7">
-        <Link to="/" className="flex min-w-0 items-center gap-3" aria-label="TudoPraPet">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm">
-            <img src={logo} alt="" className="h-full w-full object-contain" />
-          </span>
-          <span className="hidden text-xl font-extrabold tracking-tight sm:inline">
-            Tudo<span className="text-[#f1c548]">Pra</span>Pet
+        <Link to="/" className="flex min-w-0 items-center" aria-label="TudoPraPet">
+          <span className="flex h-14 shrink-0 items-center rounded-xl bg-white px-3 shadow-sm">
+            <img src={logo} alt="" className="h-10 w-auto" />
           </span>
         </Link>
 

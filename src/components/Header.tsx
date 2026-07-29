@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCategoryTree } from "@/hooks/useCategoryTree";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/tpp-logo.svg";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
 
@@ -74,11 +74,8 @@ export const Header = () => {
           </Button>
         </div>
 
-        <Link to="/" className="flex shrink-0 items-center justify-self-center gap-2" aria-label="TudoPraPet - início">
+        <Link to="/" className="flex shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
           <img src={logo} alt="TudoPraPet" className="h-11 w-auto md:h-14" />
-          <span className="hidden font-display font-900 text-2xl text-foreground md:inline md:text-3xl">
-            Tudo<span className="text-primary">Pra</span>Pet
-          </span>
         </Link>
 
         <form

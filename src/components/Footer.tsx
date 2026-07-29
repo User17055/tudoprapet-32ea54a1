@@ -1,5 +1,4 @@
 import { Instagram, Mail, MessageCircle } from "lucide-react";
-import logo from "@/assets/logo.png";
 import { Link } from "react-router-dom";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";

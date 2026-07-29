@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown, CheckCircle2, Circle } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/tpp-logo.svg';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
@@ -100,11 +100,8 @@ const Register = () => {
             <ArrowLeft className="h-4 w-4" />
             Voltar ao catálogo
           </Link>
-          <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
-            <span className="hidden sm:inline font-display font-900 text-lg text-foreground">
-              Tudo<span className="text-primary">Pra</span>Pet
-            </span>
+          <Link to="/" className="flex items-center">
+            <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
           </Link>
         </div>
       </div>
