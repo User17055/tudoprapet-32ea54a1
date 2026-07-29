@@ -66,9 +66,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               onFocus={() => openItem(item)}
               onClick={close}
               aria-expanded={kids.length > 0 ? openId === item.id : undefined}
-              className={`relative flex h-14 items-center whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 ${
+              className={`relative flex h-14 items-center whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:origin-left after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform after:duration-200 hover:after:scale-x-100 ${
                 selected
-                  ? "text-primary"
+                  ? "text-primary after:scale-x-100"
                   : "text-foreground hover:text-primary"
               }`}
             >
@@ -79,7 +79,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       })}
 
       {openItemData && openChildren.length > 0 && (
-        <div className="absolute left-0 top-full z-50 w-[min(300px,calc(100vw-2rem))] animate-in fade-in-0 slide-in-from-top-2 duration-200">
+        <div className="absolute left-0 top-full z-50 w-[min(300px,calc(100vw-2rem))] origin-top-left animate-in fade-in-0 slide-in-from-top-1 duration-300">
           <div className="relative min-h-[260px] rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
             <div className="p-4">
               <div className="space-y-1">
