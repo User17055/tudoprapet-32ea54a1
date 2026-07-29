@@ -49,7 +49,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
 
   return (
     <div
-      className="relative flex min-w-0 flex-1 items-stretch gap-7 xl:gap-10"
+      className="relative flex min-w-0 flex-1 items-stretch gap-5"
       onMouseLeave={close}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node)) close();
@@ -66,23 +66,25 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               onFocus={() => openItem(item)}
               onClick={close}
               aria-expanded={kids.length > 0 ? openId === item.id : undefined}
-              className={`relative flex h-14 items-center whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:origin-left after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform after:duration-200 hover:after:scale-x-100 ${
+              className={`group relative flex h-14 items-center whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:origin-left after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform after:duration-200 hover:after:scale-x-100 ${
                 selected
                   ? "text-primary after:scale-x-100"
                   : "text-foreground hover:text-primary"
               }`}
             >
-              {item.label}
+              <span className="transition-transform duration-200 group-hover:-translate-y-0.5">
+                {item.label}
+              </span>
             </Link>
           </div>
         );
       })}
 
       {openItemData && openChildren.length > 0 && (
-        <div className="absolute left-0 top-full z-50 w-[min(300px,calc(100vw-2rem))] origin-top-left animate-in fade-in-0 slide-in-from-top-1 duration-300">
-          <div className="relative min-h-[260px] rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
-            <div className="p-4">
-              <div className="space-y-1">
+        <div className="absolute left-0 top-full z-50 w-[min(260px,calc(100vw-2rem))] origin-top-left animate-in fade-in-0 slide-in-from-top-1 duration-300">
+          <div className="relative min-h-[230px] rounded-b-lg bg-card shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)]">
+            <div className="p-3">
+              <div className="space-y-0.5">
                 {openChildren.map((child) => {
                   const grandchildren = childrenOf.get(child.id) || [];
                   const isSelected = activeChild?.id === child.id;
@@ -94,7 +96,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
                       onMouseEnter={() => setActiveChildId(child.id)}
                       onFocus={() => setActiveChildId(child.id)}
                       onClick={close}
-                      className={`flex min-h-10 items-center justify-between gap-3 rounded-md px-3.5 py-2 text-sm transition-colors duration-200 ${
+                      className={`flex min-h-9 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm transition-colors duration-200 ${
                         isSelected
                           ? "bg-primary/10 font-bold text-primary"
                           : "text-foreground hover:bg-primary/10 hover:text-primary"
@@ -111,15 +113,15 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
             {activeChild && (
               <div
                 key={activeChild.id}
-                className="absolute left-full top-0 min-h-full w-[min(380px,calc(100vw-332px))] animate-in fade-in-0 rounded-b-lg bg-card p-5 shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)] duration-150"
+                className="absolute left-full top-0 min-h-full w-[min(320px,calc(100vw-292px))] animate-in fade-in-0 rounded-b-lg bg-card p-4 shadow-[0_18px_38px_-18px_rgba(15,23,42,0.32)] duration-150"
               >
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {activeGrandchildren.map((grandchild) => (
                     <Link
                       key={grandchild.id}
                       to={`/catalogo?categoria=${grandchild.slug}&categoria_id=${grandchild.id}`}
                       onClick={close}
-                      className="block rounded-md px-3.5 py-2 text-sm text-foreground transition-colors duration-200 hover:bg-primary/10 hover:text-primary"
+                      className="block rounded-md px-3 py-1.5 text-sm text-foreground transition-colors duration-200 hover:bg-primary/10 hover:text-primary"
                     >
                       {grandchild.name}
                     </Link>
@@ -127,7 +129,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
                   <Link
                     to={`/catalogo?categoria=${activeChild.slug}&categoria_id=${activeChild.id}`}
                     onClick={close}
-                    className="mt-2 block px-2 py-2 text-sm font-extrabold text-primary hover:underline"
+                    className="mt-1.5 block px-3 py-1.5 text-sm font-extrabold text-primary hover:underline"
                   >
                     Ver todos
                   </Link>

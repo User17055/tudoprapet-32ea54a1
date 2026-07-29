@@ -173,7 +173,7 @@ export const Header = () => {
                   key={suggestion}
                   to={`/catalogo?busca=${encodeURIComponent(suggestion)}`}
                   onClick={openProduct}
-                  className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                 >
                   <Search className="h-4 w-4 shrink-0" />
                   <span>{suggestion}</span>
@@ -304,8 +304,13 @@ export const Header = () => {
         <div className="relative z-20 ml-auto hidden items-center gap-0 md:flex">
           {user ? (
             <Link to="/perfil" aria-label="Abrir minha conta">
-              <Button variant="ghost" size="icon" className="h-10 w-10 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
+              <Button variant="ghost" size="sm" className="h-10 max-w-[180px] gap-2 bg-transparent px-2 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
                 <User className="!h-6 !w-6" strokeWidth={2.3} />
+                <span className="max-w-[135px] truncate text-sm font-bold">
+                  {user.user_metadata?.first_name ||
+                    user.user_metadata?.name ||
+                    user.email?.split("@")[0]}
+                </span>
               </Button>
             </Link>
           ) : (
