@@ -566,11 +566,15 @@ const ProductDetail = () => {
               )}
               {hasSubscriberDiscount && (
                 <div className="flex items-center gap-1.5 pt-1">
-                  <Crown className="h-4 w-4 text-sky-500" />
                   <span className="font-display font-900 text-xl text-sky-500 tabular-nums">
                     R$ {subscriberPrice.toFixed(2).replace(".", ",")}
                   </span>
-                  <span className="text-xs text-sky-500/80 font-medium">para assinantes</span>
+                  <span className="rounded-md bg-[#00a896] px-2 py-1 text-[10px] font-black leading-none tracking-wide text-white shadow-sm">
+                    PIX
+                  </span>
+                  <span className="text-xs font-medium text-sky-600">
+                    No <strong className="font-black uppercase text-[#00a896]">Pix</strong> para assinantes
+                  </span>
                 </div>
               )}
             </div>

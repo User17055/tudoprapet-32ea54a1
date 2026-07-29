@@ -4,7 +4,7 @@ import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useProductVariations } from "@/hooks/useProductVariations";
-import { Loader2, Plus, RefreshCw, ShoppingCart, Store } from "lucide-react";
+import { Loader2, Plus, ShoppingCart, Store } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -226,13 +226,15 @@ export const ProductCard = ({ product, products = [] }: Props) => {
             </span>
           </div>
         ) : hasSubscriberDiscount ? (
-          <div className="mt-1 flex flex-col items-start gap-[2px]">
-            <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-[#0054a6] tabular-nums">
+          <div className="mt-1.5 flex flex-col items-start gap-1">
+            <span className="inline-flex items-center gap-2 text-[18px] font-extrabold leading-none text-[#0054a6] tabular-nums">
               {formatPrice(subscriberPrice)}
-              <RefreshCw className="h-3.5 w-3.5" />
+              <span className="rounded-md bg-[#00a896] px-2 py-1 text-[10px] font-black leading-none tracking-wide text-white shadow-sm">
+                PIX
+              </span>
             </span>
-            <span className="text-[12px] font-normal leading-none text-[#0054a6]">
-              para assinantes
+            <span className="text-[12px] font-medium leading-none text-[#0054a6]">
+              No <strong className="font-black uppercase text-[#00a896]">Pix</strong> para assinantes
             </span>
           </div>
         ) : null}
