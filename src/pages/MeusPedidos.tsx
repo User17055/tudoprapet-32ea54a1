@@ -101,7 +101,7 @@ const MeusPedidos = () => {
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="TudoPraPet" className="h-11 w-auto" />
+            <img src={logo} alt="TudoPraPet" className="h-auto w-44" />
           </Link>
           <Button variant="ghost" size="sm" onClick={() => navigate('/perfil')} className="btn-bounce gap-2">
             <ArrowLeft className="h-4 w-4" /> Voltar

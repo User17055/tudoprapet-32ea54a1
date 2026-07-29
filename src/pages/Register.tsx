@@ -101,7 +101,7 @@ const Register = () => {
             Voltar ao catálogo
           </Link>
           <Link to="/" className="flex items-center">
-            <img src={logo} alt="TudoPraPet" className="h-9 w-auto" />
+            <img src={logo} alt="TudoPraPet" className="h-auto w-36 sm:w-44" />
           </Link>
         </div>
       </div>

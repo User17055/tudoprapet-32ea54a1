@@ -60,7 +60,7 @@ export const Header = () => {
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
-      <div className="container mx-auto grid grid-cols-3 items-center gap-2 pb-2 pt-3 md:flex md:justify-between md:gap-4">
+      <div className="container mx-auto grid grid-cols-3 items-center gap-2 pb-2 pt-3 md:flex md:gap-3">
         <div className="flex justify-self-start md:hidden">
           <Button
             variant="ghost"
@@ -75,13 +75,13 @@ export const Header = () => {
         </div>
 
         <Link to="/" className="flex shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
-          <img src={logo} alt="TudoPraPet" className="h-11 w-auto md:h-14" />
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-12 md:w-auto" />
         </Link>
 
         <form
           role="search"
           onSubmit={(e) => { e.preventDefault(); handleSearch(); }}
-          className="hidden md:flex flex-1 max-w-lg relative"
+          className="relative hidden min-w-0 flex-1 md:flex"
         >
           <input
             type="text"
@@ -89,10 +89,14 @@ export const Header = () => {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+            className="h-12 w-full rounded-full border-2 border-primary/20 bg-background px-6 pr-14 text-base shadow-sm transition focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
-            <Search className="h-4 w-4 text-muted-foreground" />
+          <button
+            type="submit"
+            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+            aria-label="Pesquisar"
+          >
+            <Search className="h-5 w-5" />
           </button>
         </form>
 
@@ -136,12 +140,14 @@ export const Header = () => {
       </div>
 
       <div className="hidden lg:block">
-        <div className="container mx-auto flex items-center gap-1 pb-3">
+        <div className="container mx-auto flex items-stretch gap-7">
           <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
           <Link
             to="/clube"
-            className={`rounded-full px-3 py-2 text-base font-semibold transition-all duration-200 ${
-              isClubeActive ? "bg-primary/10 text-primary" : "text-foreground hover:-translate-y-0.5 hover:bg-primary/5 hover:text-primary"
+            className={`flex h-14 shrink-0 items-center whitespace-nowrap border-b-[3px] px-0 text-base font-bold transition-colors ${
+              isClubeActive
+                ? "border-primary text-primary"
+                : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
             }`}
           >
             Clube

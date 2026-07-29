@@ -163,7 +163,7 @@ export default function Admin() {
       <header className="sticky top-0 z-50 flex h-20 items-center justify-between gap-4 bg-[#112f5f] px-4 text-white shadow-lg sm:px-7">
         <Link to="/" className="flex min-w-0 items-center" aria-label="TudoPraPet">
           <span className="flex h-14 shrink-0 items-center rounded-xl bg-white px-3 shadow-sm">
-            <img src={logo} alt="" className="h-10 w-auto" />
+            <img src={logo} alt="" className="h-auto w-48" />
           </span>
         </Link>
 

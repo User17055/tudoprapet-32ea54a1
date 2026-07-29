@@ -22,8 +22,9 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
 
   const openItem = (item: MegaMenuItem) => {
-    setOpenId(item.id);
-    setActiveChildId((childrenOf.get(item.id) || [])[0]?.id ?? null);
+    const children = childrenOf.get(item.id) || [];
+    setOpenId(children.length > 0 ? item.id : null);
+    setActiveChildId(children[0]?.id ?? null);
   };
 
   const close = () => {
@@ -33,94 +34,107 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
 
   if (loading) {
     return (
-      <>
+      <div className="flex flex-1 items-center gap-8">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-4 w-16 rounded-full" />
+          <Skeleton key={i} className="h-5 w-24" />
         ))}
-      </>
+      </div>
     );
   }
 
+  const openItemData = items.find((item) => item.id === openId);
+  const openChildren = openItemData ? childrenOf.get(openItemData.id) || [] : [];
+  const activeChild = openChildren.find((child) => child.id === activeChildId) || openChildren[0];
+  const activeGrandchildren = activeChild ? childrenOf.get(activeChild.id) || [] : [];
+
   return (
-    <>
+    <div
+      className="relative flex min-w-0 flex-1 items-stretch gap-7 xl:gap-10"
+      onMouseLeave={close}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) close();
+      }}
+    >
       {items.map((item) => {
         const kids = childrenOf.get(item.id) || [];
-        const active = isActive(item.slug);
-        const activeKid = kids.find((k) => k.id === activeChildId);
-        const grandkids = activeKid ? childrenOf.get(activeKid.id) || [] : [];
+        const selected = isActive(item.slug) || openId === item.id;
 
         return (
-          <div
-            key={item.id}
-            className="relative"
-            onMouseEnter={() => openItem(item)}
-            onMouseLeave={close}
-            onBlur={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) close();
-            }}
-
-            
-          >
+          <div key={item.id} className="flex items-stretch" onMouseEnter={() => openItem(item)}>
             <Link
               to={`/catalogo?categoria=${item.slug}&categoria_id=${item.id}`}
               onFocus={() => openItem(item)}
+              onClick={close}
               aria-expanded={kids.length > 0 ? openId === item.id : undefined}
-              className={`block rounded-full px-3 py-2 text-base font-semibold transition-all duration-200 ${
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-foreground hover:-translate-y-0.5 hover:bg-primary/5 hover:text-primary"
+              className={`relative flex h-14 items-center whitespace-nowrap border-b-[3px] px-0 text-base font-bold transition-colors ${
+                selected
+                  ? "border-primary text-primary"
+                  : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
               }`}
             >
               {item.label}
             </Link>
-
-            {openId === item.id && kids.length > 0 && (
-              <div className="absolute left-0 top-full z-50 pt-2">
-                <div className="flex bg-card shadow-xl overflow-hidden">
-                  <div className="w-52 py-3">
-                    {kids.map((kid) => {
-                      const kidGrandkids = childrenOf.get(kid.id) || [];
-                      return (
-                        <Link
-                          key={kid.id}
-                          to={`/catalogo?categoria=${kid.slug}&categoria_id=${kid.id}`}
-                          onMouseEnter={() => setActiveChildId(kid.id)}
-                          className={`flex items-center justify-between gap-2 px-4 py-2 text-sm transition-colors ${
-                            activeChildId === kid.id ? "text-primary font-semibold" : "hover:text-primary"
-                          }`}
-                        >
-                          {kid.name}
-                          {kidGrandkids.length > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-                        </Link>
-                      );
-                    })}
-                  </div>
-
-                  {activeKid && grandkids.length > 0 && (
-                    <div className="w-52 py-3">
-                      {grandkids.map((gk) => (
-                        <Link
-                          key={gk.id}
-                          to={`/catalogo?categoria=${gk.slug}&categoria_id=${gk.id}`}
-                          className="block px-4 py-2 text-sm transition-colors hover:text-primary"
-                        >
-                          {gk.name}
-                        </Link>
-                      ))}
-                      <Link
-                        to={`/catalogo?categoria=${activeKid.slug}&categoria_id=${activeKid.id}`}
-                        className="block px-4 py-2 text-sm font-semibold text-primary hover:underline"
-                      >
-                        Ver todos
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         );
       })}
-    </>
+
+      {openItemData && activeChild && (
+        <div className="absolute left-0 top-full z-50 w-[min(820px,calc(100vw-2rem))]">
+          <div className="grid min-h-[300px] grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)] overflow-hidden rounded-b-xl border border-t-0 border-border bg-card shadow-[0_20px_45px_-18px_rgba(15,23,42,0.35)]">
+            <div className="border-r border-border/70 p-5">
+              <div className="space-y-1">
+                {openChildren.map((child) => {
+                  const grandchildren = childrenOf.get(child.id) || [];
+                  const isSelected = activeChild.id === child.id;
+
+                  return (
+                    <Link
+                      key={child.id}
+                      to={`/catalogo?categoria=${child.slug}&categoria_id=${child.id}`}
+                      onMouseEnter={() => setActiveChildId(child.id)}
+                      onFocus={() => setActiveChildId(child.id)}
+                      onClick={close}
+                      className={`flex min-h-11 items-center justify-between gap-3 rounded-md px-4 py-2.5 text-[15px] transition-colors ${
+                        isSelected
+                          ? "bg-primary/10 font-bold text-primary"
+                          : "text-foreground hover:bg-muted hover:text-primary"
+                      }`}
+                    >
+                      <span>{child.name}</span>
+                      {grandchildren.length > 0 && <ChevronRight className="h-4 w-4 shrink-0" />}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-7">
+              <h3 className="mb-4 text-sm font-extrabold uppercase tracking-wide text-primary">
+                {activeChild.name}
+              </h3>
+              <div className="space-y-1">
+                {activeGrandchildren.map((grandchild) => (
+                  <Link
+                    key={grandchild.id}
+                    to={`/catalogo?categoria=${grandchild.slug}&categoria_id=${grandchild.id}`}
+                    onClick={close}
+                    className="block rounded-md px-2 py-2.5 text-[15px] text-foreground transition-colors hover:bg-muted hover:text-primary"
+                  >
+                    {grandchild.name}
+                  </Link>
+                ))}
+                <Link
+                  to={`/catalogo?categoria=${activeChild.slug}&categoria_id=${activeChild.id}`}
+                  onClick={close}
+                  className="mt-2 block px-2 py-2.5 text-[15px] font-extrabold text-primary hover:underline"
+                >
+                  Ver todos
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
