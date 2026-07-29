@@ -161,36 +161,10 @@ const Catalog = () => {
     setSearchParams({});
   };
 
-  const rootCats = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
   const selectedCat = useMemo(
     () => categories.find((c) => c.id === categoryId) || categories.find((c) => c.slug === categorySlug),
     [categories, categoryId, categorySlug],
   );
-  const childrenOf = useMemo(() => {
-    const map = new Map<string, Category[]>();
-    for (const c of categories) {
-      if (!c.parent_id) continue;
-      if (!map.has(c.parent_id)) map.set(c.parent_id, []);
-      map.get(c.parent_id)!.push(c);
-    }
-    return map;
-  }, [categories]);
-  const ancestorIds = useMemo(() => {
-    const ids = new Set<string>();
-    let cur = selectedCat;
-    while (cur?.parent_id) {
-      ids.add(cur.parent_id);
-      cur = categories.find((c) => c.id === cur!.parent_id);
-    }
-    return ids;
-  }, [selectedCat, categories]);
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
-  const toggleExpandCat = (id: string) =>
-    setExpandedCats((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
   const expandCategoryIds = useCallback((rootId: string): Set<string> => {
     const ids = new Set<string>([rootId]);
     let frontier = [rootId];
@@ -417,44 +391,6 @@ const Catalog = () => {
     </label>
   );
 
-  const CategoryNode = ({ cat, depth }: { cat: Category; depth: number }) => {
-    const kids = childrenOf.get(cat.id) || [];
-    const expanded = expandedCats.has(cat.id) || ancestorIds.has(cat.id);
-    return (
-      <div className={depth > 0 ? "ml-3 border-l border-border pl-3" : ""}>
-        <div className="flex items-center gap-0.5">
-          <div className="min-w-0 flex-1">
-            <CheckRow
-              checked={selectedCat?.id === cat.id}
-              onChange={() => {
-                setCategorySlug(cat.slug);
-                setCategoryId(cat.id);
-              }}
-              label={cat.name}
-            />
-          </div>
-          {kids.length > 0 && (
-            <button
-              type="button"
-              onClick={() => toggleExpandCat(cat.id)}
-              aria-label={expanded ? `Recolher ${cat.name}` : `Expandir ${cat.name}`}
-              className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
-            >
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
-            </button>
-          )}
-        </div>
-        {kids.length > 0 && expanded && (
-          <div className="mt-0.5 space-y-0.5">
-            {kids.map((kid) => (
-              <CategoryNode key={kid.id} cat={kid} depth={depth + 1} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // Sidebar with all filters
   const FiltersSidebar = (
     <aside className="space-y-6">
@@ -486,7 +422,7 @@ const Catalog = () => {
       <Accordion
         key={loading ? "loading" : "loaded"}
         type="multiple"
-        defaultValue={["preco", "categoria", "marca", ...STANDARD_ATTR_KEYS as unknown as string[], ...customKeys]}
+        defaultValue={["preco", "marca", ...STANDARD_ATTR_KEYS.filter((key) => key !== "Pet"), ...customKeys]}
         className="border-0"
       >
         <AccordionItem value="preco" className="border-b border-border last:border-0">
@@ -501,25 +437,6 @@ const Catalog = () => {
                   label={r.label}
                   count={priceCount[idx]}
                 />
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem value="categoria" className="border-b border-border last:border-0">
-          <AccordionTrigger className="font-display font-bold text-sm">Categoria</AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-0.5">
-              <CheckRow
-                checked={categorySlug === "all"}
-                onChange={() => {
-                  setCategorySlug("all");
-                  setCategoryId(null);
-                }}
-                label="Todas"
-              />
-              {rootCats.map((c) => (
-                <CategoryNode key={c.id} cat={c} depth={0} />
               ))}
             </div>
           </AccordionContent>
@@ -543,7 +460,7 @@ const Catalog = () => {
           </AccordionContent>
         </AccordionItem>
 
-        {STANDARD_ATTR_KEYS.map((key) => {
+        {STANDARD_ATTR_KEYS.filter((key) => key !== "Pet").map((key) => {
           const values = Array.from(valuesByKey.get(key) || []).sort();
           if (values.length === 0) return null;
           const selected = attrValues[key] || new Set<string>();
