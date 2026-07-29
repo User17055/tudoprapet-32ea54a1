@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { Cat, ChevronRight, Dog } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Category } from "@/hooks/useCategoryTree";
 
@@ -58,6 +58,12 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
       {items.map((item) => {
         const kids = childrenOf.get(item.id) || [];
         const selected = isActive(item.slug) || openId === item.id;
+        const categoryName = `${item.slug} ${item.label}`.toLocaleLowerCase("pt-BR");
+        const isDogCategory =
+          categoryName.includes("cachorr") ||
+          categoryName.includes("cães") ||
+          categoryName.includes("caes");
+        const isCatCategory = categoryName.includes("gato");
 
         return (
           <div key={item.id} className="flex items-stretch" onMouseEnter={() => openItem(item)}>
@@ -66,12 +72,18 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
               onFocus={() => openItem(item)}
               onClick={close}
               aria-expanded={kids.length > 0 ? openId === item.id : undefined}
-              className={`relative flex h-14 items-center whitespace-nowrap border-b-[3px] px-0 text-base font-bold transition-colors ${
+              className={`relative flex h-14 items-center gap-2.5 whitespace-nowrap px-0 text-base font-bold transition-colors duration-200 ${
                 selected
-                  ? "border-primary text-primary"
-                  : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+                  ? "text-primary"
+                  : "text-foreground hover:text-primary"
               }`}
             >
+              {isDogCategory && (
+                <Dog className="h-7 w-7 shrink-0 text-primary" strokeWidth={2.25} />
+              )}
+              {isCatCategory && (
+                <Cat className="h-7 w-7 shrink-0 text-[#d5aa00]" strokeWidth={2.25} />
+              )}
               {item.label}
             </Link>
           </div>

@@ -130,11 +130,11 @@ export const CartDrawer = () => {
 
   if (isMobile) {
     return (
-      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 bg-transparent text-primary hover:bg-transparent hover:text-primary">
+      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 bg-transparent text-[#d5aa00] hover:bg-transparent hover:text-[#b89000]">
         <Link to="/carrinho">
-          <ShoppingCart className="h-6 w-6" />
+          <ShoppingCart className="h-7 w-7" strokeWidth={2.2} />
           {totalItems > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
+            <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}
             </Badge>
           )}
@@ -147,10 +147,10 @@ export const CartDrawer = () => {
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-12 w-12 bg-transparent text-primary shadow-none hover:bg-transparent hover:text-primary">
-          <ShoppingCart className="h-7 w-7" />
+        <Button variant="ghost" size="icon" className="relative h-12 w-12 bg-transparent text-[#d5aa00] shadow-none hover:bg-transparent hover:text-[#b89000]">
+          <ShoppingCart className="h-8 w-8" strokeWidth={2.2} />
           {totalItems > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
+            <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}
             </Badge>
           )}

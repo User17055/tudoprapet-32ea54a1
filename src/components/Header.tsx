@@ -197,7 +197,7 @@ export const Header = () => {
 
   return (
     <header
-      className={`sticky top-0 z-50 bg-card shadow-sm border-b border-border transition-transform duration-300 ${
+      className={`sticky top-0 z-50 bg-card shadow-[0_4px_16px_-14px_rgba(15,23,42,0.3)] transition-transform duration-300 ${
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
@@ -248,11 +248,11 @@ export const Header = () => {
           {renderSearchPreview()}
         </form>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="ml-auto hidden items-center gap-4 md:flex">
           {user ? (
             <Link to="/perfil">
               <Button variant="ghost" size="sm" className="h-12 max-w-[190px] gap-2 bg-transparent px-2 text-foreground shadow-none hover:bg-transparent hover:text-primary">
-                <User className="h-6 w-6 shrink-0" />
+                <User className="h-7 w-7 shrink-0 text-primary" strokeWidth={2.2} />
                 <span className="max-w-[145px] truncate text-base font-semibold">
                   {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
                 </span>
@@ -265,7 +265,7 @@ export const Header = () => {
                 variant="ghost"
                 className="h-12 gap-2 bg-transparent px-2 font-display text-base font-bold text-foreground shadow-none hover:bg-transparent hover:text-primary"
               >
-                <User className="h-6 w-6" />
+                <User className="h-7 w-7 text-primary" strokeWidth={2.2} />
                 Entrar
               </Button>
             </Link>
@@ -293,10 +293,10 @@ export const Header = () => {
           <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
           <Link
             to="/clube"
-            className={`flex h-14 shrink-0 items-center whitespace-nowrap border-b-[3px] px-0 text-base font-bold transition-colors ${
+            className={`flex h-14 shrink-0 items-center whitespace-nowrap px-0 text-base font-bold transition-colors ${
               isClubeActive
-                ? "border-primary text-primary"
-                : "border-transparent text-foreground hover:border-primary/40 hover:text-primary"
+                ? "text-primary"
+                : "text-foreground hover:text-primary"
             }`}
           >
             Clube
