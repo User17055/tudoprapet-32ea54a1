@@ -65,7 +65,7 @@ export const Header = () => {
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full text-primary hover:bg-primary/10"
+            className="text-primary hover:bg-transparent hover:text-primary"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileOpen}
@@ -89,11 +89,11 @@ export const Header = () => {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-12 w-full rounded-full border-2 border-primary/20 bg-background px-6 pr-14 text-base shadow-sm transition focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="h-14 w-full rounded-md border-0 bg-muted/70 px-6 pr-14 text-base shadow-none transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
             <Search className="h-5 w-5" />
@@ -103,7 +103,7 @@ export const Header = () => {
         <div className="hidden items-center gap-2 md:flex">
           {user ? (
             <Link to="/perfil">
-              <Button variant="outline" size="sm" className="h-10 max-w-[180px] gap-2 rounded-full border-primary/15 bg-primary/5 px-4 text-primary hover:bg-primary/10">
+              <Button variant="ghost" size="sm" className="h-12 max-w-[180px] gap-2 bg-transparent px-2 text-foreground shadow-none hover:bg-transparent hover:text-primary">
                 <User className="h-5 w-5" />
                 <span className="text-sm font-medium max-w-[140px] truncate">
                   {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
@@ -114,7 +114,8 @@ export const Header = () => {
             <Link to="/login">
               <Button
                 size="sm"
-                className="h-10 rounded-full font-display font-bold px-5 shadow-[0_8px_18px_-10px_hsl(var(--primary))] btn-bounce bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                variant="ghost"
+                className="h-12 gap-2 bg-transparent px-2 font-display font-bold text-foreground shadow-none hover:bg-transparent hover:text-primary"
               >
                 <User className="h-4 w-4" />
                 Entrar
@@ -125,7 +126,7 @@ export const Header = () => {
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full text-primary hover:bg-primary/10 lg:hidden"
+            className="bg-transparent text-primary hover:bg-transparent hover:text-primary lg:hidden"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileOpen}
@@ -167,10 +168,14 @@ export const Header = () => {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="w-full rounded-full border border-input bg-background px-5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+            className="h-14 w-full rounded-md border-0 bg-muted/70 px-5 pr-14 text-base transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
-          <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:text-primary transition-colors">
-            <Search className="h-4 w-4 text-muted-foreground" />
+          <button
+            type="submit"
+            className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
+            aria-label="Pesquisar"
+          >
+            <Search className="h-5 w-5" />
           </button>
         </form>
       </div>
