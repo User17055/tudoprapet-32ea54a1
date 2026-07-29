@@ -303,7 +303,7 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-12 w-full rounded-md border border-[#dfe3ea] bg-white px-5 pr-12 text-sm shadow-none transition placeholder:text-muted-foreground focus:border-[#c8ced8] focus:outline-none focus:ring-2 focus:ring-black/5"
+            className="h-12 w-full rounded-md border border-[#59616c] bg-white px-5 pr-12 text-sm shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
@@ -389,7 +389,7 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-md border border-[#dfe3ea] bg-white px-5 pr-14 text-base transition placeholder:text-muted-foreground focus:border-[#c8ced8] focus:outline-none focus:ring-2 focus:ring-black/5"
+            className="h-14 w-full rounded-md border border-[#59616c] bg-white px-5 pr-14 text-base transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
