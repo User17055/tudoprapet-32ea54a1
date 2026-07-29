@@ -362,65 +362,6 @@ export type Database = {
           },
         ]
       }
-      product_variation_groups: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      product_variation_items: {
-        Row: {
-          created_at: string
-          group_id: string
-          id: string
-          label: string
-          shopify_product_handle: string
-          shopify_product_id: string
-          shopify_product_title: string
-          sort_order: number
-        }
-        Insert: {
-          created_at?: string
-          group_id: string
-          id?: string
-          label: string
-          shopify_product_handle: string
-          shopify_product_id: string
-          shopify_product_title: string
-          sort_order?: number
-        }
-        Update: {
-          created_at?: string
-          group_id?: string
-          id?: string
-          label?: string
-          shopify_product_handle?: string
-          shopify_product_id?: string
-          shopify_product_title?: string
-          sort_order?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_variation_items_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "product_variation_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           acquisition_source: string | null
