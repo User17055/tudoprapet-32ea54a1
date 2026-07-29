@@ -168,14 +168,14 @@ export const Header = () => {
             Buscando produtos...
           </div>
         ) : searchResults.length > 0 ? (
-          <div className="max-h-[min(620px,72vh)] overflow-y-auto">
-            <div className="px-2 py-2">
+          <div>
+            <div className="px-2 py-1.5">
               {suggestions.map((suggestion) => (
                 <Link
                   key={suggestion}
                   to={`/catalogo?busca=${encodeURIComponent(suggestion)}`}
                   onClick={openProduct}
-                  className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <Search className="h-4 w-4 shrink-0" />
                   <span>{suggestion}</span>
@@ -183,12 +183,12 @@ export const Header = () => {
               ))}
             </div>
 
-            <div className="px-5 py-4 text-base font-extrabold text-foreground">
+            <div className="px-4 py-2.5 text-sm font-extrabold text-foreground">
               Produtos sugeridos
             </div>
 
-            <div className="grid grid-cols-1 gap-4 bg-muted/25 p-4 xl:grid-cols-2">
-              {searchResults.slice(0, 4).map((product) => {
+            <div className="grid grid-cols-1 gap-2 bg-muted/25 p-3 xl:grid-cols-2">
+              {searchResults.map((product) => {
                 const image = product.node.images.edges[0]?.node;
                 const variant =
                   product.node.variants.edges.find((item) => item.node.availableForSale)?.node ||
@@ -203,9 +203,9 @@ export const Header = () => {
                     key={product.node.id}
                     to={`/product/${product.node.handle}`}
                     onClick={openProduct}
-                    className="flex min-h-[170px] min-w-0 items-center gap-4 rounded-xl border border-border bg-white p-4 transition-shadow hover:shadow-md"
+                    className="flex min-h-[118px] min-w-0 items-center gap-3 rounded-lg border border-border bg-white p-3 transition-shadow hover:shadow-sm"
                   >
-                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden bg-white">
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden bg-white">
                       {image ? (
                         <img
                           src={image.url}
@@ -218,15 +218,15 @@ export const Header = () => {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground" title={product.node.title}>
+                      <p className="line-clamp-2 text-xs font-medium leading-snug text-foreground" title={product.node.title}>
                         {product.node.title}
                       </p>
-                      <p className="mt-2 text-lg font-extrabold text-foreground">
+                      <p className="mt-1.5 text-base font-extrabold text-foreground">
                         {formatPrice(price)}
                       </p>
                       {hasSubscriberPrice && (
-                        <div className="mt-4 text-primary">
-                          <p className="text-lg font-extrabold">
+                        <div className="mt-2 text-primary">
+                          <p className="text-base font-extrabold">
                             {formatPrice(String(subscriberPrice))}
                           </p>
                           <p className="text-xs font-medium">para assinantes</p>
@@ -238,13 +238,6 @@ export const Header = () => {
               })}
             </div>
 
-            <Link
-              to={`/catalogo?busca=${encodeURIComponent(search.trim())}`}
-              onClick={openProduct}
-              className="flex items-center justify-center border-t border-border px-4 py-3 text-sm font-bold text-primary transition-colors hover:bg-muted"
-            >
-              Ver todos os resultados
-            </Link>
           </div>
         ) : (
           <div className="px-5 py-8 text-center">
@@ -298,43 +291,33 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-12 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-12 text-sm shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-14 w-full rounded-md border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
-            className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
+            className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center bg-transparent text-primary transition-colors hover:text-primary/75"
             aria-label="Pesquisar"
           >
-            <Search className="h-5 w-5" />
+            <Search className="h-6 w-6" strokeWidth={2.5} />
           </button>
           {renderSearchPreview()}
         </form>
 
         <div className="relative z-20 ml-auto hidden items-center gap-2 md:flex lg:gap-3">
           {user ? (
-            <Link to="/perfil">
-              <Button variant="ghost" size="sm" className="h-14 max-w-[205px] gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
-                <User className="h-9 w-9 shrink-0" strokeWidth={2} />
-                <span className="hidden max-w-[155px] flex-col items-start truncate text-sm font-bold leading-tight xl:flex">
-                  <span className="max-w-full truncate">
-                    {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
-                  </span>
-                  <span className="font-semibold">Minha conta</span>
-                </span>
+            <Link to="/perfil" aria-label="Abrir minha conta">
+              <Button variant="ghost" size="icon" className="h-14 w-14 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
+                <User className="h-10 w-10" strokeWidth={2.5} />
               </Button>
             </Link>
           ) : (
-            <Link to="/login">
+            <Link to="/login" aria-label="Entrar ou criar conta">
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
-                className="h-14 gap-2 bg-transparent px-1 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
+                className="h-14 w-14 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
               >
-                <User className="h-9 w-9" strokeWidth={2} />
-                <span className="hidden flex-col items-start text-sm font-bold leading-tight xl:flex">
-                  <span>Entrar</span>
-                  <span className="font-semibold">Cadastre-se</span>
-                </span>
+                <User className="h-10 w-10" strokeWidth={2.5} />
               </Button>
             </Link>
           )}
