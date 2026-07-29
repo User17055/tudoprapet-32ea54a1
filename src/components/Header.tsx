@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Heart, Loader2, Menu, MessageCircle, Package, Phone, Search, User, X } from "lucide-react";
+import { Loader2, Menu, MessageCircle, Package, Search, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
@@ -316,22 +316,6 @@ export const Header = () => {
         </form>
 
         <div className="relative z-20 ml-auto hidden items-center gap-2 md:flex lg:gap-3">
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Falar pelo WhatsApp"
-            className="hidden h-12 w-10 items-center justify-center text-[#1c2333] transition-colors hover:text-primary lg:flex"
-          >
-            <Phone className="h-7 w-7" strokeWidth={2.1} />
-          </a>
-          <Link
-            to="/catalogo"
-            aria-label="Ver produtos favoritos"
-            className="hidden h-12 w-10 items-center justify-center text-[#1c2333] transition-colors hover:text-primary lg:flex"
-          >
-            <Heart className="h-8 w-8" strokeWidth={2} />
-          </Link>
           <CartDrawer />
           {user ? (
             <Link to="/perfil">
