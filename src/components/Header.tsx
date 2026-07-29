@@ -188,7 +188,7 @@ export const Header = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-2 bg-muted/25 p-3 xl:grid-cols-2">
-              {searchResults.map((product) => {
+              {searchResults.slice(0, 4).map((product) => {
                 const image = product.node.images.edges[0]?.node;
                 const variant =
                   product.node.variants.edges.find((item) => item.node.availableForSale)?.node ||
@@ -271,7 +271,7 @@ export const Header = () => {
         </div>
 
         <Link to="/" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
-          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-[52px] md:w-auto" />
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-11 md:w-auto" />
         </Link>
 
         <form
@@ -303,11 +303,11 @@ export const Header = () => {
           {renderSearchPreview()}
         </form>
 
-        <div className="relative z-20 ml-auto hidden items-center gap-2 md:flex lg:gap-3">
+        <div className="relative z-20 ml-auto hidden items-center gap-0 md:flex">
           {user ? (
             <Link to="/perfil" aria-label="Abrir minha conta">
-              <Button variant="ghost" size="icon" className="h-14 w-14 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
-                <User className="h-10 w-10" strokeWidth={2.5} />
+              <Button variant="ghost" size="icon" className="h-14 w-12 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
+                <User className="!h-10 !w-10" strokeWidth={2.5} />
               </Button>
             </Link>
           ) : (
@@ -315,9 +315,9 @@ export const Header = () => {
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-14 w-14 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
+                className="h-14 w-12 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
               >
-                <User className="h-10 w-10" strokeWidth={2.5} />
+                <User className="!h-10 !w-10" strokeWidth={2.5} />
               </Button>
             </Link>
           )}
