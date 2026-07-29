@@ -306,8 +306,8 @@ export const Header = () => {
         <div className="relative z-20 ml-auto hidden items-center gap-0 md:flex">
           {user ? (
             <Link to="/perfil" aria-label="Abrir minha conta">
-              <Button variant="ghost" size="icon" className="h-14 w-12 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
-                <User className="!h-10 !w-10" strokeWidth={2.5} />
+              <Button variant="ghost" size="icon" className="h-12 w-11 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
+                <User className="!h-8 !w-8" strokeWidth={2.4} />
               </Button>
             </Link>
           ) : (
@@ -315,9 +315,9 @@ export const Header = () => {
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-14 w-12 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
+                className="h-12 w-11 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
               >
-                <User className="!h-10 !w-10" strokeWidth={2.5} />
+                <User className="!h-8 !w-8" strokeWidth={2.4} />
               </Button>
             </Link>
           )}
