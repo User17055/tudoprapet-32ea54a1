@@ -271,7 +271,7 @@ export const Header = () => {
         </div>
 
         <Link to="/" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
-          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-11 md:w-auto" />
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-10 md:w-auto" />
         </Link>
 
         <form
@@ -291,7 +291,7 @@ export const Header = () => {
             }}
             placeholder="Buscar produtos..."
             aria-label="Buscar produtos"
-            className="h-14 w-full rounded-xl border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-[52px] w-full rounded-xl border border-[#d1d5db] bg-white px-5 pr-14 text-base shadow-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
           />
           <button
             type="submit"
