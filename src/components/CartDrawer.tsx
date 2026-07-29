@@ -132,7 +132,7 @@ export const CartDrawer = () => {
     return (
       <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 bg-transparent text-[#e0b400] hover:bg-transparent hover:text-[#c49c00]">
         <Link to="/carrinho">
-          <ShoppingCart className="!h-8 !w-8" strokeWidth={2.3} />
+          <ShoppingCart className="!h-7 !w-7" strokeWidth={2.2} />
           {totalItems > 0 && (
             <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}
@@ -147,8 +147,8 @@ export const CartDrawer = () => {
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-12 w-12 bg-transparent text-[#e0b400] shadow-none hover:bg-transparent hover:text-[#c49c00]">
-          <ShoppingCart className="!h-9 !w-9" strokeWidth={2.3} />
+        <Button variant="ghost" size="icon" className="relative h-10 w-10 bg-transparent text-[#e0b400] shadow-none hover:bg-transparent hover:text-[#c49c00]">
+          <ShoppingCart className="!h-7 !w-7" strokeWidth={2.2} />
           {totalItems > 0 && (
             <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}

@@ -78,8 +78,6 @@ export const Header = () => {
     if (location.pathname !== "/catalogo") return false;
     return new URLSearchParams(location.search).get("categoria") === slug;
   };
-  const isClubeActive = location.pathname === "/clube";
-
   useEffect(() => {
     let lastY = window.scrollY;
     const onScroll = () => {
@@ -306,8 +304,8 @@ export const Header = () => {
         <div className="relative z-20 ml-auto hidden items-center gap-0 md:flex">
           {user ? (
             <Link to="/perfil" aria-label="Abrir minha conta">
-              <Button variant="ghost" size="icon" className="h-12 w-11 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
-                <User className="!h-8 !w-8" strokeWidth={2.4} />
+              <Button variant="ghost" size="icon" className="h-10 w-10 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80">
+                <User className="!h-6 !w-6" strokeWidth={2.3} />
               </Button>
             </Link>
           ) : (
@@ -315,9 +313,9 @@ export const Header = () => {
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-12 w-11 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
+                className="h-10 w-10 bg-transparent p-0 text-primary shadow-none hover:bg-transparent hover:text-primary/80"
               >
-                <User className="!h-8 !w-8" strokeWidth={2.4} />
+                <User className="!h-6 !w-6" strokeWidth={2.3} />
               </Button>
             </Link>
           )}
@@ -342,16 +340,6 @@ export const Header = () => {
       <div className="hidden lg:block">
         <div className="container mx-auto flex items-stretch gap-7 lg:pl-16 xl:pl-24">
           <MegaMenu items={navItems} childrenOf={childrenOf} loading={categoriesLoading} isActive={isCategoryActive} />
-          <Link
-            to="/clube"
-            className={`flex h-14 shrink-0 items-center whitespace-nowrap px-0 text-base font-bold transition-colors ${
-              isClubeActive
-                ? "text-primary"
-                : "text-foreground hover:text-primary"
-            }`}
-          >
-            Clube
-          </Link>
         </div>
       </div>
 
@@ -434,15 +422,6 @@ export const Header = () => {
               })}
             </Accordion>
           )}
-
-          <Link
-            to="/clube"
-            className={`block border-b border-border py-3 text-sm font-medium transition-colors ${
-              isClubeActive ? "text-primary font-semibold" : "text-foreground hover:text-primary"
-            }`}
-          >
-            Clube
-          </Link>
 
           <div className="mt-2 pt-3 flex flex-col gap-3">
             {user ? (
