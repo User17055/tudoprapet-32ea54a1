@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
+import { cachedStorefrontApiRequest, fetchShopifyProductByHandle, getCachedShopifyProductByHandle, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -32,8 +32,10 @@ import { ProductImage } from "@/components/ProductImage";
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
-  const [product, setProduct] = useState<ShopifyProduct | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [product, setProduct] = useState<ShopifyProduct | null>(
+    () => getCachedShopifyProductByHandle(handle),
+  );
+  const [loading, setLoading] = useState(() => !getCachedShopifyProductByHandle(handle));
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -78,29 +80,47 @@ const ProductDetail = () => {
   };
 
   useEffect(() => {
+    let active = true;
     const fetchProduct = async () => {
-      setLoading(true);
       setSelectedVariantIdx(0);
       setSelectedImageIdx(0);
+      const cachedProduct = getCachedShopifyProductByHandle(handle);
+      if (cachedProduct) {
+        if (active) {
+          setProduct(cachedProduct);
+          setLoading(false);
+        }
+        if (handle) {
+          fetchShopifyProductByHandle(handle, false)
+            .then((detailedProduct) => {
+              if (active && detailedProduct) setProduct(detailedProduct);
+            })
+            .catch(console.error);
+        }
+        return;
+      }
+      setLoading(true);
       try {
-        const data = await storefrontApiRequest(PRODUCT_BY_HANDLE_QUERY, { handle });
-        const p = data?.data?.productByHandle;
-        if (p) setProduct({ node: p });
+        const nextProduct = handle ? await fetchShopifyProductByHandle(handle) : null;
+        if (active) setProduct(nextProduct);
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     fetchProduct();
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    return () => {
+      active = false;
+    };
   }, [handle]);
 
   useEffect(() => {
     const fetchRecommended = async () => {
       if (!product?.node?.id) return;
       try {
-        const data = await storefrontApiRequest(PRODUCT_RECOMMENDATIONS_QUERY, {
+        const data = await cachedStorefrontApiRequest(PRODUCT_RECOMMENDATIONS_QUERY, {
           productId: product.node.id,
         });
         const recs = data?.data?.productRecommendations || [];
@@ -110,7 +130,7 @@ const ProductDetail = () => {
 
         // Fallback: if Shopify didn't return recommendations, show recent products
         if (mapped.length === 0) {
-          const fb = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
+          const fb = await cachedStorefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
           const edges: ShopifyProduct[] = fb?.data?.products?.edges || [];
           mapped = edges.filter((p) => p.node.handle !== handle);
         }

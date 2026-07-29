@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShopifyProduct, storefrontApiRequest, PRODUCTS_QUERY } from "@/lib/shopify";
-import { fetchAllShopifyProducts } from "@/lib/shopify";
+import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { Loader2, PackageOpen } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";

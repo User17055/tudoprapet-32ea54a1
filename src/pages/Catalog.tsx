@@ -1,9 +1,9 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
-import { ShopifyProduct, storefrontApiRequest, BEST_SELLING_PRODUCTS_QUERY, fetchAllShopifyProducts } from "@/lib/shopify";
+import { ShopifyProduct, cachedStorefrontApiRequest, BEST_SELLING_PRODUCTS_QUERY, fetchAllShopifyProducts } from "@/lib/shopify";
 import { ChevronDown, ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,7 @@ interface AttrValue { id: string; attr_key: string; attr_value: string; sort_ord
 
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSearch = searchParams.get("busca") || "";
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [bestSellingProducts, setBestSellingProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,10 +86,9 @@ const Catalog = () => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const queryParam = searchParams.get("busca") || undefined;
         const [shop, bestSelling, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
-          fetchAllShopifyProducts(queryParam || undefined),
-          storefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
+          fetchAllShopifyProducts(requestedSearch || undefined),
+          cachedStorefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
           supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
@@ -101,9 +101,9 @@ const Catalog = () => {
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
         setPresetValues((pv.data || []) as AttrValue[]);
-        setProductCats((pc.data || []) as any);
-        setProductBrands((pcontent.data || []) as any);
-        setProductAttrs((pa.data || []) as any);
+        setProductCats(pc.data || []);
+        setProductBrands(pcontent.data || []);
+        setProductAttrs(pa.data || []);
       } catch (error) {
         console.error("Failed to fetch products:", error);
       } finally {
@@ -111,7 +111,7 @@ const Catalog = () => {
       }
     };
     fetchAll();
-  }, [searchParams]);
+  }, [requestedSearch]);
 
   useEffect(() => {
     const category = searchParams.get("categoria");
@@ -191,7 +191,7 @@ const Catalog = () => {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  const expandCategoryIds = (rootId: string): Set<string> => {
+  const expandCategoryIds = useCallback((rootId: string): Set<string> => {
     const ids = new Set<string>([rootId]);
     let frontier = [rootId];
     while (frontier.length) {
@@ -200,7 +200,7 @@ const Catalog = () => {
       frontier = next;
     }
     return ids;
-  };
+  }, [categories]);
 
   // Counts per filter — based on products that pass all OTHER filters
   // For simplicity & performance, counts are based on the unfiltered product set.
@@ -322,7 +322,7 @@ const Catalog = () => {
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [audienceVisibleProducts, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands]);
+  }, [audienceVisibleProducts, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =

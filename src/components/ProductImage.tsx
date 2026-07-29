@@ -116,27 +116,14 @@ export function ProductImage({
   targetFill = 0.74,
   className,
   style,
+  onLoad,
   ...props
 }: ProductImageProps) {
   const cacheKey = src ? `${src}|${targetFill}` : "";
   const [scale, setScale] = useState(() => (cacheKey ? scaleCache.get(cacheKey) ?? 1 : 1));
 
   useEffect(() => {
-    let active = true;
-    if (!src) {
-      setScale(1);
-      return () => {
-        active = false;
-      };
-    }
-
-    setScale(scaleCache.get(cacheKey) ?? 1);
-    analyzeVisibleProductScale(src, targetFill).then((nextScale) => {
-      if (active) setScale(nextScale);
-    });
-    return () => {
-      active = false;
-    };
+    setScale(cacheKey ? scaleCache.get(cacheKey) ?? 1 : 1);
   }, [src, targetFill, cacheKey]);
 
   return (
@@ -145,6 +132,12 @@ export function ProductImage({
       src={src}
       className={className}
       style={{ ...style, transform: `scale(${scale})` }}
+      decoding="async"
+      onLoad={(event) => {
+        onLoad?.(event);
+        if (!src || scaleCache.has(cacheKey)) return;
+        analyzeVisibleProductScale(src, targetFill).then(setScale);
+      }}
     />
   );
 }
