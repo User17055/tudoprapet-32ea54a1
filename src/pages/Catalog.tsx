@@ -23,6 +23,7 @@ import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
+import { fuzzySearch } from "@/lib/fuzzySearch";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -87,7 +88,7 @@ const Catalog = () => {
       setLoading(true);
       try {
         const [shop, bestSelling, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
-          fetchAllShopifyProducts(requestedSearch || undefined),
+          fetchAllShopifyProducts(),
           cachedStorefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
