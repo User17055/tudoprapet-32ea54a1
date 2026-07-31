@@ -23,6 +23,7 @@ import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
+import { fuzzySearch } from "@/lib/fuzzySearch";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -87,7 +88,7 @@ const Catalog = () => {
       setLoading(true);
       try {
         const [shop, bestSelling, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
-          fetchAllShopifyProducts(requestedSearch || undefined),
+          fetchAllShopifyProducts(),
           cachedStorefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
@@ -111,7 +112,7 @@ const Catalog = () => {
       }
     };
     fetchAll();
-  }, [requestedSearch]);
+  }, []);
 
   useEffect(() => {
     const category = searchParams.get("categoria");
@@ -256,6 +257,18 @@ const Catalog = () => {
   const filteredProducts = useMemo(() => {
     let result = [...audienceVisibleProducts];
 
+    // busca tolerante a erros de digitacao
+    const term = requestedSearch.trim();
+    if (term) {
+      result = fuzzySearch(term, result, (p) => [
+        { value: p.node.title, weight: 1 },
+        { value: p.node.vendor, weight: 0.9 },
+        { value: p.node.productType, weight: 0.85 },
+        { value: (p.node.tags || []).join(" "), weight: 0.8 },
+        { value: p.node.description?.slice(0, 300), weight: 0.6 },
+      ]);
+    }
+
 
     if (categorySlug !== "all") {
       if (selectedCat) {
@@ -296,7 +309,7 @@ const Catalog = () => {
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [audienceVisibleProducts, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds]);
+  }, [audienceVisibleProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =

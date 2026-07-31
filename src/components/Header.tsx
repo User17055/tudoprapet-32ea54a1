@@ -9,7 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCategoryTree } from "@/hooks/useCategoryTree";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { searchShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { searchShopifyProducts, fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { fuzzySearch } from "@/lib/fuzzySearch";
 import { isAudienceVisibleTo, useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
@@ -105,7 +106,17 @@ export const Header = () => {
 
     const timer = window.setTimeout(async () => {
       try {
-        const products = await searchShopifyProducts(term, 10);
+        let products = await searchShopifyProducts(term, 10);
+        if (products.length === 0) {
+          // fallback tolerante a erros de digitacao
+          const all = await fetchAllShopifyProducts();
+          products = fuzzySearch(term, all, (p) => [
+            { value: p.node.title, weight: 1 },
+            { value: p.node.vendor, weight: 0.9 },
+            { value: p.node.productType, weight: 0.85 },
+            { value: (p.node.tags || []).join(" "), weight: 0.8 },
+          ]).slice(0, 10);
+        }
         if (cancelled) return;
 
         const availableProducts = products
