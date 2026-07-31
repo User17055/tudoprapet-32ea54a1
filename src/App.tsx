@@ -9,7 +9,7 @@ import { useAccountCartSync } from "@/hooks/useAccountCartSync";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import Index from "./pages/Index.tsx";
-import { AcquisitionSourceGate } from "@/components/AcquisitionSourceGate";
+
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
 const ProductDetail = lazy(() => import("./pages/ProductDetail.tsx"));
@@ -58,7 +58,7 @@ const AppContent = () => {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
-      <AcquisitionSourceGate />
+      
     </BrowserRouter>
   );
 };
