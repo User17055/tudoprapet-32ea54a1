@@ -133,7 +133,7 @@ const Profile = () => {
                 <PiggyBank className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-white/50">Economia no Clube</p>
+                <p className="text-xs text-white/50">Economia total</p>
                 <p className="truncate font-display text-base font-900 text-white">
                   {ordersLoading ? "..." : formatCurrency(totalSavings)}
                 </p>
@@ -157,7 +157,7 @@ const Profile = () => {
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-white/50">Seu status</p>
                 <p className="truncate font-display text-base font-900 text-white">
-                  {isSubscribed ? "Clube" : "Cliente"}
+                  {isSubscribed ? "Assinante" : "Cliente"}
                 </p>
               </div>
             </div>
@@ -183,12 +183,6 @@ const Profile = () => {
               icon: ArrowRight,
               title: "Comprar de novo",
               text: "Voltar ao catálogo",
-            },
-            {
-              to: "/clube",
-              icon: Crown,
-              title: "Clube TudoPraPet",
-              text: isSubscribed ? "Ver benefícios" : "Assinar e economizar",
             },
           ].map((item) => (
             <Link
