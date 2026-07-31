@@ -71,9 +71,9 @@ const Login = () => {
               Sua conta TudoPraPet, simples de acompanhar.
             </h1>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-muted-foreground">
-              Entre para ver pedidos, continuar comprando mais rápido e acessar
-              benefícios do Clube quando estiver disponível para sua conta.
+              Entre para ver pedidos e continuar comprando mais rápido.
             </p>
+
 
             <div className="mt-8 grid gap-3">
               {[
