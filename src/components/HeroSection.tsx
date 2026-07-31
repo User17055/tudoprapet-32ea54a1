@@ -40,13 +40,6 @@ export const HeroSection = () => {
                 <ShoppingBag className="h-5 w-5" />
                 Entrar em campo
               </Link>
-              <Link
-                to="/clube"
-                className="inline-flex items-center justify-center gap-2 bg-transparent border-2 border-primary text-primary font-bold px-7 py-3.5 rounded-full hover:bg-primary hover:text-primary-foreground transition-all"
-              >
-                <Crown className="h-5 w-5" />
-                Vire assinante
-              </Link>
             </div>
 
           </div>

@@ -125,8 +125,8 @@ const Register = () => {
               <li className="flex gap-3 items-start">
                 <div className="bg-primary/10 text-primary p-2 rounded-xl"><Crown className="h-5 w-5" /></div>
                 <div>
-                  <p className="font-bold text-foreground">Acesso ao Clube</p>
-                  <p className="text-sm text-muted-foreground">Preços de assinante em produtos selecionados.</p>
+                  <p className="font-bold text-foreground">Ofertas exclusivas</p>
+                  <p className="text-sm text-muted-foreground">Preços especiais em produtos selecionados.</p>
                 </div>
               </li>
               <li className="flex gap-3 items-start">

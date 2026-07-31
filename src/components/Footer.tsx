@@ -27,7 +27,7 @@ const footerColumns = [
   {
     title: "Pra voce",
     links: [
-      { label: "Clube", to: "/clube" },
+      
       { label: "Promocoes", to: "/catalogo" },
       { label: "Catalogo", to: "/catalogo" },
       { label: "Recompra", to: "/meus-pedidos" },

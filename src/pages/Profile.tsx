@@ -117,18 +117,11 @@ const Profile = () => {
               </div>
 
               <div className="flex gap-2 sm:flex-col sm:items-end">
-                {isSubscribed ? (
+                {isSubscribed && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 px-3 py-1.5 text-xs font-bold text-white">
                     <Crown className="h-4 w-4" />
-                    Clube ativo
+                    Assinante
                   </span>
-                ) : (
-                  <Button asChild className="rounded-full gap-2 btn-bounce bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                    <Link to="/clube">
-                      <Sparkles className="h-4 w-4" />
-                      Entrar no Clube
-                    </Link>
-                  </Button>
                 )}
               </div>
             </div>

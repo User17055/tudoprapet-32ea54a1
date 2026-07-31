@@ -20,7 +20,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
 const Profile = lazy(() => import("./pages/Profile.tsx"));
 const Catalog = lazy(() => import("./pages/Catalog.tsx"));
 const Cart = lazy(() => import("./pages/Cart.tsx"));
-const Clube = lazy(() => import("./pages/Clube.tsx"));
+
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const MeusPedidos = lazy(() => import("./pages/MeusPedidos.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -52,7 +52,7 @@ const AppContent = () => {
           <Route path="/esqueci-senha" element={<ForgotPassword />} />
           <Route path="/redefinir-senha" element={<ResetPassword />} />
           <Route path="/perfil" element={<Profile />} />
-          <Route path="/clube" element={<Clube />} />
+          
           <Route path="/admin" element={<Admin />} />
           <Route path="/meus-pedidos" element={<MeusPedidos />} />
           <Route path="*" element={<NotFound />} />
