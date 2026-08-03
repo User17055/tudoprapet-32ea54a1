@@ -1,7 +1,12 @@
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders } from "../_shared/cors.ts";
+import { requireAdmin } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Dispara WhatsApp para telefone arbitrário — restrito a admin.
+  const authResult = await requireAdmin(req);
+  if (!authResult.ok) return authResult.response;
 
   const baseUrl = Deno.env.get("EXTERNAL_API_BASE_URL");
   const token = Deno.env.get("EXTERNAL_API_TOKEN");

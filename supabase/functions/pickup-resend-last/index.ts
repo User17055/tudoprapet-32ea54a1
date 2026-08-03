@@ -1,17 +1,13 @@
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-
-const STORE_NAME = "TudoPraPet";
-const PICKUP_HOURS = "segunda a sexta, das 9h às 18h, e aos sábados até 12h";
-
-function normalizePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-  return digits.startsWith("55") ? digits : `55${digits}`;
-}
+import { corsHeaders } from "../_shared/cors.ts";
+import { normalizePhone, PICKUP_HOURS, STORE_NAME } from "../_shared/pickup.ts";
+import { requireAdmin } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Reenvia WhatsApp para um cliente real — mesmo gate das demais pickup-*.
+  const authResult = await requireAdmin(req);
+  if (!authResult.ok) return authResult.response;
 
   try {
     const shopDomain = Deno.env.get("SHOPIFY_SHOP_DOMAIN") || "petjoy-deals-hb8r9.myshopify.com";
