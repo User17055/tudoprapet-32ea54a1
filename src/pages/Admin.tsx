@@ -302,6 +302,9 @@ function PricesTab() {
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
   const [price, setPrice] = useState("");
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState("");
+  const [updatingPrice, setUpdatingPrice] = useState(false);
 
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -403,7 +406,49 @@ function PricesTab() {
     const { error } = await supabase.from("subscriber_prices").delete().eq("id", id);
     if (error) return toast.error("Erro ao excluir");
     toast.success("Removido");
+    if (editingPriceId === id) {
+      setEditingPriceId(null);
+      setEditingPrice("");
+    }
     setPrices(prices.filter(p => p.id !== id));
+  };
+
+  const startEditingPrice = (subscriberPrice: SubPrice) => {
+    setEditingPriceId(subscriberPrice.id);
+    setEditingPrice(String(subscriberPrice.subscriber_price));
+  };
+
+  const cancelEditingPrice = () => {
+    setEditingPriceId(null);
+    setEditingPrice("");
+  };
+
+  const handleUpdatePrice = async (subscriberPrice: SubPrice) => {
+    if (updatingPrice) return;
+
+    const numeric = parseFloat(editingPrice.replace(",", "."));
+    if (isNaN(numeric) || numeric <= 0) {
+      toast.error("Preço inválido");
+      return;
+    }
+
+    setUpdatingPrice(true);
+    const { error } = await supabase
+      .from("subscriber_prices")
+      .update({ subscriber_price: numeric })
+      .eq("id", subscriberPrice.id);
+    setUpdatingPrice(false);
+
+    if (error) {
+      toast.error("Erro ao atualizar: " + error.message);
+      return;
+    }
+
+    setPrices(current => current.map(item => (
+      item.id === subscriberPrice.id ? { ...item, subscriber_price: numeric } : item
+    )));
+    cancelEditingPrice();
+    toast.success("Preço atualizado!");
   };
 
   const productById = useMemo(() => {
@@ -415,7 +460,11 @@ function PricesTab() {
   const variantInfo = (sp: SubPrice) => {
     const prod = productById.get(sp.shopify_product_id);
     const variant = prod?.variants.edges.find(v => v.node.id === sp.shopify_variant_id);
-    return { productTitle: prod?.title || "Produto removido", variantTitle: variant?.node.title || sp.shopify_variant_id };
+    return {
+      productTitle: prod?.title || "Produto removido",
+      productImage: prod?.images.edges[0]?.node,
+      variantTitle: variant?.node.title || sp.shopify_variant_id,
+    };
   };
 
   const previewImage = selectedProduct?.node.images.edges[0]?.node;
@@ -536,7 +585,7 @@ function PricesTab() {
                   <TableHead>Produto</TableHead>
                   <TableHead>Variante</TableHead>
                   <TableHead className="text-right">Preço assinante</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-24"><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -544,13 +593,98 @@ function PricesTab() {
                   const info = variantInfo(sp);
                   return (
                     <TableRow key={sp.id}>
-                      <TableCell className="font-medium">{info.productTitle}</TableCell>
-                      <TableCell>{info.variantTitle}</TableCell>
-                      <TableCell className="text-right font-bold text-sky-600">R$ {sp.subscriber_price.toFixed(2)}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(sp.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex min-w-[220px] items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                            {info.productImage ? (
+                              <img
+                                src={info.productImage.url}
+                                alt={info.productImage.altText || info.productTitle}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Package className="h-5 w-5 text-muted-foreground" />
+                            )}
+                          </div>
+                          <span className="font-medium line-clamp-2">{info.productTitle}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{info.variantTitle}</TableCell>
+                      <TableCell className="text-right">
+                        {editingPriceId === sp.id ? (
+                          <div className="ml-auto flex w-36 items-center gap-2">
+                            <span className="text-sm text-muted-foreground">R$</span>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={editingPrice}
+                              onChange={(event) => setEditingPrice(event.target.value)}
+                              disabled={updatingPrice}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") handleUpdatePrice(sp);
+                                if (event.key === "Escape") cancelEditingPrice();
+                              }}
+                              className="h-8 text-right font-bold"
+                              autoFocus
+                              aria-label={`Novo preço de ${info.productTitle}`}
+                            />
+                          </div>
+                        ) : (
+                          <span className="font-bold text-sky-600 tabular-nums">
+                            R$ {Number(sp.subscriber_price).toFixed(2)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end">
+                          {editingPriceId === sp.id ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
+                                onClick={() => handleUpdatePrice(sp)}
+                                disabled={updatingPrice}
+                                aria-label="Salvar novo preço"
+                              >
+                                {updatingPrice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={cancelEditingPrice}
+                                disabled={updatingPrice}
+                                aria-label="Cancelar edição"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => startEditingPrice(sp)}
+                                aria-label={`Editar preço de ${info.productTitle}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleDelete(sp.id)}
+                                aria-label={`Excluir preço de ${info.productTitle}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
