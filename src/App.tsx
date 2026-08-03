@@ -42,6 +42,7 @@ const AppContent = () => {
   useAccountCartSync();
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Index />} />
