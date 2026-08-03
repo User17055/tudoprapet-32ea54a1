@@ -1,11 +1,11 @@
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-shopify-hmac-sha256, x-shopify-topic, x-shopify-shop-domain",
-};
+import { corsHeadersWith } from "../_shared/cors.ts";
+import { normalizePhone, PICKUP_HOURS, STORE_NAME } from "../_shared/pickup.ts";
 
-const STORE_NAME = "TudoPraPet";
-const PICKUP_HOURS = "segunda a sexta, das 9h às 18h, e aos sábados até 12h";
+const corsHeaders = corsHeadersWith(
+  "x-shopify-hmac-sha256",
+  "x-shopify-topic",
+  "x-shopify-shop-domain",
+);
 
 async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null, secret: string): Promise<boolean> {
   if (!hmacHeader) return false;
@@ -19,13 +19,6 @@ async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null, sec
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return b64 === hmacHeader;
-}
-
-function normalizePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-  return digits.startsWith("55") ? digits : `55${digits}`;
 }
 
 Deno.serve(async (req) => {

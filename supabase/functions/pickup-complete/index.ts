@@ -1,9 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.75.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 const SHOPIFY_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
 const SHOPIFY_API_VERSION = "2025-07";
