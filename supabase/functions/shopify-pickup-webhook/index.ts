@@ -7,6 +7,7 @@ import {
   PICKUP_HOURS,
   STORE_NAME,
 } from "../_shared/pickup.ts";
+import { decideHmac, resolveHmacMode, verifyShopifyHmac } from "../_shared/webhook.ts";
 
 const corsHeaders = corsHeadersWith(
   "x-shopify-hmac-sha256",
@@ -14,19 +15,7 @@ const corsHeaders = corsHeadersWith(
   "x-shopify-shop-domain",
 );
 
-async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null, secret: string): Promise<boolean> {
-  if (!hmacHeader) return false;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return b64 === hmacHeader;
-}
+// verifyShopifyHmac, resolveHmacMode e decideHmac vivem em ../_shared/webhook.ts
 
 /**
  * Descobre o método de entrega do pedido: "pick_up", outro valor, ou null
@@ -79,11 +68,29 @@ Deno.serve(async (req) => {
     const shopDomain = req.headers.get("x-shopify-shop-domain");
     const webhookSecret = Deno.env.get("SHOPIFY_WEBHOOK_SECRET");
 
-    if (webhookSecret) {
-      const valid = await verifyShopifyHmac(rawBody, hmac, webhookSecret);
-      if (!valid) {
-        console.warn("HMAC inválido — prosseguindo mesmo assim (verificação desabilitada temporariamente)");
-      }
+    // Autenticação do webhook. Em modo `monitor` (padrão) o resultado é apenas
+    // registrado; em `enforce` a assinatura inválida é rejeitada.
+    // Ver SHOPIFY_WEBHOOK_HMAC_MODE em ../_shared/webhook.ts.
+    const hmacMode = resolveHmacMode(Deno.env.get("SHOPIFY_WEBHOOK_HMAC_MODE"));
+    const signatureValid = webhookSecret
+      ? await verifyShopifyHmac(rawBody, hmac, webhookSecret)
+      : null;
+    const decision = decideHmac({
+      mode: hmacMode,
+      secretConfigured: !!webhookSecret,
+      signatureValid,
+    });
+
+    // Linha estável para grep nos logs antes de ligar o enforce.
+    console.log(
+      `HMAC_CHECK mode=${hmacMode} result=${decision.reason} action=${decision.action} topic=${topic} shop=${shopDomain ?? "-"}`,
+    );
+
+    if (decision.action === "reject") {
+      return new Response(JSON.stringify({ error: "assinatura invalida", reason: decision.reason }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const payload = JSON.parse(rawBody);
