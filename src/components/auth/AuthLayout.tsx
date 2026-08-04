@@ -26,7 +26,7 @@ interface AuthLayoutProps {
  * raio, sombra e anel de foco. Aqui a estrutura é uma só.
  *
  * Proporção de cor 60-30-10: fundo neutro quente, painel navy, e o dourado
- * reservado ao filete do painel e ao eyebrow — um acento por tela, não mais.
+ * reservado ao filete do painel e ao anel de foco — um acento por tela, não mais.
  */
 export const AuthLayout = ({
   backTo,
@@ -40,7 +40,7 @@ export const AuthLayout = ({
   footer,
 }: AuthLayoutProps) => {
   return (
-    <div className="min-h-screen bg-muted/40">
+    <div className="flex min-h-screen flex-col bg-muted/40">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
           <Link
@@ -57,49 +57,53 @@ export const AuthLayout = ({
         </div>
       </header>
 
-      <main className="container mx-auto grid max-w-6xl items-stretch gap-8 px-4 py-8 lg:grid-cols-[1fr_minmax(380px,440px)] lg:py-14">
-        {/* Painel da marca. Nada essencial vive aqui, por isso pode sumir no
-            mobile — mas o texto tem significado e não é escondido de leitores
-            de tela; só os elementos puramente decorativos são aria-hidden. */}
-        <section className="relative hidden overflow-hidden rounded-3xl bg-primary p-10 lg:flex lg:flex-col lg:justify-between">
-          {/* alt vazio: o logo já é anunciado no cabeçalho, aqui é repetição. */}
-          <img src={logo} alt="" className="h-auto w-40 brightness-0 invert" />
+      {/* flex-1 + items-center centra verticalmente o que sobra abaixo do
+          cabeçalho. Como o wrapper usa min-h-screen (mínimo, não fixo), uma
+          página alta como o cadastro faz o container crescer em vez de cortar. */}
+      <main className="flex flex-1 items-center px-4 py-8 lg:py-12">
+        <div className="container mx-auto grid max-w-6xl items-stretch gap-8 lg:grid-cols-[1fr_minmax(380px,440px)]">
+          {/* Painel da marca. Nada essencial vive aqui, por isso pode sumir no
+              mobile — mas o texto tem significado e não é escondido de leitores
+              de tela; só os elementos puramente decorativos são aria-hidden. */}
+          <section className="relative hidden min-h-[26rem] overflow-hidden rounded-3xl bg-primary p-10 lg:flex lg:flex-col lg:justify-between">
+            {/* alt vazio: o logo já é anunciado no cabeçalho, aqui é repetição. */}
+            <img src={logo} alt="" className="h-auto w-40 brightness-0 invert" />
 
-          <div>
-            {/* O filete dourado: o "10%" da proporção. Como superfície, não texto. */}
-            <span className="mb-6 block h-1.5 w-16 rounded-full bg-secondary" />
-            <p className="font-display text-4xl font-900 leading-tight text-primary-foreground">
-              {panelTitle}
-            </p>
-            {panelText && (
-              <p className="mt-4 max-w-sm text-base leading-relaxed text-primary-foreground/70">
-                {panelText}
+            <div className="relative z-10">
+              {/* O filete dourado: o "10%" da proporção. Como superfície, não texto. */}
+              <span className="mb-6 block h-1.5 w-16 rounded-full bg-secondary" />
+              <p className="font-display text-4xl font-900 leading-tight text-primary-foreground">
+                {panelTitle}
               </p>
-            )}
-          </div>
+              {panelText && (
+                <p className="mt-4 max-w-sm text-base leading-relaxed text-primary-foreground/70">
+                  {panelText}
+                </p>
+              )}
+            </div>
 
-          {/* Patinhas em dourado bem baixo, textura e não elemento. */}
-          <div
-            className="pointer-events-none absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-secondary/10"
-            aria-hidden="true"
-          />
-        </section>
+            <div
+              className="pointer-events-none absolute -bottom-16 -right-16 h-64 w-64 rounded-full bg-secondary/10"
+              aria-hidden="true"
+            />
+          </section>
 
-        <section className="mx-auto flex w-full max-w-md flex-col justify-center">
-          <div className="mb-6">
-            {eyebrow && (
-              <p className="text-sm font-bold uppercase tracking-wide text-pet-gold-deep">
-                {eyebrow}
-              </p>
-            )}
-            <h1 className="mt-1 font-display text-3xl font-900 text-foreground">{title}</h1>
-            {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}
-          </div>
+          <section className="mx-auto flex w-full max-w-md flex-col justify-center">
+            <div className="mb-6">
+              {eyebrow && (
+                <p className="text-sm font-bold uppercase tracking-wide text-pet-gold-deep">
+                  {eyebrow}
+                </p>
+              )}
+              <h1 className="mt-1 font-display text-3xl font-900 text-foreground">{title}</h1>
+              {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}
+            </div>
 
-          {children}
+            {children}
 
-          {footer && <div className="mt-5">{footer}</div>}
-        </section>
+            {footer && <div className="mt-5">{footer}</div>}
+          </section>
+        </div>
       </main>
     </div>
   );
