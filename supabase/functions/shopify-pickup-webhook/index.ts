@@ -24,8 +24,12 @@ const corsHeaders = corsHeadersWith(
  * Preferimos o que já veio no payload; só consultamos a Admin API quando o
  * tópico não traz essa informação (fulfillments/* não trazem).
  */
+interface FulfillmentOrderLike {
+  delivery_method?: { method_type?: string };
+}
+
 async function resolveDeliveryMethodType(
-  payloadFulfillmentOrder: Record<string, any>,
+  payloadFulfillmentOrder: FulfillmentOrderLike,
   orderId: string,
   shopDomain: string | null,
 ): Promise<string | null> {
@@ -44,11 +48,12 @@ async function resolveDeliveryMethodType(
       console.error(`Failed to fetch fulfillment_orders for order ${orderId}: ${resp.status}`);
       return null;
     }
-    const { fulfillment_orders } = await resp.json();
-    const methods = (fulfillment_orders || [])
-      .map((f: any) => f?.delivery_method?.method_type)
-      .filter(Boolean)
-      .map(String);
+    const { fulfillment_orders } = await resp.json() as {
+      fulfillment_orders?: FulfillmentOrderLike[];
+    };
+    const methods = (fulfillment_orders ?? [])
+      .map((f) => f?.delivery_method?.method_type)
+      .filter((m): m is string => !!m);
     if (methods.length === 0) return null;
     // Se qualquer parte do pedido é retirada, tratamos o pedido como retirada.
     return methods.find(isPickupMethod) ?? methods[0];

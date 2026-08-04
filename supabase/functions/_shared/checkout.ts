@@ -80,8 +80,11 @@ export async function handleSpecialPriceCheckout(
       .select(`shopify_variant_id, ${config.priceColumn}`)
       .in("shopify_variant_id", variantIds);
 
+    // O nome da coluna é dinâmico (subscriber_price / price), então o parser de
+    // tipos do postgrest-js não consegue inferir a linha e devolve um
+    // ParserError. O cast passa por unknown de propósito.
     const specialPriceMap = new Map<string, number>();
-    for (const row of (specialRows ?? []) as Record<string, unknown>[]) {
+    for (const row of (specialRows ?? []) as unknown as Record<string, unknown>[]) {
       specialPriceMap.set(String(row.shopify_variant_id), Number(row[config.priceColumn]));
     }
 

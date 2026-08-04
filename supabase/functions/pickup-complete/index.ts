@@ -76,7 +76,7 @@ async function fulfillShopifyOrder(orderId: string | number) {
         .filter((li) => li.remainingQuantity > 0)
         .map((li) => ({ id: li.id, quantity: li.remainingQuantity })),
     }))
-    .filter((x) => x.fulfillmentOrderLineItems.length > 0);
+    .filter((x: { fulfillmentOrderLineItems: unknown[] }) => x.fulfillmentOrderLineItems.length > 0);
 
   if (lineItemsByFulfillmentOrder.length === 0) {
     return { already_fulfilled: true, order_name: order.name };
