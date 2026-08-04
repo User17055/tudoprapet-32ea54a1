@@ -205,7 +205,39 @@ Deno.serve(async (req) => {
     }
 
     console.log(`WhatsApp dispatched for order ${orderNumber}: ${respText}`);
-    return new Response(JSON.stringify({ ok: true, order: orderNumber, external: respText }), {
+
+    // Save the pickup code onto the Shopify order so Shopify's own e-mail
+    // notification (Settings -> Notifications) can render it via Liquid:
+    //   {{ attributes["Codigo de retirada"] }}
+    let pickupCode: string | null = null;
+    try {
+      const parsed = JSON.parse(respText);
+      pickupCode = parsed?.pickup_code || parsed?.code || parsed?.data?.pickup_code || null;
+    } catch { /* non-JSON response */ }
+
+    if (pickupCode && numericId) {
+      const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+      if (shopDomain && adminToken) {
+        try {
+          const upd = await fetch(`https://${shopDomain}/admin/api/2025-07/orders/${numericId}.json`, {
+            method: "PUT",
+            headers: { "X-Shopify-Access-Token": adminToken, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              order: {
+                id: Number(numericId),
+                note_attributes: [{ name: "Codigo de retirada", value: pickupCode }],
+              },
+            }),
+          });
+          if (!upd.ok) console.error(`Failed to save pickup code on order: ${upd.status} ${await upd.text()}`);
+          else console.log(`Pickup code ${pickupCode} saved on order ${orderNumber}`);
+        } catch (e) {
+          console.error("Failed to save pickup code:", e);
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, order: orderNumber, pickup_code: pickupCode, external: respText }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
