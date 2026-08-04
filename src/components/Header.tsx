@@ -279,7 +279,7 @@ export const Header = () => {
           </Button>
         </div>
 
-        <Link to="/" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - início">
+        <Link to="/catalogo" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - catálogo">
           <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-10 md:w-auto" />
         </Link>
 
