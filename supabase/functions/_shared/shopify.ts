@@ -1,5 +1,7 @@
 // Chamadas à Shopify. Usa apenas fetch (padrão web), sem depender de Deno.
 
+import { mergeNoteAttributes, type NoteAttribute, PICKUP_CODE_ATTRIBUTE } from "./pickup.ts";
+
 export const SHOP_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
 export const ADMIN_API = `https://${SHOP_DOMAIN}/admin/api/2025-07`;
 export const STOREFRONT_API = `https://${SHOP_DOMAIN}/api/2025-07/graphql.json`;
@@ -46,6 +48,73 @@ export async function fetchCurrentVariantPrices(
     if (n?.id && Number.isFinite(amt)) currentPriceMap.set(n.id, amt);
   }
   return currentPriceMap;
+}
+
+/**
+ * Grava o código de retirada em note_attributes do pedido, para o e-mail nativo
+ * da Shopify renderizar via {{ attributes["Codigo de retirada"] }}.
+ *
+ * Preserva os atributos que já existiam: o PUT da Admin API substitui o array
+ * inteiro, então escrever só o código apagaria o resto.
+ *
+ * `existingNoteAttributes` evita uma chamada quando o chamador já tem o pedido
+ * em mãos. Quando não é passado, buscamos apenas esse campo.
+ */
+export async function savePickupCodeOnOrder(opts: {
+  shopDomain: string;
+  adminToken: string;
+  numericOrderId: string;
+  pickupCode: string;
+  existingNoteAttributes?: NoteAttribute[] | null;
+}): Promise<boolean> {
+  const { shopDomain, adminToken, numericOrderId, pickupCode } = opts;
+  const orderUrl = `https://${shopDomain}/admin/api/2025-07/orders/${numericOrderId}.json`;
+
+  let existing = opts.existingNoteAttributes;
+  if (existing === undefined) {
+    try {
+      const read = await fetch(`${orderUrl}?fields=note_attributes`, {
+        headers: { "X-Shopify-Access-Token": adminToken },
+      });
+      if (read.ok) {
+        const body = await read.json();
+        existing = body?.order?.note_attributes ?? [];
+      } else {
+        // Seguimos assim mesmo: ficar sem o código no pedido significa e-mail
+        // sem código, que é a razão de existir desta gravação. O risco de
+        // apagar outros atributos fica registrado.
+        console.warn(
+          `Nao foi possivel ler note_attributes do pedido ${numericOrderId} (${read.status}) — gravando apenas o codigo`,
+        );
+        existing = null;
+      }
+    } catch (e) {
+      console.warn(`Falha ao ler note_attributes do pedido ${numericOrderId}:`, e);
+      existing = null;
+    }
+  }
+
+  try {
+    const upd = await fetch(orderUrl, {
+      method: "PUT",
+      headers: { "X-Shopify-Access-Token": adminToken, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order: {
+          id: Number(numericOrderId),
+          note_attributes: mergeNoteAttributes(existing, PICKUP_CODE_ATTRIBUTE, pickupCode),
+        },
+      }),
+    });
+    if (!upd.ok) {
+      console.error(`Failed to save pickup code on order: ${upd.status} ${await upd.text()}`);
+      return false;
+    }
+    console.log(`Pickup code ${pickupCode} saved on order ${numericOrderId}`);
+    return true;
+  } catch (e) {
+    console.error("Failed to save pickup code:", e);
+    return false;
+  }
 }
 
 export interface DraftOrderResult {

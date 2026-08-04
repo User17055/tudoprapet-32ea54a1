@@ -2,11 +2,13 @@ import { corsHeadersWith } from "../_shared/cors.ts";
 import {
   buildIdempotencyKey,
   classifyWebhookEvent,
+  extractPickupCode,
   isPickupMethod,
   normalizePhone,
   PICKUP_HOURS,
   STORE_NAME,
 } from "../_shared/pickup.ts";
+import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
 import { decideHmac, resolveHmacMode, verifyShopifyHmac } from "../_shared/webhook.ts";
 
 const corsHeaders = corsHeadersWith(
@@ -287,34 +289,28 @@ Deno.serve(async (req) => {
 
     console.log(`WhatsApp dispatched for order ${orderNumber}: ${respText}`);
 
-    // Save the pickup code onto the Shopify order so Shopify's own e-mail
-    // notification (Settings -> Notifications) can render it via Liquid:
-    //   {{ attributes["Codigo de retirada"] }}
-    let pickupCode: string | null = null;
-    try {
-      const parsed = JSON.parse(respText);
-      pickupCode = parsed?.pickup_code || parsed?.code || parsed?.data?.pickup_code || null;
-    } catch { /* non-JSON response */ }
+    // Grava o código no pedido para o e-mail nativo da Shopify renderizar via
+    // {{ attributes["Codigo de retirada"] }}.
+    const pickupCode = extractPickupCode(respText);
+
+    if (!pickupCode && isReadyToPickup) {
+      // Sem isto a falha era invisível: o e-mail saía sem código e nada indicava
+      // o motivo. Ou a API externa não devolveu código, ou devolveu num campo
+      // que não conhecemos.
+      console.warn(
+        `PICKUP_CODE_AUSENTE order=${orderNumber} — resposta da API externa sem codigo reconhecivel: ${respText.slice(0, 200)}`,
+      );
+    }
 
     if (pickupCode && numericId) {
       const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
       if (shopDomain && adminToken) {
-        try {
-          const upd = await fetch(`https://${shopDomain}/admin/api/2025-07/orders/${numericId}.json`, {
-            method: "PUT",
-            headers: { "X-Shopify-Access-Token": adminToken, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              order: {
-                id: Number(numericId),
-                note_attributes: [{ name: "Codigo de retirada", value: pickupCode }],
-              },
-            }),
-          });
-          if (!upd.ok) console.error(`Failed to save pickup code on order: ${upd.status} ${await upd.text()}`);
-          else console.log(`Pickup code ${pickupCode} saved on order ${orderNumber}`);
-        } catch (e) {
-          console.error("Failed to save pickup code:", e);
-        }
+        await savePickupCodeOnOrder({
+          shopDomain,
+          adminToken,
+          numericOrderId: numericId,
+          pickupCode,
+        });
       }
     }
 

@@ -3,8 +3,8 @@
 Registro do que foi alterado, por quê, e o que muda na prática. Escrito para quem não
 acompanhou as mudanças de perto.
 
-**Escopo:** branch `Guilherme`, 8 commits. Nada foi integrado à `main` — a decisão de
-merge é do time.
+**Escopo:** branch `Guilherme`. A `main` foi integrada à branch (seção 6), mas **nada
+foi integrado à `main`** — a decisão de merge é do time.
 
 ---
 
@@ -12,17 +12,17 @@ merge é do time.
 
 | | Antes | Depois |
 |---|---|---|
-| Testes automatizados | 7 | **76** |
+| Testes automatizados | 7 | **86** |
 | Edge functions sem autenticação | 6 de 13 | **0** |
 | Assinatura HMAC do webhook | calculada e descartada | verificada, com interruptor |
+| `supabase/functions` sob verificação | nenhuma | typecheck + lint (Deno) |
 | Cópias de `corsHeaders` | 10 (divergentes) | 1 |
 | Linhas nos dois checkouts | 400 | 47 |
 | Mensagens de WhatsApp por pedido de retirada | até 4 | 2 |
 | Aviso de retirada em pedido de entrega | sim | não |
+| `note_attributes` do pedido ao gravar o código | array substituído | preservado |
+| Código de retirada ausente | falha silenciosa | log `PICKUP_CODE_AUSENTE` |
 | Documentação de arquitetura | nenhuma | 3 documentos |
-
-Saldo de código: **−473 / +124 linhas** na primeira leva, mais as correções do fluxo de
-retirada.
 
 ---
 
@@ -329,7 +329,84 @@ ela é observável, e ligar a proteção custa uma variável em vez de um deploy
 
 ---
 
-## 6. O que não foi feito, e por quê
+## 6. Integração com a `main`
+
+### Contexto
+
+Enquanto o trabalho acontecia nesta branch, a `main` recebeu 13 commits do Lovable — e
+**atacavam o mesmo problema do fluxo de retirada, em paralelo, nas mesmas horas**. Os
+dois lados mexeram nos mesmos dois arquivos.
+
+Conflito em apenas um: `shopify-pickup-webhook`. O `pickup-resend-last` fundiu sozinho.
+
+### As duas abordagens, lado a lado
+
+| | Lovable (`main`) | Esta branch |
+|---|---|---|
+| **Foco** | o sintoma sentido pela loja: código não chega no e-mail | a causa do volume: mensagem demais sendo enviada |
+| **Entregou** | código gravado em `note_attributes` → e-mail nativo da Shopify | filtro retirada/entrega, remoção de tópico duplicado, idempotência, HMAC, testes |
+| **Acertou onde a outra errou** | resposta sempre 200 | — |
+| **Não tocou** | causa do 131049, segurança | o problema do e-mail (só recomendou) |
+
+São complementares, e é por isso que o resultado da fusão é melhor que qualquer um dos
+dois isolado.
+
+### Resolução do conflito
+
+O ponto em disputa era a resposta em falha da API externa: esta branch devolvia **502**
+em erro 5xx (para a Shopify repetir); a `main` devolve **200 sempre**.
+
+**Ficou a versão da `main`**, por um motivo que não estava escrito lá: além de
+retentativa gerar mensagem duplicada — exatamente o problema que se quer resolver —, a
+Shopify **remove a inscrição do webhook** após falhas sustentadas. Perder uma
+notificação é recuperável pelo botão de reenvio; perder o registro mata o fluxo inteiro
+em silêncio.
+
+O raciocínio ficou como comentário no código, para não ser revertido por engano.
+
+### O que a comparação revelou depois
+
+Reler o código da `main` com calma — e não apenas conferir que o merge preservou os dois
+lados — mostrou três coisas. Duas foram corrigidas:
+
+**`note_attributes` era substituído por inteiro.** O PUT da Admin API troca o array
+todo, então gravar `[{ codigo }]` apagaria qualquer outro atributo do pedido: observação
+de presente, dado vindo do checkout, atributo posto por app. Hoje o risco era baixo
+porque nada mais escreve ali, mas é o tipo de perda de dado que só aparece quando já
+aconteceu.
+
+Agora os atributos existentes são preservados e apenas o do código é sobrescrito
+(`mergeNoteAttributes`). Quando o chamador já tem o pedido carregado — caso do
+`pickup-resend-last` — eles são passados adiante e evita-se uma leitura extra.
+
+**Código ausente falhava em silêncio.** A extração tentava três nomes de campo
+(`pickup_code`, `code`, `data.pickup_code`) e, se nenhum casasse, seguia sem gravar
+**sem registrar nada**. O e-mail saía sem código e não havia como saber por quê. Agora
+emite `PICKUP_CODE_AUSENTE` com o início da resposta da API externa.
+
+Os três nomes de campo foram mantidos: são herança de não haver documentação do contrato
+da API externa deste lado. Ficam como estão até isso ser acertado com quem a mantém.
+
+**A gravação estava duplicada** nas duas functions, com implementações ligeiramente
+diferentes. Foi para `_shared/` (`extractPickupCode`, `mergeNoteAttributes`,
+`savePickupCodeOnOrder`), com 10 testes novos.
+
+### O que não dá para corrigir deste lado
+
+**Os dois canais estão acoplados.** Em `shopify-pickup-webhook`, a falha do envio do
+WhatsApp retorna **antes** da extração e gravação do código. Ou seja: se o WhatsApp
+falha, o código nunca chega ao pedido, e **o e-mail também sai sem código**.
+
+Isso anula o propósito de ter um segundo canal — o e-mail deveria funcionar justamente
+quando o WhatsApp não funciona.
+
+Não é corrigível aqui: se `/api/whatsapp/send` falha, provavelmente não há código algum
+para gravar. A solução é a API externa separar a **geração** do código do **envio** da
+mensagem. É conversa com quem mantém a API, não patch neste repositório.
+
+---
+
+## 7. O que não foi feito, e por quê
 
 ### Execução das edge functions
 
@@ -344,7 +421,7 @@ valores de produção, a function **manda WhatsApp de verdade**.
 
 ---
 
-## 7. As edge functions entraram na verificação automática
+## 8. As edge functions entraram na verificação automática
 
 Até aqui, `supabase/functions/` estava **fora de tudo**: o `tsconfig.app.json` inclui
 apenas `src/`, então `npx tsc --noEmit` nunca olhou para a pasta. Sem typecheck, sem
@@ -385,7 +462,7 @@ Está comentado dentro do `deno.json`. Não troque para `auto`.
 
 ---
 
-## 8. Decisões que dependem do time
+## 9. Decisões que dependem do time
 
 1. **Categoria do template de WhatsApp** — mudar de MARKETING para UTILITY no WhatsApp
    Manager. É a correção de maior impacto no problema do 131049 e não está no código.
@@ -399,9 +476,10 @@ Está comentado dentro do `deno.json`. Não troque para `auto`.
    gravar o código em `note_attributes` do pedido justamente para isso, mas o template
    de notificação precisa incluir `{{ attributes["Codigo de retirada"] }}` — é
    configuração em Settings → Notifications, não código.
-5. **`note_attributes` é substituído por inteiro** no PUT que grava o código. Se o
-   pedido já tiver outros atributos (observação de presente, dado de checkout), eles
-   são apagados. Hoje o risco parece baixo, mas vale confirmar.
+5. **Separar geração do código do envio da mensagem** na API externa. Hoje, se o envio
+   do WhatsApp falha, o código nunca é gravado no pedido e o e-mail também sai sem
+   código — os dois canais caem juntos, o que anula o propósito de ter o segundo.
+   Ver seção 6.
 6. **Quatro functions órfãs** — `create-checkout`, `customer-portal`, `pickup-test-send`
    e `shopify-webhooks-admin` não são chamadas por ninguém. `customer-portal` aponta
    para `/clube`, rota que não existe mais. Remover ou restaurar a tela?
@@ -413,10 +491,10 @@ Está comentado dentro do `deno.json`. Não troque para `auto`.
 
 ---
 
-## 9. Como verificar
+## 10. Como verificar
 
 ```bash
-npm run test              # 76 testes
+npm run test              # 86 testes
 npx tsc --noEmit          # frontend, sem erros
 npm run lint              # frontend
 npm run check:functions   # edge functions (requer Deno instalado)

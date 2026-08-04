@@ -71,3 +71,47 @@ export function isPickupMethod(methodType: string | null | undefined): boolean {
 export function buildIdempotencyKey(event: string, orderId: string): string {
   return `${event}:${orderId.replace(/\D/g, "")}`;
 }
+
+export interface NoteAttribute {
+  name: string;
+  value: string;
+}
+
+/** Nome do atributo no pedido. O template de e-mail da Shopify lê exatamente isto. */
+export const PICKUP_CODE_ATTRIBUTE = "Codigo de retirada";
+
+/**
+ * Lê o código de retirada da resposta da API externa.
+ *
+ * Os três nomes de campo aceitos são uma herança: não há documentação do
+ * contrato da API externa deste lado, então a implementação original tentava
+ * `pickup_code`, `code` e `data.pickup_code`. Mantido como estava para não
+ * quebrar, mas o certo é fixar o contrato com quem mantém a API.
+ */
+export function extractPickupCode(responseText: string): string | null {
+  try {
+    const parsed = JSON.parse(responseText);
+    const code = parsed?.pickup_code ?? parsed?.code ?? parsed?.data?.pickup_code ?? null;
+    if (code === null || code === undefined || code === "") return null;
+    return String(code);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Monta a lista de note_attributes preservando o que já existia.
+ *
+ * O PUT de note_attributes na Admin API **substitui o array inteiro**. Escrever
+ * só `[{ codigo }]` apaga qualquer outro atributo do pedido (observação de
+ * presente, dado vindo do checkout, atributo posto por app). Esta função
+ * mantém os demais e sobrescreve apenas o de mesmo nome.
+ */
+export function mergeNoteAttributes(
+  existing: NoteAttribute[] | null | undefined,
+  name: string,
+  value: string,
+): NoteAttribute[] {
+  const kept = (existing ?? []).filter((attr) => attr?.name !== name);
+  return [...kept, { name, value }];
+}
