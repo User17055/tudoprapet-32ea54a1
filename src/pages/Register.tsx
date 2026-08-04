@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown, CheckCircle2, Circle } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/tpp-logo.svg';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
@@ -59,12 +59,9 @@ const Register = () => {
     }
     const normalizedReferralCode = referralCode.trim().toUpperCase();
     if (acquisitionSource === 'recomendacao') {
-      const { data, error } = await supabase
-        .from('employee_referral_codes')
-        .select('id')
-        .eq('code', normalizedReferralCode)
-        .eq('active', true)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc('validate_referral_code', {
+        _code: normalizedReferralCode,
+      });
 
       if (error || !data) {
         toast.error('Codigo de funcionario invalido ou inativo.');
@@ -103,11 +100,8 @@ const Register = () => {
             <ArrowLeft className="h-4 w-4" />
             Voltar ao catálogo
           </Link>
-          <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
-            <span className="hidden sm:inline font-display font-900 text-lg text-foreground">
-              Tudo<span className="text-primary">Pra</span>Pet
-            </span>
+          <Link to="/" className="flex items-center">
+            <img src={logo} alt="TudoPraPet" className="h-auto w-36 sm:w-44" />
           </Link>
         </div>
       </div>
@@ -131,8 +125,8 @@ const Register = () => {
               <li className="flex gap-3 items-start">
                 <div className="bg-primary/10 text-primary p-2 rounded-xl"><Crown className="h-5 w-5" /></div>
                 <div>
-                  <p className="font-bold text-foreground">Acesso ao Clube</p>
-                  <p className="text-sm text-muted-foreground">Preços de assinante em produtos selecionados.</p>
+                  <p className="font-bold text-foreground">Ofertas exclusivas</p>
+                  <p className="text-sm text-muted-foreground">Preços especiais em produtos selecionados.</p>
                 </div>
               </li>
               <li className="flex gap-3 items-start">

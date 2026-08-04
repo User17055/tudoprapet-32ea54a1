@@ -4,13 +4,14 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight, Store } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { CouponInput } from "@/components/CouponInput";
 import { getDisplayOptions } from "@/lib/shopify";
 import { goToCheckout } from "@/lib/checkout";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -20,21 +21,36 @@ export const CartDrawer = () => {
   const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { isFranchisee, getFranchisePrice, loading: franchiseLoading } = useFranchisePrices();
   const isMobile = useIsMobile();
+  const customerIsSubscribed = isSubscribed && !isFranchisee;
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
   const clubTotalPrice = items.reduce((sum, item) => {
     const regularPrice = parseFloat(item.price.amount);
     const subscriberPrice = getSubscriberPrice(item.variantId);
-    const price = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
+    const price = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
       ? subscriberPrice
       : regularPrice;
 
     return sum + price * item.quantity;
   }, 0);
-  const clubDiscount = isSubscribed ? Math.max(0, totalPrice - clubTotalPrice) : 0;
-  const displayTotalPrice = isSubscribed ? clubTotalPrice : totalPrice;
+  const franchiseTotalPrice = items.reduce((sum, item) => {
+    const regularPrice = parseFloat(item.price.amount);
+    const franchisePrice = getFranchisePrice(item.variantId);
+    const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
+      ? franchisePrice
+      : regularPrice;
+    return sum + price * item.quantity;
+  }, 0);
+  const clubDiscount = customerIsSubscribed ? Math.max(0, totalPrice - clubTotalPrice) : 0;
+  const franchiseDiscount = isFranchisee ? Math.max(0, totalPrice - franchiseTotalPrice) : 0;
+  const displayTotalPrice = isFranchisee
+    ? franchiseTotalPrice
+    : customerIsSubscribed
+    ? clubTotalPrice
+    : totalPrice;
 
   const itemsListRef = useRef<HTMLDivElement>(null);
   const subtotalRef = useRef<HTMLSpanElement>(null);
@@ -71,7 +87,22 @@ export const CartDrawer = () => {
   const handleCheckout = async () => {
     setCheckingOut(true);
     try {
-      if (isSubscribed) {
+      if (isFranchisee) {
+        try {
+          const lineItems = items.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
+          const { data, error } = await supabase.functions.invoke("franchise-checkout", { body: { items: lineItems } });
+          if (error) throw error;
+          if (data?.checkoutUrl) {
+            clearCart();
+            setCartOpen(false);
+            goToCheckout(data.checkoutUrl);
+            return;
+          }
+        } catch (err) {
+          console.error("Franchise checkout failed:", err);
+          toast.error("Erro ao aplicar preço de franquia. Usando checkout normal.");
+        }
+      } else if (customerIsSubscribed) {
         try {
           const lineItems = items.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
           const { data, error } = await supabase.functions.invoke("subscriber-checkout", { body: { items: lineItems } });
@@ -99,11 +130,11 @@ export const CartDrawer = () => {
 
   if (isMobile) {
     return (
-      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 rounded-full hover:bg-primary/10">
+      <Button asChild variant="ghost" size="icon" className="relative translate-y-0.5 bg-transparent text-[#e0b400] hover:bg-transparent hover:text-[#c49c00]">
         <Link to="/carrinho">
-          <ShoppingCart className="h-5 w-5" />
+          <ShoppingCart className="!h-7 !w-7" strokeWidth={2.2} />
           {totalItems > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
+            <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}
             </Badge>
           )}
@@ -116,10 +147,10 @@ export const CartDrawer = () => {
   return (
     <Sheet open={isCartOpen} onOpenChange={(open) => open ? setCartOpen(true) : closeCart()}>
       <SheetTrigger asChild>
-        <Button variant="outline" size="icon" className="relative h-10 w-10 rounded-full border-primary/15 bg-primary/5 text-primary shadow-none hover:bg-primary/10 hover:text-primary">
-          <ShoppingCart className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="relative h-10 w-10 bg-transparent text-[#e0b400] shadow-none hover:bg-transparent hover:text-[#c49c00]">
+          <ShoppingCart className="!h-7 !w-7" strokeWidth={2.2} />
           {totalItems > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] rounded-full p-0 px-1 flex items-center justify-center text-[11px] font-bold bg-secondary text-secondary-foreground border-2 border-card shadow">
+            <Badge className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-card bg-primary p-0 px-1 text-[11px] font-bold text-primary-foreground shadow">
               {totalItems}
             </Badge>
           )}
@@ -140,7 +171,14 @@ export const CartDrawer = () => {
             {totalItems === 0 ? "Seu carrinho está vazio" : `${totalItems} ${totalItems === 1 ? "item" : "itens"} • R$ ${displayTotalPrice.toFixed(2).replace('.', ',')}`}
           </SheetDescription>
 
-          {isSubscribed && items.length > 0 && (
+          {isFranchisee && items.length > 0 ? (
+            <div className="mt-3 hidden sm:flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 px-3 py-2 text-xs font-semibold">
+              <Store className="h-4 w-4" />
+              {franchiseDiscount > 0
+                ? `Conta franquia: economia de R$ ${franchiseDiscount.toFixed(2).replace('.', ',')}`
+                : "Conta franquia: preços exclusivos aplicados no checkout"}
+            </div>
+          ) : customerIsSubscribed && items.length > 0 && (
             <div className="mt-3 hidden sm:flex items-center gap-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-700 dark:text-sky-300 px-3 py-2 text-xs font-semibold">
               <Crown className="h-4 w-4" />
               {clubDiscount > 0
@@ -182,8 +220,14 @@ export const CartDrawer = () => {
                   {items.map((item) => {
                     const regularPrice = parseFloat(item.price.amount);
                     const subscriberPrice = getSubscriberPrice(item.variantId);
-                    const hasSubscriberPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
-                    const itemPrice = hasSubscriberPrice ? subscriberPrice : regularPrice;
+                    const franchisePrice = getFranchisePrice(item.variantId);
+                    const hasFranchisePrice = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice;
+                    const hasSubscriberPrice = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
+                    const itemPrice = hasFranchisePrice
+                      ? franchisePrice
+                      : hasSubscriberPrice
+                      ? subscriberPrice
+                      : regularPrice;
                     const regularLineTotal = regularPrice * item.quantity;
                     const lineTotal = itemPrice * item.quantity;
                     return (
@@ -249,7 +293,7 @@ export const CartDrawer = () => {
                               </Button>
                             </div>
                             <div className="text-right whitespace-nowrap">
-                              {hasSubscriberPrice && (
+                              {(hasFranchisePrice || hasSubscriberPrice) && (
                                 <p className="text-[11px] leading-none text-muted-foreground line-through">
                                   R$ {regularLineTotal.toFixed(2).replace('.', ',')}
                                 </p>
@@ -260,6 +304,11 @@ export const CartDrawer = () => {
                               {hasSubscriberPrice && (
                                 <p className="text-[10px] font-semibold leading-none text-primary">
                                   assinatura
+                                </p>
+                              )}
+                              {hasFranchisePrice && (
+                                <p className="text-[10px] font-semibold leading-none text-emerald-600">
+                                  franquia
                                 </p>
                               )}
                             </div>
@@ -290,11 +339,15 @@ export const CartDrawer = () => {
                     <span ref={subtotalRef} className="inline-block font-display font-900 text-2xl text-primary">
                       R$ {displayTotalPrice.toFixed(2).replace('.', ',')}
                     </span>
-                    {clubDiscount > 0 && (
+                    {franchiseDiscount > 0 ? (
+                      <span className="block text-[11px] font-semibold text-emerald-600">
+                        valor de franquia
+                      </span>
+                    ) : clubDiscount > 0 ? (
                       <span className="block text-[11px] font-semibold text-primary">
                         valor com assinatura
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <p className="text-[11px] text-muted-foreground -mt-1 flex items-center gap-1.5">
@@ -311,7 +364,7 @@ export const CartDrawer = () => {
                   onClick={handleCheckout}
                   className="w-full btn-bounce rounded-full font-display font-bold text-base py-6 shadow-md"
                   size="lg"
-                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || checkingOut}
+                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
                 >
                   {checkingOut || isLoading || isSyncing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

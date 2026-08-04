@@ -196,6 +196,30 @@ export type Database = {
         }
         Relationships: []
       }
+      franchise_prices: {
+        Row: {
+          created_at: string
+          price: number
+          shopify_product_id: string
+          shopify_variant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          price: number
+          shopify_product_id: string
+          shopify_variant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          price?: number
+          shopify_product_id?: string
+          shopify_variant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hero_banners: {
         Row: {
           active: boolean
@@ -247,6 +271,27 @@ export type Database = {
           id?: string
           shopify_product_id?: string
           sort_order?: number
+        }
+        Relationships: []
+      }
+      product_audience: {
+        Row: {
+          audience: string
+          created_at: string
+          shopify_product_id: string
+          updated_at: string
+        }
+        Insert: {
+          audience?: string
+          created_at?: string
+          shopify_product_id: string
+          updated_at?: string
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          shopify_product_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -317,12 +362,72 @@ export type Database = {
           },
         ]
       }
+      product_variation_groups: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      product_variation_items: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          label: string
+          shopify_product_handle: string
+          shopify_product_id: string
+          shopify_product_title: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          label: string
+          shopify_product_handle: string
+          shopify_product_id: string
+          shopify_product_title: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          label?: string
+          shopify_product_handle?: string
+          shopify_product_id?: string
+          shopify_product_title?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variation_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "product_variation_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           acquisition_source: string | null
           created_at: string
           email: string | null
           id: string
+          is_franchisee: boolean
           name: string | null
           referral_code: string | null
           updated_at: string
@@ -333,6 +438,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          is_franchisee?: boolean
           name?: string | null
           referral_code?: string | null
           updated_at?: string
@@ -343,6 +449,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          is_franchisee?: boolean
           name?: string | null
           referral_code?: string | null
           updated_at?: string
@@ -479,6 +586,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      validate_referral_code: { Args: { _code: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user"

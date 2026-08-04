@@ -25,7 +25,9 @@ import {
   Star,
   Store,
   Ticket,
-  PawPrint,
+  Menu,
+  ExternalLink,
+  Boxes,
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,12 +37,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
-import logo from "@/assets/logo.png";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
+import logo from "@/assets/tpp-logo.svg";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
 import CategoriesTab from "./admin/CategoriesTab";
 import FeaturedTab from "./admin/FeaturedTab";
 import RetiradaTab from "./admin/RetiradaTab";
+import FranquiaTab from "./admin/FranquiaTab";
+import VariationsTab from "./admin/VariationsTab";
 
 interface SubPrice {
   id: string;
@@ -63,11 +68,13 @@ type SectionId =
   | "prices"
   | "content"
   | "details"
+  | "variations"
   | "categories"
   | "banners"
   | "featured"
   | "referrals"
-  | "retirada";
+  | "retirada"
+  | "franquia";
 
 interface SectionDef {
   id: SectionId;
@@ -92,7 +99,9 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
     items: [
       { id: "content", label: "Conteúdo", description: "Descrições personalizadas dos produtos", icon: FileText, component: ContentTab },
       { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
+      { id: "variations", label: "Variações", description: "Agrupe tamanhos e pesos do mesmo produto", icon: Boxes, component: VariationsTab },
       { id: "categories", label: "Ordem do Menu", description: "Ordem das categorias no menu do site", icon: ListTree, component: CategoriesTab },
+      { id: "franquia", label: "Franquia", description: "Visibilidade e preços exclusivos para franqueados", icon: Store, component: FranquiaTab },
     ],
   },
   {
@@ -116,10 +125,14 @@ export default function Admin() {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useIsAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const tabParam = searchParams.get("tab");
   const active = ALL_SECTIONS.find((s) => s.id === tabParam) ?? ALL_SECTIONS[0];
-  const selectSection = (id: SectionId) => setSearchParams({ tab: id });
+  const selectSection = (id: SectionId) => {
+    setSearchParams({ tab: id });
+    setMobileNavOpen(false);
+  };
 
   if (!authLoading && !user) return <Navigate to="/login" replace />;
   if (authLoading || roleLoading) {
@@ -143,43 +156,140 @@ export default function Admin() {
   }
 
   const ActiveComponent = active.component;
+  const ActiveIcon = active.icon;
 
   return (
-    <div>
-      <header>
-        <Link to="/">TudoPraPet</Link>
-        <span> — Painel Admin</span>
-        <span> ({user?.email})</span>
-        <Button asChild size="sm" variant="ghost">
-          <Link to="/">Ver loja</Link>
-        </Button>
+    <div className="min-h-screen bg-[#f4f6fa] text-[#1c2333]">
+      <header className="sticky top-0 z-50 flex h-20 items-center justify-between gap-4 bg-[#112f5f] px-4 text-white shadow-lg sm:px-7">
+        <Link to="/" className="flex min-w-0 items-center" aria-label="TudoPraPet">
+          <span className="flex h-14 shrink-0 items-center rounded-xl bg-white px-3 shadow-sm">
+            <img src={logo} alt="" className="h-auto w-48" />
+          </span>
+        </Link>
+
+        <div className="pointer-events-none absolute inset-x-[28%] top-0 hidden h-full overflow-hidden lg:block" aria-hidden="true">
+          {[4, 19, 34, 49, 64, 79, 94].map((left, index) => (
+            <img
+              key={left}
+              src="/admin-decor/pataamarela.png"
+              alt=""
+              className="admin-paw-pulse absolute h-11 w-[72px] object-contain"
+              style={{
+                left: `${left}%`,
+                top: `${index % 2 === 0 ? -3 : 34}px`,
+                transform: `rotate(${index % 2 === 0 ? -70 : -88}deg)`,
+                animationDelay: `${(6 - index) * 0.15}s`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="relative flex min-w-0 items-center gap-2 sm:gap-4">
+          <div className="hidden min-w-0 text-right md:block">
+            <p className="text-sm font-semibold">Painel Administrativo</p>
+            <p className="max-w-64 truncate text-xs text-white/65">{user?.email}</p>
+          </div>
+          <Button asChild size="sm" variant="secondary" className="h-9 gap-2 bg-[#f1c548] text-[#0a1931] hover:bg-[#e0b23f]">
+            <Link to="/">
+              <span className="hidden sm:inline">Ver loja</span>
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="text-white hover:bg-white/10 hover:text-white lg:hidden"
+            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
       </header>
 
-      <nav>
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <p>{group.label}</p>
-            <ul>
-              {group.items.map((item) => (
-                <li key={item.id}>
-                  <button
-                    onClick={() => selectSection(item.id)}
-                    disabled={item.id === active.id}
-                  >
-                    {item.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </nav>
+      <div className="flex min-h-[calc(100vh-5rem)] items-start">
+        {mobileNavOpen && (
+          <button
+            type="button"
+            className="fixed inset-0 top-20 z-30 bg-[#0a1931]/45 backdrop-blur-[1px] lg:hidden"
+            aria-label="Fechar menu"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
 
-      <main>
-        <h1>{active.label}</h1>
-        <p>{active.description}</p>
-        <ActiveComponent />
-      </main>
+        <aside
+          className={cn(
+            "fixed bottom-0 left-0 top-20 z-40 flex w-[280px] flex-col bg-[#ddac42] p-4 transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-[calc(100vh-5rem)] lg:w-64 lg:translate-x-0",
+            mobileNavOpen ? "translate-x-0" : "-translate-x-full",
+          )}
+        >
+          <nav className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-black/5 bg-white p-3 pb-16 shadow-[-8px_10px_0_rgba(10,25,49,0.16)] lg:pb-20">
+            <div className="mb-3 border-b pb-3 md:hidden">
+              <p className="text-xs font-bold text-[#112f5f]">Painel Administrativo</p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{user?.email}</p>
+            </div>
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="mb-4 last:mb-0">
+                <p className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#0a1931]/65">
+                  {group.label}
+                </p>
+                <ul className="space-y-1">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const selected = item.id === active.id;
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectSection(item.id)}
+                          aria-current={selected ? "page" : undefined}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                            selected
+                              ? "bg-[#112f5f] font-bold text-white shadow-sm"
+                              : "text-[#152642] hover:bg-[#f4f6fa]",
+                          )}
+                        >
+                          <Icon className={cn("h-4 w-4 shrink-0", selected ? "text-[#f1c548]" : "text-[#112f5f]")} />
+                          <span>{item.label}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </nav>
+          <img
+            src="/admin-decor/semfundo.png"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-[-20px] z-0 w-[285px] max-w-none drop-shadow-[0_10px_12px_rgba(10,25,49,0.22)]"
+          />
+        </aside>
+
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-[1440px]">
+            <div className="mb-6 flex items-start gap-3">
+              <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112f5f] text-[#f1c548] shadow-sm">
+                <ActiveIcon className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b17c15]">
+                  {NAV_GROUPS.find((group) => group.items.some((item) => item.id === active.id))?.label}
+                </p>
+                <h1 className="text-2xl font-extrabold tracking-tight text-[#0a1931]">{active.label}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
+              </div>
+            </div>
+            <section key={active.id} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+              <ActiveComponent />
+            </section>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -192,15 +302,18 @@ function PricesTab() {
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
   const [price, setPrice] = useState("");
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState("");
+  const [updatingPrice, setUpdatingPrice] = useState(false);
 
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const [shop, sub] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
       ]);
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (sub.error) throw sub.error;
       setPrices((sub.data || []) as SubPrice[]);
     } catch (e) {
@@ -293,7 +406,49 @@ function PricesTab() {
     const { error } = await supabase.from("subscriber_prices").delete().eq("id", id);
     if (error) return toast.error("Erro ao excluir");
     toast.success("Removido");
+    if (editingPriceId === id) {
+      setEditingPriceId(null);
+      setEditingPrice("");
+    }
     setPrices(prices.filter(p => p.id !== id));
+  };
+
+  const startEditingPrice = (subscriberPrice: SubPrice) => {
+    setEditingPriceId(subscriberPrice.id);
+    setEditingPrice(String(subscriberPrice.subscriber_price));
+  };
+
+  const cancelEditingPrice = () => {
+    setEditingPriceId(null);
+    setEditingPrice("");
+  };
+
+  const handleUpdatePrice = async (subscriberPrice: SubPrice) => {
+    if (updatingPrice) return;
+
+    const numeric = parseFloat(editingPrice.replace(",", "."));
+    if (isNaN(numeric) || numeric <= 0) {
+      toast.error("Preço inválido");
+      return;
+    }
+
+    setUpdatingPrice(true);
+    const { error } = await supabase
+      .from("subscriber_prices")
+      .update({ subscriber_price: numeric })
+      .eq("id", subscriberPrice.id);
+    setUpdatingPrice(false);
+
+    if (error) {
+      toast.error("Erro ao atualizar: " + error.message);
+      return;
+    }
+
+    setPrices(current => current.map(item => (
+      item.id === subscriberPrice.id ? { ...item, subscriber_price: numeric } : item
+    )));
+    cancelEditingPrice();
+    toast.success("Preço atualizado!");
   };
 
   const productById = useMemo(() => {
@@ -305,7 +460,11 @@ function PricesTab() {
   const variantInfo = (sp: SubPrice) => {
     const prod = productById.get(sp.shopify_product_id);
     const variant = prod?.variants.edges.find(v => v.node.id === sp.shopify_variant_id);
-    return { productTitle: prod?.title || "Produto removido", variantTitle: variant?.node.title || sp.shopify_variant_id };
+    return {
+      productTitle: prod?.title || "Produto removido",
+      productImage: prod?.images.edges[0]?.node,
+      variantTitle: variant?.node.title || sp.shopify_variant_id,
+    };
   };
 
   const previewImage = selectedProduct?.node.images.edges[0]?.node;
@@ -426,7 +585,7 @@ function PricesTab() {
                   <TableHead>Produto</TableHead>
                   <TableHead>Variante</TableHead>
                   <TableHead className="text-right">Preço assinante</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-24"><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -434,13 +593,98 @@ function PricesTab() {
                   const info = variantInfo(sp);
                   return (
                     <TableRow key={sp.id}>
-                      <TableCell className="font-medium">{info.productTitle}</TableCell>
-                      <TableCell>{info.variantTitle}</TableCell>
-                      <TableCell className="text-right font-bold text-sky-600">R$ {sp.subscriber_price.toFixed(2)}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(sp.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex min-w-[220px] items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                            {info.productImage ? (
+                              <img
+                                src={info.productImage.url}
+                                alt={info.productImage.altText || info.productTitle}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Package className="h-5 w-5 text-muted-foreground" />
+                            )}
+                          </div>
+                          <span className="font-medium line-clamp-2">{info.productTitle}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{info.variantTitle}</TableCell>
+                      <TableCell className="text-right">
+                        {editingPriceId === sp.id ? (
+                          <div className="ml-auto flex w-36 items-center gap-2">
+                            <span className="text-sm text-muted-foreground">R$</span>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={editingPrice}
+                              onChange={(event) => setEditingPrice(event.target.value)}
+                              disabled={updatingPrice}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") handleUpdatePrice(sp);
+                                if (event.key === "Escape") cancelEditingPrice();
+                              }}
+                              className="h-8 text-right font-bold"
+                              autoFocus
+                              aria-label={`Novo preço de ${info.productTitle}`}
+                            />
+                          </div>
+                        ) : (
+                          <span className="font-bold text-sky-600 tabular-nums">
+                            R$ {Number(sp.subscriber_price).toFixed(2)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end">
+                          {editingPriceId === sp.id ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
+                                onClick={() => handleUpdatePrice(sp)}
+                                disabled={updatingPrice}
+                                aria-label="Salvar novo preço"
+                              >
+                                {updatingPrice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={cancelEditingPrice}
+                                disabled={updatingPrice}
+                                aria-label="Cancelar edição"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => startEditingPrice(sp)}
+                                aria-label={`Editar preço de ${info.productTitle}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleDelete(sp.id)}
+                                aria-label={`Excluir preço de ${info.productTitle}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -596,6 +840,7 @@ interface ProfileRow {
   email: string | null;
   name: string | null;
   created_at: string;
+  is_franchisee?: boolean | null;
 }
 
 function UsersTab() {
@@ -680,6 +925,14 @@ function UsersTab() {
     setTogglingEmail(null);
   };
 
+  const toggleFranchisee = async (p: ProfileRow) => {
+    const next = !p.is_franchisee;
+    const { error } = await supabase.from("profiles").update({ is_franchisee: next }).eq("id", p.id);
+    if (error) return toast.error("Erro: " + error.message);
+    setProfiles((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_franchisee: next } : x)));
+    toast.success(next ? "Marcado como franqueado" : "Franquia removida");
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return profiles;
@@ -689,16 +942,21 @@ function UsersTab() {
     );
   }, [profiles, search]);
 
-  const withoutPlan = filtered.filter(p => !subscriberIds.has(p.user_id) && !memberEmails.has((p.email || "").toLowerCase()));
+  const hasActivePlan = (profile: ProfileRow) =>
+    subscriberIds.has(profile.user_id) ||
+    memberEmails.has((profile.email || "").toLowerCase());
+  const totalWithPlan = profiles.filter(hasActivePlan).length;
+  const totalWithoutPlan = profiles.length - totalWithPlan;
+  const totalFranchisees = profiles.filter((profile) => profile.is_franchisee).length;
 
   return (
     <Card>
       <CardHeader className="p-4 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Usuários cadastrados ({profiles.length})</CardTitle>
+            <CardTitle className="text-base">Usuários cadastrados</CardTitle>
             <CardDescription className="mt-0.5">
-              {withoutPlan.length} sem plano · {filtered.length - withoutPlan.length} com plano ativo
+              Informações sincronizadas com as contas e planos da plataforma.
             </CardDescription>
           </div>
           <Input
@@ -708,6 +966,24 @@ function UsersTab() {
             className="h-9 w-full sm:w-64"
           />
         </div>
+        <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:flex-wrap">
+          {[
+            { label: "Total", value: profiles.length },
+            { label: "Com plano", value: totalWithPlan },
+            { label: "Sem plano", value: totalWithoutPlan },
+            { label: "Franqueados", value: totalFranchisees },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border bg-[#f8f9fc] px-3 py-2 sm:min-w-28">
+              <p className="text-lg font-extrabold tabular-nums text-[#112f5f]">{item.value}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</p>
+            </div>
+          ))}
+        </div>
+        {search.trim() && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            {filtered.length} {filtered.length === 1 ? "resultado encontrado" : "resultados encontrados"}
+          </p>
+        )}
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {loading ? (
@@ -792,6 +1068,16 @@ function UsersTab() {
                                 <Crown className="h-3 w-3" />
                               )}
                               {isMember ? "Remover" : "Membro"}
+                            </Button>
+                            <Button
+                              variant={p.is_franchisee ? "outline" : "secondary"}
+                              size="sm"
+                              onClick={() => toggleFranchisee(p)}
+                              className="h-8 gap-1"
+                              title={p.is_franchisee ? "Remover franqueado" : "Marcar como franqueado"}
+                            >
+                              <Store className="h-3 w-3" />
+                              {p.is_franchisee ? "Franq. ✓" : "Franquia"}
                             </Button>
                           </>
                         )}
@@ -1128,15 +1414,16 @@ function ContentTab() {
   const [productId, setProductId] = useState("");
   const [description, setDescription] = useState("");
   const [specifications, setSpecifications] = useState("");
+  const [searchProduct, setSearchProduct] = useState("");
 
   const loadAll = async () => {
     setLoading(true);
     try {
       const [shop, cnt] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("product_content").select("*").order("updated_at", { ascending: false }),
       ]);
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (cnt.error) throw cnt.error;
       setContents((cnt.data || []) as ProductContent[]);
     } catch (e) {
@@ -1207,6 +1494,12 @@ function ContentTab() {
     return map;
   }, [products]);
 
+  const filteredProducts = useMemo(() => {
+    const q = searchProduct.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(p => p.node.title.toLowerCase().includes(q));
+  }, [products, searchProduct]);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -1218,30 +1511,74 @@ function ContentTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Produto</label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {products.map(p => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid gap-4 md:grid-cols-[150px_1fr]">
+            {/* Preview */}
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3">
+              <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+                {selectedProduct?.node.images.edges[0]?.node ? (
+                  <img
+                    src={selectedProduct.node.images.edges[0].node.url}
+                    alt={selectedProduct.node.images.edges[0].node.altText || selectedProduct.node.title || ""}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Package className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <p className="min-h-[2.4em] text-xs font-bold line-clamp-2">
+                {selectedProduct?.node.title || "Selecione um produto"}
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Buscar produto</label>
+                <Input
+                  placeholder="Digite o nome do produto..."
+                  value={searchProduct}
+                  onChange={(e) => setSearchProduct(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Produto</label>
+                <Select value={productId} onValueChange={setProductId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {filteredProducts.map(p => (
+                      <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedProduct && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-medium text-blue-900 mb-2">Variações:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedProduct.node.variants.edges.map((variant) => (
+                      <span key={variant.node.id} className="text-xs bg-white border border-blue-300 rounded px-2 py-1 text-blue-800">
+                        {variant.node.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium">Descrição</label>
+                <FormattedTextarea
+                  value={description}
+                  onChange={setDescription}
+                  placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
+                  rows={8}
+                  disabled={!productId}
+                />
+              </div>
+              <Button onClick={handleSave} disabled={saving || !productId}>
+                {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Descrição</label>
-            <FormattedTextarea
-              value={description}
-              onChange={setDescription}
-              placeholder={"Descrição:\nTexto descritivo do produto...\n\nBenefícios:\n- Benefício 1\n- Benefício 2"}
-              rows={10}
-              disabled={!productId}
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving || !productId}>
-            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
-          </Button>
         </CardContent>
       </Card>
 

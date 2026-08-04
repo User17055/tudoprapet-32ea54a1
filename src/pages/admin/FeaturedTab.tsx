@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ProductPicker } from "@/components/admin/ProductPicker";
 import { ArrowDown, ArrowUp, Loader2, Package, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,11 +25,11 @@ export default function FeaturedTab() {
     setLoading(true);
     try {
       const [shop, highlights] = await Promise.all([
-        storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+        fetchAllShopifyProducts(),
         supabase.from("featured_products").select("*").order("sort_order", { ascending: true }),
       ]);
 
-      setProducts(shop?.data?.products?.edges || []);
+      setProducts(shop);
       if (highlights.error) throw highlights.error;
       setFeatured((highlights.data || []) as FeaturedProduct[]);
     } catch (error: any) {
@@ -134,18 +129,14 @@ export default function FeaturedTab() {
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <Select value={productId} onValueChange={setProductId} disabled={loading}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um produto..." />
-            </SelectTrigger>
-            <SelectContent>
-              {availableProducts.map((product) => (
-                <SelectItem key={product.node.id} value={product.node.id}>
-                  {product.node.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ProductPicker
+            products={availableProducts}
+            value={productId}
+            onChange={setProductId}
+            disabled={loading}
+            placeholder="Selecione um produto..."
+          />
+
           <Button onClick={addFeatured} disabled={saving || loading || !productId}>
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

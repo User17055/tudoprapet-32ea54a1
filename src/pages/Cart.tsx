@@ -10,12 +10,14 @@ import {
   Minus,
   Plus,
   ShoppingCart,
+  Store,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CouponInput } from "@/components/CouponInput";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { supabase } from "@/integrations/supabase/client";
 import { getDisplayOptions } from "@/lib/shopify";
 import { goToCheckout } from "@/lib/checkout";
@@ -37,6 +39,8 @@ const Cart = () => {
   } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { isFranchisee, getFranchisePrice, loading: franchiseLoading } = useFranchisePrices();
+  const customerIsSubscribed = isSubscribed && !isFranchisee;
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce(
@@ -46,14 +50,27 @@ const Cart = () => {
   const clubTotalPrice = items.reduce((sum, item) => {
     const regularPrice = parseFloat(item.price.amount);
     const subscriberPrice = getSubscriberPrice(item.variantId);
-    const price = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
+    const price = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
       ? subscriberPrice
       : regularPrice;
 
     return sum + price * item.quantity;
   }, 0);
-  const clubDiscount = isSubscribed ? Math.max(0, totalPrice - clubTotalPrice) : 0;
-  const displayTotalPrice = isSubscribed ? clubTotalPrice : totalPrice;
+  const franchiseTotalPrice = items.reduce((sum, item) => {
+    const regularPrice = parseFloat(item.price.amount);
+    const franchisePrice = getFranchisePrice(item.variantId);
+    const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
+      ? franchisePrice
+      : regularPrice;
+    return sum + price * item.quantity;
+  }, 0);
+  const clubDiscount = customerIsSubscribed ? Math.max(0, totalPrice - clubTotalPrice) : 0;
+  const franchiseDiscount = isFranchisee ? Math.max(0, totalPrice - franchiseTotalPrice) : 0;
+  const displayTotalPrice = isFranchisee
+    ? franchiseTotalPrice
+    : customerIsSubscribed
+    ? clubTotalPrice
+    : totalPrice;
 
   const itemsListRef = useRef<HTMLElement>(null);
   const subtotalRef = useRef<HTMLSpanElement>(null);
@@ -89,7 +106,27 @@ const Cart = () => {
   const handleCheckout = async () => {
     setCheckingOut(true);
     try {
-      if (isSubscribed) {
+      if (isFranchisee) {
+        try {
+          const lineItems = items.map((item) => ({
+            variantId: item.variantId,
+            quantity: item.quantity,
+          }));
+          const { data, error } = await supabase.functions.invoke(
+            "franchise-checkout",
+            { body: { items: lineItems } },
+          );
+          if (error) throw error;
+          if (data?.checkoutUrl) {
+            clearCart();
+            goToCheckout(data.checkoutUrl);
+            return;
+          }
+        } catch (err) {
+          console.error("Franchise checkout failed:", err);
+          toast.error("Erro ao aplicar preço de franquia. Usando checkout normal.");
+        }
+      } else if (customerIsSubscribed) {
         try {
           const lineItems = items.map((item) => ({
             variantId: item.variantId,
@@ -141,7 +178,14 @@ const Cart = () => {
         </div>
       </header>
 
-      {isSubscribed && items.length > 0 && (
+      {isFranchisee && items.length > 0 ? (
+        <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700">
+          <Store className="h-4 w-4" />
+          {franchiseDiscount > 0
+            ? `Conta franquia: economia de R$ ${franchiseDiscount.toFixed(2).replace(".", ",")}`
+            : "Conta franquia: preços exclusivos aplicados no checkout"}
+        </div>
+      ) : customerIsSubscribed && items.length > 0 && (
         <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-700 dark:text-sky-300">
           <Crown className="h-4 w-4" />
           {clubDiscount > 0
@@ -176,8 +220,14 @@ const Cart = () => {
               {items.map((item) => {
                 const regularPrice = parseFloat(item.price.amount);
                 const subscriberPrice = getSubscriberPrice(item.variantId);
-                const hasSubscriberPrice = isSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
-                const itemPrice = hasSubscriberPrice ? subscriberPrice : regularPrice;
+                const franchisePrice = getFranchisePrice(item.variantId);
+                const hasFranchisePrice = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice;
+                const hasSubscriberPrice = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
+                const itemPrice = hasFranchisePrice
+                  ? franchisePrice
+                  : hasSubscriberPrice
+                  ? subscriberPrice
+                  : regularPrice;
                 const regularLineTotal = regularPrice * item.quantity;
                 const lineTotal = itemPrice * item.quantity;
                 const image = item.product.node.images?.edges?.[0]?.node;
@@ -252,7 +302,7 @@ const Cart = () => {
                         </div>
 
                         <div className="text-right">
-                          {hasSubscriberPrice && (
+                          {(hasFranchisePrice || hasSubscriberPrice) && (
                             <p className="whitespace-nowrap text-[11px] leading-none text-muted-foreground line-through">
                               R$ {regularLineTotal.toFixed(2).replace(".", ",")}
                             </p>
@@ -263,6 +313,11 @@ const Cart = () => {
                           {hasSubscriberPrice && (
                             <p className="whitespace-nowrap text-[10px] font-semibold leading-none text-primary">
                               assinatura
+                            </p>
+                          )}
+                          {hasFranchisePrice && (
+                            <p className="whitespace-nowrap text-[10px] font-semibold leading-none text-emerald-600">
+                              franquia
                             </p>
                           )}
                         </div>
@@ -294,11 +349,15 @@ const Cart = () => {
                     <span className="inline-block font-display text-2xl font-900 text-primary">
                       R$ {displayTotalPrice.toFixed(2).replace(".", ",")}
                     </span>
-                    {clubDiscount > 0 && (
+                    {franchiseDiscount > 0 ? (
+                      <span className="block text-[11px] font-semibold text-emerald-600">
+                        valor de franquia
+                      </span>
+                    ) : clubDiscount > 0 ? (
                       <span className="block text-[11px] font-semibold text-primary">
                         valor com assinatura
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
@@ -312,7 +371,7 @@ const Cart = () => {
                   onClick={handleCheckout}
                   className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
                   size="lg"
-                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || checkingOut}
+                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
                 >
                   {checkingOut || isLoading || isSyncing ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -361,7 +420,7 @@ const Cart = () => {
                 onClick={handleCheckout}
                 className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
                 size="lg"
-                disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || checkingOut}
+                disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
               >
                 {checkingOut || isLoading || isSyncing ? (
                   <Loader2 className="h-5 w-5 animate-spin" />

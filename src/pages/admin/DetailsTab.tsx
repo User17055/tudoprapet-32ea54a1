@@ -10,6 +10,7 @@ import { Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks } from "
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 
 interface Category {
@@ -511,6 +512,7 @@ function AssignPanel() {
   const [newValue, setNewValue] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
+  const [searchProduct, setSearchProduct] = useState("");
 
   // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
@@ -530,6 +532,22 @@ function AssignPanel() {
     () => allValues.filter((v) => v.attr_key === activeKey),
     [allValues, activeKey]
   );
+  const configuredIds = useMemo(
+    () =>
+      new Set<string>([
+        ...allProductCats.map((x) => x.shopify_product_id),
+        ...allProductContent.filter((x) => x.brand_id).map((x) => x.shopify_product_id),
+        ...allProductAttrs.map((x) => x.shopify_product_id),
+      ]),
+    [allProductAttrs, allProductCats, allProductContent],
+  );
+  const filteredProductsForSelect = useMemo(() => {
+    const q = searchProduct.trim().toLowerCase();
+    if (!q) return products.filter((p) => p.node.id === productId || !configuredIds.has(p.node.id));
+    return products
+      .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
+      .filter((p) => p.node.title.toLowerCase().includes(q));
+  }, [products, productId, configuredIds, searchProduct]);
 
   const reloadAll = async () => {
     const [pc, pcontent, pa] = await Promise.all([
@@ -547,11 +565,11 @@ function AssignPanel() {
       setLoading(true);
       try {
         const [shop, cats, brs] = await Promise.all([
-          storefrontApiRequest(PRODUCTS_QUERY, { first: 100 }),
+          fetchAllShopifyProducts(),
           supabase.from("categories").select("*").order("name"),
           supabase.from("brands").select("*").order("name"),
         ]);
-        setProducts(shop?.data?.products?.edges || []);
+        setProducts(shop);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
         await reloadAll();
@@ -585,10 +603,29 @@ function AssignPanel() {
     })();
   }, [productId]);
 
+  const getParentIds = (id: string): string[] => {
+    const parents: string[] = [];
+    let current = categories.find((c) => c.id === id);
+    const seen = new Set<string>([id]);
+    while (current?.parent_id) {
+      if (seen.has(current.parent_id)) break; // Prevent infinite loop
+      parents.push(current.parent_id);
+      seen.add(current.parent_id);
+      current = categories.find((c) => c.id === current?.parent_id);
+    }
+    return parents;
+  };
+
   const toggleCategory = (id: string) => {
     setSelectedCats((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        // Auto-select all parents
+        getParentIds(id).forEach((parentId) => next.add(parentId));
+      }
       return next;
     });
   };
@@ -696,11 +733,6 @@ function AssignPanel() {
   };
 
   // Build summary of configured products
-  const configuredIds = new Set<string>([
-    ...allProductCats.map((x) => x.shopify_product_id),
-    ...allProductContent.filter((x) => x.brand_id).map((x) => x.shopify_product_id),
-    ...allProductAttrs.map((x) => x.shopify_product_id),
-  ]);
   const configuredProducts = products.filter((p) => configuredIds.has(p.node.id));
   const filteredConfigured = configuredProducts.filter((p) =>
     !filter.trim() ? true : p.node.title.toLowerCase().includes(filter.toLowerCase())
@@ -783,17 +815,21 @@ function AssignPanel() {
         <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Atribuir detalhes a um produto</CardTitle></CardHeader>
         <CardContent className="space-y-4 p-4 pt-0">
           <div>
-            <label className="text-sm font-medium mb-1 block">
-              Produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>
+            <label className="text-sm font-medium mb-2 block">
+              Buscar e selecionar produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>
             </label>
+            <Input
+              placeholder="Digite o nome do produto..."
+              value={searchProduct}
+              onChange={(e) => setSearchProduct(e.target.value)}
+              className="mb-2 h-9"
+            />
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
-                {products
-                  .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
-                  .map((p) => (
-                    <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                  ))}
+                {filteredProductsForSelect.map((p) => (
+                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">
@@ -801,8 +837,39 @@ function AssignPanel() {
             </p>
           </div>
 
+          {productId && selectedProduct && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-medium text-blue-900 mb-2">Variações disponíveis:</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedProduct.node.variants.edges.map((variant) => (
+                  <span key={variant.node.id} className="text-xs bg-white border border-blue-300 rounded px-2 py-1 text-blue-800">
+                    {variant.node.title}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {productId && (
             <>
+              {/* Preview */}
+              <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 mb-6 md:w-48">
+                <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+                  {selectedProduct?.node.images.edges[0]?.node ? (
+                    <img
+                      src={selectedProduct.node.images.edges[0].node.url}
+                      alt={selectedProduct.node.images.edges[0].node.altText || selectedProduct.node.title || ""}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Package className="h-10 w-10 text-muted-foreground" />
+                  )}
+                </div>
+                <p className="text-xs font-bold line-clamp-3">
+                  {selectedProduct?.node.title}
+                </p>
+              </div>
+
               <div className="grid gap-6 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Categorias</label>

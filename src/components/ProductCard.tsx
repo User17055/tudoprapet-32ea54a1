@@ -1,12 +1,18 @@
 import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
-import { Loader2, Plus, RefreshCw, ShoppingCart } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useProductAudience } from "@/hooks/useProductAudience";
+import { useProductVariations } from "@/hooks/useProductVariations";
+import { Loader2, Plus, ShoppingCart, Store } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import { ProductImage } from "@/components/ProductImage";
 
 interface Props {
   product: ShopifyProduct;
+  products?: ShopifyProduct[];
 }
 
 const formatPrice = (value: number) =>
@@ -17,11 +23,24 @@ const formatPrice = (value: number) =>
 
 const TWO_INSTALLMENTS_RATE = 0.0859;
 
-export const ProductCard = ({ product }: Props) => {
+export const ProductCard = ({ product, products = [] }: Props) => {
+  const navigate = useNavigate();
+  const [selectedProduct, setSelectedProduct] = useState(product);
+
+  useEffect(() => {
+    setSelectedProduct(product);
+  }, [product]);
+
   const addItem = useCartStore((s) => s.addItem);
   const isLoading = useCartStore((s) => s.isLoading);
   const { getSubscriberPrice } = useSubscriberPrices();
-  const { node } = product;
+  const { getFranchisePrice, isFranchisee } = useFranchisePrices();
+  const { isVisibleTo } = useProductAudience();
+  const { getVariations } = useProductVariations();
+  const { node } = selectedProduct;
+  const variationItems = getVariations(node.id).filter((item) =>
+    isVisibleTo(item.shopify_product_id, isFranchisee),
+  );
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
@@ -36,13 +55,23 @@ export const ProductCard = ({ product }: Props) => {
   const isOutOfStock = !variant?.availableForSale;
 
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
+  const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
+  const hasFranchiseDiscount =
+    isFranchisee && franchisePrice !== null && franchisePrice < price;
+  const franchiseDiscountPercent = hasFranchiseDiscount && franchisePrice !== null
+    ? Math.round(((price - franchisePrice) / price) * 100)
+    : 0;
   const hasSubscriberDiscount =
-    subscriberPrice !== null && subscriberPrice < price;
+    !isFranchisee &&
+    subscriberPrice !== null &&
+    subscriberPrice < price;
   const subscriberDiscountPercent = hasSubscriberDiscount
     ? Math.round(((price - subscriberPrice) / price) * 100)
     : 0;
   const badgePercent = hasDiscount
     ? discountPercent
+    : hasFranchiseDiscount
+    ? franchiseDiscountPercent
     : hasSubscriberDiscount
     ? subscriberDiscountPercent
     : 0;
@@ -58,7 +87,7 @@ export const ProductCard = ({ product }: Props) => {
     if (!variant) return;
 
     const addPromise = addItem({
-      product,
+      product: selectedProduct,
       variantId: variant.id,
       variantTitle: variant.title,
       price: variant.price,
@@ -93,11 +122,12 @@ export const ProductCard = ({ product }: Props) => {
         )}
 
         {image ? (
-          <img
+          <ProductImage
             src={image.url}
             alt={image.altText || node.title}
             loading="lazy"
-            className={`absolute inset-0 z-[1] h-full w-full object-contain p-8 transition-transform duration-500 group-hover:scale-105 ${
+            targetFill={0.74}
+            className={`absolute inset-0 z-[1] h-full w-full object-contain transition-transform duration-300 ${
               isOutOfStock ? "opacity-40 grayscale" : "opacity-100"
             }`}
           />
@@ -121,9 +151,54 @@ export const ProductCard = ({ product }: Props) => {
         </button>
       </div>
 
-      <h3 className="mt-4 line-clamp-2 min-h-[2.9em] text-[15px] font-normal leading-[1.35] text-[#202633]">
-        {node.title}
-      </h3>
+      <div className="mt-4 min-h-[2.9em]">
+        <h3
+          className={`line-clamp-2 text-[15px] font-normal leading-[1.35] text-[#202633] ${
+            variationItems.length > 1
+              ? "group-hover:hidden"
+              : ""
+          }`}
+        >
+          {node.title}
+        </h3>
+
+        {variationItems.length > 1 && (
+          <div className="hidden h-[2.9em] items-center gap-2 overflow-x-auto pr-1 group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {variationItems.map((item) => {
+              const active = item.shopify_product_id === node.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  title={`${item.label} — ${item.shopify_product_title}`}
+                  aria-label={`Selecionar ${item.label}`}
+                  aria-pressed={active}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (active) return;
+                    const nextProduct = products.find(
+                      (candidate) => candidate.node.id === item.shopify_product_id,
+                    );
+                    if (nextProduct) {
+                      setSelectedProduct(nextProduct);
+                    } else {
+                      navigate(`/product/${item.shopify_product_handle}`);
+                    }
+                  }}
+                  className={`h-10 shrink-0 rounded-xl border px-3.5 text-[15px] font-bold uppercase leading-none transition-colors ${
+                    active
+                      ? "border-[#171717] bg-[#171717] text-white"
+                      : "border-[#d7d9dd] bg-white text-[#51545a] hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="mt-4 flex flex-col items-start gap-1">
         {showOriginalPrice && originalPrice && (
@@ -142,17 +217,26 @@ export const ProductCard = ({ product }: Props) => {
           </span>
         )}
 
-        {hasSubscriberDiscount && (
+        {hasFranchiseDiscount && franchisePrice !== null ? (
           <div className="mt-1 flex flex-col items-start gap-[2px]">
-            <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-[#0054a6] tabular-nums">
-              {formatPrice(subscriberPrice)}
-              <RefreshCw className="h-3.5 w-3.5" />
+            <span className="inline-flex items-center gap-1 text-[17px] font-bold leading-none text-emerald-600 tabular-nums">
+              {formatPrice(franchisePrice)}
+              <Store className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[12px] font-normal leading-none text-[#0054a6]">
-              para assinantes
+            <span className="text-[12px] font-normal leading-none text-emerald-600">
+              preço franquia
             </span>
           </div>
-        )}
+        ) : hasSubscriberDiscount ? (
+          <div className="mt-1.5 flex flex-col items-start gap-1">
+            <span className="text-[18px] font-extrabold leading-none text-[#0054a6] tabular-nums">
+              {formatPrice(subscriberPrice)}
+            </span>
+            <span className="text-[12px] font-medium leading-none text-[#0054a6]">
+              No <strong className="font-black uppercase text-[#00a896]">Pix</strong> para assinantes
+            </span>
+          </div>
+        ) : null}
       </div>
     </Link>
   );

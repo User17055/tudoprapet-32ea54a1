@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { storefrontApiRequest, PRODUCT_BY_HANDLE_QUERY, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
+import { cachedStorefrontApiRequest, fetchShopifyProductByHandle, getCachedShopifyProductByHandle, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useProductAudience } from "@/hooks/useProductAudience";
+import { useProductVariations } from "@/hooks/useProductVariations";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -25,11 +28,14 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { goToCheckout } from "@/lib/checkout";
+import { ProductImage } from "@/components/ProductImage";
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
-  const [product, setProduct] = useState<ShopifyProduct | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [product, setProduct] = useState<ShopifyProduct | null>(
+    () => getCachedShopifyProductByHandle(handle),
+  );
+  const [loading, setLoading] = useState(() => !getCachedShopifyProductByHandle(handle));
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -46,6 +52,13 @@ const ProductDetail = () => {
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const {
+    getFranchisePrice,
+    isFranchisee,
+    loading: franchiseAccessLoading,
+  } = useFranchisePrices();
+  const { isVisibleTo, loading: audienceLoading } = useProductAudience();
+  const { getVariations } = useProductVariations();
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);
@@ -67,26 +80,47 @@ const ProductDetail = () => {
   };
 
   useEffect(() => {
+    let active = true;
     const fetchProduct = async () => {
+      setSelectedVariantIdx(0);
+      setSelectedImageIdx(0);
+      const cachedProduct = getCachedShopifyProductByHandle(handle);
+      if (cachedProduct) {
+        if (active) {
+          setProduct(cachedProduct);
+          setLoading(false);
+        }
+        if (handle) {
+          fetchShopifyProductByHandle(handle, false)
+            .then((detailedProduct) => {
+              if (active && detailedProduct) setProduct(detailedProduct);
+            })
+            .catch(console.error);
+        }
+        return;
+      }
+      setLoading(true);
       try {
-        const data = await storefrontApiRequest(PRODUCT_BY_HANDLE_QUERY, { handle });
-        const p = data?.data?.productByHandle;
-        if (p) setProduct({ node: p });
+        const nextProduct = handle ? await fetchShopifyProductByHandle(handle) : null;
+        if (active) setProduct(nextProduct);
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     fetchProduct();
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    return () => {
+      active = false;
+    };
   }, [handle]);
 
   useEffect(() => {
     const fetchRecommended = async () => {
       if (!product?.node?.id) return;
       try {
-        const data = await storefrontApiRequest(PRODUCT_RECOMMENDATIONS_QUERY, {
+        const data = await cachedStorefrontApiRequest(PRODUCT_RECOMMENDATIONS_QUERY, {
           productId: product.node.id,
         });
         const recs = data?.data?.productRecommendations || [];
@@ -96,7 +130,7 @@ const ProductDetail = () => {
 
         // Fallback: if Shopify didn't return recommendations, show recent products
         if (mapped.length === 0) {
-          const fb = await storefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
+          const fb = await cachedStorefrontApiRequest(PRODUCTS_QUERY, { first: 12, query: null });
           const edges: ShopifyProduct[] = fb?.data?.products?.edges || [];
           mapped = edges.filter((p) => p.node.handle !== handle);
         }
@@ -160,7 +194,7 @@ const ProductDetail = () => {
     fetchCustomContent();
   }, [product?.node?.id]);
 
-  if (loading) {
+  if (loading || audienceLoading || franchiseAccessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -188,9 +222,42 @@ const ProductDetail = () => {
     );
   }
 
+  // Block access if product audience doesn't match viewer
+  const productAllowed = isVisibleTo(product.node.id, isFranchisee);
+  if (!productAllowed) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-xl font-display">Produto indisponível</p>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Este produto não está disponível para o seu perfil.
+            </p>
+            <Link to="/catalogo">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Ver catálogo
+              </Button>
+            </Link>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+
+
   const { node } = product;
+  const productVariations = getVariations(node.id).filter((item) =>
+    isVisibleTo(item.shopify_product_id, isFranchisee),
+  );
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
+  const visibleRecommended = recommended.filter((item) =>
+    isVisibleTo(item.node.id, isFranchisee),
+  );
   const mainImage = images[selectedImageIdx]?.node || images[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
@@ -199,8 +266,15 @@ const ProductDetail = () => {
     ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
     : 0;
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
-  const hasSubscriberDiscount = subscriberPrice !== null && subscriberPrice < price;
+  const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
+  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null && franchisePrice < price;
+  const hasSubscriberDiscount =
+    !isFranchisee &&
+    subscriberPrice !== null &&
+    subscriberPrice < price;
   const installment = (price / 2).toFixed(2).replace(".", ",");
+
+  
 
   const handleAdd = async () => {
     if (!variant) return;
@@ -221,7 +295,22 @@ const ProductDetail = () => {
     if (!variant) return;
     setBuyingNow(true);
 
-    if (isSubscribed) {
+    if (isFranchisee) {
+      try {
+        const { data, error } = await supabase.functions.invoke("franchise-checkout", {
+          body: { items: [{ variantId: variant.id, quantity }] },
+        });
+        if (error) throw error;
+        if (data?.checkoutUrl) {
+          goToCheckout(data.checkoutUrl);
+          setBuyingNow(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Franchise checkout failed:", err);
+        toast.error("Erro ao aplicar preço de franquia.");
+      }
+    } else if (isSubscribed) {
       try {
         const { data, error } = await supabase.functions.invoke("subscriber-checkout", {
           body: { items: [{ variantId: variant.id, quantity }] },
@@ -238,7 +327,7 @@ const ProductDetail = () => {
       }
     }
 
-    // Não-assinante: checkout instantâneo sem afetar o carrinho
+    // Fallback: checkout instantâneo sem afetar o carrinho
     const checkoutUrl = await createInstantCheckoutUrl([
       { variantId: variant.id, quantity },
     ]);
@@ -341,9 +430,9 @@ const ProductDetail = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-[#f6f7f9]">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-6 lg:py-10">
+      <main className="container mx-auto flex-1 px-4 py-5 lg:py-8">
         <Link
           to="/"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary mb-6 transition-colors"
@@ -351,12 +440,12 @@ const ProductDetail = () => {
           <ArrowLeft className="h-4 w-4" /> Voltar para a loja
         </Link>
 
-        <div className="grid lg:grid-cols-[1fr_420px] gap-8 lg:gap-12">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:gap-8">
           {/* Gallery */}
-          <div>
+          <div className="rounded-3xl border border-border/70 bg-white p-3 shadow-sm sm:p-5">
             {/* Mobile: Carousel */}
             <div className="lg:hidden">
-              <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-border">
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-white">
                 {hasDiscount && (
                   <span className="absolute top-3 left-3 z-10 bg-accent text-accent-foreground text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm">
                     {discountPercent}% OFF
@@ -378,10 +467,11 @@ const ProductDetail = () => {
                       key={i}
                       className="flex-shrink-0 w-full h-full snap-center"
                     >
-                      <img
+                      <ProductImage
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-cover"
+                        targetFill={0.82}
+                        className="h-full w-full object-contain transition-transform duration-300"
                       />
                     </div>
                   ))}
@@ -429,10 +519,11 @@ const ProductDetail = () => {
                           : "border-border hover:border-primary/50"
                       }`}
                     >
-                      <img
+                      <ProductImage
                         src={img.node.url}
                         alt={img.node.altText || `${node.title} ${i + 1}`}
-                        className="w-full h-full object-contain p-2"
+                        targetFill={0.78}
+                        className="h-full w-full object-contain transition-transform duration-300"
                       />
                     </button>
                   ))}
@@ -447,7 +538,7 @@ const ProductDetail = () => {
                   </button>
                 )}
               </div>
-              <div className="relative aspect-square bg-white rounded-2xl overflow-hidden border border-border">
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-white">
                 {hasDiscount && (
                   <span className="absolute top-4 left-4 z-10 bg-accent text-accent-foreground text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
                     {discountPercent}% OFF
@@ -457,10 +548,11 @@ const ProductDetail = () => {
                   Imagens ilustrativas
                 </span>
                 {mainImage && (
-                  <img
+                  <ProductImage
                     src={mainImage.url}
                     alt={mainImage.altText || node.title}
-                    className="w-full h-full object-cover"
+                    targetFill={0.82}
+                    className="h-full w-full object-contain transition-transform duration-300"
                   />
                 )}
               </div>
@@ -468,7 +560,7 @@ const ProductDetail = () => {
           </div>
 
           {/* Buy Box */}
-          <div className="space-y-5">
+          <div className="space-y-5 rounded-3xl border border-border/70 bg-white p-5 shadow-sm lg:sticky lg:top-24 lg:p-6">
             <div>
               <h1 className="font-display font-900 text-2xl lg:text-3xl leading-tight">
                 {node.title}
@@ -487,16 +579,52 @@ const ProductDetail = () => {
                   R$ {price.toFixed(2).replace(".", ",")}
                 </p>
               </div>
-              {hasSubscriberDiscount && (
+              {hasFranchiseDiscount && franchisePrice !== null && (
                 <div className="flex items-center gap-1.5 pt-1">
-                  <Crown className="h-4 w-4 text-sky-500" />
+                  <Crown className="h-4 w-4 text-emerald-600" />
+                  <span className="font-display font-900 text-xl text-emerald-600 tabular-nums">
+                    R$ {franchisePrice.toFixed(2).replace(".", ",")}
+                  </span>
+                  <span className="text-xs text-emerald-600/80 font-medium">preço franquia</span>
+                </div>
+              )}
+              {hasSubscriberDiscount && (
+                <div className="flex flex-col items-start gap-1 pt-1">
                   <span className="font-display font-900 text-xl text-sky-500 tabular-nums">
                     R$ {subscriberPrice.toFixed(2).replace(".", ",")}
                   </span>
-                  <span className="text-xs text-sky-500/80 font-medium">para assinantes</span>
+                  <span className="text-xs font-medium text-sky-600">
+                    No <strong className="font-black uppercase text-[#00a896]">Pix</strong> para assinantes
+                  </span>
                 </div>
               )}
             </div>
+
+            {productVariations.length > 1 && (
+              <div className="space-y-2">
+                <p className="font-medium text-sm text-foreground">Tamanho:</p>
+                <div className="flex flex-wrap gap-2">
+                  {productVariations.map((item) => {
+                    const active = item.shopify_product_id === node.id;
+                    return (
+                      <Link
+                        key={item.id}
+                        to={`/product/${item.shopify_product_handle}`}
+                        title={item.shopify_product_title}
+                        aria-current={active ? "page" : undefined}
+                        className={`rounded-lg border-2 px-4 py-2 text-sm font-semibold transition-all ${
+                          active
+                            ? "border-[#171717] bg-[#171717] text-white"
+                            : "border-border bg-background text-foreground hover:border-primary/60"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Variant selector */}
             {node.variants.edges.length > 1 && (
@@ -569,27 +697,6 @@ const ProductDetail = () => {
               </Button>
             </div>
 
-            {/* Subscriber Club Card */}
-            <div className="rounded-2xl border-2 border-sky-400/40 bg-sky-50/50 dark:bg-sky-950/20 p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <Crown className="h-5 w-5 text-sky-500" />
-                <h3 className="font-display font-900 text-base text-sky-600 dark:text-sky-400">
-                  Assine pra não faltar
-                </h3>
-              </div>
-              <p className="text-sm font-semibold text-foreground leading-snug">
-                Assine para benefícios exclusivos
-              </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Receba na frequência que seu pet precisa, sem custo de envio, com descontos especiais e prioridade no atendimento. Cancele quando quiser.
-              </p>
-              <Link
-                to="/clube"
-                className="inline-flex items-center gap-1 text-sm font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400"
-              >
-                Assinar agora →
-              </Link>
-            </div>
 
             {/* Trust badges */}
             <div className="grid grid-cols-3 gap-2 pt-3">
@@ -610,8 +717,8 @@ const ProductDetail = () => {
         </div>
 
         {/* Description section */}
-        <section className="mt-12 lg:mt-16 max-w-4xl">
-          <div className="border-t border-border pt-10">
+        <section className="mt-10 max-w-4xl rounded-3xl border border-border/70 bg-white p-5 shadow-sm lg:mt-12 lg:p-8">
+          <div>
             <div className="flex items-center gap-3 mb-6">
               <div className="h-10 w-1.5 bg-primary rounded-full" />
               <h2 className="font-display font-900 text-2xl lg:text-3xl">
@@ -666,7 +773,7 @@ const ProductDetail = () => {
         </section>
 
         {/* Recommended products */}
-        {recommended.length > 0 && (
+        {visibleRecommended.length > 0 && (
           <section className="mt-12 lg:mt-16">
             <div className="flex items-center gap-3 mb-6">
               <div className="h-10 w-1.5 bg-accent rounded-full" />
@@ -675,7 +782,7 @@ const ProductDetail = () => {
               </h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {recommended.map((p) => (
+              {visibleRecommended.map((p) => (
                 <ProductCard key={p.node.id} product={p} />
               ))}
             </div>

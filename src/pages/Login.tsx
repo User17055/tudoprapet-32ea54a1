@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/tpp-logo.svg";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -53,11 +53,8 @@ const Login = () => {
             </Link>
           </Button>
 
-          <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
-            <span className="font-display text-lg font-900 text-foreground">
-              Tudo<span className="text-primary">Pra</span>Pet
-            </span>
+          <Link to="/" className="flex items-center">
+            <img src={logo} alt="TudoPraPet" className="h-auto w-36 sm:w-44" />
           </Link>
         </div>
       </header>
@@ -74,9 +71,9 @@ const Login = () => {
               Sua conta TudoPraPet, simples de acompanhar.
             </h1>
             <p className="mt-4 max-w-lg text-base leading-relaxed text-muted-foreground">
-              Entre para ver pedidos, continuar comprando mais rápido e acessar
-              benefícios do Clube quando estiver disponível para sua conta.
+              Entre para ver pedidos e continuar comprando mais rápido.
             </p>
+
 
             <div className="mt-8 grid gap-3">
               {[

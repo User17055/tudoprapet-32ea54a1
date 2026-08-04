@@ -4,6 +4,20 @@ const SHOPIFY_API_VERSION = '2025-07';
 const SHOPIFY_STORE_PERMANENT_DOMAIN = 'petjoy-deals-hb8r9.myshopify.com';
 const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_PERMANENT_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`;
 const SHOPIFY_STOREFRONT_TOKEN = '66b7b618d388aa97942b3ac0c15a2315';
+const SHOPIFY_CACHE_TTL = 5 * 60 * 1000;
+
+interface TimedCacheEntry<T> {
+  data: T | null;
+  expiresAt: number;
+  pending: Promise<T> | null;
+}
+
+const queryCache = new Map<
+  string,
+  TimedCacheEntry<Awaited<ReturnType<typeof storefrontApiRequest>>>
+>();
+const productListCache = new Map<string, TimedCacheEntry<ShopifyProduct[]>>();
+const productByHandleCache = new Map<string, ShopifyProduct>();
 
 export interface ShopifyProduct {
   node: {
@@ -84,9 +98,38 @@ export async function storefrontApiRequest(query: string, variables: Record<stri
   return data;
 }
 
+export async function cachedStorefrontApiRequest(
+  query: string,
+  variables: Record<string, unknown> = {},
+  ttl = SHOPIFY_CACHE_TTL,
+) {
+  const key = `${query}|${JSON.stringify(variables)}`;
+  const now = Date.now();
+  const cached = queryCache.get(key);
+  if (cached?.data && cached.expiresAt > now) return cached.data;
+  if (cached?.pending) return cached.pending;
+
+  const pending = storefrontApiRequest(query, variables)
+    .then((data) => {
+      queryCache.set(key, { data, expiresAt: Date.now() + ttl, pending: null });
+      return data;
+    })
+    .catch((error) => {
+      queryCache.delete(key);
+      throw error;
+    });
+  queryCache.set(key, {
+    data: cached?.data ?? null,
+    expiresAt: cached?.expiresAt ?? 0,
+    pending,
+  });
+  return pending;
+}
+
 export const PRODUCTS_QUERY = `
-  query GetProducts($first: Int!, $query: String) {
-    products(first: $first, query: $query) {
+  query GetProducts($first: Int!, $query: String, $after: String) {
+    products(first: $first, query: $query, after: $after) {
+      pageInfo { hasNextPage endCursor }
       edges {
         node {
           id
@@ -140,6 +183,92 @@ export const PRODUCTS_QUERY = `
     }
   }
 `;
+
+/**
+ * Busca TODOS os produtos da loja paginando via cursor (250 por página).
+ * Necessário porque `first: 100` deixava produtos de fora quando o catálogo cresce.
+ */
+export async function fetchAllShopifyProducts(searchQuery?: string): Promise<ShopifyProduct[]> {
+  const cacheKey = searchQuery?.trim().toLowerCase() || "__all__";
+  const now = Date.now();
+  const cached = productListCache.get(cacheKey);
+  if (cached?.data && cached.expiresAt > now) return cached.data;
+  if (cached?.pending) return cached.pending;
+
+  const pending = fetchAllShopifyProductsUncached(searchQuery)
+    .then((products) => {
+      products.forEach((product) => productByHandleCache.set(product.node.handle, product));
+      productListCache.set(cacheKey, {
+        data: products,
+        expiresAt: Date.now() + SHOPIFY_CACHE_TTL,
+        pending: null,
+      });
+      return products;
+    })
+    .catch((error) => {
+      productListCache.delete(cacheKey);
+      throw error;
+    });
+  productListCache.set(cacheKey, {
+    data: cached?.data ?? null,
+    expiresAt: cached?.expiresAt ?? 0,
+    pending,
+  });
+  return pending;
+}
+
+export async function searchShopifyProducts(
+  searchQuery: string,
+  first = 8,
+): Promise<ShopifyProduct[]> {
+  const term = searchQuery.trim();
+  if (term.length < 2) return [];
+
+  const data = await cachedStorefrontApiRequest(PRODUCTS_QUERY, {
+    first,
+    query: term,
+    after: null,
+  });
+  const products = (data?.data?.products?.edges || []) as ShopifyProduct[];
+  products.forEach((product) => productByHandleCache.set(product.node.handle, product));
+  return products;
+}
+
+async function fetchAllShopifyProductsUncached(searchQuery?: string): Promise<ShopifyProduct[]> {
+  const all: ShopifyProduct[] = [];
+  let after: string | null = null;
+  for (let i = 0; i < 20; i++) {
+    const data = await storefrontApiRequest(PRODUCTS_QUERY, {
+      first: 250,
+      query: searchQuery,
+      after,
+    });
+    const conn = data?.data?.products;
+    if (!conn) break;
+    all.push(...conn.edges);
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return all;
+}
+
+export function getCachedShopifyProductByHandle(handle?: string) {
+  return handle ? productByHandleCache.get(handle) ?? null : null;
+}
+
+export async function fetchShopifyProductByHandle(
+  handle: string,
+  preferListCache = true,
+): Promise<ShopifyProduct | null> {
+  const cached = getCachedShopifyProductByHandle(handle);
+  if (preferListCache && cached) return cached;
+  const data = await cachedStorefrontApiRequest(PRODUCT_BY_HANDLE_QUERY, { handle });
+  const node = data?.data?.productByHandle;
+  if (!node) return null;
+  const product = { node } as ShopifyProduct;
+  productByHandleCache.set(handle, product);
+  return product;
+}
 
 export const BEST_SELLING_PRODUCTS_QUERY = `
   query GetBestSellingProducts($first: Int!) {

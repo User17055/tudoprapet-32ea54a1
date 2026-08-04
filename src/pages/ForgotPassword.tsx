@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/tpp-logo.svg';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -43,11 +43,8 @@ const ForgotPassword = () => {
             <ArrowLeft className="h-4 w-4" />
             Voltar ao login
           </Link>
-          <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="TudoPraPet" className="h-8 w-auto" />
-            <span className="hidden sm:inline font-display font-900 text-lg text-foreground">
-              Tudo<span className="text-primary">Pra</span>Pet
-            </span>
+          <Link to="/" className="flex items-center">
+            <img src={logo} alt="TudoPraPet" className="h-auto w-36 sm:w-44" />
           </Link>
         </div>
       </div>

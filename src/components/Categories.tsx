@@ -11,7 +11,7 @@ export const Categories = () => {
   const navigate = useNavigate();
 
   return (
-    <section className="py-1 md:py-2">
+    <section className="py-1 md:hidden">
       <div className="max-w-[220px] md:max-w-[280px] mx-auto px-3">
         <div className="grid grid-cols-2 gap-2 mx-auto">
           {pets.map((p) => (

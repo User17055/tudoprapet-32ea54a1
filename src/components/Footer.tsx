@@ -1,5 +1,4 @@
 import { Instagram, Mail, MessageCircle } from "lucide-react";
-import logo from "@/assets/logo.png";
 import { Link } from "react-router-dom";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
@@ -28,7 +27,7 @@ const footerColumns = [
   {
     title: "Pra voce",
     links: [
-      { label: "Clube", to: "/clube" },
+      
       { label: "Promocoes", to: "/catalogo" },
       { label: "Catalogo", to: "/catalogo" },
       { label: "Recompra", to: "/meus-pedidos" },
