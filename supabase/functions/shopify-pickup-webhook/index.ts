@@ -115,8 +115,9 @@ Deno.serve(async (req) => {
 
     if (!resolvedOrderId) {
       console.error(`missing order id topic=${topic} payload=${rawBody.slice(0, 500)}`);
-      return new Response(JSON.stringify({ error: "missing order id" }), {
-        status: 400,
+      // Always 200: a non-2xx makes Shopify mark the delivery as failed and retry forever.
+      return new Response(JSON.stringify({ ignored: true, error: "missing order id" }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
