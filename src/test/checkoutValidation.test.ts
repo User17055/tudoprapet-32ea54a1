@@ -9,8 +9,8 @@ const VALID = { variantId: "gid://shopify/ProductVariant/111", quantity: 2 };
 
 function rejectionOf(raw: unknown): string {
   const result = parseCheckoutItems(raw);
-  if (result.ok) throw new Error("esperava rejeição, mas passou");
-  return result.message;
+  if (result.ok === false) return result.message;
+  throw new Error("esperava rejeição, mas passou");
 }
 
 describe("parseCheckoutItems", () => {
