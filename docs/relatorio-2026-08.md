@@ -331,51 +331,100 @@ ela é observável, e ligar a proteção custa uma variável em vez de um deploy
 
 ## 6. O que não foi feito, e por quê
 
-### Verificação de execução
+### Execução das edge functions
 
-Deno e Supabase CLI não estavam instalados na máquina de desenvolvimento, e o `tsconfig`
-cobre apenas `src/`. **As edge functions não foram executadas nem type-checkadas.**
+O typecheck delas passou a existir (ver seção 7), mas **elas ainda não foram
+executadas**. Verificação estática não é a mesma coisa que rodar.
 
-O que existe: testes unitários da lógica pura extraída, conferência das constantes de
-comportamento, e revisão manual. É consistente, mas não substitui execução.
+Antes de abrir PR para a `main`, vale um smoke test com `supabase functions serve` —
+principalmente dos dois checkouts e do webhook de retirada, que é o que mais mudou.
 
-**Antes de abrir PR para a `main`, rodar `supabase functions serve` e fazer um smoke
-test** — principalmente dos dois checkouts e do webhook de retirada.
+Ao rodar localmente, aponte `EXTERNAL_API_BASE_URL` para algo descartável. Com os
+valores de produção, a function **manda WhatsApp de verdade**.
 
 ---
 
-## 7. Decisões que dependem do time
+## 7. As edge functions entraram na verificação automática
+
+Até aqui, `supabase/functions/` estava **fora de tudo**: o `tsconfig.app.json` inclui
+apenas `src/`, então `npx tsc --noEmit` nunca olhou para a pasta. Sem typecheck, sem
+lint, sem teste, sem execução local. Foi por isso que coisas como o HMAC descartado e as
+seis functions sem autenticação sobreviveram tanto tempo — nada as examinava.
+
+A causa era o fluxo de trabalho: as functions são geradas e publicadas pelo Lovable, e
+ninguém precisou desenvolvê-las na própria máquina. Deno e Supabase CLI nunca fizeram
+falta, e portanto nunca foram adicionados.
+
+Agora existem dois scripts:
+
+```bash
+npm run check:functions   # deno check — typecheck das 13 functions
+npm run lint:functions    # deno lint
+```
+
+O Supabase CLI entrou como devDependency, então vem com `npm install`. O Deno é um
+runtime e precisa ser instalado na máquina: `winget install DenoLand.Deno`.
+
+**O typecheck encontrou dois erros no primeiro uso** — ambos invisíveis até então:
+
+| Onde | Erro |
+|---|---|
+| `_shared/checkout.ts` | cast inválido no resultado do postgrest com coluna dinâmica |
+| `pickup-complete/index.ts` | parâmetro com `any` implícito (código pré-existente) |
+
+Os dois foram corrigidos.
+
+### Uma armadilha que vale registrar
+
+O `deno.json` precisa de `"nodeModulesDir": "none"`. Com `"auto"` — que é o que o
+próprio Deno sugere na mensagem de erro — ele instala cópias próprias das dependências
+em `node_modules/.deno/`, e o `vite build` passa a resolver o rollup de lá e **quebra**.
+Testes e typecheck continuam passando, então a quebra só aparece no build.
+
+Está comentado dentro do `deno.json`. Não troque para `auto`.
+
+---
+
+## 8. Decisões que dependem do time
 
 1. **Categoria do template de WhatsApp** — mudar de MARKETING para UTILITY no WhatsApp
    Manager. É a correção de maior impacto no problema do 131049 e não está no código.
 2. **A API externa honra `idempotency_key`?** Sem isso, a proteção contra duplicata é
    parcial.
-3. **E-mail com o código único** — a API externa já tem o código; enviá-lo por e-mail
-   tira a dependência exclusiva de um canal que a Meta controla.
-4. **Ligar `SHOPIFY_WEBHOOK_HMAC_MODE=enforce`** depois de confirmar nos logs que todos
+3. **Ligar `SHOPIFY_WEBHOOK_HMAC_MODE=enforce`** depois de confirmar nos logs que todos
    os `HMAC_CHECK` são `result=valid`. Enquanto não for ligado, o webhook segue
    aceitando payload forjado — o código está pronto, falta a decisão. Procedimento em
    `docs/edge-functions-auth.md`.
-5. **Quatro functions órfãs** — `create-checkout`, `customer-portal`, `pickup-test-send`
+4. **Conferir se o e-mail da Shopify está renderizando o código.** A `main` passou a
+   gravar o código em `note_attributes` do pedido justamente para isso, mas o template
+   de notificação precisa incluir `{{ attributes["Codigo de retirada"] }}` — é
+   configuração em Settings → Notifications, não código.
+5. **`note_attributes` é substituído por inteiro** no PUT que grava o código. Se o
+   pedido já tiver outros atributos (observação de presente, dado de checkout), eles
+   são apagados. Hoje o risco parece baixo, mas vale confirmar.
+6. **Quatro functions órfãs** — `create-checkout`, `customer-portal`, `pickup-test-send`
    e `shopify-webhooks-admin` não são chamadas por ninguém. `customer-portal` aponta
    para `/clube`, rota que não existe mais. Remover ou restaurar a tela?
-6. **Registro de envio** — ressuscitar `pickup_codes` ou equivalente, para que falha de
+7. **Registro de envio** — ressuscitar `pickup_codes` ou equivalente, para que falha de
    entrega deixe de ser invisível.
-7. **`order_created` no WhatsApp** deve continuar existindo, dado que a Shopify já manda
+8. **`order_created` no WhatsApp** deve continuar existindo, dado que a Shopify já manda
    e-mail de confirmação?
-8. **CORS `*`** é necessário, ou dá para restringir aos domínios da loja?
+9. **CORS `*`** é necessário, ou dá para restringir aos domínios da loja?
 
 ---
 
-## 8. Como verificar
+## 9. Como verificar
 
 ```bash
-npm run test        # 76 testes
-npx tsc --noEmit    # sem erros
-npm run lint
+npm run test              # 76 testes
+npx tsc --noEmit          # frontend, sem erros
+npm run lint              # frontend
+npm run check:functions   # edge functions (requer Deno instalado)
+npm run lint:functions    # edge functions
+npm run build             # confere que o bundle ainda sai
 ```
 
 Documentos relacionados:
 
 - [`docs/edge-functions-auth.md`](edge-functions-auth.md) — matriz de autenticação das 13
-  functions, o padrão da casa, e por que `verify_jwt` não é controle de acesso
+  functions, o padrão da casa, e o procedimento para ligar o `enforce` do HMAC
