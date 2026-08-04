@@ -188,6 +188,137 @@ a validação aceitou o item e repassou apenas `variantId` e `quantity`.
 
 ---
 
+---
+
+# Parte 3 — Como saber o que está publicado
+
+## Sincronizar código não é publicar function
+
+São mecanismos separados, e essa distinção custou horas de confusão em 04/08/2026.
+
+O Lovable puxa os commits do GitHub para o workspace dele — os arquivos aparecem no
+editor, corretos. Mas o **deploy** das edge functions só acontece quando ele mesmo edita
+uma function pelo pipeline dele. Mudança que chega de fora, por Pull Request, fica no
+editor e **não vai ao ar**.
+
+O resultado é o pior tipo de falha: silenciosa. O código está certo no repositório, certo
+no GitHub, certo dentro do Lovable — e o que roda em produção é outra coisa. Ninguém
+percebe, porque não há nada visivelmente errado em lugar nenhum.
+
+## Como verificar, sem precisar de credencial
+
+Nem todo mundo do time tem acesso ao painel do Supabase. Este teste não precisa de
+nenhum: um `OPTIONS` não processa corpo, não dispara nada, e devolve os cabeçalhos CORS
+que a própria function monta.
+
+```bash
+curl -s -i -X OPTIONS https://smvtnflhkvxdmvqbxwrf.supabase.co/functions/v1/shopify-pickup-webhook | grep -i access-control-allow-headers
+```
+
+Confirme que é a function respondendo, e não o gateway, procurando estes cabeçalhos na
+resposta completa:
+
+```
+x-served-by: supabase-edge-runtime
+x-deno-execution-id: ...
+```
+
+Para varrer várias de uma vez:
+
+```bash
+for fn in shopify-pickup-webhook customer-portal check-subscription subscriber-checkout pickup-validate; do printf "%-24s " "$fn"; curl -s -i -X OPTIONS "https://smvtnflhkvxdmvqbxwrf.supabase.co/functions/v1/$fn" | grep -i "access-control-allow-headers"; done
+```
+
+## Como escolher o que observar
+
+O truque é achar **qualquer diferença observável** entre a versão que você quer publicar
+e a que está no ar. Em agosto/2026 serviu o `x-retry-count`: ele passou a existir quando
+o `corsHeaders` foi centralizado em `_shared/cors.ts`, e não existia antes.
+
+**Esse sinal expira.** Depois que a versão nova subir, `x-retry-count` estará sempre
+presente e não distingue mais nada. Para o próximo deploy é preciso escolher outro
+discriminador — o que mudou naquela entrega.
+
+Se o time quiser algo permanente, a saída é embutir um **marcador de versão** nas
+functions: uma constante em `_shared/cors.ts` devolvida como cabeçalho, atualizada a cada
+entrega. Custa disciplina, mas troca "descobrir um discriminador" por "ler um número".
+
+## O que foi encontrado em 04/08/2026
+
+Todas as cinco functions sondadas responderam a lista antiga de cabeçalhos:
+
+```
+authorization, x-client-info, apikey, content-type,
+x-shopify-hmac-sha256, x-shopify-topic, x-shopify-shop-domain
+```
+
+Como a centralização do `corsHeaders` foi uma das primeiras mudanças da leva, a versão
+publicada era anterior a praticamente todo o trabalho. **Não houve deploy nenhum** — não
+foi uma mudança específica que ficou de fora.
+
+Descartadas por verificação direta, para o registro:
+
+- **Codebase do Lovable × repositório:** todos os `.ts`, `.tsx` e `.sql` de `src/` e
+  `supabase/` comparados. Zero diferenças, nenhum arquivo a mais ou a menos.
+- **Configuração:** `project_id`, `.env` e a URL do webhook registrada na Shopify apontam
+  todos para o mesmo projeto.
+- **Código órfão:** a mensagem antiga do HMAC não existe em nenhum arquivo da codebase.
+
+## Soluções possíveis
+
+Em ordem de esforço.
+
+### 1. Pedir ao Lovable que publique
+
+Único caminho que funciona hoje. Peça pelo chat dele que faça o deploy das edge
+functions. Se ele alegar que não há o que mudar, force com algo mínimo e observável —
+um comentário em `_shared/cors.ts`, que é o arquivo de menor risco.
+
+*Vantagem:* imediato, sem depender de acesso novo.
+*Limite:* manual, sem garantia de que publica tudo, e precisa ser lembrado a cada PR.
+
+### 2. Obter acesso ao projeto Supabase
+
+Com um `SUPABASE_ACCESS_TOKEN` do projeto, qualquer pessoa do time publica:
+
+```bash
+npx supabase functions deploy --project-ref smvtnflhkvxdmvqbxwrf
+```
+
+*Vantagem:* destrava tudo, inclusive CI.
+*Limite:* depende do que o plano do Lovable Cloud permite. Vale perguntar ao suporte.
+
+### 3. CI que publica no merge
+
+Um GitHub Action rodando `supabase functions deploy` quando `supabase/functions/**` muda
+na `main`. **Depende da solução 2** — sem o token, não há como.
+
+*Vantagem:* fecha a lacuna permanentemente; ninguém precisa lembrar.
+*Limite:* todo merge vai direto a produção. É uma decisão de postura, não só técnica.
+
+### 4. Migrar para um Supabase próprio
+
+Sair do Supabase gerido pelo Lovable e usar um projeto do time.
+
+*Vantagem:* controle total, CI, acesso a logs para todos.
+*Limite:* é uma migração de verdade — banco, secrets, storage, auth.
+
+### 5. Trabalhar só pelo Lovable
+
+Aceitar que ele é o único caminho e que o Git vira histórico.
+
+*Vantagem:* nenhuma mudança de processo.
+*Limite:* Pull Request e revisão de código passam a ser decorativos — o que é revisado
+não é o que roda. Foi essa divergência que gerou o problema.
+
+### Recomendação
+
+A 1 resolve hoje. A 2 é o que vale perguntar em seguida, porque destrava a 3 — e a 3 é a
+única que impede o problema de voltar. A 4 só se a 2 for negada e o time considerar o
+risco inaceitável. A 5 é o que acontece por omissão se ninguém decidir nada.
+
+---
+
 ## O que estes testes NÃO cobrem
 
 - **Nada da Shopify real.** Busca de pedido, método de entrega, gravação em
