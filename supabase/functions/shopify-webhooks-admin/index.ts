@@ -28,7 +28,11 @@ Deno.serve(async (req) => {
   }
 
   if (action === "register") {
-    const topics = ["orders/create", "fulfillments/create", "fulfillments/update", "fulfillment_orders/line_items_prepared_for_pickup"];
+    // fulfillments/update saiu: atualizar um fulfillment existente (rastreio,
+    // correcao de dado) nao e um novo evento de "pronto para retirada", e era
+    // fonte de mensagem duplicada. O webhook tambem ignora esse topico agora,
+    // entao registros antigos que ainda existam na loja nao geram envio.
+    const topics = ["orders/create", "fulfillments/create", "fulfillment_orders/line_items_prepared_for_pickup"];
     const results: unknown[] = [];
     for (const topic of topics) {
       const r = await fetch(`${base}/webhooks.json`, {

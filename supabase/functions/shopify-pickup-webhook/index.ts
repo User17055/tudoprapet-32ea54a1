@@ -1,5 +1,12 @@
 import { corsHeadersWith } from "../_shared/cors.ts";
-import { normalizePhone, PICKUP_HOURS, STORE_NAME } from "../_shared/pickup.ts";
+import {
+  buildIdempotencyKey,
+  classifyWebhookEvent,
+  isPickupMethod,
+  normalizePhone,
+  PICKUP_HOURS,
+  STORE_NAME,
+} from "../_shared/pickup.ts";
 
 const corsHeaders = corsHeadersWith(
   "x-shopify-hmac-sha256",
@@ -19,6 +26,47 @@ async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null, sec
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
   const b64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
   return b64 === hmacHeader;
+}
+
+/**
+ * Descobre o método de entrega do pedido: "pick_up", outro valor, ou null
+ * quando não foi possível determinar.
+ *
+ * Preferimos o que já veio no payload; só consultamos a Admin API quando o
+ * tópico não traz essa informação (fulfillments/* não trazem).
+ */
+async function resolveDeliveryMethodType(
+  payloadFulfillmentOrder: Record<string, any>,
+  orderId: string,
+  shopDomain: string | null,
+): Promise<string | null> {
+  const fromPayload = payloadFulfillmentOrder?.delivery_method?.method_type;
+  if (fromPayload) return String(fromPayload);
+
+  const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+  if (!shopDomain || !adminToken || !orderId) return null;
+
+  try {
+    const resp = await fetch(
+      `https://${shopDomain}/admin/api/2025-07/orders/${orderId}/fulfillment_orders.json`,
+      { headers: { "X-Shopify-Access-Token": adminToken } },
+    );
+    if (!resp.ok) {
+      console.error(`Failed to fetch fulfillment_orders for order ${orderId}: ${resp.status}`);
+      return null;
+    }
+    const { fulfillment_orders } = await resp.json();
+    const methods = (fulfillment_orders || [])
+      .map((f: any) => f?.delivery_method?.method_type)
+      .filter(Boolean)
+      .map(String);
+    if (methods.length === 0) return null;
+    // Se qualquer parte do pedido é retirada, tratamos o pedido como retirada.
+    return methods.find(isPickupMethod) ?? methods[0];
+  } catch (e) {
+    console.error("fulfillment_orders fetch failed:", e);
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -49,23 +97,16 @@ Deno.serve(async (req) => {
 
     const fulfillmentStatus = String(payload?.status || payload?.fulfillment_status || fo?.status || "").toLowerCase();
     const tags = String(payload?.tags || "").toLowerCase();
-    const isReadyToPickup =
-      topic === "fulfillment_orders/ready_to_pickup" ||
-      topic === "fulfillment_orders/line_items_prepared_for_pickup" ||
-      topic === "fulfillments/create" ||
-      topic === "fulfillments/update" ||
-      fulfillmentStatus === "ready_for_pickup" ||
-      tags.includes("pronto-retirada") ||
-      tags.includes("ready-for-pickup");
-    const isOrderCreated = topic === "orders/create";
 
-    if (!isReadyToPickup && !isOrderCreated) {
+    const eventName = classifyWebhookEvent(topic, { fulfillmentStatus, tags });
+
+    if (!eventName) {
       return new Response(JSON.stringify({ ignored: true, reason: `unhandled (topic=${topic} status=${fulfillmentStatus})` }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const eventName = isReadyToPickup ? "order_ready_for_pickup" : "order_created";
+    const isReadyToPickup = eventName === "order_ready_for_pickup";
 
     // For fulfillment_orders topics, `id` is the fulfillment_order id, not the order id.
     // Prefer explicit order_id fields; fall back to nested shapes; only use payload.id for orders/create & fulfillments/*.
@@ -114,6 +155,25 @@ Deno.serve(async (req) => {
       });
     }
 
+
+    // Aviso de retirada só vale para pedido que É de retirada. Sem esta checagem,
+    // todo pedido de entrega despachado disparava "venha buscar na loja".
+    //
+    // Quando não conseguimos determinar o método (payload sem o dado e Admin API
+    // indisponível), seguimos com o envio: deixar de avisar um cliente que veio
+    // buscar é pior do que uma mensagem indevida ocasional. O caso fica em log.
+    if (isReadyToPickup) {
+      const methodType = await resolveDeliveryMethodType(fo, resolvedOrderId, shopDomain);
+      if (methodType === null) {
+        console.warn(`Delivery method indeterminado para o pedido ${resolvedOrderId} — enviando mesmo assim`);
+      } else if (!isPickupMethod(methodType)) {
+        console.log(`Pedido ${resolvedOrderId} nao e retirada (method_type=${methodType}) — ignorado`);
+        return new Response(
+          JSON.stringify({ ignored: true, reason: `not a pickup order (method_type=${methodType})` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
 
     // Fulfillment webhooks lack customer/phone — fetch full order via Admin API
     const needsOrderFetch = !customer?.phone && !shippingAddress?.phone && !customer?.email;
@@ -172,6 +232,10 @@ Deno.serve(async (req) => {
       customer_name: customerName,
       phone: customerPhone,
       store_name: STORE_NAME,
+      // Mesma chave para os vários tópicos que significam o mesmo evento, e para
+      // as retentativas da Shopify. Permite à API externa descartar repetição.
+      idempotency_key: buildIdempotencyKey(eventName, resolvedOrderId),
+      source_topic: topic,
     };
     if (eventName === "order_ready_for_pickup") {
       outbound.pickup_hours = PICKUP_HOURS;
@@ -189,10 +253,19 @@ Deno.serve(async (req) => {
 
     if (!resp.ok) {
       console.error(`External API error ${resp.status}: ${respText}`);
-      return new Response(JSON.stringify({ error: "external_api_failed", status: resp.status, body: respText }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      // A Shopify reenvia o webhook por até 48h quando a resposta não é 2xx.
+      // Repetir só faz sentido se a falha for transitória (5xx / indisponível).
+      // Em erro 4xx o problema está no que enviamos: repetir 19 vezes só gera
+      // mensagem duplicada e piora a reputação do número no WhatsApp.
+      const isTransient = resp.status >= 500;
+      return new Response(
+        JSON.stringify({ error: "external_api_failed", status: resp.status, body: respText, retry: isTransient }),
+        {
+          status: isTransient ? 502 : 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     console.log(`WhatsApp dispatched for order ${orderNumber}: ${respText}`);
