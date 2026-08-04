@@ -65,31 +65,53 @@ Três regras, nesta ordem:
 
 `subscriber-checkout` e `franchise-checkout` delegam para `_shared/checkout.ts`.
 
-## Em aberto
+## `shopify-pickup-webhook` — autenticação por HMAC
 
-### `shopify-pickup-webhook` — HMAC calculado e descartado
+É a única sem JWT, o que é **correto** para um webhook: webhook se autentica pela
+assinatura HMAC-SHA256 que a Shopify envia, não por JWT.
 
-É a única sem JWT, o que é **correto** para um webhook: a autenticação de webhook é a
-assinatura HMAC, não JWT. O problema é que a assinatura é verificada e o resultado
-ignorado:
+Antes, a assinatura era calculada e o resultado **descartado** com um `console.warn` —
+qualquer um podia forjar um payload e fazer o sistema disparar um WhatsApp, com código
+de retirada válido, para o telefone que escolhesse.
 
-```ts
-if (!valid) {
-  console.warn("HMAC inválido — prosseguindo mesmo assim (verificação desabilitada temporariamente)");
-}
+Hoje a verificação vale, controlada por `SHOPIFY_WEBHOOK_HMAC_MODE`:
+
+| Modo | Assinatura inválida | Segredo ausente |
+|---|---|---|
+| `monitor` (**padrão**) | registra e processa | registra e processa |
+| `enforce` | **401** | **401** |
+
+A política está em [`_shared/webhook.ts`](../supabase/functions/_shared/webhook.ts)
+(`decideHmac`), separada do cálculo criptográfico e coberta por 12 testes.
+
+### Por que o padrão é `monitor`
+
+Não há como confirmar de fora se `SHOPIFY_WEBHOOK_SECRET` está correto em produção. Se
+estiver ausente ou errado, ligar a rejeição derruba o fluxo de retirada inteiro — e a
+falha é silenciosa do lado da loja: nenhum cliente recebe código, e ninguém é avisado.
+
+`monitor` faz a verificação valer como observação primeiro. Cada requisição emite:
+
+```
+HMAC_CHECK mode=monitor result=valid action=accept topic=fulfillments/create shop=...
 ```
 
-O processamento continua mesmo com assinatura inválida. Como a function repassa o
-evento para a API externa — que gera o código de retirada e dispara o WhatsApp — um
-payload forjado vira mensagem real no telefone que o atacante escolher, com um código
-de retirada válido junto.
+### Como ligar o enforce
 
-**Não corrigir sem coordenar.** O comentário diz "temporariamente", então foi um
-contorno de setup. Se `SHOPIFY_WEBHOOK_SECRET` estiver ausente ou errado em produção,
-passar a rejeitar derruba o fluxo de retirada inteiro.
+1. Deixar em `monitor` alguns dias, cobrindo pedidos reais.
+2. Procurar `HMAC_CHECK` nos logs da function. Se todos os `result=valid`, o segredo
+   está correto.
+3. Se aparecer `result=invalid-monitored`, **não ligue** — o segredo está errado ou há
+   requisição não vinda da Shopify. Investigar antes.
+4. Se aparecer `result=secret-missing-monitored`, `SHOPIFY_WEBHOOK_SECRET` não está
+   configurado. Configurar antes.
+5. Confirmado, definir `SHOPIFY_WEBHOOK_HMAC_MODE=enforce` nas variáveis da function.
 
-Caminho seguro: primeiro registrar em log se o HMAC *bateria*, sem bloquear; observar
-alguns dias; só então passar a rejeitar.
+Segredo ausente com `enforce` ligado é **rejeitado**, não aceito em silêncio: quem liga
+o enforce está afirmando que a verificação funciona, e aceitar nesse caso reproduziria
+exatamente o buraco anterior.
+
+## Em aberto
 
 ### Quatro functions sem chamador
 

@@ -12,8 +12,9 @@ merge é do time.
 
 | | Antes | Depois |
 |---|---|---|
-| Testes automatizados | 7 | **64** |
+| Testes automatizados | 7 | **76** |
 | Edge functions sem autenticação | 6 de 13 | **0** |
+| Assinatura HMAC do webhook | calculada e descartada | verificada, com interruptor |
 | Cópias de `corsHeaders` | 10 (divergentes) | 1 |
 | Linhas nos dois checkouts | 400 | 47 |
 | Mensagens de WhatsApp por pedido de retirada | até 4 | 2 |
@@ -244,11 +245,12 @@ funcionando.
 
 ---
 
-## 5. O que não foi feito, e por quê
+## 5. Autenticação do webhook da Shopify (HMAC)
 
-### HMAC do webhook da Shopify
+### Problema
 
-`shopify-pickup-webhook` calcula a assinatura HMAC corretamente e **ignora o resultado**:
+`shopify-pickup-webhook` calculava a assinatura HMAC corretamente e **descartava o
+resultado**:
 
 ```ts
 if (!valid) {
@@ -256,20 +258,78 @@ if (!valid) {
 }
 ```
 
-Qualquer um pode forjar um payload e fazer o sistema disparar um WhatsApp — com um
-código de retirada válido — para o telefone que escolher.
+Qualquer pessoa capaz de fazer um POST na URL da function podia forjar um payload de
+pedido e disparar um WhatsApp — **com um código de retirada válido** — para o telefone
+que escolhesse.
 
-**Não foi corrigido de propósito.** A correção é de três linhas, mas se
-`SHOPIFY_WEBHOOK_SECRET` estiver ausente ou errado em produção, passar a rejeitar
-derruba o fluxo de retirada inteiro.
+Havia um segundo buraco, mais discreto: quando `SHOPIFY_WEBHOOK_SECRET` não estava
+configurado, o `if (webhookSecret)` pulava a verificação por completo, sem qualquer
+aviso. Segredo ausente e segredo correto eram indistinguíveis nos logs.
 
-Caminho seguro: registrar em log se o HMAC *bateria*, sem bloquear; observar alguns
-dias; só então passar a rejeitar.
+### Causa
 
-**Este é o item mais importante da lista de pendências**, e a razão é o modelo de
-negócio: o código de retirada substitui a assinatura do canhoto — ele **é** o
-comprovante de entrega da mercadoria. Um comprovante que aceita payload forjado, sem
-registro no Supabase e sem log de envio, não é auditável.
+O comentário dizia "temporariamente", então foi um contorno durante o setup da
+integração que nunca foi revertido. É um padrão comum: desliga-se a verificação para
+destravar o desenvolvimento e ninguém volta.
+
+Por que importa mais do que parece: **o código de retirada substitui a assinatura do
+canhoto** — ele *é* o comprovante de entrega da mercadoria. Um comprovante que pode ser
+gerado por payload forjado não sustenta uma divergência de estoque.
+
+### Solução
+
+A verificação passou a valer, com um interruptor explícito
+(`SHOPIFY_WEBHOOK_HMAC_MODE`):
+
+| Modo | Assinatura inválida | Segredo ausente |
+|---|---|---|
+| `monitor` (**padrão**) | registra e processa | registra e processa |
+| `enforce` | **401** | **401** |
+
+A política de decisão ficou em `_shared/webhook.ts` (`decideHmac`), separada do cálculo
+criptográfico — é o que permite testá-la sem depender de `crypto.subtle`. São 12 testes
+cobrindo as seis combinações de modo × estado.
+
+Duas decisões de projeto que valem registro:
+
+**O padrão é `monitor`, não `enforce`.** Não há como confirmar de fora se o segredo está
+correto em produção. Se estiver errado, ligar a rejeição derruba a retirada inteira — e
+a falha é silenciosa do lado da loja. `monitor` faz a verificação valer como observação
+primeiro.
+
+**Segredo ausente com `enforce` ligado é rejeitado**, não aceito em silêncio. Quem liga
+o enforce está afirmando que a verificação funciona; aceitar nesse caso reproduziria
+exatamente o buraco anterior.
+
+Aproveitando, a comparação da assinatura passou a ser em tempo constante. O `===`
+anterior sai no primeiro byte diferente, o que em teoria permite descobrir a assinatura
+esperada medindo o tempo de resposta.
+
+### O que muda concretamente
+
+**Hoje, ao fazer o deploy: nada muda no comportamento.** Em `monitor` toda requisição
+continua sendo processada exatamente como antes. Isso é intencional — o deploy é seguro
+por construção.
+
+**O que muda é que agora dá para saber.** Cada requisição emite uma linha estável:
+
+```
+HMAC_CHECK mode=monitor result=valid action=accept topic=fulfillments/create shop=...
+```
+
+**A proteção real entra quando o time trocar uma variável de ambiente.** O procedimento
+está em `docs/edge-functions-auth.md`: rodar em `monitor` alguns dias, conferir que
+todos os `HMAC_CHECK` são `result=valid`, e então definir
+`SHOPIFY_WEBHOOK_HMAC_MODE=enforce`.
+
+**Sendo direto sobre o que isso significa:** o E1 está implementado e testado, mas a
+loja só fica protegida contra payload forjado quando alguém ligar o `enforce`. Enquanto
+estiver em `monitor`, a vulnerabilidade continua aberta — com a diferença de que agora
+ela é observável, e ligar a proteção custa uma variável em vez de um deploy.
+
+---
+
+## 6. O que não foi feito, e por quê
 
 ### Verificação de execução
 
@@ -284,7 +344,7 @@ test** — principalmente dos dois checkouts e do webhook de retirada.
 
 ---
 
-## 6. Decisões que dependem do time
+## 7. Decisões que dependem do time
 
 1. **Categoria do template de WhatsApp** — mudar de MARKETING para UTILITY no WhatsApp
    Manager. É a correção de maior impacto no problema do 131049 e não está no código.
@@ -292,8 +352,10 @@ test** — principalmente dos dois checkouts e do webhook de retirada.
    parcial.
 3. **E-mail com o código único** — a API externa já tem o código; enviá-lo por e-mail
    tira a dependência exclusiva de um canal que a Meta controla.
-4. **`SHOPIFY_WEBHOOK_SECRET` está configurado e correto em produção?** Bloqueia a
-   correção do HMAC.
+4. **Ligar `SHOPIFY_WEBHOOK_HMAC_MODE=enforce`** depois de confirmar nos logs que todos
+   os `HMAC_CHECK` são `result=valid`. Enquanto não for ligado, o webhook segue
+   aceitando payload forjado — o código está pronto, falta a decisão. Procedimento em
+   `docs/edge-functions-auth.md`.
 5. **Quatro functions órfãs** — `create-checkout`, `customer-portal`, `pickup-test-send`
    e `shopify-webhooks-admin` não são chamadas por ninguém. `customer-portal` aponta
    para `/clube`, rota que não existe mais. Remover ou restaurar a tela?
@@ -305,10 +367,10 @@ test** — principalmente dos dois checkouts e do webhook de retirada.
 
 ---
 
-## 7. Como verificar
+## 8. Como verificar
 
 ```bash
-npm run test        # 64 testes
+npm run test        # 76 testes
 npx tsc --noEmit    # sem erros
 npm run lint
 ```
