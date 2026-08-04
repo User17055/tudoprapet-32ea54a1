@@ -6,6 +6,7 @@ import {
   isPickupMethod,
   normalizePhone,
   PICKUP_HOURS,
+  shouldSavePickupCode,
   STORE_NAME,
 } from "../_shared/pickup.ts";
 import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
@@ -303,14 +304,29 @@ Deno.serve(async (req) => {
     }
 
     if (pickupCode && numericId) {
-      const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
-      if (shopDomain && adminToken) {
-        await savePickupCodeOnOrder({
-          shopDomain,
-          adminToken,
-          numericOrderId: numericId,
-          pickupCode,
-        });
+      // `order_created` dispara para todo pedido e não passa pelo filtro de
+      // retirada lá em cima. Se a API externa devolver código nesse evento, um
+      // pedido de ENTREGA ganharia "Codigo de retirada" — e o cliente veria um
+      // código de retirada no e-mail. Só resolvemos o método aqui (uma chamada
+      // à Admin API) quando há código a gravar fora do evento de "pronto".
+      const methodType = isReadyToPickup
+        ? null
+        : await resolveDeliveryMethodType(fo, resolvedOrderId, shopDomain);
+
+      if (shouldSavePickupCode(eventName, methodType)) {
+        const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+        if (shopDomain && adminToken) {
+          await savePickupCodeOnOrder({
+            shopDomain,
+            adminToken,
+            numericOrderId: numericId,
+            pickupCode,
+          });
+        }
+      } else {
+        console.log(
+          `Codigo de retirada NAO gravado order=${resolvedOrderId} event=${eventName} method_type=${methodType ?? "indeterminado"}`,
+        );
       }
     }
 

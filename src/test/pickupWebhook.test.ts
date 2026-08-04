@@ -6,6 +6,7 @@ import {
   isPickupMethod,
   mergeNoteAttributes,
   PICKUP_CODE_ATTRIBUTE,
+  shouldSavePickupCode,
 } from "../../supabase/functions/_shared/pickup.ts";
 
 describe("classifyWebhookEvent", () => {
@@ -138,6 +139,35 @@ describe("mergeNoteAttributes", () => {
     const existing = [{ name: "Observacao", value: "x" }];
     mergeNoteAttributes(existing, PICKUP_CODE_ATTRIBUTE, "AB12");
     expect(existing).toEqual([{ name: "Observacao", value: "x" }]);
+  });
+});
+
+describe("shouldSavePickupCode", () => {
+  it("always saves on the ready event (the pickup filter already ran upstream)", () => {
+    expect(shouldSavePickupCode("order_ready_for_pickup", null)).toBe(true);
+    expect(shouldSavePickupCode("order_ready_for_pickup", "shipping")).toBe(true);
+  });
+
+  it("saves on order_created only when the order is provably a pickup", () => {
+    expect(shouldSavePickupCode("order_created", "pick_up")).toBe(true);
+    expect(shouldSavePickupCode("order_created", "PICK_UP")).toBe(true);
+  });
+
+  it("never writes a pickup code onto a delivery order", () => {
+    // Regressão: orders/create dispara para todo pedido. Se a API externa
+    // devolver código nesse evento, o cliente de ENTREGA ganharia um
+    // "Codigo de retirada" no e-mail.
+    expect(shouldSavePickupCode("order_created", "shipping")).toBe(false);
+    expect(shouldSavePickupCode("order_created", "local")).toBe(false);
+  });
+
+  it("does not save on order_created when the method is indeterminate", () => {
+    // O evento de "pronto" grava de novo, então o pedido de retirada não perde
+    // o código — só o recebe mais tarde. O inverso (código em pedido de
+    // entrega) não tem segunda chance de correção.
+    expect(shouldSavePickupCode("order_created", null)).toBe(false);
+    expect(shouldSavePickupCode("order_created", undefined)).toBe(false);
+    expect(shouldSavePickupCode("order_created", "")).toBe(false);
   });
 });
 
