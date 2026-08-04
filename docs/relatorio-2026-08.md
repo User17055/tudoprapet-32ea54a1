@@ -506,3 +506,9 @@ Documentos relacionados:
 
 - [`docs/edge-functions-auth.md`](edge-functions-auth.md) — matriz de autenticação das 13
   functions, o padrão da casa, e o procedimento para ligar o `enforce` do HMAC
+- [`docs/smoke-test-retirada.md`](smoke-test-retirada.md) — como exercitar o webhook
+  localmente sem tocar em produção, e o que foi verificado em 04/08/2026
+
+O smoke test confirmou que a verificação de HMAC está correta: assinatura calculada com
+`openssl` foi aceita, assinatura errada e ausência de assinatura devolveram 401. O código
+do item "ligar o `enforce`" está validado; falta apenas a confirmação em produção.
