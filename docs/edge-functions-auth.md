@@ -79,8 +79,10 @@ if (!valid) {
 }
 ```
 
-O processamento continua mesmo com assinatura inválida. Como a function grava em
-`pickup_codes` e dispara WhatsApp, um payload forjado é aceito.
+O processamento continua mesmo com assinatura inválida. Como a function repassa o
+evento para a API externa — que gera o código de retirada e dispara o WhatsApp — um
+payload forjado vira mensagem real no telefone que o atacante escolher, com um código
+de retirada válido junto.
 
 **Não corrigir sem coordenar.** O comentário diz "temporariamente", então foi um
 contorno de setup. Se `SHOPIFY_WEBHOOK_SECRET` estiver ausente ou errado em produção,
@@ -108,6 +110,33 @@ sem a tela de gestão.
 Antes respondia a qualquer requisição via query string (`?action=list_orders`,
 `?action=delete&id=`). Se alguém usava isso pelo navegador para depurar, agora precisa
 de sessão de admin — vale avisar quem usava.
+
+## O fluxo de retirada mora fora deste repositório
+
+Vale destacar porque não é óbvio lendo o código: **nenhuma das functions de retirada
+grava em tabela do Supabase**. Elas são um proxy autenticado para uma API externa, que
+é quem gera, guarda e valida o código de retirada.
+
+| Function | Encaminha para |
+|---|---|
+| `shopify-pickup-webhook` | `POST {EXTERNAL_API_BASE_URL}/api/whatsapp/send` |
+| `pickup-resend-last` | `POST {EXTERNAL_API_BASE_URL}/api/whatsapp/send` |
+| `pickup-test-send` | `POST {EXTERNAL_API_BASE_URL}/api/whatsapp/send` |
+| `pickup-validate` | `POST {EXTERNAL_API_BASE_URL}/api/pickup/validate` |
+| `pickup-complete` | `POST {EXTERNAL_API_BASE_URL}/api/pickup/complete` + fulfillment na Shopify |
+
+Autenticação nessa API é por header `X-API-Key` (`EXTERNAL_API_TOKEN`).
+
+Houve uma tentativa de guardar isso no Postgres: a tabela `pickup_codes` foi criada na
+migration `20260708144427` e **derrubada 47 minutos depois** pela `20260708153152`.
+Ficou o desenho atual, com o estado inteiramente na API externa.
+
+`pickup-complete` tem `https://andrejrs.com.br` hardcoded como fallback caso
+`EXTERNAL_API_BASE_URL` não esteja definida — as outras quatro falham explicitamente
+quando falta a variável. Convém padronizar.
+
+**Consequência prática:** se a API externa cair, o fluxo de retirada para por completo,
+e não há registro no Supabase para reconstruir o que aconteceu.
 
 ## Perguntas para o time
 
