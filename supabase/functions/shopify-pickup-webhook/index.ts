@@ -198,8 +198,8 @@ Deno.serve(async (req) => {
 
     if (!resp.ok) {
       console.error(`External API error ${resp.status}: ${respText}`);
-      return new Response(JSON.stringify({ error: "external_api_failed", status: resp.status, body: respText }), {
-        status: 502,
+      return new Response(JSON.stringify({ ok: false, error: "external_api_failed", status: resp.status, body: respText }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -210,8 +210,8 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("Webhook error:", error);
-    return new Response(JSON.stringify({ error: String(error) }), {
-      status: 500,
+    return new Response(JSON.stringify({ ok: false, error: String(error) }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
