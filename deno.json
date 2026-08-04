@@ -1,0 +1,17 @@
+{
+  "//": "Config do Deno para verificar as edge functions. Ver npm run check:functions.",
+  "//nodeModulesDir": "'none' e OBRIGATORIO aqui. Com 'auto' o Deno instala copias proprias em node_modules/.deno e o vite build passa a resolver rollup de la, quebrando o build. Com 'none' o Deno usa o cache global dele e nao encosta em node_modules, que fica so do npm.",
+  "nodeModulesDir": "none",
+  "//lint": "no-explicit-any fica de fora: as functions lidam com payload JSON nao tipado da Shopify e com respostas da API externa. Tipar isso exigiria modelar contratos de terceiros que mudam sem aviso — o any ali e deliberado, nao descuido.",
+  "lint": {
+    "include": ["supabase/functions"],
+    "rules": {
+      "tags": ["recommended"],
+      "exclude": ["no-explicit-any"]
+    }
+  },
+  "fmt": {
+    "include": ["supabase/functions"],
+    "lineWidth": 100
+  }
+}

@@ -1,17 +1,14 @@
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-
-const STORE_NAME = "TudoPraPet";
-const PICKUP_HOURS = "segunda a sexta, das 9h às 18h, e aos sábados até 12h";
-
-function normalizePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-  return digits.startsWith("55") ? digits : `55${digits}`;
-}
+import { corsHeaders } from "../_shared/cors.ts";
+import { extractPickupCode, normalizePhone, PICKUP_HOURS, STORE_NAME } from "../_shared/pickup.ts";
+import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
+import { requireAdmin } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Reenvia WhatsApp para um cliente real — mesmo gate das demais pickup-*.
+  const authResult = await requireAdmin(req);
+  if (!authResult.ok) return authResult.response;
 
   try {
     const shopDomain = Deno.env.get("SHOPIFY_SHOP_DOMAIN") || "petjoy-deals-hb8r9.myshopify.com";
@@ -105,27 +102,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Save the pickup code on the Shopify order so Shopify's own notification
-    // e-mail can show it via {{ attributes["Codigo de retirada"] }}
-    let pickupCode: string | null = null;
-    try {
-      const parsed = JSON.parse(respText);
-      pickupCode = parsed?.pickup_code || parsed?.code || parsed?.data?.pickup_code || null;
-    } catch { /* non-JSON */ }
+    // Grava o código no pedido para o e-mail nativo da Shopify renderizar via
+    // {{ attributes["Codigo de retirada"] }}.
+    const pickupCode = extractPickupCode(respText);
 
-    if (pickupCode) {
-      try {
-        const upd = await fetch(`https://${shopDomain}/admin/api/2025-07/orders/${numericId}.json`, {
-          method: "PUT",
-          headers: { "X-Shopify-Access-Token": adminToken, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            order: { id: Number(numericId), note_attributes: [{ name: "Codigo de retirada", value: pickupCode }] },
-          }),
-        });
-        if (!upd.ok) console.error(`Failed to save pickup code: ${upd.status} ${await upd.text()}`);
-      } catch (e) {
-        console.error("Failed to save pickup code:", e);
-      }
+    if (!pickupCode) {
+      console.warn(
+        `PICKUP_CODE_AUSENTE order=${orderNumber} — resposta da API externa sem codigo reconhecivel: ${respText.slice(0, 200)}`,
+      );
+    } else {
+      // O pedido já está carregado aqui, então passamos os atributos atuais e
+      // evitamos uma leitura extra na Admin API.
+      await savePickupCodeOnOrder({
+        shopDomain,
+        adminToken,
+        numericOrderId: numericId,
+        pickupCode,
+        existingNoteAttributes: order.note_attributes ?? [],
+      });
     }
 
     return new Response(JSON.stringify({
