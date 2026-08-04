@@ -72,6 +72,24 @@ export function buildIdempotencyKey(event: string, orderId: string): string {
   return `${event}:${orderId.replace(/\D/g, "")}`;
 }
 
+/**
+ * Decide se o código devolvido pela API externa deve ser gravado no pedido.
+ *
+ * Para `order_ready_for_pickup` o filtro de retirada já rodou antes do envio
+ * (pedido de entrega nem chega aqui), então gravamos sempre. Para os demais
+ * eventos — hoje só `order_created`, que dispara para TODO pedido — só gravamos
+ * com método de entrega comprovadamente `pick_up`. Método indeterminado NÃO
+ * grava: um código de retirada no e-mail de um cliente de entrega é pior do que
+ * o código chegar apenas no evento de "pronto", que grava de novo.
+ */
+export function shouldSavePickupCode(
+  event: PickupEvent,
+  methodType: string | null | undefined,
+): boolean {
+  if (event === "order_ready_for_pickup") return true;
+  return isPickupMethod(methodType);
+}
+
 export interface NoteAttribute {
   name: string;
   value: string;

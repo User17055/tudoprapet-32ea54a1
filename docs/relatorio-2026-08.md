@@ -506,3 +506,16 @@ Documentos relacionados:
 
 - [`docs/edge-functions-auth.md`](edge-functions-auth.md) — matriz de autenticação das 13
   functions, o padrão da casa, e o procedimento para ligar o `enforce` do HMAC
+- [`docs/smoke-test-edge-functions.md`](smoke-test-edge-functions.md) — como exercitar as
+  functions localmente sem tocar em produção, e o que foi verificado em 04/08/2026
+
+O smoke test cobriu o webhook de retirada e os dois checkouts. Dois resultados importam:
+
+**A verificação de HMAC está correta.** Assinatura calculada com `openssl` foi aceita;
+assinatura errada e ausência de assinatura devolveram 401. O código do item "ligar o
+`enforce`" está validado; falta apenas a confirmação em produção.
+
+**A unificação dos checkouts está correta.** Apesar do código comum, `subscriber-checkout`
+consulta `club_members` por e-mail e `subscriber_prices`, enquanto `franchise-checkout`
+consulta `profiles` por `user_id` e `franchise_prices` — verificado nos logs. Era o
+principal risco da refatoração.
