@@ -43,18 +43,31 @@ const allowedDistance = (word: string) => {
   return 3;
 };
 
+/** Tamanho minimo para uma palavra do texto valer casamento por prefixo/substring. */
+const MIN_LOOSE_MATCH_LENGTH = 3;
+
+/**
+ * Palavras curtas ou vazias de significado nao podem casar por prefixo/substring:
+ * "de" e substring de "golden", o que fazia qualquer titulo com "de" casar com
+ * a busca "golden". Casamento exato continua valendo para qualquer palavra.
+ */
+const allowsLooseMatch = (word: string) =>
+  word.length >= MIN_LOOSE_MATCH_LENGTH && !STOP_WORDS.has(word);
+
 /** Score de 0 a 1 de um termo contra as palavras do texto (0 = nao casou). */
 function tokenScore(term: string, words: string[]): number {
   let best = 0;
   for (const word of words) {
     if (word === term) return 1;
-    if (word.startsWith(term) || term.startsWith(word)) {
-      best = Math.max(best, 0.9);
-      continue;
-    }
-    if (word.includes(term) || term.includes(word)) {
-      best = Math.max(best, 0.75);
-      continue;
+    if (allowsLooseMatch(word)) {
+      if (word.startsWith(term) || term.startsWith(word)) {
+        best = Math.max(best, 0.9);
+        continue;
+      }
+      if (word.includes(term) || term.includes(word)) {
+        best = Math.max(best, 0.75);
+        continue;
+      }
     }
     const dist = levenshtein(term, word);
     if (dist <= allowedDistance(term)) {

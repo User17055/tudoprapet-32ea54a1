@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/cors.ts";
+import { requireUser } from "../_shared/auth.ts";
 
 const PRICE_ID = "price_1TKM1SRPcks7vOIJJByCtDwR";
 
@@ -17,8 +14,14 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
-    const { email, customerName } = await req.json();
+    // O e-mail vem do JWT; só o nome de exibição continua vindo do corpo.
+    const authResult = await requireUser(req);
+    if (!authResult.ok) return authResult.response;
+
+    const email = authResult.auth.email;
     if (!email) throw new Error("Email is required");
+
+    const { customerName } = await req.json().catch(() => ({ customerName: undefined }));
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 

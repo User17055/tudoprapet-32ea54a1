@@ -1,10 +1,17 @@
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders } from "../_shared/cors.ts";
+import { requireAdmin } from "../_shared/auth.ts";
 
 const SHOP = "petjoy-deals-hb8r9.myshopify.com";
 const API = "2025-07";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Proxy da Admin API da Shopify: lista pedidos com dados de cliente, registra e
+  // remove webhooks da loja. Restrito a admin.
+  const authResult = await requireAdmin(req);
+  if (!authResult.ok) return authResult.response;
+
   const token = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
   if (!token) return new Response(JSON.stringify({ error: "no token" }), { status: 500, headers: corsHeaders });
 
@@ -21,7 +28,11 @@ Deno.serve(async (req) => {
   }
 
   if (action === "register") {
-    const topics = ["orders/create", "fulfillments/create", "fulfillments/update", "fulfillment_orders/line_items_prepared_for_pickup"];
+    // fulfillments/update saiu: atualizar um fulfillment existente (rastreio,
+    // correcao de dado) nao e um novo evento de "pronto para retirada", e era
+    // fonte de mensagem duplicada. O webhook tambem ignora esse topico agora,
+    // entao registros antigos que ainda existam na loja nao geram envio.
+    const topics = ["orders/create", "fulfillments/create", "fulfillment_orders/line_items_prepared_for_pickup"];
     const results: unknown[] = [];
     for (const topic of topics) {
       const r = await fetch(`${base}/webhooks.json`, {
