@@ -163,8 +163,9 @@ Deno.serve(async (req) => {
     const baseUrl = Deno.env.get("EXTERNAL_API_BASE_URL");
     const apiToken = Deno.env.get("EXTERNAL_API_TOKEN");
     if (!baseUrl || !apiToken) {
-      return new Response(JSON.stringify({ error: "EXTERNAL_API_BASE_URL/TOKEN não configurados" }), {
-        status: 500,
+      console.error("EXTERNAL_API_BASE_URL/TOKEN não configurados");
+      return new Response(JSON.stringify({ ok: false, error: "EXTERNAL_API_BASE_URL/TOKEN não configurados" }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
