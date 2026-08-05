@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 export default {
   darkMode: ["class"],
@@ -102,5 +103,13 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // "hoverable" alcanca so aparelhos com ponteiro preciso (mouse/trackpad).
+    // Serve para separar o que depende de hover do que precisa funcionar no toque,
+    // sem usar largura de tela: um tablet largo continua sendo tratado como toque.
+    plugin(({ addVariant }) => {
+      addVariant("hoverable", "@media (hover: hover) and (pointer: fine)");
+    }),
+  ],
 } satisfies Config;
