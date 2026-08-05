@@ -4,12 +4,13 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
 import { ShopifyProduct, cachedStorefrontApiRequest, BEST_SELLING_PRODUCTS_QUERY, fetchAllShopifyProducts } from "@/lib/shopify";
-import { ChevronDown, ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -68,6 +69,7 @@ const Catalog = () => {
   const [attrValues, setAttrValues] = useState<Record<string, Set<string>>>({});
   const [priceRangeIdxs, setPriceRangeIdxs] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState("relevance");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -404,19 +406,24 @@ const Catalog = () => {
     </label>
   );
 
-  // Sidebar with all filters
-  const FiltersSidebar = (
+  // Sidebar with all filters.
+  // "compact" e a versao que vai dentro do sheet no mobile: as secoes nascem fechadas
+  // para caber na tela, e o cabecalho interno some porque o sheet ja tem titulo e
+  // botao de limpar proprios.
+  const renderFilters = ({ compact = false }: { compact?: boolean } = {}) => (
     <aside className="space-y-6">
-      <div className="border-b border-border pb-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-display font-bold text-base">Filtrar Produtos</h3>
+      {!compact && (
+        <div className="border-b border-border pb-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-display font-bold text-base">Filtrar Produtos</h3>
+          </div>
+          {hasActiveFilters && (
+            <button onClick={clearFilters} className="text-sm text-primary hover:underline flex items-center gap-1.5">
+              Limpar filtros <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
-        {hasActiveFilters && (
-          <button onClick={clearFilters} className="text-sm text-primary hover:underline flex items-center gap-1.5">
-            Limpar filtros <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+      )}
 
       <div className="border-b border-border pb-5">
         <h3 className="font-display font-bold text-sm uppercase tracking-wide mb-3">Buscar</h3>
@@ -435,7 +442,9 @@ const Catalog = () => {
       <Accordion
         key={loading ? "loading" : "loaded"}
         type="multiple"
-        defaultValue={["preco", "marca", ...STANDARD_ATTR_KEYS.filter((key) => key !== "Pet"), ...customKeys]}
+        defaultValue={
+          compact ? [] : ["preco", "marca", ...STANDARD_ATTR_KEYS.filter((key) => key !== "Pet"), ...customKeys]
+        }
         className="border-0"
       >
         <AccordionItem value="preco" className="border-b border-border last:border-0">
@@ -599,18 +608,63 @@ const Catalog = () => {
           )}
 
           <div className="grid lg:grid-cols-[220px_1fr] gap-8">
-            <div className="hidden lg:block">{FiltersSidebar}</div>
+            <div className="hidden lg:block">{renderFilters()}</div>
 
-            <details className="group lg:hidden rounded-xl border border-border bg-card overflow-hidden">
-              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden px-4 py-3 font-display font-bold text-sm uppercase tracking-wide flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <SlidersHorizontal className="h-4 w-4 text-primary" />
-                  Filtros {hasActiveFilters && <span className="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">Ativos</span>}
-                </span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="p-4 border-t border-border">{FiltersSidebar}</div>
-            </details>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className="lg:hidden flex w-full items-center justify-between rounded-xl border border-border bg-card px-4 py-3 font-display text-sm font-bold uppercase tracking-wide"
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-primary" />
+                Filtros
+                {hasActiveFilters && (
+                  <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">Ativos</span>
+                )}
+              </span>
+              <span className="text-xs font-normal normal-case text-muted-foreground">
+                {filteredProducts.length} produto{filteredProducts.length !== 1 ? "s" : ""}
+              </span>
+            </button>
+
+            <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <SheetContent
+                side="bottom"
+                closeLabel="Fechar filtros"
+                onClose={() => setFiltersOpen(false)}
+                aria-describedby={undefined}
+                // Sem isto o Radix foca o campo de busca ao abrir e o teclado do
+                // celular sobe sozinho, cobrindo metade dos filtros.
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                className="flex h-[85vh] flex-col gap-0 rounded-t-2xl p-0 lg:hidden"
+              >
+                <div className="shrink-0 border-b border-border px-4 py-4">
+                  <SheetTitle className="font-display text-base font-bold">Filtrar Produtos</SheetTitle>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+                  {renderFilters({ compact: true })}
+                </div>
+
+                {/* Os filtros ja aplicam em tempo real, entao "Ver N produtos" apenas fecha
+                    o painel: o numero mostrado ja e o resultado que esta valendo atras dele. */}
+                <div className="shrink-0 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={clearFilters}
+                      disabled={!hasActiveFilters}
+                      className="shrink-0 rounded-full"
+                    >
+                      Limpar
+                    </Button>
+                    <Button onClick={() => setFiltersOpen(false)} className="flex-1 rounded-full">
+                      Ver {filteredProducts.length} produto{filteredProducts.length !== 1 ? "s" : ""}
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
 
             <div>
               {activeChips.length > 0 && (

@@ -51,10 +51,12 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {
   onClose?: () => void;
+  /** Rotulo do botao de fechar. O padrao existe porque o primeiro uso foi o carrinho. */
+  closeLabel?: string;
 }
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, onClose, ...props }, ref) => (
+  ({ side = "right", className, children, onClose, closeLabel = "Fechar carrinho", ...props }, ref) => (
     <SheetPortal>
       <SheetOverlay onClick={onClose} />
       <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
@@ -62,7 +64,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
         <SheetPrimitive.Close
           type="button"
           onClick={onClose}
-          aria-label="Fechar carrinho"
+          aria-label={closeLabel}
           className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
         >
           <X className="h-4 w-4" />
