@@ -60,7 +60,8 @@ export function classifyWebhookEvent(topic: string, signals: WebhookSignals = {}
 
 /** true quando o método de entrega da Shopify é retirada na loja. */
 export function isPickupMethod(methodType: string | null | undefined): boolean {
-  return String(methodType ?? "").toLowerCase() === "pick_up";
+  const normalized = String(methodType ?? "").trim().toLowerCase().replace(/[-\s]+/g, "_");
+  return normalized === "pick_up";
 }
 
 /**
