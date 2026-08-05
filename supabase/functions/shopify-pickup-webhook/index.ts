@@ -142,11 +142,12 @@ Deno.serve(async (req) => {
 
     if (!resolvedOrderId && isFulfillmentOrdersTopic) {
       const foId = String(fo.id || payload.id || lifo.fulfillment_order_id || "");
+      const numericFoId = foId.replace(/\D/g, "");
       const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
-      if (foId && shopDomain && adminToken) {
+      if (numericFoId && shopDomain && adminToken) {
         try {
           const foResp = await fetch(
-            `https://${shopDomain}/admin/api/2025-07/fulfillment_orders/${foId}.json`,
+            `https://${shopDomain}/admin/api/2025-07/fulfillment_orders/${numericFoId}.json`,
             { headers: { "X-Shopify-Access-Token": adminToken } },
           );
           if (foResp.ok) {
