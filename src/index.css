@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -41,6 +41,17 @@
     --pet-navy-light: 224 50% 95%;
     --pet-gold-light: 44 80% 94%;
 
+    /* O dourado da marca (--secondary) tem 1.6:1 sobre branco — não serve como
+       texto. Esta variante escurecida dá 4.7:1 e passa em AA. Use --secondary
+       como SUPERFÍCIE (com texto navy, 10.3:1) e --pet-gold-deep como TINTA. */
+    --pet-gold-deep: 40 90% 32%;
+
+    /* Cores semânticas dos toasts, derivadas da paleta da marca. */
+    --toast-success: var(--pet-green);
+    --toast-error: var(--destructive);
+    --toast-warning: var(--pet-gold-deep);
+    --toast-info: var(--primary);
+
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -70,8 +81,7 @@
 
 @layer utilities {
   .pet-toast {
-    --toast-accent: #0ea5e9;
-    font-family: 'Poppins', sans-serif !important;
+    --toast-accent: hsl(var(--toast-info));
     letter-spacing: -0.01em;
   }
 
@@ -103,30 +113,19 @@
     animation-play-state: paused;
   }
 
-  .pet-toast.toast-success { --toast-accent: #198754; }
-  .pet-toast.toast-error { --toast-accent: #dc3545; }
-  .pet-toast.toast-warning { --toast-accent: #f59e0b; }
-  .pet-toast.toast-info { --toast-accent: #0ea5e9; }
-  .pet-toast.toast-loading { --toast-accent: #2563eb; }
+  .pet-toast.toast-success { --toast-accent: hsl(var(--toast-success)); }
+  .pet-toast.toast-error { --toast-accent: hsl(var(--toast-error)); }
+  .pet-toast.toast-warning { --toast-accent: hsl(var(--toast-warning)); }
+  .pet-toast.toast-info { --toast-accent: hsl(var(--toast-info)); }
+  .pet-toast.toast-loading { --toast-accent: hsl(var(--muted-foreground)); }
 
   .pet-toast .pet-toast-icon {
     color: var(--toast-accent) !important;
   }
 
-  .pet-toast [data-title]::before {
-    display: block;
-    margin-bottom: 2px;
-    color: var(--toast-accent);
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-
-  .pet-toast.toast-success [data-title]::before { content: 'Sucesso'; }
-  .pet-toast.toast-error [data-title]::before { content: 'Erro'; }
-  .pet-toast.toast-warning [data-title]::before { content: 'Aten\00e7\00e3o'; }
-  .pet-toast.toast-info [data-title]::before { content: 'Informa\00e7\00e3o'; }
-  .pet-toast.toast-loading [data-title]::before { content: 'Aguarde'; }
+  /* O rótulo de categoria ("Sucesso", "Erro") era injetado por CSS acima da
+     mensagem, repetindo o que a cor e o ícone já dizem — em toast.success("Login
+     realizado com sucesso") o usuário lia a mesma coisa duas vezes. Removido. */
 
   @keyframes pet-toast-progress {
     from { transform: scaleX(1); }

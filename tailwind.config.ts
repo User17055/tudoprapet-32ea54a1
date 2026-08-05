@@ -57,6 +57,9 @@ export default {
         },
         "pet-navy-light": "hsl(var(--pet-navy-light))",
         "pet-gold-light": "hsl(var(--pet-gold-light))",
+        // Dourado seguro para texto (4.7:1 sobre branco). O --secondary da marca
+        // só serve como superfície — ver comentário em index.css.
+        "pet-gold-deep": "hsl(var(--pet-gold-deep))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

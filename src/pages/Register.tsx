@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { CheckCircle2, Circle, Lock, Mail, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AuthLayout } from '@/components/auth/AuthLayout';
+import { AuthField } from '@/components/auth/AuthField';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { ArrowLeft, Mail, Lock, User as UserIcon, Eye, EyeOff, ShieldCheck, Gift, Crown, CheckCircle2, Circle } from 'lucide-react';
-import logo from '@/assets/tpp-logo.svg';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
@@ -30,7 +31,6 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [acquisitionSource, setAcquisitionSource] = useState('');
   const [referralCode, setReferralCode] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -90,224 +90,138 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border">
-        <div className="container mx-auto flex items-center justify-between py-3 px-4">
-          <Link
-            to="/catalogo"
-            className="inline-flex items-center gap-2 rounded-full bg-muted hover:bg-primary hover:text-primary-foreground text-foreground font-semibold px-4 py-2.5 text-sm transition-colors btn-bounce"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar ao catálogo
+    <AuthLayout
+      backTo="/catalogo"
+      backLabel="Catálogo"
+      eyebrow="É rápido e gratuito"
+      title="Criar conta"
+      panelTitle="Cuide melhor do seu pet."
+      panelText="Ofertas, compras mais rápidas e histórico de pedidos em um lugar só."
+      footer={
+        <p className="text-center text-sm text-muted-foreground">
+          Já tem conta?{' '}
+          <Link to="/login" className="font-bold text-primary hover:underline">
+            Entrar
           </Link>
-          <Link to="/" className="flex items-center">
-            <img src={logo} alt="TudoPraPet" className="h-auto w-36 sm:w-44" />
-          </Link>
+        </p>
+      }
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-4 rounded-2xl border border-border bg-background p-6 shadow-sm"
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <AuthField
+            id="firstName"
+            label="Nome"
+            icon={UserIcon}
+            autoComplete="given-name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            placeholder="João"
+          />
+          <AuthField
+            id="lastName"
+            label="Sobrenome"
+            icon={UserIcon}
+            autoComplete="family-name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+            placeholder="Silva"
+          />
         </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-6 md:py-12">
-        <div className="grid lg:grid-cols-2 gap-8 items-center max-w-6xl mx-auto">
-          <div className="hidden lg:block space-y-6">
-            <div>
-              <span className="inline-flex items-center gap-2 bg-secondary/20 text-secondary-foreground font-semibold text-xs px-3 py-1.5 rounded-full">
-                <Gift className="h-3.5 w-3.5" /> Crie sua conta grátis
-              </span>
-              <h2 className="font-display font-900 text-4xl text-foreground mt-4 leading-tight">
-                Cuide melhor do seu pet com<br />
-                <span className="text-primary">vantagens exclusivas.</span>
-              </h2>
-              <p className="text-muted-foreground mt-3 text-base">
-                Cadastre-se em segundos e desbloqueie ofertas, agilize compras futuras e acompanhe seus pedidos.
-              </p>
-            </div>
-            <ul className="space-y-4">
-              <li className="flex gap-3 items-start">
-                <div className="bg-primary/10 text-primary p-2 rounded-xl"><Crown className="h-5 w-5" /></div>
-                <div>
-                  <p className="font-bold text-foreground">Ofertas exclusivas</p>
-                  <p className="text-sm text-muted-foreground">Preços especiais em produtos selecionados.</p>
-                </div>
-              </li>
-              <li className="flex gap-3 items-start">
-                <div className="bg-primary/10 text-primary p-2 rounded-xl"><Gift className="h-5 w-5" /></div>
-                <div>
-                  <p className="font-bold text-foreground">Vantagens personalizadas</p>
-                  <p className="text-sm text-muted-foreground">Benefícios pensados para o seu pet.</p>
-                </div>
-              </li>
-              <li className="flex gap-3 items-start">
-                <div className="bg-primary/10 text-primary p-2 rounded-xl"><ShieldCheck className="h-5 w-5" /></div>
-                <div>
-                  <p className="font-bold text-foreground">Histórico de pedidos</p>
-                  <p className="text-sm text-muted-foreground">Recompre seus favoritos com 1 clique.</p>
-                </div>
-              </li>
-            </ul>
-          </div>
+        <AuthField
+          id="email"
+          label="E-mail"
+          icon={Mail}
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          placeholder="seu@email.com"
+        />
 
-          <div className="w-full max-w-md mx-auto lg:mx-0 lg:ml-auto">
-            <div className="text-center lg:text-left mb-6">
-              <h1 className="font-display font-900 text-3xl md:text-4xl text-foreground">Criar conta</h1>
-              <p className="text-muted-foreground text-base mt-2">É rápido e gratuito 🐾</p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="bg-card rounded-3xl shadow-xl border border-border p-6 md:p-8 space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-foreground">Nome</label>
-                  <div className="relative">
-                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      autoComplete="given-name"
-                      value={firstName}
-                      onChange={e => setFirstName(e.target.value)}
-                      required
-                      placeholder="João"
-                      className="w-full rounded-xl border-2 border-input bg-background pl-10 pr-3 py-4 text-base focus:outline-none focus:border-primary transition"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-foreground">Sobrenome</label>
-                  <input
-                    type="text"
-                    autoComplete="family-name"
-                    value={lastName}
-                    onChange={e => setLastName(e.target.value)}
-                    required
-                    placeholder="Silva"
-                    className="w-full rounded-xl border-2 border-input bg-background px-3 py-4 text-base focus:outline-none focus:border-primary transition"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground">E-mail</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    required
-                    placeholder="seu@email.com"
-                    className="w-full rounded-xl border-2 border-input bg-background pl-12 pr-4 py-4 text-base focus:outline-none focus:border-primary transition"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground">Como voce conheceu a TudoPraPet?</label>
-                <Select value={acquisitionSource} onValueChange={setAcquisitionSource}>
-                  <SelectTrigger className="h-[58px] rounded-xl border-2 border-input bg-background px-4 text-base focus:border-primary">
-                    <SelectValue placeholder="Selecione uma opcao" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SOURCE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {acquisitionSource === 'recomendacao' && (
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-foreground">Codigo de indicacao</label>
-                  <input
-                    type="text"
-                    value={referralCode}
-                    onChange={e => setReferralCode(e.target.value.toUpperCase())}
-                    required
-                    placeholder="Ex: JOAO10"
-                    className="w-full rounded-xl border-2 border-input bg-background px-4 py-4 text-base uppercase focus:outline-none focus:border-primary transition"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Use o codigo informado por quem indicou voce ou por um funcionario.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground">Senha</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                    placeholder="Senha segura"
-                    className="w-full rounded-xl border-2 border-input bg-background pl-12 pr-12 py-4 text-base focus:outline-none focus:border-primary transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-primary"
-                    aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                <div className="rounded-xl bg-muted/40 p-3">
-                  <p className="mb-2 text-xs font-bold text-foreground">Sua senha precisa ter:</p>
-                  <ul className="space-y-1.5">
-                    {passwordRules.map((rule) => (
-                      <li
-                        key={rule.label}
-                        className={`flex items-center gap-2 text-xs ${
-                          rule.valid ? 'text-pet-green' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {rule.valid ? (
-                          <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        ) : (
-                          <Circle className="h-4 w-4 shrink-0" />
-                        )}
-                        <span>{rule.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading || !isPasswordSecure}
-                className="w-full rounded-xl font-display font-bold text-base py-6 btn-bounce shadow-md"
-              >
-                {loading ? 'Criando conta...' : 'Criar minha conta'}
-              </Button>
-
-              <p className="text-xs text-center text-muted-foreground">
-                Ao criar conta você aceita nossos termos e política de privacidade.
-              </p>
-            </form>
-
-            <div className="mt-6 space-y-3 text-center">
-              <p className="text-sm text-muted-foreground">
-                Já tem conta?{' '}
-                <Link to="/login" className="text-primary font-bold hover:underline">
-                  Entrar
-                </Link>
-              </p>
-              <Link
-                to="/catalogo"
-                className="lg:hidden inline-flex items-center justify-center gap-2 w-full rounded-xl border-2 border-primary text-primary font-bold py-3 hover:bg-primary hover:text-primary-foreground transition"
-              >
-                <ArrowLeft className="h-4 w-4" /> Continuar comprando sem login
-              </Link>
-            </div>
-          </div>
+        <div className="space-y-2">
+          <label className="text-sm font-bold text-foreground">
+            Como voce conheceu a TudoPraPet?
+          </label>
+          <Select value={acquisitionSource} onValueChange={setAcquisitionSource}>
+            <SelectTrigger className="h-12 rounded-xl border border-input bg-background px-4 text-base focus:border-primary focus:ring-4 focus:ring-secondary/30">
+              <SelectValue placeholder="Selecione uma opcao" />
+            </SelectTrigger>
+            <SelectContent>
+              {SOURCE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </div>
-    </div>
+
+        {acquisitionSource === 'recomendacao' && (
+          <AuthField
+            id="referralCode"
+            label="Codigo de indicacao"
+            icon={UserIcon}
+            value={referralCode}
+            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+            required
+            placeholder="Ex: JOAO10"
+            className="uppercase"
+          />
+        )}
+
+        <div className="space-y-2">
+          <AuthField
+            id="password"
+            label="Senha"
+            icon={Lock}
+            revealable
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="Senha segura"
+          />
+
+          <ul className="space-y-1.5 rounded-xl bg-muted/40 p-3">
+            {passwordRules.map((rule) => (
+              <li
+                key={rule.label}
+                className={`flex items-center gap-2 text-xs ${
+                  rule.valid ? 'text-pet-green' : 'text-muted-foreground'
+                }`}
+              >
+                {rule.valid ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                ) : (
+                  <Circle className="h-4 w-4 shrink-0" />
+                )}
+                <span>{rule.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <Button
+          type="submit"
+          disabled={loading || !isPasswordSecure}
+          className="btn-bounce h-12 w-full rounded-xl font-display text-base font-bold"
+        >
+          {loading ? 'Criando conta...' : 'Criar minha conta'}
+        </Button>
+
+        <p className="text-center text-xs text-muted-foreground">
+          Ao criar conta você aceita nossos termos e política de privacidade.
+        </p>
+      </form>
+    </AuthLayout>
   );
 };
 

@@ -81,7 +81,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       position="top-right"
       closeButton
-      richColors
       gap={10}
       offset={16}
       mobileOffset={12}
@@ -95,27 +94,27 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         duration: 4000,
 
+        // A borda de cada variante usa --toast-accent, definida em index.css a
+        // partir dos tokens da marca. Antes eram hex fixos do Bootstrap.
         classNames: {
           toast:
-            "group toast pet-toast !w-[min(92vw,390px)] !overflow-hidden !rounded-2xl !border !px-4 !py-3.5 !gap-3 !font-sans !shadow-[0_14px_40px_-12px_rgba(15,23,42,0.28)] backdrop-blur-md",
-          success:
-            "toast-success !border-emerald-500/40 !bg-white !text-slate-900 dark:!border-emerald-400/40 dark:!bg-slate-950 dark:!text-slate-50",
-          error:
-            "toast-error !border-red-500/40 !bg-white !text-slate-900 dark:!border-red-400/40 dark:!bg-slate-950 dark:!text-slate-50",
-          warning:
-            "toast-warning !border-amber-500/45 !bg-white !text-slate-900 dark:!border-amber-400/45 dark:!bg-slate-950 dark:!text-slate-50",
-          info:
-            "toast-info !border-sky-500/40 !bg-white !text-slate-900 dark:!border-sky-400/40 dark:!bg-slate-950 dark:!text-slate-50",
-          loading:
-            "toast-loading !border-slate-300 !bg-white !text-slate-900 dark:!border-slate-600 dark:!bg-slate-950 dark:!text-slate-50",
-          title: "!text-[14px] !font-bold !leading-snug !text-slate-900 dark:!text-slate-50",
+            "group toast pet-toast !w-[min(92vw,390px)] !overflow-hidden !rounded-2xl !border !border-[color:var(--toast-accent)]/35 !bg-background !px-4 !py-3.5 !gap-3 !font-sans !text-foreground !shadow-[0_14px_40px_-12px_hsl(var(--primary)/0.28)]",
+          success: "toast-success",
+          error: "toast-error",
+          warning: "toast-warning",
+          info: "toast-info",
+          loading: "toast-loading",
+          title: "!text-[14px] !font-bold !leading-snug !text-foreground",
           content: "!min-w-0 !flex-1 !pr-6",
-          description: "!mt-1 !block !text-[13px] !font-normal !leading-snug !text-slate-600 dark:!text-slate-300 !whitespace-normal !break-words",
-          icon: "pet-toast-icon !mr-1 !flex !h-9 !w-9 !shrink-0 !items-center !justify-center !rounded-full !bg-black/[0.04] dark:!bg-white/10",
+          description:
+            "!mt-1 !block !text-[13px] !font-normal !leading-snug !text-muted-foreground !whitespace-normal !break-words",
+          icon: "pet-toast-icon !mr-1 !flex !h-9 !w-9 !shrink-0 !items-center !justify-center !rounded-full !bg-[color:var(--toast-accent)]/10",
           closeButton:
-            "!right-2 !top-2 !left-auto !translate-x-0 !translate-y-0 !h-6 !w-6 !border-transparent !bg-black/5 !text-slate-600 hover:!bg-black/10 hover:!text-slate-900 dark:!bg-white/10 dark:!text-slate-300 dark:hover:!bg-white/20",
-          actionButton: "!rounded-full !bg-primary !px-3 !py-1.5 !text-xs !font-bold !text-primary-foreground",
-          cancelButton: "!rounded-full !bg-black/10 !px-3 !py-1.5 !text-xs !font-semibold !text-current",
+            "!right-2 !top-2 !left-auto !translate-x-0 !translate-y-0 !h-6 !w-6 !border-transparent !bg-muted !text-muted-foreground hover:!bg-border hover:!text-foreground",
+          actionButton:
+            "!rounded-full !bg-primary !px-3 !py-1.5 !text-xs !font-bold !text-primary-foreground",
+          cancelButton:
+            "!rounded-full !bg-muted !px-3 !py-1.5 !text-xs !font-semibold !text-foreground",
         },
       }}
       {...props}

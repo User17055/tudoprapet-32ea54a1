@@ -3,8 +3,22 @@
 Registro do que foi alterado, por quê, e o que muda na prática. Escrito para quem não
 acompanhou as mudanças de perto.
 
-**Escopo:** branch `Guilherme`. A `main` foi integrada à branch (seção 6), mas **nada
-foi integrado à `main`** — a decisão de merge é do time.
+**Escopo:** branch `Guilherme`, integrada à `main`.
+
+> ## ⚠️ Nada disto está em produção
+>
+> Em 04/08/2026 foi verificado que **todas as edge functions publicadas são uma versão
+> anterior a este trabalho**. O código está correto no repositório, no GitHub e dentro do
+> Lovable — mas nunca foi publicado no Supabase.
+>
+> No Lovable Cloud, **sincronizar código e publicar function são mecanismos separados**.
+> Ele puxa os commits do GitHub para o workspace, mas o deploy só roda quando ele mesmo
+> edita uma function. Mudança vinda de Pull Request fica no editor e não vai ao ar.
+>
+> Consequência prática: os buracos de segurança descritos na seção 2 **seguem abertos**.
+>
+> Como verificar e como resolver: [`docs/smoke-test-edge-functions.md`](smoke-test-edge-functions.md),
+> Parte 3.
 
 ---
 
@@ -464,6 +478,10 @@ Está comentado dentro do `deno.json`. Não troque para `auto`.
 
 ## 9. Decisões que dependem do time
 
+0. **Publicar as edge functions.** Bloqueia todos os itens abaixo que dependem de código
+   — hoje nada deste relatório está rodando. Ver Parte 3 do documento de smoke test para
+   as opções, da mais imediata (pedir ao Lovable) à definitiva (acesso ao projeto
+   Supabase, que destrava CI).
 1. **Categoria do template de WhatsApp** — mudar de MARKETING para UTILITY no WhatsApp
    Manager. É a correção de maior impacto no problema do 131049 e não está no código.
 2. **A API externa honra `idempotency_key`?** Sem isso, a proteção contra duplicata é
