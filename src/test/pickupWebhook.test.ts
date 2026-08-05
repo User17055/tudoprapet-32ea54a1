@@ -58,6 +58,8 @@ describe("classifyWebhookEvent", () => {
 describe("isPickupMethod", () => {
   it("recognises the Shopify pickup method", () => {
     expect(isPickupMethod("pick_up")).toBe(true);
+    expect(isPickupMethod("pick-up")).toBe(true);
+    expect(isPickupMethod("pick up")).toBe(true);
     expect(isPickupMethod("PICK_UP")).toBe(true);
   });
 
