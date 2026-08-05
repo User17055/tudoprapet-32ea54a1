@@ -130,6 +130,8 @@ Deno.serve(async (req) => {
     let orderNumber = String(payload.order_number || payload.name || fo.order_name || "");
     let customer = payload.customer || {};
     let shippingAddress = payload.shipping_address || payload.destination || fo.destination || {};
+    let billingAddress = payload.billing_address || {};
+    let orderPhone = payload.phone || "";
 
 
     // If we only have a fulfillment_order id, resolve the underlying order_id via Admin API
@@ -142,11 +144,12 @@ Deno.serve(async (req) => {
 
     if (!resolvedOrderId && isFulfillmentOrdersTopic) {
       const foId = String(fo.id || payload.id || lifo.fulfillment_order_id || "");
+      const numericFoId = foId.replace(/\D/g, "");
       const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
-      if (foId && shopDomain && adminToken) {
+      if (numericFoId && shopDomain && adminToken) {
         try {
           const foResp = await fetch(
-            `https://${shopDomain}/admin/api/2025-07/fulfillment_orders/${foId}.json`,
+            `https://${shopDomain}/admin/api/2025-07/fulfillment_orders/${numericFoId}.json`,
             { headers: { "X-Shopify-Access-Token": adminToken } },
           );
           if (foResp.ok) {
@@ -205,6 +208,8 @@ Deno.serve(async (req) => {
             const { order } = await orderResp.json();
             customer = order.customer || customer;
             shippingAddress = order.shipping_address || shippingAddress;
+            billingAddress = order.billing_address || billingAddress;
+            orderPhone = order.phone || orderPhone;
             orderNumber = String(order.order_number || order.name || orderNumber);
           } else {
             console.error(`Failed to fetch order ${resolvedOrderId}: ${orderResp.status}`);
@@ -218,7 +223,13 @@ Deno.serve(async (req) => {
     const customerName =
       `${customer.first_name || shippingAddress.first_name || ""} ${customer.last_name || shippingAddress.last_name || ""}`.trim()
       || customer.name || "Cliente";
-    const customerPhone = normalizePhone(customer.phone || shippingAddress.phone || (payload as any).billing_address?.phone || payload.phone);
+    const customerPhone = normalizePhone(
+      customer.phone ||
+      customer.default_address?.phone ||
+      shippingAddress.phone ||
+      billingAddress.phone ||
+      orderPhone,
+    );
 
     if (!customerPhone) {
       console.warn(`No customer phone for order ${resolvedOrderId}, skipping`);
