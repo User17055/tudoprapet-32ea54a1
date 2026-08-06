@@ -24,7 +24,9 @@ const Login = () => {
         toast.success("Login realizado com sucesso.");
         navigate("/perfil");
       } else {
-        toast.error(result.error || "Email ou senha incorretos.");
+        // Ja vem traduzido do AuthContext — inclusive o caso de e-mail nao
+        // confirmado, que nao pode virar "senha incorreta".
+        toast.error(result.error ?? "Nao foi possivel entrar. Tente novamente.");
       }
     } finally {
       setLoading(false);

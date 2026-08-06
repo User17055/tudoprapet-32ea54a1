@@ -4,7 +4,7 @@ import { Loader2, Menu, MessageCircle, Package, Search, User, X } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { MobileCategoryNav } from "@/components/MobileCategoryNav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCategoryTree } from "@/hooks/useCategoryTree";
 import { Link } from "react-router-dom";
@@ -399,44 +399,12 @@ export const Header = () => {
               ))}
             </div>
           ) : (
-            <Accordion type="single" collapsible>
-              {navItems.map((item) => {
-                const kids = childrenOf.get(item.id) || [];
-                if (kids.length === 0) {
-                  return (
-                    <Link
-                      key={item.id}
-                      to={`/catalogo?categoria=${item.slug}&categoria_id=${item.id}`}
-                      className={`block border-b border-border py-3 text-sm font-medium transition-colors ${
-                        isCategoryActive(item.slug) ? "text-primary font-semibold" : "text-foreground hover:text-primary"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                }
-                return (
-                  <AccordionItem key={item.id} value={item.id}>
-                    <AccordionTrigger className="py-3 text-sm font-medium hover:no-underline">
-                      {item.label}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="flex flex-col gap-1 border-l border-border pl-3">
-                        {kids.map((kid) => (
-                          <Link
-                            key={kid.id}
-                            to={`/catalogo?categoria=${kid.slug}&categoria_id=${kid.id}`}
-                            className="py-1.5 text-sm text-muted-foreground transition-colors hover:text-primary"
-                          >
-                            {kid.name}
-                          </Link>
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
+            <MobileCategoryNav
+              items={navItems}
+              childrenOf={childrenOf}
+              isActive={isCategoryActive}
+              onNavigate={() => setMobileOpen(false)}
+            />
           )}
 
           <div className="mt-2 pt-3 flex flex-col gap-3">

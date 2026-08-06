@@ -243,6 +243,38 @@ Se o time quiser algo permanente, a saída é embutir um **marcador de versão**
 functions: uma constante em `_shared/cors.ts` devolvida como cabeçalho, atualizada a cada
 entrega. Custa disciplina, mas troca "descobrir um discriminador" por "ler um número".
 
+### O marcador de versão (implementado)
+
+Foi feito. `_shared/cors.ts` exporta `FUNCTIONS_VERSION` e devolve o valor no cabeçalho
+`x-tpp-functions-version`, que viaja em toda resposta de todas as 13 functions — inclusive
+no `OPTIONS`, porque todas espalham `corsHeaders`.
+
+```bash
+bash scripts/check-deploy.sh                  # sonda o webhook de retirada
+bash scripts/check-deploy.sh pickup-validate  # uma específica
+bash scripts/check-deploy.sh --all            # as 13
+```
+
+O script lê `FUNCTIONS_VERSION` do repositório e compara com o que a function publicada
+devolve. **Incremente a constante a cada entrega que mexa em `supabase/functions/`** — sem
+isso o marcador para de discriminar, exatamente como aconteceu com o `x-retry-count`.
+
+São três saídas, e a distinção entre as duas últimas é o ponto:
+
+| Saída | Significado |
+|:--:|---|
+| `0` | publicado, na versão do repositório |
+| `1` | respondeu com versão diferente, ou sem o cabeçalho → **o deploy não rodou** |
+| `2` | não deu para alcançar ou identificar → **desconhecido, não conclua nada** |
+
+O script confirma que quem respondeu foi a function (`x-served-by: supabase-edge-runtime`)
+antes de julgar a versão. Sem isso, um 403 do gateway seria lido como "publicada sem o
+marcador" — falso, e manda alguém caçar um deploy que talvez já tenha acontecido.
+
+Enquanto a versão publicada for anterior a esta mudança, o resultado esperado é `1` (sem o
+cabeçalho): o marcador só passa a existir em produção **depois** do primeiro deploy que o
+inclua.
+
 ## O que foi encontrado em 04/08/2026
 
 Todas as cinco functions sondadas responderam a lista antiga de cabeçalhos:

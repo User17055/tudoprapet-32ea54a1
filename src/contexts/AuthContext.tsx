@@ -12,6 +12,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+/**
+ * A Supabase devolve o erro em ingles ("Invalid login credentials"). Traduzimos
+ * aqui, no unico ponto que fala com ela, para que as paginas nao precisem saber
+ * disso — Login e Register recebem a mensagem ja pronta.
+ *
+ * A chave e o `code` e nao o texto: codigo nao muda quando eles reescrevem a
+ * mensagem numa atualizacao.
+ */
+const MENSAGENS_AUTH: Record<string, string> = {
+  invalid_credentials: 'E-mail ou senha incorretos.',
+  email_not_confirmed: 'Confirme seu e-mail antes de entrar. Veja sua caixa de entrada.',
+  user_already_exists: 'Este e-mail ja esta cadastrado.',
+  email_exists: 'Este e-mail ja esta cadastrado.',
+  weak_password: 'Escolha uma senha mais forte.',
+  over_request_rate_limit: 'Muitas tentativas. Aguarde um instante.',
+  over_email_send_rate_limit: 'Muitas tentativas. Aguarde um instante.',
+};
+
+// `invalid_credentials` cobre e-mail inexistente E senha errada — a Supabase nao
+// distingue os dois de proposito, para nao permitir descobrir quem tem conta na
+// loja. Nao separe essas mensagens.
+const traduzirErro = (error: { code?: string }, padrao: string) =>
+  (error.code && MENSAGENS_AUTH[error.code]) || padrao;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,10 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return { success: false, error: error.message };
+      if (error) {
+        return { success: false, error: traduzirErro(error, 'Nao foi possivel entrar. Tente novamente.') };
+      }
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Erro ao fazer login.' };
+    } catch {
+      // Falha de rede tambem vem em ingles; nao repassamos.
+      return { success: false, error: 'Nao foi possivel entrar. Verifique sua conexao.' };
     }
   };
 
@@ -57,10 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         },
       });
-      if (error) return { success: false, error: error.message };
+      if (error) {
+        return { success: false, error: traduzirErro(error, 'Nao foi possivel criar a conta. Tente novamente.') };
+      }
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Erro ao criar conta.' };
+    } catch {
+      return { success: false, error: 'Nao foi possivel criar a conta. Verifique sua conexao.' };
     }
   };
 

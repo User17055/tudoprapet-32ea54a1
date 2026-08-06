@@ -151,19 +151,22 @@ export const ProductCard = ({ product, products = [] }: Props) => {
         </button>
       </div>
 
-      <div className="mt-4 min-h-[2.9em]">
+      <div className="mt-4 flex min-h-[2.9em] flex-col">
         <h3
           className={`line-clamp-2 text-[15px] font-normal leading-[1.35] text-[#202633] ${
             variationItems.length > 1
-              ? "group-hover:hidden"
+              ? "order-2 hoverable:group-hover:hidden"
               : ""
           }`}
         >
           {node.title}
         </h3>
 
+        {/* No toque nao existe hover, entao as variacoes ficam sempre visiveis acima
+            do titulo. Onde ha mouse, o comportamento continua sendo o de sempre:
+            escondidas ate o hover, quando entao substituem o titulo. */}
         {variationItems.length > 1 && (
-          <div className="hidden h-[2.9em] items-center gap-2 overflow-x-auto pr-1 group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="order-1 flex h-[2.9em] items-center gap-2 overflow-x-auto pr-1 hoverable:hidden hoverable:group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {variationItems.map((item) => {
               const active = item.shopify_product_id === node.id;
               return (
