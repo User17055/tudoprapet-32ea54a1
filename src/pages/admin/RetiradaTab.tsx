@@ -201,6 +201,23 @@ export default function RetiradaTab() {
             </Button>
           </form>
 
+          <form
+            onSubmit={(e) => { e.preventDefault(); if (customer.trim()) handleResend({ customer: customer.trim() }); }}
+            className="flex gap-2"
+          >
+            <Input
+              placeholder="Reenviar por nome do cliente (ex: Marsi)"
+              value={customer}
+              onChange={(e) => setCustomer(e.target.value)}
+              disabled={resending}
+            />
+            <Button type="submit" variant="secondary" disabled={resending || !customer.trim()}>
+              {resending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reenviar"}
+            </Button>
+          </form>
+
+
+
           {errorMsg && (
             <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
               <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
