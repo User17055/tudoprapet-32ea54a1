@@ -62,20 +62,24 @@ export default function RetiradaTab() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [customer, setCustomer] = useState("");
 
-  const handleResendLast = async () => {
+  const handleResend = async (payload: { customer?: string } = {}) => {
     setResending(true);
     try {
-      const { data, error } = await supabase.functions.invoke("pickup-resend-last", { body: {} });
+      const { data, error } = await supabase.functions.invoke("pickup-resend-last", { body: payload });
       if (error) { toast.error(await extractError(error)); return; }
       if (data?.error) { toast.error(String(data.error)); return; }
-      toast.success(`Código reenviado para ${data?.customer_name || "cliente"} (${data?.order_number || ""})`);
+      toast.success(`Código ${data?.pickup_code || ""} reenviado para ${data?.customer_name || "cliente"} (${data?.order_number || ""})`);
     } catch (err) {
       toast.error(String(err));
     } finally {
       setResending(false);
     }
   };
+
+  const handleResendLast = () => handleResend();
+
 
   const loadHistory = async () => {
     setHistoryLoading(true);
