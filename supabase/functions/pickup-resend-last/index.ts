@@ -22,10 +22,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    let body: { order_id?: string | number } = {};
+    let body: { order_id?: string | number; customer?: string } = {};
     try { body = await req.json(); } catch { /* ignore */ }
 
-    // Fetch order: specific id or the most recent one
+    // Fetch order: specific id, busca por nome do cliente, ou o mais recente
     let order: any = null;
     if (body.order_id) {
       const numeric = String(body.order_id).replace(/\D/g, "");
@@ -39,8 +39,9 @@ Deno.serve(async (req) => {
       }
       order = (await r.json()).order;
     } else {
+      const limit = body.customer ? 250 : 1;
       const r = await fetch(
-        `https://${shopDomain}/admin/api/2025-07/orders.json?status=any&limit=1&order=created_at+desc`,
+        `https://${shopDomain}/admin/api/2025-07/orders.json?status=any&limit=${limit}&order=created_at+desc`,
         { headers: { "X-Shopify-Access-Token": adminToken } },
       );
       if (!r.ok) {
@@ -48,8 +49,27 @@ Deno.serve(async (req) => {
           status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const j = await r.json();
-      order = (j.orders || [])[0];
+      const orders = (await r.json()).orders || [];
+      if (body.customer) {
+        const term = body.customer.trim().toLowerCase();
+        order = orders.find((o: any) => {
+          const c = o.customer || {};
+          const s = o.shipping_address || {};
+          const hay = [
+            c.first_name, c.last_name, c.name, c.email,
+            s.first_name, s.last_name, s.name,
+            o.email, o.contact_email, o.name,
+          ].filter(Boolean).join(" ").toLowerCase();
+          return hay.includes(term);
+        });
+        if (!order) {
+          return new Response(JSON.stringify({ error: `Nenhum pedido encontrado para "${body.customer}"` }), {
+            status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } else {
+        order = orders[0];
+      }
     }
 
     if (!order) {
