@@ -100,6 +100,33 @@ export interface NoteAttribute {
 export const PICKUP_CODE_ATTRIBUTE = "Codigo de retirada";
 
 /**
+ * Atributo gravado no pedido quando o atendente confirma a retirada.
+ * É o sinal usado para NÃO reenviar a mensagem de "pronto para retirada" de um
+ * pedido que o cliente já levou — ver isAlreadyPickedUp.
+ */
+export const PICKUP_DONE_ATTRIBUTE = "Retirado em";
+
+/**
+ * true quando o pedido já foi retirado.
+ *
+ * Dois sinais, qualquer um basta:
+ * - o atributo gravado pelo pickup-complete (fonte primária, nossa);
+ * - o pedido já totalmente processado na Shopify (fulfilled), caso a baixa
+ *   tenha sido feita direto no painel da Shopify.
+ */
+export function isAlreadyPickedUp(opts: {
+  noteAttributes?: NoteAttribute[] | null;
+  fulfillmentStatus?: string | null;
+}): boolean {
+  const hasAttr = (opts.noteAttributes ?? []).some(
+    (a) => a?.name === PICKUP_DONE_ATTRIBUTE && String(a?.value ?? "").trim() !== "",
+  );
+  if (hasAttr) return true;
+  const status = String(opts.fulfillmentStatus ?? "").trim().toLowerCase();
+  return status === "fulfilled";
+}
+
+/**
  * Lê o código de retirada da resposta da API externa.
  *
  * Os três nomes de campo aceitos são uma herança: não há documentação do

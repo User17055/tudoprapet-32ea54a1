@@ -1,6 +1,12 @@
 // Chamadas à Shopify. Usa apenas fetch (padrão web), sem depender de Deno.
 
-import { mergeNoteAttributes, type NoteAttribute, PICKUP_CODE_ATTRIBUTE } from "./pickup.ts";
+import {
+  isAlreadyPickedUp,
+  mergeNoteAttributes,
+  type NoteAttribute,
+  PICKUP_CODE_ATTRIBUTE,
+  PICKUP_DONE_ATTRIBUTE,
+} from "./pickup.ts";
 
 export const SHOP_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
 export const ADMIN_API = `https://${SHOP_DOMAIN}/admin/api/2025-07`;
@@ -114,6 +120,90 @@ export async function savePickupCodeOnOrder(opts: {
   } catch (e) {
     console.error("Failed to save pickup code:", e);
     return false;
+  }
+}
+
+/** Grava um note_attribute qualquer preservando os demais. */
+async function setOrderNoteAttribute(opts: {
+  shopDomain: string;
+  adminToken: string;
+  numericOrderId: string;
+  name: string;
+  value: string;
+  existingNoteAttributes?: NoteAttribute[] | null;
+}): Promise<boolean> {
+  const orderUrl = `https://${opts.shopDomain}/admin/api/2025-07/orders/${opts.numericOrderId}.json`;
+  let existing = opts.existingNoteAttributes;
+  if (existing === undefined) {
+    existing = (await fetchOrderPickupState(opts)).noteAttributes;
+  }
+  try {
+    const upd = await fetch(orderUrl, {
+      method: "PUT",
+      headers: { "X-Shopify-Access-Token": opts.adminToken, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order: {
+          id: Number(opts.numericOrderId),
+          note_attributes: mergeNoteAttributes(existing, opts.name, opts.value),
+        },
+      }),
+    });
+    if (!upd.ok) {
+      console.error(`Failed to set ${opts.name} on order: ${upd.status} ${await upd.text()}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`Failed to set ${opts.name}:`, e);
+    return false;
+  }
+}
+
+/** Marca o pedido como retirado (atributo lido por isAlreadyPickedUp). */
+export function markOrderPickedUp(opts: {
+  shopDomain: string;
+  adminToken: string;
+  numericOrderId: string;
+  at?: string;
+}): Promise<boolean> {
+  return setOrderNoteAttribute({
+    ...opts,
+    name: PICKUP_DONE_ATTRIBUTE,
+    value: opts.at ?? new Date().toISOString(),
+  });
+}
+
+/**
+ * Lê o estado de retirada do pedido: atributos + status de processamento.
+ * Em caso de falha devolve `alreadyPickedUp: false` — preferimos avisar o
+ * cliente a silenciar por causa de uma leitura que não deu certo.
+ */
+export async function fetchOrderPickupState(opts: {
+  shopDomain: string;
+  adminToken: string;
+  numericOrderId: string;
+}): Promise<{ noteAttributes: NoteAttribute[] | null; alreadyPickedUp: boolean }> {
+  try {
+    const read = await fetch(
+      `https://${opts.shopDomain}/admin/api/2025-07/orders/${opts.numericOrderId}.json?fields=note_attributes,fulfillment_status`,
+      { headers: { "X-Shopify-Access-Token": opts.adminToken } },
+    );
+    if (!read.ok) {
+      console.warn(`Nao foi possivel ler o pedido ${opts.numericOrderId} (${read.status})`);
+      return { noteAttributes: null, alreadyPickedUp: false };
+    }
+    const order = (await read.json())?.order ?? {};
+    const noteAttributes: NoteAttribute[] = order.note_attributes ?? [];
+    return {
+      noteAttributes,
+      alreadyPickedUp: isAlreadyPickedUp({
+        noteAttributes,
+        fulfillmentStatus: order.fulfillment_status,
+      }),
+    };
+  } catch (e) {
+    console.warn(`Falha ao ler o pedido ${opts.numericOrderId}:`, e);
+    return { noteAttributes: null, alreadyPickedUp: false };
   }
 }
 
