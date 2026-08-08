@@ -1,6 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { extractPickupCode, normalizePhone, PICKUP_HOURS, STORE_NAME } from "../_shared/pickup.ts";
 import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
+import { isAlreadyPickedUp } from "../_shared/pickup.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
@@ -91,6 +92,18 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Cliente sem telefone cadastrado", order_number: order.name }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Pedido já retirado não recebe de novo o código.
+    if (isAlreadyPickedUp({
+      noteAttributes: order.note_attributes ?? [],
+      fulfillmentStatus: order.fulfillment_status,
+    })) {
+      return new Response(JSON.stringify({
+        error: "Pedido já retirado — mensagem não enviada",
+        already_picked_up: true,
+        order_number: order.name,
+      }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const numericId = String(order.id).replace(/\D/g, "");

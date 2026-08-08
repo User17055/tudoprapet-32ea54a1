@@ -9,7 +9,7 @@ import {
   shouldSavePickupCode,
   STORE_NAME,
 } from "../_shared/pickup.ts";
-import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
+import { fetchOrderPickupState, savePickupCodeOnOrder } from "../_shared/shopify.ts";
 import { decideHmac, resolveHmacMode, verifyShopifyHmac } from "../_shared/webhook.ts";
 
 const corsHeaders = corsHeadersWith(
@@ -191,6 +191,25 @@ Deno.serve(async (req) => {
           JSON.stringify({ ignored: true, reason: `not a pickup order (method_type=${methodType})` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
+      }
+    }
+
+    // Pedido já retirado não recebe de novo "venha buscar na loja".
+    if (isReadyToPickup) {
+      const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+      const numeric = resolvedOrderId.replace(/\D/g, "");
+      if (shopDomain && adminToken && numeric) {
+        const { alreadyPickedUp } = await fetchOrderPickupState({
+          shopDomain,
+          adminToken,
+          numericOrderId: numeric,
+        });
+        if (alreadyPickedUp) {
+          console.log(`Pedido ${resolvedOrderId} ja retirado — mensagem nao enviada`);
+          return new Response(JSON.stringify({ ignored: true, reason: "already_picked_up" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
     }
 

@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.75.0";
 import { corsHeaders } from "../_shared/cors.ts";
+import { markOrderPickedUp } from "../_shared/shopify.ts";
 
 const SHOPIFY_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
 const SHOPIFY_API_VERSION = "2025-07";
@@ -201,6 +202,13 @@ Deno.serve(async (req) => {
     if (shopifyOrderId) {
       try {
         shopifyResult = await fulfillShopifyOrder(shopifyOrderId as string | number);
+        // Marca o pedido como retirado: é o sinal que impede um novo envio de
+        // "pronto para retirada" para quem já levou a compra.
+        const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+        const numericOrderId = String(shopifyOrderId).replace(/\D/g, "");
+        if (adminToken && numericOrderId) {
+          await markOrderPickedUp({ shopDomain: SHOPIFY_DOMAIN, adminToken, numericOrderId });
+        }
       } catch (e) {
         shopifyError = String(e);
         console.error("Shopify fulfill error:", e);
