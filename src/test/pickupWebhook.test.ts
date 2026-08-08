@@ -5,7 +5,9 @@ import {
   extractPickupCode,
   isPickupMethod,
   mergeNoteAttributes,
+  isAlreadyPickedUp,
   PICKUP_CODE_ATTRIBUTE,
+  PICKUP_DONE_ATTRIBUTE,
   shouldSavePickupCode,
 } from "../../supabase/functions/_shared/pickup.ts";
 
@@ -190,5 +192,21 @@ describe("buildIdempotencyKey", () => {
   it("separates different orders", () => {
     expect(buildIdempotencyKey("order_ready_for_pickup", "12345"))
       .not.toBe(buildIdempotencyKey("order_ready_for_pickup", "54321"));
+  });
+});
+
+describe("isAlreadyPickedUp", () => {
+  it("detects the pickup-done attribute", () => {
+    expect(isAlreadyPickedUp({ noteAttributes: [{ name: PICKUP_DONE_ATTRIBUTE, value: "2026-08-08T12:00:00Z" }] })).toBe(true);
+  });
+
+  it("ignores an empty attribute value", () => {
+    expect(isAlreadyPickedUp({ noteAttributes: [{ name: PICKUP_DONE_ATTRIBUTE, value: " " }] })).toBe(false);
+  });
+
+  it("treats a fulfilled order as picked up", () => {
+    expect(isAlreadyPickedUp({ fulfillmentStatus: "fulfilled" })).toBe(true);
+    expect(isAlreadyPickedUp({ fulfillmentStatus: "partial" })).toBe(false);
+    expect(isAlreadyPickedUp({})).toBe(false);
   });
 });
