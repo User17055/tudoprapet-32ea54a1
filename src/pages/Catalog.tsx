@@ -3,8 +3,9 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductCardSkeleton } from "@/components/ProductCardSkeleton";
 import { ShopifyProduct, cachedStorefrontApiRequest, BEST_SELLING_PRODUCTS_QUERY, fetchAllShopifyProducts } from "@/lib/shopify";
-import { ChevronRight, Loader2, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ChevronRight, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -81,6 +82,7 @@ const Catalog = () => {
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const {
     getVariations,
+    getVariationGroupName,
     loading: variationsLoading,
   } = useProductVariations();
   const catalogLoading = loading || audienceLoading || franchiseeLoading || variationsLoading;
@@ -264,6 +266,13 @@ const Catalog = () => {
     if (term) {
       result = fuzzySearch(term, result, (p) => [
         { value: p.node.title, weight: 1 },
+        { value: getVariationGroupName(p.node.id) || "", weight: 1 },
+        ...getVariations(p.node.id)
+          .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
+          .flatMap((item) => [
+            { value: item.label, weight: 1 },
+            { value: item.shopify_product_title, weight: 1 },
+          ]),
         { value: p.node.vendor, weight: 0.9 },
         { value: p.node.productType, weight: 0.85 },
         { value: (p.node.tags || []).join(" "), weight: 0.8 },
@@ -311,7 +320,7 @@ const Catalog = () => {
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [audienceVisibleProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds]);
+  }, [audienceVisibleProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =
@@ -601,7 +610,12 @@ const Catalog = () => {
               </div>
               <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
                 {shelfProducts.map((product) => (
-                  <ProductCard key={`shelf-${product.node.id}`} product={product} products={products} />
+                  <ProductCard
+                    key={`shelf-${product.node.id}`}
+                    product={product}
+                    products={products}
+                    searchQuery={requestedSearch}
+                  />
                 ))}
               </div>
             </section>
@@ -697,8 +711,13 @@ const Catalog = () => {
               </div>
 
               {catalogLoading ? (
-                <div className="flex justify-center py-20">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <div
+                  className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 xl:grid-cols-4"
+                  aria-label="Carregando produtos"
+                >
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <ProductCardSkeleton key={index} />
+                  ))}
                 </div>
               ) : filteredProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -712,7 +731,12 @@ const Catalog = () => {
               ) : (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 xl:grid-cols-4">
                   {filteredProducts.map((product) => (
-                    <ProductCard key={product.node.id} product={product} products={products} />
+                    <ProductCard
+                      key={product.node.id}
+                      product={product}
+                      products={products}
+                      searchQuery={requestedSearch}
+                    />
                   ))}
                 </div>
               )}

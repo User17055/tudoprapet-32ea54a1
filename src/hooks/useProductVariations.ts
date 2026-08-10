@@ -11,28 +11,45 @@ export interface ProductVariationItem {
   sort_order: number;
 }
 
-let cachedItems: ProductVariationItem[] | null = null;
-let pendingItems: Promise<ProductVariationItem[]> | null = null;
+export interface ProductVariationGroup {
+  id: string;
+  name: string;
+}
 
-async function fetchVariationItems(): Promise<ProductVariationItem[]> {
-  if (cachedItems) return cachedItems;
-  if (pendingItems) return pendingItems;
+interface ProductVariationsData {
+  items: ProductVariationItem[];
+  groups: ProductVariationGroup[];
+}
 
-  pendingItems = (async () => {
+let cachedData: ProductVariationsData | null = null;
+let pendingData: Promise<ProductVariationsData> | null = null;
+
+async function fetchProductVariations(): Promise<ProductVariationsData> {
+  if (cachedData) return cachedData;
+  if (pendingData) return pendingData;
+
+  pendingData = (async () => {
     try {
-      const { data, error } = await supabase
-        .from("product_variation_items")
-        .select("id, group_id, shopify_product_id, shopify_product_handle, shopify_product_title, label, sort_order")
-        .order("sort_order");
-      if (error) throw error;
-      cachedItems = (data || []) as ProductVariationItem[];
-      return cachedItems;
+      const [itemsResult, groupsResult] = await Promise.all([
+        supabase
+          .from("product_variation_items")
+          .select("id, group_id, shopify_product_id, shopify_product_handle, shopify_product_title, label, sort_order")
+          .order("sort_order"),
+        supabase.from("product_variation_groups").select("id, name"),
+      ]);
+      if (itemsResult.error) throw itemsResult.error;
+      if (groupsResult.error) throw groupsResult.error;
+      cachedData = {
+        items: (itemsResult.data || []) as ProductVariationItem[],
+        groups: (groupsResult.data || []) as ProductVariationGroup[],
+      };
+      return cachedData;
     } finally {
-      pendingItems = null;
+      pendingData = null;
     }
   })();
 
-  return pendingItems;
+  return pendingData;
 }
 
 export function indexProductVariations(items: ProductVariationItem[]) {
@@ -54,23 +71,33 @@ export function indexProductVariations(items: ProductVariationItem[]) {
 }
 
 export function useProductVariations() {
-  const [items, setItems] = useState<ProductVariationItem[]>(cachedItems || []);
-  const [loading, setLoading] = useState(!cachedItems);
+  const [data, setData] = useState<ProductVariationsData>(
+    cachedData || { items: [], groups: [] },
+  );
+  const [loading, setLoading] = useState(!cachedData);
 
   useEffect(() => {
-    fetchVariationItems()
-      .then(setItems)
+    fetchProductVariations()
+      .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const itemsByProduct = useMemo(() => indexProductVariations(items), [items]);
+  const itemsByProduct = useMemo(() => indexProductVariations(data.items), [data.items]);
+  const groupNames = useMemo(
+    () => new Map(data.groups.map((group) => [group.id, group.name])),
+    [data.groups],
+  );
 
   const getVariations = (productId: string) => itemsByProduct.get(productId) || [];
+  const getVariationGroupName = (productId: string) => {
+    const groupId = itemsByProduct.get(productId)?.[0]?.group_id;
+    return groupId ? groupNames.get(groupId) || null : null;
+  };
 
-  return { items, loading, getVariations };
+  return { items: data.items, groups: data.groups, loading, getVariations, getVariationGroupName };
 }
 
 export function invalidateProductVariationsCache() {
-  cachedItems = null;
+  cachedData = null;
 }
