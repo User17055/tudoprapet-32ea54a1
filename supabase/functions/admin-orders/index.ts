@@ -17,7 +17,7 @@ function deliveryLabel(order: any): { label: string; method: string } {
     .join(" ")
     .trim();
   const searchable = method.toLowerCase();
-  if (/retirada|retire|pickup|pick_up|local pickup/.test(searchable)) return { label: "RETIRADA", method: method || "Retirada na loja" };
+  if (/retirada|retire|pickup|pick_up|local pickup|shop location/.test(searchable)) return { label: "RETIRADA", method: "Retirada na loja" };
   if (/\bpac\b|correios pac/.test(searchable)) return { label: "PAC", method: method || "PAC" };
   if (/sedex/.test(searchable)) return { label: "SEDEX", method };
   if (/moto|motoboy|entrega local/.test(searchable)) return { label: "MOTOBOY", method };
