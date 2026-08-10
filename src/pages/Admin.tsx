@@ -1425,6 +1425,7 @@ function ContentTab() {
   const [description, setDescription] = useState("");
   const [specifications, setSpecifications] = useState("");
   const [searchProduct, setSearchProduct] = useState("");
+  const [descriptionFilter, setDescriptionFilter] = useState<"all" | "missing" | "filled">("all");
 
   const loadAll = async () => {
     setLoading(true);
@@ -1506,9 +1507,21 @@ function ContentTab() {
 
   const filteredProducts = useMemo(() => {
     const q = searchProduct.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(p => p.node.title.toLowerCase().includes(q));
-  }, [products, searchProduct]);
+    const productsWithDescription = new Set(
+      contents
+        .filter((content) => Boolean(content.description?.trim()))
+        .map((content) => content.shopify_product_id),
+    );
+
+    return products.filter((product) => {
+      const matchesSearch = !q || product.node.title.toLowerCase().includes(q);
+      const hasDescription = productsWithDescription.has(product.node.id);
+      const matchesDescription = descriptionFilter === "all"
+        || (descriptionFilter === "missing" && !hasDescription)
+        || (descriptionFilter === "filled" && hasDescription);
+      return matchesSearch && matchesDescription;
+    });
+  }, [products, contents, searchProduct, descriptionFilter]);
 
   return (
     <div className="space-y-4">
@@ -1542,23 +1555,50 @@ function ContentTab() {
 
             {/* Form */}
             <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Buscar produto</label>
-                <Input
-                  placeholder="Digite o nome do produto..."
-                  value={searchProduct}
-                  onChange={(e) => setSearchProduct(e.target.value)}
-                  className="h-9"
-                />
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Buscar produto</label>
+                  <Input
+                    placeholder="Digite o nome do produto..."
+                    value={searchProduct}
+                    onChange={(e) => setSearchProduct(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Filtrar por descrição</label>
+                  <Select
+                    value={descriptionFilter}
+                    onValueChange={(value: "all" | "missing" | "filled") => {
+                      setDescriptionFilter(value);
+                      setProductId("");
+                    }}
+                  >
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os produtos</SelectItem>
+                      <SelectItem value="missing">Sem descrição</SelectItem>
+                      <SelectItem value="filled">Com descrição</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Produto</label>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label className="block text-sm font-medium">Produto</label>
+                  <span className="text-xs text-muted-foreground">{filteredProducts.length} encontrado(s)</span>
+                </div>
                 <Select value={productId} onValueChange={setProductId}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     {filteredProducts.map(p => (
                       <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
                     ))}
+                    {filteredProducts.length === 0 && (
+                      <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                        Nenhum produto encontrado
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
