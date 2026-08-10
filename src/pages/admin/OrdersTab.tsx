@@ -84,14 +84,22 @@ export default function OrdersTab() {
           : `Pedido ${order.name} enviado. Aguardando a impressora...`,
       );
 
+      let lastStatusProblem = "";
       for (let attempt = 0; attempt < 45; attempt += 1) {
         await wait(2_000);
         const { data: statusData, error: statusError } = await supabase.functions.invoke("admin-orders", {
           body: { action: "print_status", jobId: queued.job_id },
         });
-        if (statusError) continue;
+        if (statusError) {
+          lastStatusProblem = statusError.message;
+          continue;
+        }
 
         const job = (statusData as PrintStatusResponse)?.job;
+        if (!job) {
+          lastStatusProblem = "A função admin-orders publicada não retornou o status da impressão.";
+          continue;
+        }
         if (job?.status === "printed") {
           toast.success(`Pedido ${order.name} recebido pela impressora`, {
             id: notificationId,
@@ -110,7 +118,7 @@ export default function OrdersTab() {
 
       toast.warning(`Pedido ${order.name} continua aguardando`, {
         id: notificationId,
-        description: "Sem confirmação do computador remoto. A solicitação permanece na fila e será processada quando a conexão voltar.",
+        description: lastStatusProblem || "Sem confirmação do computador remoto. A solicitação permanece na fila e será processada quando a conexão voltar.",
         duration: 10_000,
       });
     } catch (error) {

@@ -19,8 +19,11 @@ describe("impressão de pedido", () => {
     const zpl = orderToZpl(order);
     expect(zpl.startsWith("^XA")).toBe(true);
     expect(zpl.endsWith("^XZ")).toBe(true);
+    expect(zpl).toContain("TPP-ZPL-V2");
+    expect(zpl).toContain("^GFA");
     expect(zpl).toContain("Joao   Silva");
     expect(zpl).toContain("2x Racao Premium - 2 kg");
+    expect(zpl).not.toContain("Separacao:");
   });
 
   it("gera documento A4 com os dados do pedido", () => {

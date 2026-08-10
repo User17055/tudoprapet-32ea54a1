@@ -23,7 +23,40 @@ const recordHistory=async(entry)=>{state.history.unshift({at:new Date().toISOStr
 function sendRaw(zpl){return new Promise(async(resolve,reject)=>{const temp=join(tmpdir(),`tpp-${randomUUID()}.zpl`);await writeFile(temp,zpl,"ascii");const child=spawn("powershell.exe",["-NoProfile","-ExecutionPolicy","Bypass","-File",join(here,"print-raw.ps1"),"-PrinterName",config.printerName,"-FilePath",temp],{windowsHide:true});let err="";child.stderr.on("data",c=>err+=c);child.on("error",reject);child.on("close",async code=>{await unlink(temp).catch(()=>{});if(code===0){lastPrintAt=new Date().toISOString();lastError=null;resolve()}else{lastError=err.trim()||`PowerShell terminou com código ${code}`;reject(new Error(lastError))}})})}
 const clean=(v,max=50)=>String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[\^~]/g," ").replace(/[^\x20-\x7e]/g," ").slice(0,max);
 const brl=v=>`R$ ${Number(v||0).toFixed(2).replace(".",",")}`;
-function orderToZpl(o){let y=315;const items=(o.line_items||[]).map((i,n)=>{if(n>0)y+=55;const label=`${i.quantity}x ${i.title}${i.variant_title?` - ${i.variant_title}`:""}`;return `^FO25,${y}^A0N,25,25^FB460,2,2,L^FD${clean(label,80)}^FS\n^FO500,${y}^A0N,25,25^FB175,1,0,R^FD${clean(brl(i.price*i.quantity),20)}^FS`}).join("\n");const ty=y+75;return `^XA\n^PW700\n^LL${Math.max(650,ty+180)}\n^FO25,25^A0N,40,40^FDTUDOPRAPET^FS\n^FO25,75^A0N,34,34^FDPEDIDO ${clean(o.name)}^FS\n^FO25,120^A0N,22,22^FDData: ${clean(new Date(o.created_at).toLocaleString("pt-BR"))}^FS\n^FO25,150^A0N,22,22^FDCliente: ${clean(o.customer_name)}^FS\n^FO25,180^A0N,22,22^FDTelefone: ${clean(o.phone||"Nao informado")}^FS\n^FO25,210^A0N,22,22^FB650,2,2,L^FDEntrega: ${clean(o.address||"Nao informado",90)}^FS\n^FO25,275^GB650,2,2^FS\n${items}\n^FO25,${ty}^GB650,2,2^FS\n^FO25,${ty+25}^A0N,32,32^FDTotal^FS\n^FO430,${ty+25}^A0N,32,32^FB245,1,0,R^FD${clean(brl(o.total_price))}^FS\n^FO25,${ty+75}^A0N,20,20^FDPagamento: ${clean(o.financial_status)}^FS\n^FO25,${ty+105}^A0N,20,20^FDSeparacao: ${clean(o.fulfillment_status||"nao separado")}^FS\n^XZ`}
+function orderToZpl(o){
+  let y=655;
+  const items=(o.line_items||[]).map((item,index)=>{
+    if(index>0)y+=58;
+    const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;
+    return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${clean(label,85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${clean(brl(item.price*item.quantity),20)}^FS`;
+  }).join("\n");
+  const totalY=y+82,height=Math.max(950,totalY+165);
+  const delivery=clean(o.delivery_label||o.shipping_method||"ENVIO",18).toUpperCase();
+  const barcode=String(o.id||o.name).replace(/\D/g,"").slice(-20)||"0";
+  return `^XA
+^CI28
+^FX TPP-ZPL-V2
+^PW800
+^LL${height}
+^FO160,20${logoGfa.trim()}^FS
+^FO25,120^GB750,4,4^FS
+^FO25,145^GB750,90,90^FS
+^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
+^FO25,255^A0N,30,30^FDPEDIDO ${clean(o.name,24)}^FS
+^FO25,295^A0N,22,22^FDMETODO: ${clean(o.shipping_method||delivery,48)}^FS
+^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
+^FO25,505^GB750,3,3^FS
+^FO25,525^A0N,24,24^FDDESTINATARIO^FS
+^FO25,560^A0N,31,31^FB730,2,3,L^FD${clean(o.customer_name,60)}^FS
+^FO25,605^A0N,22,22^FB730,2,3,L^FD${delivery==="RETIRADA"?"RETIRAR NA LOJA TUDOPRAPET":clean(o.address||"Nao informado",100)}^FS
+^FO25,635^GB750,2,2^FS
+${items}
+^FO25,${totalY}^GB750,2,2^FS
+^FO25,${totalY+25}^A0N,32,32^FDTotal^FS
+^FO500,${totalY+25}^A0N,32,32^FB275,1,0,R^FD${clean(brl(o.total_price),22)}^FS
+^FO25,${totalY+75}^A0N,20,20^FDPAGAMENTO: ${clean(o.financial_status,25)}^FS
+^XZ`;
+}
 
 async function fetchLabelOrders(){
   const since=new Date(Date.now()-30*86400000).toISOString();
@@ -115,15 +148,23 @@ async function pollOrders(){if(polling||!config.autoPrint)return;if(!config.prin
   state.lastPollAt=data.server_time||new Date().toISOString();await saveState();lastError=null
   }catch(e){lastError=e instanceof Error?e.message:String(e)}finally{polling=false}
 }
-async function agentPost(body){const response=await fetch(`${config.supabaseUrl.replace(/\/$/,"")}/functions/v1/admin-orders`,{method:"POST",headers:{"content-type":"application/json","x-print-agent-token":config.printAgentToken},body:JSON.stringify(body)});if(!response.ok)throw new Error(`Fila de impressão: HTTP ${response.status} ${await response.text()}`);return response.json()}
+async function agentPost(body){
+  const response=await fetch(`${config.supabaseUrl.replace(/\/$/,"")}/functions/v1/admin-orders`,{method:"POST",headers:{"content-type":"application/json","x-print-agent-token":config.printAgentToken},body:JSON.stringify(body)});
+  if(!response.ok)throw new Error(`Fila de impressão: HTTP ${response.status} ${await response.text()}`);
+  const data=await response.json();
+  data.functionsVersion=response.headers.get("x-tpp-functions-version")||"não informada";
+  return data;
+}
 async function pollPrintJobs(){
   if(pollingJobs||!config.printAgentToken||config.printAgentToken.startsWith("COLOQUE_"))return;
   pollingJobs=true;
   try{
     const data=await agentPost({action:"print_jobs"});
+    if(!Array.isArray(data.jobs))throw new Error(`A função admin-orders publicada está desatualizada (versão ${data.functionsVersion}). Publique a versão 2026-08-10.6.`);
     for(const job of data.jobs||[]){
       if(state.printedJobIds.includes(String(job.id))){
-        await agentPost({action:"ack_print",jobId:job.id,status:"printed"});
+        const confirmation=await agentPost({action:"ack_print",jobId:job.id,status:"printed"});
+        if(confirmation.ok!==true)throw new Error(`A nuvem recebeu o retorno, mas não confirmou o pedido ${job.order_name||job.id}. Atualize a função admin-orders.`);
         continue;
       }
       try{
@@ -137,7 +178,8 @@ async function pollPrintJobs(){
       // a próxima tentativa apenas confirma, sem imprimir outra etiqueta.
       state.printedJobIds.push(String(job.id));
       await recordHistory({jobId:String(job.id),orderName:job.order_name||job.order_id||"Pedido",source:"manual",status:"printed"});
-      await agentPost({action:"ack_print",jobId:job.id,status:"printed"});
+      const confirmation=await agentPost({action:"ack_print",jobId:job.id,status:"printed"});
+      if(confirmation.ok!==true)throw new Error(`A nuvem recebeu o retorno, mas não confirmou o pedido ${job.order_name||job.id}. Atualize a função admin-orders.`);
     }
     lastError=null;
   }catch(error){lastError=error instanceof Error?error.message:String(error)}
@@ -161,10 +203,29 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.4.0",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.0",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}
+  }
+  if(req.method==="POST"&&req.url==="/order-label"){
+    let body,order;
+    try{
+      body=await readJson(req);
+      if(!body.orderId)throw new Error("Selecione um pedido");
+      const orders=await fetchLabelOrders();
+      order=orders.find(item=>String(item.id)===String(body.orderId));
+      if(!order)throw new Error("Pedido não encontrado entre os pedidos recentes");
+      const zpl=orderToZpl(order);
+      if(body.print===true){
+        await sendRaw(zpl);
+        await recordHistory({orderId:String(order.id),orderName:order.name||String(order.id),source:"manual",status:"printed"});
+      }
+      return reply(res,200,{ok:true,zpl,printed:body.print===true},origin);
+    }catch(error){
+      if(body?.print===true)await recordHistory({orderId:String(order?.id||body?.orderId||""),orderName:order?.name||String(body?.orderId||"Pedido"),source:"manual",status:"error",error:error instanceof Error?error.message:String(error)}).catch(()=>{});
+      return reply(res,400,{error:error instanceof Error?error.message:"Falha ao gerar etiqueta"},origin);
+    }
   }
   if(req.method==="POST"&&req.url==="/invoice-label"){
     let body,order;

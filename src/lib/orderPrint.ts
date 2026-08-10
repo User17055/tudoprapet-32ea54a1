@@ -1,3 +1,5 @@
+import logoGfa from "@/assets/tpp-logo-gfa.txt?raw";
+
 export interface PrintableOrderItem {
   title: string;
   variant_title?: string | null;
@@ -41,32 +43,39 @@ const zplText = (value: unknown, max = 42) =>
     .slice(0, max);
 
 export function orderToZpl(order: PrintableOrder): string {
-  let y = 315;
+  let y = 655;
   const renderedItems = order.line_items.map((item, index) => {
-    if (index > 0) y += 55;
+    if (index > 0) y += 58;
     const name = `${item.quantity}x ${item.title}${item.variant_title ? ` - ${item.variant_title}` : ""}`;
-    return `^FO25,${y}^A0N,25,25^FB460,2,2,L^FD${zplText(name, 80)}^FS\n^FO500,${y}^A0N,25,25^FB175,1,0,R^FD${zplText(money(item.price * item.quantity, order.currency), 20)}^FS`;
+    return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${zplText(name, 85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${zplText(money(item.price * item.quantity, order.currency), 20)}^FS`;
   }).join("\n");
-  const totalY = y + 75;
-  const height = Math.max(650, totalY + 180);
+  const totalY = y + 82;
+  const height = Math.max(950, totalY + 165);
+  const delivery = zplText(order.delivery_label || order.shipping_method || "ENVIO", 18).toUpperCase();
+  const barcode = String(order.id || order.name).replace(/\D/g, "").slice(-20) || "0";
 
   return `^XA
 ^CI28
-^PW700
+^FX TPP-ZPL-V2
+^PW800
 ^LL${height}
-^FO25,25^A0N,40,40^FDTUDOPRAPET^FS
-^FO25,75^A0N,34,34^FDPEDIDO ${zplText(order.name, 24)}^FS
-^FO25,120^A0N,22,22^FDData: ${zplText(new Date(order.created_at).toLocaleString("pt-BR"), 34)}^FS
-^FO25,150^A0N,22,22^FDCliente: ${zplText(order.customer_name, 48)}^FS
-^FO25,180^A0N,22,22^FDTelefone: ${zplText(order.phone || "Nao informado", 32)}^FS
-^FO25,210^A0N,22,22^FB650,2,2,L^FDEntrega: ${zplText(order.address || "Nao informado", 90)}^FS
-^FO25,275^GB650,2,2^FS
+^FO160,20${logoGfa.trim()}^FS
+^FO25,120^GB750,4,4^FS
+^FO25,145^GB750,90,90^FS
+^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
+^FO25,255^A0N,30,30^FDPEDIDO ${zplText(order.name, 24)}^FS
+^FO25,295^A0N,22,22^FDMETODO: ${zplText(order.shipping_method || delivery, 48)}^FS
+^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
+^FO25,505^GB750,3,3^FS
+^FO25,525^A0N,24,24^FDDESTINATARIO^FS
+^FO25,560^A0N,31,31^FB730,2,3,L^FD${zplText(order.customer_name, 60)}^FS
+^FO25,605^A0N,22,22^FB730,2,3,L^FD${delivery === "RETIRADA" ? "RETIRAR NA LOJA TUDOPRAPET" : zplText(order.address || "Nao informado", 100)}^FS
+^FO25,635^GB750,2,2^FS
 ${renderedItems}
-^FO25,${totalY}^GB650,2,2^FS
+^FO25,${totalY}^GB750,2,2^FS
 ^FO25,${totalY + 25}^A0N,32,32^FDTotal^FS
-^FO430,${totalY + 25}^A0N,32,32^FB245,1,0,R^FD${zplText(money(order.total_price, order.currency), 22)}^FS
-^FO25,${totalY + 75}^A0N,20,20^FDPagamento: ${zplText(order.financial_status, 25)}^FS
-^FO25,${totalY + 105}^A0N,20,20^FDSeparacao: ${zplText(order.fulfillment_status || "nao separado", 25)}^FS
+^FO500,${totalY + 25}^A0N,32,32^FB275,1,0,R^FD${zplText(money(order.total_price, order.currency), 22)}^FS
+^FO25,${totalY + 75}^A0N,20,20^FDPAGAMENTO: ${zplText(order.financial_status, 25)}^FS
 ^XZ`;
 }
 

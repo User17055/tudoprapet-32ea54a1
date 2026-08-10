@@ -19,15 +19,14 @@
     </section>
 
     <section class="panel">
-      <h2>Etiqueta com XML da nota fiscal</h2>
-      <p>Selecione o pedido e carregue o XML da NF-e. A forma de entrega vem da escolha feita pelo cliente na Shopify.</p>
+      <h2>Gerar etiqueta do pedido</h2>
+      <p>Selecione um pedido. A forma de entrega e os dados do cliente vêm diretamente da Shopify, sem precisar carregar XML.</p>
       <div class="form">
-        <div><label for="order">Pedido Shopify</label><select id="order"><option value="">Carregando pedidos…</option></select></div>
-        <div><label for="xml">XML da NF-e</label><input id="xml" type="file" accept=".xml,text/xml,application/xml"></div>
+        <div class="full"><label for="order">Pedido Shopify</label><select id="order"><option value="">Carregando pedidos…</option></select></div>
         <div class="full"><div id="invoice-summary" class="message"></div></div>
         <div class="full actions">
           <button id="generate" class="secondary" disabled>Gerar código ZPL</button>
-          <button id="print" disabled>Imprimir etiqueta + DANFE</button>
+          <button id="print" disabled>Imprimir etiqueta</button>
           <button id="download" class="secondary" disabled>Baixar .zpl</button>
         </div>
         <div class="full"><textarea id="zpl" readonly placeholder="O código ZPL gerado aparecerá aqui."></textarea></div>
@@ -41,26 +40,15 @@
     <div class="foot">O histórico atualiza automaticamente a cada 5 segundos.</div>
   </main>
   <script>
-    const $=id=>document.getElementById(id); let invoice=null, orders=[];
-    const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    const xmlNode=(root,name)=>root?Array.from(root.getElementsByTagName('*')).find(node=>node.localName===name):null;
-    const xmlText=(root,name)=>xmlNode(root,name)?.textContent?.trim()||'';
+    const $=id=>document.getElementById(id); let orders=[];
     const setMessage=(text,bad=false)=>{const box=$('invoice-summary');box.textContent=text;box.className=`message show${bad?' bad':''}`};
-    function parseInvoice(text){
-      const doc=new DOMParser().parseFromString(text,'application/xml');
-      if(doc.querySelector('parsererror'))throw new Error('XML inválido');
-      const inf=xmlNode(doc,'infNFe'),ide=xmlNode(doc,'ide'),emit=xmlNode(doc,'emit'),dest=xmlNode(doc,'dest'),ender=dest&&xmlNode(dest,'enderDest'),prot=xmlNode(doc,'infProt'),total=xmlNode(doc,'ICMSTot');
-      if(!inf||!ide||!dest)throw new Error('O arquivo não parece ser um XML de NF-e autorizado');
-      return {number:xmlText(ide,'nNF'),series:xmlText(ide,'serie'),issueDate:xmlText(ide,'dhEmi')||xmlText(ide,'dEmi'),accessKey:xmlText(prot||doc,'chNFe')||(inf.getAttribute('Id')||'').replace(/^NFe/,''),protocol:xmlText(prot||doc,'nProt'),emitterName:xmlText(emit,'xNome'),emitterCnpj:xmlText(emit,'CNPJ'),emitterIe:xmlText(emit,'IE'),recipientName:xmlText(dest,'xNome'),recipientDoc:xmlText(dest,'CPF')||xmlText(dest,'CNPJ'),address:[xmlText(ender,'xLgr'),xmlText(ender,'nro'),xmlText(ender,'xCpl'),xmlText(ender,'xBairro')].filter(Boolean).join(', '),city:xmlText(ender,'xMun'),state:xmlText(ender,'UF'),zip:xmlText(ender,'CEP'),additionalInfo:xmlText(xmlNode(doc,'infAdic'),'infCpl'),total:xmlText(total,'vNF')};
-    }
     async function loadStatus(){try{const s=await fetch('/status').then(r=>r.json());$('program').textContent=`● Ligado — versão ${s.version}`;$('program').className='value online';$('printer').textContent=s.printer;$('automatic').textContent=s.autoPrint?'Ativada':'Desativada';$('last-error').textContent=s.lastError||'Nenhum';$('last-error').className=`value ${s.lastError?'error-text':'online'}`}catch{$('program').textContent='Desconectado';$('program').className='value error-text'}}
     async function loadHistory(){try{const data=await fetch('/history').then(r=>r.json()),body=$('history');body.textContent='';if(!data.history.length){body.innerHTML='<tr><td colspan="4" class="empty">Nenhum pedido recebido ainda.</td></tr>';return}for(const item of data.history){const row=document.createElement('tr');for(const value of [item.orderName,item.source==='automatic'?'Automático':item.source==='xml'?'XML NF-e':'Botão imprimir',new Date(item.at).toLocaleString('pt-BR')]){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell)}const result=document.createElement('td'),badge=document.createElement('span');badge.className=`badge ${item.status}`;badge.textContent=item.status==='printed'?'Impresso':'Falhou';result.appendChild(badge);if(item.error){const small=document.createElement('small');small.textContent=item.error;result.appendChild(small)}row.appendChild(result);body.appendChild(row)}}catch{}}
     async function loadOrders(){try{const data=await fetch('/label-orders').then(async r=>{if(!r.ok)throw new Error(await r.text());return r.json()});orders=data.orders||[];const select=$('order');select.innerHTML='<option value="">Selecione o pedido…</option>';for(const order of orders){const option=document.createElement('option');option.value=String(order.id);option.textContent=`${order.name} — ${order.customer_name} — ${order.delivery_label||order.shipping_method||'ENVIO'}`;select.appendChild(option)}}catch(error){$('order').innerHTML='<option value="">Não foi possível carregar os pedidos</option>';setMessage(String(error.message||error),true)}}
-    function updateButtons(){const ready=Boolean(invoice&&$('order').value);$('generate').disabled=!ready;$('print').disabled=!ready}
+    function updateButtons(){const ready=Boolean($('order').value);$('generate').disabled=!ready;$('print').disabled=!ready;const order=orders.find(item=>String(item.id)===$('order').value);if(order)setMessage(`${order.name} — ${order.customer_name} — ${order.delivery_label||order.shipping_method||'ENVIO'}`)}
     $('order').addEventListener('change',updateButtons);
-    $('xml').addEventListener('change',async event=>{try{const file=event.target.files[0];if(!file)return;invoice=parseInvoice(await file.text());setMessage(`NF ${invoice.number}/${invoice.series} — ${invoice.recipientName} — CEP ${invoice.zip}`);const match=orders.find(order=>(invoice.zip&&String(order.address||'').replace(/\D/g,'').includes(invoice.zip))||normalize(order.customer_name)===normalize(invoice.recipientName));if(match)$('order').value=String(match.id);updateButtons()}catch(error){invoice=null;setMessage(error.message||String(error),true);updateButtons()}});
-    async function requestLabel(print){const button=print?$('print'):$('generate');button.disabled=true;setMessage(print?'Enviando para a impressora…':'Gerando etiqueta…');try{const response=await fetch('/invoice-label',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({orderId:$('order').value,invoice,print})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha ao gerar etiqueta');$('zpl').value=data.zpl;$('download').disabled=false;setMessage(print?'Etiqueta e DANFE aceitos pela fila de impressão.':'Código ZPL gerado com sucesso.')}catch(error){setMessage(error.message||String(error),true)}finally{button.disabled=false}}
-    $('generate').addEventListener('click',()=>requestLabel(false));$('print').addEventListener('click',()=>requestLabel(true));$('download').addEventListener('click',()=>{const blob=new Blob([$('zpl').value],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`etiqueta-nf-${invoice?.number||'tudoprapet'}.zpl`;a.click();URL.revokeObjectURL(a.href)});
+    async function requestLabel(print){const button=print?$('print'):$('generate');button.disabled=true;setMessage(print?'Enviando para a impressora…':'Gerando etiqueta…');try{const response=await fetch('/order-label',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({orderId:$('order').value,print})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha ao gerar etiqueta');$('zpl').value=data.zpl;$('download').disabled=false;setMessage(print?'Etiqueta aceita pela fila de impressão do Windows.':'Código ZPL gerado com sucesso.')}catch(error){setMessage(error.message||String(error),true)}finally{button.disabled=false}}
+    $('generate').addEventListener('click',()=>requestLabel(false));$('print').addEventListener('click',()=>requestLabel(true));$('download').addEventListener('click',()=>{const blob=new Blob([$('zpl').value],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);const order=orders.find(item=>String(item.id)===$('order').value);a.download=`etiqueta-${String(order?.name||'tudoprapet').replace(/\D/g,'')}.zpl`;a.click();URL.revokeObjectURL(a.href)});
     loadStatus();loadHistory();loadOrders();setInterval(()=>{loadStatus();loadHistory()},5000);
   </script>
 </body>
