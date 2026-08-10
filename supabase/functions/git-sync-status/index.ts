@@ -41,15 +41,35 @@ Deno.serve(async (req) => {
     const auth = await requireAdmin(req);
     if (!auth.ok) return auth.response;
 
-    const repo = Deno.env.get("GITHUB_REPO");
+    let repo = Deno.env.get("GITHUB_REPO");
     const token = Deno.env.get("GITHUB_TOKEN") || undefined;
     const workBranch = Deno.env.get("GIT_WORK_BRANCH") || "Andre";
 
-    if (!repo || !repo.includes("/")) {
+    // Se GITHUB_REPO estiver ausente ou não existir para este token, descobre o
+    // repositório acessível pelo próprio token (evita erro por nome digitado errado).
+    let repoOk = false;
+    if (repo && repo.includes("/")) {
+      const probe = await fetch(`https://api.github.com/repos/${repo}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "tudoprapet-sync-check",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      repoOk = probe.ok;
+    }
+    if (!repoOk && token) {
+      const repos = await gh("/user/repos?per_page=100&sort=updated", token);
+      const first = (repos as any[])[0]?.full_name;
+      if (first) repo = first;
+      repoOk = Boolean(first);
+    }
+
+    if (!repo || !repoOk) {
       return json({
         configured: false,
         message:
-          'Configure o segredo GITHUB_REPO no formato "dono/repositorio" (e GITHUB_TOKEN se o repositório for privado).',
+          'Configure o segredo GITHUB_REPO no formato "dono/repositorio" e um GITHUB_TOKEN com acesso a ele.',
         functions_version: FUNCTIONS_VERSION,
       });
     }
@@ -59,6 +79,7 @@ Deno.serve(async (req) => {
       `/repos/${repo}/compare/main...${encodeURIComponent(workBranch)}`,
       token,
     );
+
 
     const pending = (cmp.commits || []).map((c: any) => ({
       sha: String(c.sha).slice(0, 7),
