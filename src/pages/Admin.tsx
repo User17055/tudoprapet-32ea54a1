@@ -46,6 +46,7 @@ import FeaturedTab from "./admin/FeaturedTab";
 import RetiradaTab from "./admin/RetiradaTab";
 import FranquiaTab from "./admin/FranquiaTab";
 import VariationsTab from "./admin/VariationsTab";
+import OrdersTab from "./admin/OrdersTab";
 
 interface SubPrice {
   id: string;
