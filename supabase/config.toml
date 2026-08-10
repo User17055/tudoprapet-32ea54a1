@@ -2,3 +2,8 @@ project_id = "smvtnflhkvxdmvqbxwrf"
 
 [functions.shopify-pickup-webhook]
 verify_jwt = false
+
+# O agente de impressão remoto não tem JWT: autentica por x-print-agent-token.
+# A própria function valida admin (JWT + has_role) ou o token do agente.
+[functions.admin-orders]
+verify_jwt = false
