@@ -29,6 +29,8 @@ import {
   ExternalLink,
   Boxes,
   Receipt,
+  GitBranch,
+
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +50,7 @@ import RetiradaTab from "./admin/RetiradaTab";
 import FranquiaTab from "./admin/FranquiaTab";
 import VariationsTab from "./admin/VariationsTab";
 import OrdersTab from "./admin/OrdersTab";
+import SyncTab from "./admin/SyncTab";
 
 interface SubPrice {
   id: string;
@@ -77,6 +80,8 @@ type SectionId =
   | "referrals"
   | "retirada"
   | "orders"
+  | "sync"
+
   | "franquia";
 
 interface SectionDef {
@@ -119,6 +124,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
     items: [
       { id: "retirada", label: "Retirada", description: "Validar código de retirada do cliente", icon: Package, component: RetiradaTab },
       { id: "orders", label: "Pedidos", description: "Todos os pedidos da loja e impressão de comprovante", icon: Receipt, component: OrdersTab },
+      { id: "sync", label: "Sincronização", description: "Commits da branch já publicados na main", icon: GitBranch, component: SyncTab },
     ],
   },
 ];
