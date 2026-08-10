@@ -190,7 +190,13 @@ Deno.serve(async (req) => {
     }
 
     const selected = all.slice(0, requestedLimit);
-    const orders = await Promise.all(selected.map(async (order: any) => normalize(order, await resolvedDeliveryLabel(order, shopifyToken))));
+    // Em lotes pequenos: 1 requisição extra por pedido em paralelo estourava o
+    // limite da Shopify e o tempo da function.
+    const orders: any[] = [];
+    for (let start = 0; start < selected.length; start += 5) {
+      const batch = selected.slice(start, start + 5);
+      orders.push(...await Promise.all(batch.map(async (order: any) => normalize(order, await resolvedDeliveryLabel(order, shopifyToken)))));
+    }
     return jsonResponse({ orders, count: orders.length, server_time: new Date().toISOString() });
   } catch (error) {
     console.error("admin-orders:", error);
