@@ -129,8 +129,8 @@ export default function SyncTab() {
                   <TriangleAlert className="h-5 w-5 text-amber-600" />
                 )}
                 {status.in_sync
-                  ? "Tudo sincronizado na main"
-                  : `${pending.length} commit(s) ainda fora da main`}
+                  ? `Tudo sincronizado na ${status.main_branch ?? "main"}`
+                  : `${pending.length} commit(s) ainda fora da ${status.main_branch ?? "main"}`}
               </CardTitle>
               <CardDescription>
                 {status.repo} · branch <strong>{status.work_branch}</strong> · última verificação{" "}
@@ -140,7 +140,7 @@ export default function SyncTab() {
             <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
               <div className="rounded-md border p-3">
                 <div className="mb-1 flex items-center gap-2 font-medium">
-                  <GitBranch className="h-4 w-4" /> main
+                  <GitBranch className="h-4 w-4" /> {status.main_branch ?? "main"}
                 </div>
                 <div className="font-mono text-xs">{status.main?.sha}</div>
                 <div className="text-muted-foreground">{status.main?.message}</div>
@@ -189,7 +189,7 @@ export default function SyncTab() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Últimos commits na main</CardTitle>
+              <CardTitle className="text-base">Últimos commits na {status.main_branch ?? "main"}</CardTitle>
               <CardDescription>
                 O que está de fato publicado na main de {status.repo}.
               </CardDescription>
