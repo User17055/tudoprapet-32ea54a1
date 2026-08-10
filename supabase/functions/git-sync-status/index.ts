@@ -45,9 +45,9 @@ Deno.serve(async (req) => {
     const token = Deno.env.get("GITHUB_TOKEN") || undefined;
     const workBranch = Deno.env.get("GIT_WORK_BRANCH") || "Andre";
 
-    // Se GITHUB_REPO estiver ausente ou não existir para este token, descobre o
-    // repositório acessível pelo próprio token (evita erro por nome digitado errado).
-    let repoOk = false;
+    // Valida o repositório configurado. Se não existir para este token, lista os
+    // repositórios acessíveis para o admin corrigir o segredo GITHUB_REPO.
+    let repoInfo: any = null;
     if (repo && repo.includes("/")) {
       const probe = await fetch(`https://api.github.com/repos/${repo}`, {
         headers: {
@@ -56,23 +56,30 @@ Deno.serve(async (req) => {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      repoOk = probe.ok;
-    }
-    if (!repoOk && token) {
-      const repos = await gh("/user/repos?per_page=100&sort=updated", token);
-      const first = (repos as any[])[0]?.full_name;
-      if (first) repo = first;
-      repoOk = Boolean(first);
+      if (probe.ok) repoInfo = await probe.json();
     }
 
-    if (!repo || !repoOk) {
+    if (!repoInfo) {
+      let available: string[] = [];
+      if (token) {
+        try {
+          const repos = await gh("/user/repos?per_page=100&sort=updated", token);
+          available = (repos as any[]).map((r) => r.full_name);
+        } catch (_e) {
+          available = [];
+        }
+      }
       return json({
         configured: false,
         message:
-          'Configure o segredo GITHUB_REPO no formato "dono/repositorio" e um GITHUB_TOKEN com acesso a ele.',
+          'O segredo GITHUB_REPO ("dono/repositorio") não existe para este GITHUB_TOKEN.',
+        available_repos: available,
         functions_version: FUNCTIONS_VERSION,
       });
     }
+
+    // Branch principal real do repositório (main, master, etc.).
+    const mainName: string = repoInfo.default_branch || "main";
 
     const mapCommits = (list: any[]) =>
       (list || []).map((c: any) => ({
@@ -83,11 +90,18 @@ Deno.serve(async (req) => {
         url: c.html_url ?? null,
       }));
 
-    // 1) Estado real da main: últimos commits que estão publicados nela.
-    const mainBranch = await gh(`/repos/${repo}/branches/main`, token);
-    const mainCommits = mapCommits(
-      await gh(`/repos/${repo}/commits?sha=main&per_page=15`, token),
+    // 1) Estado real da branch principal: últimos commits publicados nela.
+    const mainBranch = await gh(
+      `/repos/${repo}/branches/${encodeURIComponent(mainName)}`,
+      token,
     );
+    const mainCommits = mapCommits(
+      await gh(
+        `/repos/${repo}/commits?sha=${encodeURIComponent(mainName)}&per_page=15`,
+        token,
+      ),
+    );
+
 
     // 2) Branch de trabalho (opcional): commits que ainda não entraram na main.
     let workExists = false;
