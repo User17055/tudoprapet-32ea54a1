@@ -17,7 +17,9 @@ type Commit = {
 type SyncStatus = {
   configured: boolean;
   message?: string;
+  available_repos?: string[];
   repo?: string;
+  main_branch?: string;
   work_branch?: string;
   work_branch_exists?: boolean;
   in_sync?: boolean;
@@ -30,6 +32,7 @@ type SyncStatus = {
   functions_version?: string;
   checked_at?: string;
 };
+
 
 
 const REFRESH_MS = 60_000;
