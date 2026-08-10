@@ -117,6 +117,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
     label: "Operação",
     items: [
       { id: "retirada", label: "Retirada", description: "Validar código de retirada do cliente", icon: Package, component: RetiradaTab },
+      { id: "orders", label: "Pedidos", description: "Todos os pedidos da loja e impressão de comprovante", icon: Receipt, component: OrdersTab },
     ],
   },
 ];
