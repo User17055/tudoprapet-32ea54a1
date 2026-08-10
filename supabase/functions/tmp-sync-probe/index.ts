@@ -21,6 +21,9 @@ Deno.serve(async (req) => {
     const r3 = await fetch("https://api.github.com/user", { headers: h });
     out.user_status = r3.status;
     if (r3.ok) out.login = (await r3.json()).login;
+    const r4 = await fetch("https://api.github.com/user/repos?per_page=100&sort=updated", { headers: h });
+    out.repos_status = r4.status;
+    if (r4.ok) out.repos = (await r4.json()).map((r: any) => r.full_name);
   }
   return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json" } });
 });
