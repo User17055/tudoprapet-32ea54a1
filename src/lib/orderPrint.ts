@@ -14,6 +14,8 @@ export interface PrintableOrder {
   subtotal_price?: number;
   total_discounts?: number;
   shipping_price?: number;
+  shipping_method?: string | null;
+  delivery_label?: string | null;
   currency: string;
   financial_status: string;
   fulfillment_status: string | null;

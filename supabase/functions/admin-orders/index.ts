@@ -10,6 +10,21 @@ const FIELDS = [
   "shipping_address", "billing_address", "line_items", "shipping_lines", "note",
 ].join(",");
 
+function deliveryLabel(order: any): { label: string; method: string } {
+  const line = order.shipping_lines?.[0] || {};
+  const method = [line.title, line.code, line.source]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const searchable = method.toLowerCase();
+  if (/retirada|retire|pickup|pick_up|local pickup/.test(searchable)) return { label: "RETIRADA", method: method || "Retirada na loja" };
+  if (/\bpac\b|correios pac/.test(searchable)) return { label: "PAC", method: method || "PAC" };
+  if (/sedex/.test(searchable)) return { label: "SEDEX", method };
+  if (/moto|motoboy|entrega local/.test(searchable)) return { label: "MOTOBOY", method };
+  const label = method.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/gi, " ").trim().slice(0, 18).toUpperCase();
+  return { label: label || "ENVIO", method: method || "Envio" };
+}
+
 function nextLink(linkHeader: string | null): string | null {
   if (!linkHeader) return null;
   for (const part of linkHeader.split(",")) {
@@ -27,6 +42,7 @@ function normalize(order: any) {
   ].filter(Boolean).join(", ") : null;
   const customerName = [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ")
     || address?.name || "Cliente não identificado";
+  const delivery = deliveryLabel(order);
 
   return {
     id: order.id,
@@ -38,6 +54,8 @@ function normalize(order: any) {
     subtotal_price: Number(order.subtotal_price || 0),
     total_discounts: Number(order.total_discounts || 0),
     shipping_price: Number(order.shipping_lines?.[0]?.price || 0),
+    shipping_method: delivery.method,
+    delivery_label: delivery.label,
     currency: order.currency || "BRL",
     financial_status: order.financial_status || "pending",
     fulfillment_status: order.fulfillment_status || null,
@@ -79,6 +97,16 @@ Deno.serve(async (req) => {
     if (!body.orderId || !body.orderName || !body.zpl?.startsWith("^XA") || !body.zpl.trimEnd().endsWith("^XZ") || body.zpl.length > 1_000_000) {
       return errorResponse("Pedido ou código ZPL inválido", 400);
     }
+    const { data: existing } = await adminDb
+      .from("print_jobs")
+      .select("id")
+      .eq("order_id", String(body.orderId))
+      .eq("status", "queued")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) return jsonResponse({ queued: true, job_id: existing.id, already_queued: true });
+
     const { data, error } = await adminDb.from("print_jobs").insert({ order_id: String(body.orderId), order_name: body.orderName, zpl: body.zpl, source: "manual" }).select("id").single();
     if (error) { console.error("queue_print:", error); return errorResponse("Falha ao colocar pedido na fila", 500); }
     return jsonResponse({ queued: true, job_id: data.id });
@@ -89,6 +117,18 @@ Deno.serve(async (req) => {
     const { data, error } = await adminDb.from("print_jobs").select("id,order_id,order_name,zpl,created_at").eq("status", "queued").order("created_at", { ascending: true }).limit(25);
     if (error) return errorResponse("Falha ao consultar fila", 500);
     return jsonResponse({ jobs: data || [], server_time: new Date().toISOString() });
+  }
+
+  if (action === "print_status") {
+    if (isAgent || !body.jobId) return errorResponse("Consulta inválida", 400);
+    const { data, error } = await adminDb
+      .from("print_jobs")
+      .select("id,status,error_message,created_at,printed_at")
+      .eq("id", body.jobId)
+      .maybeSingle();
+    if (error) return errorResponse("Falha ao consultar impressão", 500);
+    if (!data) return errorResponse("Impressão não encontrada", 404);
+    return jsonResponse({ job: data });
   }
 
   if (action === "ack_print") {

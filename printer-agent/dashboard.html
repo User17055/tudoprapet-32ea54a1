@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TudoPraPet Impressão</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#14213d;font:14px Arial,sans-serif}.top{background:#112f5f;color:#fff;padding:22px 5vw;border-bottom:6px solid #e0ad35}.top h1{margin:0;font-size:25px}.top p{margin:6px 0 0;color:#dce7f8}.wrap{max-width:1100px;margin:28px auto;padding:0 18px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:20px}.card,.panel{background:#fff;border:1px solid #dfe4ec;border-radius:12px;padding:16px;box-shadow:0 4px 16px #10254d12}.label{font-size:12px;color:#667085}.value{margin-top:5px;font-weight:700}.online,.printed{color:#16803c}.error-text,.error{color:#b42318}.panel{margin-bottom:20px;overflow:auto}.panel h2{margin:0 0 6px}.panel>p{margin:0 0 16px;color:#667085}.form{display:grid;grid-template-columns:1fr 1fr;gap:14px}.full{grid-column:1/-1}label{display:block;font-weight:700;margin-bottom:6px}input,select,textarea{width:100%;padding:10px 12px;border:1px solid #cbd3df;border-radius:8px;background:#fff}textarea{height:160px;font:12px Consolas,monospace}.actions{display:flex;gap:10px;flex-wrap:wrap}button{border:0;border-radius:8px;padding:11px 16px;background:#153b75;color:#fff;font-weight:700;cursor:pointer}button.secondary{background:#e7edf6;color:#153b75}button:disabled{opacity:.5;cursor:not-allowed}.message{padding:10px 12px;border-radius:8px;background:#edf3fc;color:#153b75;display:none}.message.show{display:block}.message.bad{background:#feeceb;color:#b42318}table{width:100%;border-collapse:collapse;min-width:700px}th,td{text-align:left;padding:12px;border-bottom:1px solid #e7eaf0}th{background:#f7f8fa;font-size:12px;color:#667085}.badge{display:inline-block;border-radius:999px;padding:5px 9px;font-weight:700}.badge.printed{background:#e8f7ed}.badge.error{background:#feeceb}.empty{text-align:center;color:#667085;padding:35px}.foot{text-align:center;color:#778197;margin-top:14px;font-size:12px}@media(max-width:700px){.form{grid-template-columns:1fr}.full{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header class="top"><h1>TudoPraPet Impressão</h1><p>Computador receptor da impressora ZPL</p></header>
+  <main class="wrap">
+    <section class="cards">
+      <div class="card"><div class="label">Programa</div><div id="program" class="value">Carregando…</div></div>
+      <div class="card"><div class="label">Impressora</div><div id="printer" class="value">—</div></div>
+      <div class="card"><div class="label">Impressão automática</div><div id="automatic" class="value">—</div></div>
+      <div class="card"><div class="label">Último erro</div><div id="last-error" class="value">—</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Etiqueta com XML da nota fiscal</h2>
+      <p>Selecione o pedido e carregue o XML da NF-e. A forma de entrega vem da escolha feita pelo cliente na Shopify.</p>
+      <div class="form">
+        <div><label for="order">Pedido Shopify</label><select id="order"><option value="">Carregando pedidos…</option></select></div>
+        <div><label for="xml">XML da NF-e</label><input id="xml" type="file" accept=".xml,text/xml,application/xml"></div>
+        <div class="full"><div id="invoice-summary" class="message"></div></div>
+        <div class="full actions">
+          <button id="generate" class="secondary" disabled>Gerar código ZPL</button>
+          <button id="print" disabled>Imprimir etiqueta + DANFE</button>
+          <button id="download" class="secondary" disabled>Baixar .zpl</button>
+        </div>
+        <div class="full"><textarea id="zpl" readonly placeholder="O código ZPL gerado aparecerá aqui."></textarea></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Últimos pedidos recebidos</h2>
+      <table><thead><tr><th>Pedido</th><th>Origem</th><th>Horário</th><th>Resultado</th></tr></thead><tbody id="history"><tr><td colspan="4" class="empty">Nenhum pedido recebido ainda.</td></tr></tbody></table>
+    </section>
+    <div class="foot">O histórico atualiza automaticamente a cada 5 segundos.</div>
+  </main>
+  <script>
+    const $=id=>document.getElementById(id); let invoice=null, orders=[];
+    const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const xmlNode=(root,name)=>root?Array.from(root.getElementsByTagName('*')).find(node=>node.localName===name):null;
+    const xmlText=(root,name)=>xmlNode(root,name)?.textContent?.trim()||'';
+    const setMessage=(text,bad=false)=>{const box=$('invoice-summary');box.textContent=text;box.className=`message show${bad?' bad':''}`};
+    function parseInvoice(text){
+      const doc=new DOMParser().parseFromString(text,'application/xml');
+      if(doc.querySelector('parsererror'))throw new Error('XML inválido');
+      const inf=xmlNode(doc,'infNFe'),ide=xmlNode(doc,'ide'),emit=xmlNode(doc,'emit'),dest=xmlNode(doc,'dest'),ender=dest&&xmlNode(dest,'enderDest'),prot=xmlNode(doc,'infProt'),total=xmlNode(doc,'ICMSTot');
+      if(!inf||!ide||!dest)throw new Error('O arquivo não parece ser um XML de NF-e autorizado');
+      return {number:xmlText(ide,'nNF'),series:xmlText(ide,'serie'),issueDate:xmlText(ide,'dhEmi')||xmlText(ide,'dEmi'),accessKey:xmlText(prot||doc,'chNFe')||(inf.getAttribute('Id')||'').replace(/^NFe/,''),protocol:xmlText(prot||doc,'nProt'),emitterName:xmlText(emit,'xNome'),emitterCnpj:xmlText(emit,'CNPJ'),emitterIe:xmlText(emit,'IE'),recipientName:xmlText(dest,'xNome'),recipientDoc:xmlText(dest,'CPF')||xmlText(dest,'CNPJ'),address:[xmlText(ender,'xLgr'),xmlText(ender,'nro'),xmlText(ender,'xCpl'),xmlText(ender,'xBairro')].filter(Boolean).join(', '),city:xmlText(ender,'xMun'),state:xmlText(ender,'UF'),zip:xmlText(ender,'CEP'),additionalInfo:xmlText(xmlNode(doc,'infAdic'),'infCpl'),total:xmlText(total,'vNF')};
+    }
+    async function loadStatus(){try{const s=await fetch('/status').then(r=>r.json());$('program').textContent=`● Ligado — versão ${s.version}`;$('program').className='value online';$('printer').textContent=s.printer;$('automatic').textContent=s.autoPrint?'Ativada':'Desativada';$('last-error').textContent=s.lastError||'Nenhum';$('last-error').className=`value ${s.lastError?'error-text':'online'}`}catch{$('program').textContent='Desconectado';$('program').className='value error-text'}}
+    async function loadHistory(){try{const data=await fetch('/history').then(r=>r.json()),body=$('history');body.textContent='';if(!data.history.length){body.innerHTML='<tr><td colspan="4" class="empty">Nenhum pedido recebido ainda.</td></tr>';return}for(const item of data.history){const row=document.createElement('tr');for(const value of [item.orderName,item.source==='automatic'?'Automático':item.source==='xml'?'XML NF-e':'Botão imprimir',new Date(item.at).toLocaleString('pt-BR')]){const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell)}const result=document.createElement('td'),badge=document.createElement('span');badge.className=`badge ${item.status}`;badge.textContent=item.status==='printed'?'Impresso':'Falhou';result.appendChild(badge);if(item.error){const small=document.createElement('small');small.textContent=item.error;result.appendChild(small)}row.appendChild(result);body.appendChild(row)}}catch{}}
+    async function loadOrders(){try{const data=await fetch('/label-orders').then(async r=>{if(!r.ok)throw new Error(await r.text());return r.json()});orders=data.orders||[];const select=$('order');select.innerHTML='<option value="">Selecione o pedido…</option>';for(const order of orders){const option=document.createElement('option');option.value=String(order.id);option.textContent=`${order.name} — ${order.customer_name} — ${order.delivery_label||order.shipping_method||'ENVIO'}`;select.appendChild(option)}}catch(error){$('order').innerHTML='<option value="">Não foi possível carregar os pedidos</option>';setMessage(String(error.message||error),true)}}
+    function updateButtons(){const ready=Boolean(invoice&&$('order').value);$('generate').disabled=!ready;$('print').disabled=!ready}
+    $('order').addEventListener('change',updateButtons);
+    $('xml').addEventListener('change',async event=>{try{const file=event.target.files[0];if(!file)return;invoice=parseInvoice(await file.text());setMessage(`NF ${invoice.number}/${invoice.series} — ${invoice.recipientName} — CEP ${invoice.zip}`);const match=orders.find(order=>(invoice.zip&&String(order.address||'').replace(/\D/g,'').includes(invoice.zip))||normalize(order.customer_name)===normalize(invoice.recipientName));if(match)$('order').value=String(match.id);updateButtons()}catch(error){invoice=null;setMessage(error.message||String(error),true);updateButtons()}});
+    async function requestLabel(print){const button=print?$('print'):$('generate');button.disabled=true;setMessage(print?'Enviando para a impressora…':'Gerando etiqueta…');try{const response=await fetch('/invoice-label',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({orderId:$('order').value,invoice,print})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha ao gerar etiqueta');$('zpl').value=data.zpl;$('download').disabled=false;setMessage(print?'Etiqueta e DANFE aceitos pela fila de impressão.':'Código ZPL gerado com sucesso.')}catch(error){setMessage(error.message||String(error),true)}finally{button.disabled=false}}
+    $('generate').addEventListener('click',()=>requestLabel(false));$('print').addEventListener('click',()=>requestLabel(true));$('download').addEventListener('click',()=>{const blob=new Blob([$('zpl').value],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`etiqueta-nf-${invoice?.number||'tudoprapet'}.zpl`;a.click();URL.revokeObjectURL(a.href)});
+    loadStatus();loadHistory();loadOrders();setInterval(()=>{loadStatus();loadHistory()},5000);
+  </script>
+</body>
+</html>

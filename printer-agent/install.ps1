@@ -30,6 +30,13 @@ $shortcut.WindowStyle = 7
 $shortcut.Description = "Recebe e imprime pedidos TudoPraPet em ZPL"
 $shortcut.Save()
 
+$desktop = [Environment]::GetFolderPath("Desktop")
+$dashboardShortcutPath = Join-Path $desktop "TudoPraPet Impressao.url"
+@"
+[InternetShortcut]
+URL=http://127.0.0.1:$($config.port)/
+"@ | Set-Content $dashboardShortcutPath -Encoding ASCII
+
 # Encerra somente uma versão anterior do agente que esteja usando a porta dele.
 $oldListener = Get-NetTCPConnection -LocalPort $config.port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($oldListener) {
@@ -38,8 +45,11 @@ if ($oldListener) {
   else { throw "A porta $($config.port) está sendo usada por outro programa: $($oldProcess.ProcessName)." }
 }
 Start-Process -FilePath $node -ArgumentList ('"' + (Join-Path $agentDir "server.mjs") + '"') -WorkingDirectory $agentDir -WindowStyle Hidden
+Start-Sleep -Seconds 2
+Start-Process "http://127.0.0.1:$($config.port)/"
 Write-Host "TudoPraPet Impressão instalado e iniciado."
 Write-Host "Configuração: $configPath"
 Write-Host "Inicialização automática: $shortcutPath"
 Write-Host "Impressora: $($config.printerName)"
+Write-Host "Painel local: $dashboardShortcutPath"
 Write-Host "Pode fechar esta janela."

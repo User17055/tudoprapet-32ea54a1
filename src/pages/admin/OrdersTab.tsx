@@ -12,6 +12,12 @@ import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, 
 import { toast } from "sonner";
 
 interface OrdersResponse { orders: PrintableOrder[]; count: number }
+interface PrintQueueResponse { job_id: string; already_queued?: boolean }
+interface PrintStatusResponse {
+  job: { status: "queued" | "printed" | "error"; error_message: string | null; printed_at: string | null };
+}
+
+const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 const FINANCIAL: Record<string, string> = {
   pending: "Pendente", authorized: "Autorizado", partially_paid: "Parcialmente pago", paid: "Pago",
@@ -65,12 +71,53 @@ export default function OrdersTab() {
 
   const printZpl = async (order: PrintableOrder) => {
     setPrintingId(order.id);
+    let notificationId: string | number | undefined;
     try {
-      const { error } = await supabase.functions.invoke("admin-orders", { body: { action: "queue_print", orderId: String(order.id), orderName: order.name, zpl: orderToZpl(order) } });
+      const { data, error } = await supabase.functions.invoke("admin-orders", { body: { action: "queue_print", orderId: String(order.id), orderName: order.name, zpl: orderToZpl(order) } });
       if (error) throw error;
-      toast.success(`Pedido ${order.name} colocado na fila da impressora remota`);
+      const queued = data as PrintQueueResponse;
+      if (!queued?.job_id) throw new Error("A fila não retornou o identificador da impressão");
+
+      notificationId = toast.loading(
+        queued.already_queued
+          ? `Pedido ${order.name} já estava na fila. Aguardando confirmação...`
+          : `Pedido ${order.name} enviado. Aguardando a impressora...`,
+      );
+
+      for (let attempt = 0; attempt < 45; attempt += 1) {
+        await wait(2_000);
+        const { data: statusData, error: statusError } = await supabase.functions.invoke("admin-orders", {
+          body: { action: "print_status", jobId: queued.job_id },
+        });
+        if (statusError) continue;
+
+        const job = (statusData as PrintStatusResponse)?.job;
+        if (job?.status === "printed") {
+          toast.success(`Pedido ${order.name} recebido pela impressora`, {
+            id: notificationId,
+            description: "O computador remoto aceitou o ZPL na fila de impressão do Windows.",
+          });
+          return;
+        }
+        if (job?.status === "error") {
+          toast.error(`Falha ao imprimir o pedido ${order.name}`, {
+            id: notificationId,
+            description: job.error_message || "O computador remoto informou uma falha na impressora.",
+          });
+          return;
+        }
+      }
+
+      toast.warning(`Pedido ${order.name} continua aguardando`, {
+        id: notificationId,
+        description: "Sem confirmação do computador remoto. A solicitação permanece na fila e será processada quando a conexão voltar.",
+        duration: 10_000,
+      });
     } catch (error) {
-      toast.error("Não foi possível enviar à impressora remota", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Não foi possível enviar à impressora remota", {
+        id: notificationId,
+        description: error instanceof Error ? error.message : undefined,
+      });
     } finally { setPrintingId(null); }
   };
 
@@ -95,7 +142,7 @@ export default function OrdersTab() {
         </TableBody></Table></div>}
       </CardContent></Card>
 
-      <Dialog open={!!zplOrder} onOpenChange={(open) => !open && setZplOrder(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Código ZPL — {zplOrder?.name}</DialogTitle><DialogDescription>Copie o código, baixe como arquivo ou envie à impressora remota.</DialogDescription></DialogHeader>{zplOrder && <><textarea readOnly value={orderToZpl(zplOrder)} className="h-80 w-full resize-none rounded-md border bg-slate-950 p-3 font-mono text-xs text-emerald-300" /><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={async () => { await navigator.clipboard.writeText(orderToZpl(zplOrder)); toast.success("Código ZPL copiado"); }}><Clipboard className="mr-2 h-4 w-4" />Copiar</Button><Button variant="outline" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([orderToZpl(zplOrder)], { type: "text/plain" })); a.download = `pedido-${String(zplOrder.name).replace(/\D/g, "")}.zpl`; a.click(); URL.revokeObjectURL(a.href); }}><Check className="mr-2 h-4 w-4" />Baixar .zpl</Button><Button onClick={() => printZpl(zplOrder)}><Printer className="mr-2 h-4 w-4" />Imprimir ZPL</Button></div></>}</DialogContent></Dialog>
+      <Dialog open={!!zplOrder} onOpenChange={(open) => !open && setZplOrder(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Código ZPL — {zplOrder?.name}</DialogTitle><DialogDescription>Copie o código, baixe como arquivo ou envie à impressora remota.</DialogDescription></DialogHeader>{zplOrder && <><textarea readOnly value={orderToZpl(zplOrder)} className="h-80 w-full resize-none rounded-md border bg-slate-950 p-3 font-mono text-xs text-emerald-300" /><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={async () => { await navigator.clipboard.writeText(orderToZpl(zplOrder)); toast.success("Código ZPL copiado"); }}><Clipboard className="mr-2 h-4 w-4" />Copiar</Button><Button variant="outline" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([orderToZpl(zplOrder)], { type: "text/plain" })); a.download = `pedido-${String(zplOrder.name).replace(/\D/g, "")}.zpl`; a.click(); URL.revokeObjectURL(a.href); }}><Check className="mr-2 h-4 w-4" />Baixar .zpl</Button><Button disabled={printingId === zplOrder.id} onClick={() => printZpl(zplOrder)}>{printingId === zplOrder.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}Imprimir ZPL</Button></div></>}</DialogContent></Dialog>
     </div>
   );
 }
