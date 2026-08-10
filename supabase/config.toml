@@ -7,3 +7,7 @@ verify_jwt = false
 # A própria function valida admin (JWT + has_role) ou o token do agente.
 [functions.admin-orders]
 verify_jwt = false
+
+# Verificação de sincronização Andre -> main (só admin autenticado).
+[functions.git-sync-status]
+verify_jwt = true
