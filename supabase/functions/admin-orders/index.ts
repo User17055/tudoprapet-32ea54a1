@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
 
   try {
     const since = body.since || url.searchParams.get("since") || "";
-    const requestedLimit = Math.min(Math.max(Number(body.limit || url.searchParams.get("limit") || (isAgent ? 50 : 1000)), 1), 1000);
+    const requestedLimit = Math.min(Math.max(Number(body.limit || url.searchParams.get("limit") || (isAgent ? 50 : 100)), 1), 250);
     const query = new URLSearchParams({ status: "any", limit: String(Math.min(requestedLimit, 250)), order: "created_at desc", fields: FIELDS });
     if (since) query.set("created_at_min", since);
 
