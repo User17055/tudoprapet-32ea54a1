@@ -9,6 +9,7 @@ import { useAccountCartSync } from "@/hooks/useAccountCartSync";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import Index from "./pages/Index.tsx";
+import logo from "@/assets/tpp-logo.svg";
 
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
@@ -28,11 +29,16 @@ const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const queryClient = new QueryClient();
 
 const RouteFallback = () => (
-  <div className="flex min-h-[45vh] items-center justify-center bg-background">
-    <div className="flex flex-col items-center gap-3">
-      <div className="h-10 w-10 animate-pulse rounded-2xl bg-primary/15" />
-      <span className="text-sm text-muted-foreground">Abrindo página…</span>
-    </div>
+  <div
+    className="flex min-h-screen items-center justify-center bg-background"
+    role="status"
+    aria-label="Carregando TudoPraPet"
+  >
+    <img
+      src={logo}
+      alt="TudoPraPet"
+      className="h-auto w-56 animate-pulse sm:w-64"
+    />
   </div>
 );
 
