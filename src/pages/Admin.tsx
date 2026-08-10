@@ -28,6 +28,7 @@ import {
   Menu,
   ExternalLink,
   Boxes,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
