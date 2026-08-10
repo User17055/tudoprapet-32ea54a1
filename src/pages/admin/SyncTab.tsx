@@ -19,15 +19,18 @@ type SyncStatus = {
   message?: string;
   repo?: string;
   work_branch?: string;
+  work_branch_exists?: boolean;
   in_sync?: boolean;
   ahead_by?: number;
   behind_by?: number;
   pending_commits?: Commit[];
   main?: { sha: string; message: string; date?: string | null };
-  work?: { sha: string; message: string; date?: string | null };
+  main_commits?: Commit[];
+  work?: { sha: string; message: string; date?: string | null } | null;
   functions_version?: string;
   checked_at?: string;
 };
+
 
 const REFRESH_MS = 60_000;
 
