@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
-import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 
 const SHOP = "petjoy-deals-hb8r9.myshopify.com";
@@ -7,7 +7,7 @@ const API = "2025-07";
 const FIELDS = [
   "id", "name", "created_at", "cancelled_at", "cancel_reason", "total_price", "subtotal_price",
   "total_discounts", "currency", "financial_status", "fulfillment_status", "customer", "email", "phone",
-  "shipping_address", "billing_address", "line_items", "shipping_lines", "note",
+  "shipping_address", "billing_address", "line_items", "shipping_lines", "note", "tags", "note_attributes",
 ].join(",");
 
 function deliveryLabel(order: any): { label: string; method: string } {
@@ -25,6 +25,34 @@ function deliveryLabel(order: any): { label: string; method: string } {
   return { label: label || "ENVIO", method: method || "Envio" };
 }
 
+async function resolvedDeliveryLabel(order: any, shopifyToken: string): Promise<{ label: string; method: string }> {
+  const preliminary = deliveryLabel(order);
+  const attributes = (order.note_attributes || []).map((item: any) => `${item?.name || ""} ${item?.value || ""}`).join(" ");
+  const pickupEvidence = `${order.tags || ""} ${attributes}`.toLowerCase();
+  if (/codigo de retirada|pronto[- ]retirada|ready-for-pickup|\bretirada\b|\bpick[_ -]?up\b/.test(pickupEvidence)) {
+    return { label: "RETIRADA", method: "Retirada na loja" };
+  }
+  if (preliminary.label !== "ENVIO") return preliminary;
+
+  try {
+    const response = await fetch(`https://${SHOP}/admin/api/${API}/orders/${order.id}/fulfillment_orders.json`, {
+      headers: { "X-Shopify-Access-Token": shopifyToken },
+    });
+    if (!response.ok) {
+      console.error(`Shopify fulfillment_orders ${order.id}:`, response.status);
+      return preliminary;
+    }
+    const data = await response.json();
+    const methods = (data.fulfillment_orders || []).map((item: any) => String(item?.delivery_method?.method_type || "").toLowerCase());
+    if (methods.some((method: string) => method.replace(/[-\s]+/g, "_") === "pick_up")) {
+      return { label: "RETIRADA", method: "Retirada na loja" };
+    }
+  } catch (error) {
+    console.error(`Shopify fulfillment_orders ${order.id}:`, error);
+  }
+  return preliminary;
+}
+
 function nextLink(linkHeader: string | null): string | null {
   if (!linkHeader) return null;
   for (const part of linkHeader.split(",")) {
@@ -34,7 +62,7 @@ function nextLink(linkHeader: string | null): string | null {
   return null;
 }
 
-function normalize(order: any) {
+function normalize(order: any, delivery = deliveryLabel(order)) {
   const address = order.shipping_address || order.billing_address;
   const addressText = address ? [
     address.address1, address.address2, address.neighborhood,
@@ -42,8 +70,6 @@ function normalize(order: any) {
   ].filter(Boolean).join(", ") : null;
   const customerName = [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ")
     || address?.name || "Cliente não identificado";
-  const delivery = deliveryLabel(order);
-
   return {
     id: order.id,
     name: order.name || `#${order.id}`,
@@ -105,11 +131,11 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (existing) return jsonResponse({ queued: true, job_id: existing.id, already_queued: true });
+    if (existing) return jsonResponse({ queued: true, job_id: existing.id, already_queued: true, functions_version: FUNCTIONS_VERSION });
 
     const { data, error } = await adminDb.from("print_jobs").insert({ order_id: String(body.orderId), order_name: body.orderName, zpl: body.zpl, source: "manual" }).select("id").single();
     if (error) { console.error("queue_print:", error); return errorResponse("Falha ao colocar pedido na fila", 500); }
-    return jsonResponse({ queued: true, job_id: data.id });
+    return jsonResponse({ queued: true, job_id: data.id, functions_version: FUNCTIONS_VERSION });
   }
 
   if (action === "print_jobs") {
@@ -163,7 +189,8 @@ Deno.serve(async (req) => {
       next = nextLink(response.headers.get("link"));
     }
 
-    const orders = all.slice(0, requestedLimit).map(normalize);
+    const selected = all.slice(0, requestedLimit);
+    const orders = await Promise.all(selected.map(async (order: any) => normalize(order, await resolvedDeliveryLabel(order, shopifyToken))));
     return jsonResponse({ orders, count: orders.length, server_time: new Date().toISOString() });
   } catch (error) {
     console.error("admin-orders:", error);

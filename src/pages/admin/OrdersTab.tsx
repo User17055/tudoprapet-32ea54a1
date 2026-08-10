@@ -12,12 +12,13 @@ import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, 
 import { toast } from "sonner";
 
 interface OrdersResponse { orders: PrintableOrder[]; count: number }
-interface PrintQueueResponse { job_id: string; already_queued?: boolean }
+interface PrintQueueResponse { job_id: string; already_queued?: boolean; functions_version?: string }
 interface PrintStatusResponse {
   job: { status: "queued" | "printed" | "error"; error_message: string | null; printed_at: string | null };
 }
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+const MINIMUM_PRINT_FUNCTION_VERSION = "2026-08-10.8";
 
 const FINANCIAL: Record<string, string> = {
   pending: "Pendente", authorized: "Autorizado", partially_paid: "Parcialmente pago", paid: "Pago",
@@ -78,11 +79,23 @@ export default function OrdersTab() {
       const queued = data as PrintQueueResponse;
       if (!queued?.job_id) throw new Error("A fila não retornou o identificador da impressão");
 
+      // A entrega para o computador pode funcionar em versões antigas, mas elas
+      // não devolvem o resultado. Não deixamos o botão girando por 90 segundos
+      // quando já sabemos que a confirmação nunca chegará.
+      if (!queued.functions_version || queued.functions_version < MINIMUM_PRINT_FUNCTION_VERSION) {
+        toast.warning(`Pedido ${order.name} enviado para impressão`, {
+          description: "O computador pode imprimir normalmente, mas a função admin-orders publicada está antiga e não consegue devolver a confirmação.",
+          duration: 12_000,
+        });
+        return;
+      }
+
       notificationId = toast.loading(
         queued.already_queued
           ? `Pedido ${order.name} já estava na fila. Aguardando confirmação...`
           : `Pedido ${order.name} enviado. Aguardando a impressora...`,
       );
+      setPrintingId(null);
 
       let lastStatusProblem = "";
       for (let attempt = 0; attempt < 45; attempt += 1) {

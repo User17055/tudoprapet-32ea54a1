@@ -4,6 +4,8 @@ Programa local para Windows que recebe ZPL do painel e envia em modo RAW para a 
 
 O modelo normal enviado pelo admin é identificado por `TPP-ZPL-V2`, usa a logo da TudoPraPet e destaca o método de entrega escolhido pelo cliente. O agente só informa sucesso ao site depois que o Windows aceita o ZPL e a nuvem confirma o retorno.
 
+Quando a linha de frete do pedido vier vazia, a função consulta o método de entrega do fulfillment da Shopify para diferenciar corretamente retirada e envio. O layout reserva espaço para nomes e endereços em várias linhas.
+
 No computador conectado à impressora, extraia o ZIP e dê dois cliques em `INSTALAR.cmd`. O instalador lista as impressoras daquela máquina, inicia o programa escondido e configura a abertura automática com o Windows. O computador do administrador não precisa ficar ligado e o painel não precisa permanecer aberto.
 
 Ao concluir, o instalador abre o painel local **TudoPraPet Impressão** e cria um atalho na área de trabalho. A tela mostra os últimos 50 pedidos recebidos, horário, origem (automático ou botão imprimir) e resultado. Ela também pode ser aberta em `http://127.0.0.1:17891/` no computador da impressora.

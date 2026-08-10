@@ -24,7 +24,7 @@ function sendRaw(zpl){return new Promise(async(resolve,reject)=>{const temp=join
 const clean=(v,max=50)=>String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[\^~]/g," ").replace(/[^\x20-\x7e]/g," ").slice(0,max);
 const brl=v=>`R$ ${Number(v||0).toFixed(2).replace(".",",")}`;
 function orderToZpl(o){
-  let y=655;
+  let y=755;
   const items=(o.line_items||[]).map((item,index)=>{
     if(index>0)y+=58;
     const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;
@@ -47,9 +47,9 @@ function orderToZpl(o){
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS
 ^FO25,525^A0N,24,24^FDDESTINATARIO^FS
-^FO25,560^A0N,31,31^FB730,2,3,L^FD${clean(o.customer_name,60)}^FS
-^FO25,605^A0N,22,22^FB730,2,3,L^FD${delivery==="RETIRADA"?"RETIRAR NA LOJA TUDOPRAPET":clean(o.address||"Nao informado",100)}^FS
-^FO25,635^GB750,2,2^FS
+^FO25,560^A0N,31,31^FB730,2,5,L^FD${clean(o.customer_name,60)}^FS
+^FO25,640^A0N,22,22^FB730,3,5,L^FD${delivery==="RETIRADA"?"RETIRAR NA LOJA TUDOPRAPET":clean(o.address||"Nao informado",100)}^FS
+^FO25,735^GB750,2,2^FS
 ${items}
 ^FO25,${totalY}^GB750,2,2^FS
 ^FO25,${totalY+25}^A0N,32,32^FDTotal^FS
@@ -203,7 +203,7 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.0",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.1",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}

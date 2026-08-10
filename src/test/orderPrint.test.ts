@@ -9,6 +9,8 @@ const order: PrintableOrder = {
   currency: "BRL",
   financial_status: "paid",
   fulfillment_status: null,
+  delivery_label: "RETIRADA",
+  shipping_method: "Retirada na loja",
   customer_name: "João ^ Silva",
   address: "Rua São José, 10",
   line_items: [{ title: "Ração Premium", variant_title: "2 kg", quantity: 2, price: 29.95 }],
@@ -23,6 +25,9 @@ describe("impressão de pedido", () => {
     expect(zpl).toContain("^GFA");
     expect(zpl).toContain("Joao   Silva");
     expect(zpl).toContain("2x Racao Premium - 2 kg");
+    expect(zpl).toContain("^FDRETIRADA^FS");
+    expect(zpl).toContain("RETIRAR NA LOJA TUDOPRAPET");
+    expect(zpl).toContain("^FO25,735^GB750,2,2^FS");
     expect(zpl).not.toContain("Separacao:");
   });
 

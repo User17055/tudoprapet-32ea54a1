@@ -43,7 +43,7 @@ const zplText = (value: unknown, max = 42) =>
     .slice(0, max);
 
 export function orderToZpl(order: PrintableOrder): string {
-  let y = 655;
+  let y = 755;
   const renderedItems = order.line_items.map((item, index) => {
     if (index > 0) y += 58;
     const name = `${item.quantity}x ${item.title}${item.variant_title ? ` - ${item.variant_title}` : ""}`;
@@ -68,9 +68,9 @@ export function orderToZpl(order: PrintableOrder): string {
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS
 ^FO25,525^A0N,24,24^FDDESTINATARIO^FS
-^FO25,560^A0N,31,31^FB730,2,3,L^FD${zplText(order.customer_name, 60)}^FS
-^FO25,605^A0N,22,22^FB730,2,3,L^FD${delivery === "RETIRADA" ? "RETIRAR NA LOJA TUDOPRAPET" : zplText(order.address || "Nao informado", 100)}^FS
-^FO25,635^GB750,2,2^FS
+^FO25,560^A0N,31,31^FB730,2,5,L^FD${zplText(order.customer_name, 60)}^FS
+^FO25,640^A0N,22,22^FB730,3,5,L^FD${delivery === "RETIRADA" ? "RETIRAR NA LOJA TUDOPRAPET" : zplText(order.address || "Nao informado", 100)}^FS
+^FO25,735^GB750,2,2^FS
 ${renderedItems}
 ^FO25,${totalY}^GB750,2,2^FS
 ^FO25,${totalY + 25}^A0N,32,32^FDTotal^FS
