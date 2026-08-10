@@ -80,6 +80,8 @@ type SectionId =
   | "referrals"
   | "retirada"
   | "orders"
+  | "sync"
+
   | "franquia";
 
 interface SectionDef {
