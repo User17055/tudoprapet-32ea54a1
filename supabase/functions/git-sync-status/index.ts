@@ -116,9 +116,10 @@ Deno.serve(async (req) => {
       );
       workExists = true;
       const cmp = await gh(
-        `/repos/${repo}/compare/main...${encodeURIComponent(workBranch)}`,
+        `/repos/${repo}/compare/${encodeURIComponent(mainName)}...${encodeURIComponent(workBranch)}`,
         token,
       );
+
       pending = mapCommits(cmp.commits);
       aheadBy = cmp.ahead_by ?? pending.length;
       behindBy = cmp.behind_by ?? 0;
