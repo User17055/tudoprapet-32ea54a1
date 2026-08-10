@@ -1,9 +1,4 @@
-// Impressão de pedido: monta o HTML do comprovante e abre a caixa de impressão.
-//
-// Fica separado do componente para poder ser testado e reutilizado pelo agente
-// de impressão remoto (que consome o mesmo formato de pedido de `admin-orders`).
-
-export interface PrintLineItem {
+export interface PrintableOrderItem {
   title: string;
   variant_title?: string | null;
   sku?: string | null;
@@ -11,151 +6,80 @@ export interface PrintLineItem {
   price: number;
 }
 
-export interface PrintOrder {
-  name?: string;
-  order_number?: number | string;
-  created_at?: string;
-  customer_name?: string;
-  customer_email?: string | null;
-  customer_phone?: string | null;
-  financial_status?: string | null;
-  fulfillment_status?: string | null;
-  cancelled_at?: string | null;
+export interface PrintableOrder {
+  id: number | string;
+  name: string;
+  created_at: string;
   total_price: number;
-  currency?: string;
+  subtotal_price?: number;
+  total_discounts?: number;
+  shipping_price?: number;
+  currency: string;
+  financial_status: string;
+  fulfillment_status: string | null;
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
+  customer_name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
   note?: string | null;
-  pickup_code?: string | null;
-  picked_up_at?: string | null;
-  line_items: PrintLineItem[];
+  line_items: PrintableOrderItem[];
 }
 
-export const STORE_NAME = "TudoPraPet";
+const money = (value: number, currency = "BRL") =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value || 0);
 
-export const formatMoney = (value: number, currency = "BRL") =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(Number(value) || 0);
-
-export const formatDateTime = (iso?: string | null) =>
-  iso
-    ? new Date(iso).toLocaleString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "-";
-
-const STATUS_LABELS: Record<string, string> = {
-  paid: "Pago",
-  pending: "Pendente",
-  refunded: "Reembolsado",
-  partially_refunded: "Parcialmente reembolsado",
-  voided: "Cancelado",
-  authorized: "Autorizado",
-  fulfilled: "Enviado/Retirado",
-  partial: "Parcial",
-  restocked: "Reestocado",
-  unfulfilled: "Não processado",
-};
-
-export const statusLabel = (status?: string | null) =>
-  status ? STATUS_LABELS[status] ?? status : "Não processado";
-
-export function orderStatusSummary(order: PrintOrder): string {
-  if (order.cancelled_at) return "Cancelado";
-  return `${statusLabel(order.financial_status)} · ${statusLabel(order.fulfillment_status)}`;
-}
-
-const escapeHtml = (value: unknown) =>
+const zplText = (value: unknown, max = 42) =>
   String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\^~]/g, " ")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .slice(0, max);
 
-/** HTML do comprovante — largura de bobina 80mm, também legível em A4. */
-export function buildOrderPrintHtml(order: PrintOrder): string {
-  const currency = order.currency || "BRL";
-  const itemsTotal = order.line_items.reduce((sum, li) => sum + li.price * li.quantity, 0);
+export function orderToZpl(order: PrintableOrder): string {
+  let y = 315;
+  const renderedItems = order.line_items.map((item, index) => {
+    if (index > 0) y += 55;
+    const name = `${item.quantity}x ${item.title}${item.variant_title ? ` - ${item.variant_title}` : ""}`;
+    return `^FO25,${y}^A0N,25,25^FB460,2,2,L^FD${zplText(name, 80)}^FS\n^FO500,${y}^A0N,25,25^FB175,1,0,R^FD${zplText(money(item.price * item.quantity, order.currency), 20)}^FS`;
+  }).join("\n");
+  const totalY = y + 75;
+  const height = Math.max(650, totalY + 180);
 
-  const rows = order.line_items
-    .map(
-      (li) => `
-      <tr>
-        <td class="qty">${escapeHtml(li.quantity)}x</td>
-        <td>
-          <div class="title">${escapeHtml(li.title)}</div>
-          ${li.variant_title ? `<div class="muted">${escapeHtml(li.variant_title)}</div>` : ""}
-          ${li.sku ? `<div class="muted">SKU ${escapeHtml(li.sku)}</div>` : ""}
-        </td>
-        <td class="right">${escapeHtml(formatMoney(li.price * li.quantity, currency))}</td>
-      </tr>`,
-    )
-    .join("");
-
-  return `<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8" />
-<title>Pedido ${escapeHtml(order.name || order.order_number || "")} — ${STORE_NAME}</title>
-<style>
-  @page { size: 80mm auto; margin: 4mm; }
-  * { box-sizing: border-box; }
-  body { font-family: "Nunito", Arial, sans-serif; color: #10182b; margin: 0; font-size: 12px; }
-  h1 { font-size: 16px; margin: 0 0 2px; }
-  .header { text-align: center; border-bottom: 1px dashed #94a3b8; padding-bottom: 8px; margin-bottom: 8px; }
-  .muted { color: #64748b; font-size: 10px; }
-  .block { margin-bottom: 8px; }
-  .row { display: flex; justify-content: space-between; gap: 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 3px 0; vertical-align: top; }
-  .qty { width: 26px; font-weight: 700; }
-  .right { text-align: right; white-space: nowrap; }
-  .title { font-weight: 600; }
-  .total { border-top: 1px dashed #94a3b8; margin-top: 8px; padding-top: 6px; font-size: 14px; font-weight: 800; }
-  .code { text-align: center; border: 1px solid #10182b; border-radius: 6px; padding: 6px; margin-top: 8px; font-size: 15px; font-weight: 800; letter-spacing: 1px; }
-  .foot { text-align: center; margin-top: 10px; }
-</style>
-</head>
-<body>
-  <div class="header">
-    <h1>${STORE_NAME}</h1>
-    <div class="muted">Pedido ${escapeHtml(order.name || `#${order.order_number ?? ""}`)}</div>
-    <div class="muted">${escapeHtml(formatDateTime(order.created_at))}</div>
-  </div>
-
-  <div class="block">
-    <div><strong>${escapeHtml(order.customer_name || "Cliente")}</strong></div>
-    ${order.customer_phone ? `<div class="muted">${escapeHtml(order.customer_phone)}</div>` : ""}
-    ${order.customer_email ? `<div class="muted">${escapeHtml(order.customer_email)}</div>` : ""}
-    <div class="muted">Status: ${escapeHtml(orderStatusSummary(order))}</div>
-  </div>
-
-  <table>${rows}</table>
-
-  <div class="row total">
-    <span>Total</span>
-    <span>${escapeHtml(formatMoney(order.total_price || itemsTotal, currency))}</span>
-  </div>
-
-  ${order.pickup_code ? `<div class="code">Retirada: ${escapeHtml(order.pickup_code)}</div>` : ""}
-  ${order.picked_up_at ? `<div class="muted foot">Retirado em ${escapeHtml(order.picked_up_at)}</div>` : ""}
-  ${order.note ? `<div class="block muted">Obs.: ${escapeHtml(order.note)}</div>` : ""}
-
-  <div class="foot muted">Obrigado pela preferência!</div>
-</body>
-</html>`;
+  return `^XA
+^CI28
+^PW700
+^LL${height}
+^FO25,25^A0N,40,40^FDTUDOPRAPET^FS
+^FO25,75^A0N,34,34^FDPEDIDO ${zplText(order.name, 24)}^FS
+^FO25,120^A0N,22,22^FDData: ${zplText(new Date(order.created_at).toLocaleString("pt-BR"), 34)}^FS
+^FO25,150^A0N,22,22^FDCliente: ${zplText(order.customer_name, 48)}^FS
+^FO25,180^A0N,22,22^FDTelefone: ${zplText(order.phone || "Nao informado", 32)}^FS
+^FO25,210^A0N,22,22^FB650,2,2,L^FDEntrega: ${zplText(order.address || "Nao informado", 90)}^FS
+^FO25,275^GB650,2,2^FS
+${renderedItems}
+^FO25,${totalY}^GB650,2,2^FS
+^FO25,${totalY + 25}^A0N,32,32^FDTotal^FS
+^FO430,${totalY + 25}^A0N,32,32^FB245,1,0,R^FD${zplText(money(order.total_price, order.currency), 22)}^FS
+^FO25,${totalY + 75}^A0N,20,20^FDPagamento: ${zplText(order.financial_status, 25)}^FS
+^FO25,${totalY + 105}^A0N,20,20^FDSeparacao: ${zplText(order.fulfillment_status || "nao separado", 25)}^FS
+^XZ`;
 }
 
-/** Abre a janela de impressão do navegador com o comprovante do pedido. */
-export function printOrder(order: PrintOrder): boolean {
-  const html = buildOrderPrintHtml(order);
-  const win = window.open("", "_blank", "width=420,height=640");
-  if (!win) return false;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 300);
-  return true;
+const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+}[char] || char));
+
+export function orderToA4Html(order: PrintableOrder): string {
+  const rows = order.line_items.map((item) => `<tr><td>${escapeHtml(item.title)}${item.variant_title ? `<small>${escapeHtml(item.variant_title)}</small>` : ""}</td><td>${item.quantity}</td><td>${money(item.price, order.currency)}</td><td>${money(item.price * item.quantity, order.currency)}</td></tr>`).join("");
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Pedido ${escapeHtml(order.name)}</title><style>
+  @page{size:A4;margin:16mm}body{font:14px Arial;color:#172033}header{display:flex;justify-content:space-between;border-bottom:3px solid #112f5f;padding-bottom:14px}h1{margin:0;color:#112f5f}.meta{line-height:1.7;margin:20px 0}.box{border:1px solid #ccd3df;border-radius:8px;padding:14px;margin-bottom:18px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #ddd}th{background:#f3f5f8}td:nth-child(n+2),th:nth-child(n+2){text-align:right}small{display:block;color:#667}.total{text-align:right;font-size:20px;font-weight:bold;margin-top:18px}.no-print{margin-top:25px;text-align:center}@media print{.no-print{display:none}}</style></head><body>
+  <header><div><h1>TudoPraPet</h1><div>Pedido ${escapeHtml(order.name)}</div></div><div>${new Date(order.created_at).toLocaleString("pt-BR")}</div></header>
+  <section class="meta"><div><b>Cliente:</b> ${escapeHtml(order.customer_name)}</div><div><b>Telefone:</b> ${escapeHtml(order.phone || "Não informado")}</div><div><b>E-mail:</b> ${escapeHtml(order.email || "Não informado")}</div></section>
+  <section class="box"><b>Entrega:</b> ${escapeHtml(order.address || "Não informado")}${order.note ? `<p><b>Observação:</b> ${escapeHtml(order.note)}</p>` : ""}</section>
+  <table><thead><tr><th>Produto</th><th>Qtd.</th><th>Unitário</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="total">Total: ${money(order.total_price, order.currency)}</div><p>Pagamento: ${escapeHtml(order.financial_status)} · Separação: ${escapeHtml(order.fulfillment_status || "não separado")}</p>
+  <div class="no-print"><button onclick="window.print()">Imprimir</button></div><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),250))</script></body></html>`;
 }

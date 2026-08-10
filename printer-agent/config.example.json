@@ -1,0 +1,9 @@
+{
+  "printerName": "ZDesigner ZD220-203dpi ZPL (Copiar 1)",
+  "port": 17891,
+  "autoPrint": false,
+  "pollSeconds": 20,
+  "supabaseUrl": "https://smvtnflhkvxdmvqbxwrf.supabase.co",
+  "printAgentToken": "COLOQUE_AQUI_O_MESMO_PRINT_AGENT_TOKEN_DO_SUPABASE",
+  "allowedOrigins": ["https://tudoprapet.com.br", "http://localhost:8080", "http://localhost:5173"]
+}

@@ -1,205 +1,101 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { type PrintableOrder, orderToA4Html, orderToZpl } from "@/lib/orderPrint";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Printer, RefreshCw, Search } from "lucide-react";
+import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import {
-  formatDateTime,
-  formatMoney,
-  orderStatusSummary,
-  printOrder,
-  statusLabel,
-  type PrintOrder,
-} from "@/lib/orderPrint";
 
-type AdminOrder = PrintOrder & {
-  id: number;
-  name: string;
-  order_number: number;
-  closed_at?: string | null;
+interface OrdersResponse { orders: PrintableOrder[]; count: number }
+
+const FINANCIAL: Record<string, string> = {
+  pending: "Pendente", authorized: "Autorizado", partially_paid: "Parcialmente pago", paid: "Pago",
+  partially_refunded: "Parcialmente reembolsado", refunded: "Reembolsado", voided: "Cancelado",
 };
+const FULFILLMENT: Record<string, string> = {
+  fulfilled: "Encerrado", partial: "Parcial", restocked: "Devolvido", unfulfilled: "Não separado",
+};
+const money = (value: number, currency = "BRL") => new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value || 0);
 
-const STATUS_FILTERS = [
-  { value: "all", label: "Todos os status" },
-  { value: "cancelled", label: "Cancelados" },
-  { value: "closed", label: "Encerrados" },
-  { value: "refunded", label: "Reembolsados" },
-  { value: "paid", label: "Pagos" },
-  { value: "pending", label: "Pagamento pendente" },
-  { value: "unfulfilled", label: "Não processados" },
-  { value: "fulfilled", label: "Processados" },
-];
+function statusLabel(order: PrintableOrder) {
+  if (order.cancelled_at) return "Cancelado";
+  if (order.financial_status === "refunded") return "Reembolsado";
+  if (order.fulfillment_status === "fulfilled") return "Encerrado";
+  return FINANCIAL[order.financial_status] || FULFILLMENT[order.fulfillment_status || ""] || "Em andamento";
+}
 
 export default function OrdersTab() {
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [orders, setOrders] = useState<PrintableOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [zplOrder, setZplOrder] = useState<PrintableOrder | null>(null);
+  const [printingId, setPrintingId] = useState<string | number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      // status=any na função: cancelados, encerrados e reembolsados vêm juntos.
-      const { data, error } = await supabase.functions.invoke("admin-orders", {
-        body: { status: "any", limit: 250 },
-      });
-      if (error) throw error;
-      setOrders((data?.orders as AdminOrder[]) ?? []);
-    } catch (e) {
-      toast.error("Não foi possível carregar os pedidos", {
-        description: e instanceof Error ? e.message : undefined,
-      });
-    } finally {
-      setLoading(false);
-    }
+    const { data, error } = await supabase.functions.invoke("admin-orders", { body: { action: "list" } });
+    if (error) toast.error("Não foi possível carregar os pedidos", { description: error.message });
+    else setOrders((data as OrdersResponse)?.orders || []);
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return orders.filter((o) => {
-      if (term) {
-        const haystack = [o.name, o.order_number, o.customer_name, o.customer_email, o.pickup_code]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(term)) return false;
-      }
-      switch (statusFilter) {
-        case "cancelled":
-          return !!o.cancelled_at;
-        case "closed":
-          return !!o.closed_at;
-        case "refunded":
-          return o.financial_status === "refunded" || o.financial_status === "partially_refunded";
-        case "paid":
-          return o.financial_status === "paid";
-        case "pending":
-          return o.financial_status === "pending" || o.financial_status === "authorized";
-        case "fulfilled":
-          return o.fulfillment_status === "fulfilled" || o.fulfillment_status === "partial";
-        case "unfulfilled":
-          return !o.fulfillment_status;
-        default:
-          return true;
-      }
-    });
-  }, [orders, search, statusFilter]);
+  const filtered = useMemo(() => orders.filter((order) => {
+    const haystack = `${order.name} ${order.customer_name} ${order.email || ""} ${order.phone || ""}`.toLowerCase();
+    const matchesQuery = haystack.includes(query.trim().toLowerCase());
+    const label = statusLabel(order).toLowerCase();
+    const matchesStatus = status === "all" || (status === "active" ? !["cancelado", "reembolsado", "encerrado"].includes(label) : label === status);
+    return matchesQuery && matchesStatus;
+  }), [orders, query, status]);
 
-  const handlePrint = (order: AdminOrder) => {
-    if (!printOrder(order)) {
-      toast.error("Libere as janelas pop-up para imprimir o pedido.");
-    }
+  const printA4 = (order: PrintableOrder) => {
+    const popup = window.open("", "_blank");
+    if (!popup) return toast.error("O navegador bloqueou a janela de impressão");
+    popup.opener = null;
+    popup.document.write(orderToA4Html(order));
+    popup.document.close();
+  };
+
+  const printZpl = async (order: PrintableOrder) => {
+    setPrintingId(order.id);
+    try {
+      const { error } = await supabase.functions.invoke("admin-orders", { body: { action: "queue_print", orderId: String(order.id), orderName: order.name, zpl: orderToZpl(order) } });
+      if (error) throw error;
+      toast.success(`Pedido ${order.name} colocado na fila da impressora remota`);
+    } catch (error) {
+      toast.error("Não foi possível enviar à impressora remota", { description: error instanceof Error ? error.message : undefined });
+    } finally { setPrintingId(null); }
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <CardTitle>Pedidos</CardTitle>
-          <CardDescription>
-            Todos os pedidos da loja, incluindo cancelados, encerrados e reembolsados.
-          </CardDescription>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
-          <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-          Atualizar
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por pedido, cliente, e-mail ou código de retirada"
-              className="pl-9"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="sm:w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_FILTERS.map((f) => (
-                <SelectItem key={f.value} value={f.value}>
-                  {f.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[240px] flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar número, cliente, e-mail ou telefone" className="pl-9" /></div>
+        <Select value={status} onValueChange={setStatus}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent>
+          <SelectItem value="all">Todos os status</SelectItem><SelectItem value="active">Em andamento</SelectItem><SelectItem value="encerrado">Encerrados</SelectItem><SelectItem value="cancelado">Cancelados</SelectItem><SelectItem value="reembolsado">Reembolsados</SelectItem>
+        </SelectContent></Select>
+        <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Atualizar</Button>
+      </div>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">Nenhum pedido encontrado.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pedido</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Retirada</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Imprimir</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-semibold">{o.name}</TableCell>
-                    <TableCell className="whitespace-nowrap text-sm">{formatDateTime(o.created_at)}</TableCell>
-                    <TableCell>
-                      <div className="text-sm font-medium">{o.customer_name}</div>
-                      {o.customer_email && (
-                        <div className="text-xs text-muted-foreground">{o.customer_email}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {o.cancelled_at ? "Cancelado" : orderStatusSummary(o)}
-                      {o.closed_at && !o.cancelled_at && (
-                        <div className="text-xs text-muted-foreground">Encerrado</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {o.pickup_code ?? "-"}
-                      {o.picked_up_at && (
-                        <div className="text-xs text-muted-foreground">Retirado</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      {formatMoney(o.total_price, o.currency)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button size="sm" variant="outline" className="gap-2" onClick={() => handlePrint(o)}>
-                        <Printer className="h-4 w-4" />
-                        <span className="hidden sm:inline">Imprimir</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Legenda de pagamento: {statusLabel("paid")}, {statusLabel("pending")}, {statusLabel("refunded")}.
-        </p>
-      </CardContent>
-    </Card>
+      <Card className="border-blue-200 bg-blue-50/60"><CardContent className="flex items-center gap-3 p-4">
+        <Cloud className="h-5 w-5 text-blue-700" /><div><p className="text-sm font-bold">Impressão ZPL remota</p><p className="text-xs text-muted-foreground">O botão envia o pedido pela nuvem ao computador conectado à Zebra. Pedidos novos também são impressos automaticamente, sem reimprimir o histórico.</p></div>
+      </CardContent></Card>
+
+      <Card><CardContent className="p-0">
+        {loading ? <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div> : filtered.length === 0 ? <p className="py-16 text-center text-muted-foreground">Nenhum pedido encontrado.</p> :
+        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Imprimir</TableHead></TableRow></TableHeader><TableBody>
+          {filtered.map((order) => <TableRow key={order.id}><TableCell className="font-bold">{order.name}</TableCell><TableCell><div className="font-medium">{order.customer_name}</div><div className="text-xs text-muted-foreground">{order.phone || order.email || "Sem contato"}</div></TableCell><TableCell className="whitespace-nowrap">{new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell><TableCell><Badge variant="outline" className={order.cancelled_at || order.financial_status === "refunded" ? "border-red-200 bg-red-50 text-red-700" : order.fulfillment_status === "fulfilled" ? "border-slate-200 bg-slate-100" : "border-blue-200 bg-blue-50 text-blue-700"}>{statusLabel(order)}</Badge></TableCell><TableCell className="text-right font-semibold">{money(order.total_price, order.currency)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={() => printA4(order)} title="Imprimir em A4"><FileText className="h-4 w-4" /><span className="sr-only">A4</span></Button><Button size="sm" variant="outline" onClick={() => setZplOrder(order)} title="Ver código ZPL"><Code2 className="h-4 w-4" /><span className="sr-only">ZPL</span></Button><Button size="sm" onClick={() => printZpl(order)} disabled={printingId === order.id} title="Enviar à impressora ZPL remota">{printingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="sr-only">Imprimir ZPL</span></Button></div></TableCell></TableRow>)}
+        </TableBody></Table></div>}
+      </CardContent></Card>
+
+      <Dialog open={!!zplOrder} onOpenChange={(open) => !open && setZplOrder(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Código ZPL — {zplOrder?.name}</DialogTitle><DialogDescription>Copie o código, baixe como arquivo ou envie à impressora remota.</DialogDescription></DialogHeader>{zplOrder && <><textarea readOnly value={orderToZpl(zplOrder)} className="h-80 w-full resize-none rounded-md border bg-slate-950 p-3 font-mono text-xs text-emerald-300" /><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={async () => { await navigator.clipboard.writeText(orderToZpl(zplOrder)); toast.success("Código ZPL copiado"); }}><Clipboard className="mr-2 h-4 w-4" />Copiar</Button><Button variant="outline" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([orderToZpl(zplOrder)], { type: "text/plain" })); a.download = `pedido-${String(zplOrder.name).replace(/\D/g, "")}.zpl`; a.click(); URL.revokeObjectURL(a.href); }}><Check className="mr-2 h-4 w-4" />Baixar .zpl</Button><Button onClick={() => printZpl(zplOrder)}><Printer className="mr-2 h-4 w-4" />Imprimir ZPL</Button></div></>}</DialogContent></Dialog>
+    </div>
   );
 }

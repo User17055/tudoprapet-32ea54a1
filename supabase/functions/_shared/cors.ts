@@ -26,7 +26,7 @@
  * REGRA: incremente a cada entrega que mexa em supabase/functions/.
  * `scripts/check-deploy.sh` compara este valor com o que a function publicada devolve.
  */
-export const FUNCTIONS_VERSION = "2026-08-10.2";
+export const FUNCTIONS_VERSION = "2026-08-10.3";
 
 const ALLOWED_HEADERS = [
   // canônicos do SDK
@@ -35,6 +35,9 @@ const ALLOWED_HEADERS = [
   "apikey",
   "content-type",
   "x-retry-count",
+  // agente de impressão local (admin-orders)
+  "x-print-agent-token",
+
   // enviados por versões mais novas do cliente Supabase
   "x-supabase-client-platform",
   "x-supabase-client-platform-version",
