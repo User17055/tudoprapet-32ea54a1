@@ -7,7 +7,7 @@
 // `verify_jwt = false` no config.toml porque o agente de impressão não tem JWT.
 // A autorização é feita aqui dentro, nunca no gateway.
 
-import { corsHeadersWith, jsonResponse, errorResponse } from "../_shared/cors.ts";
+import { corsHeadersWith } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 import { ADMIN_API } from "../_shared/shopify.ts";
 import { PICKUP_CODE_ATTRIBUTE, PICKUP_DONE_ATTRIBUTE } from "../_shared/pickup.ts";
