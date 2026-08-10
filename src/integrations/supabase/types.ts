@@ -247,6 +247,42 @@ export type Database = {
         }
         Relationships: []
       }
+      print_jobs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          order_id: string
+          order_name: string
+          printed_at: string | null
+          source: string
+          status: string
+          zpl: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          order_id: string
+          order_name: string
+          printed_at?: string | null
+          source?: string
+          status?: string
+          zpl: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          order_id?: string
+          order_name?: string
+          printed_at?: string | null
+          source?: string
+          status?: string
+          zpl?: string
+        }
+        Relationships: []
+      }
       product_attributes: {
         Row: {
           attr_key: string
