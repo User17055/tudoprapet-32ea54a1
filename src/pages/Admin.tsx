@@ -29,6 +29,8 @@ import {
   ExternalLink,
   Boxes,
   Receipt,
+  GitBranch,
+
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
