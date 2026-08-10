@@ -74,25 +74,44 @@ Deno.serve(async (req) => {
       });
     }
 
-    // main...work: ahead_by = commits da branch que ainda não estão na main.
-    const cmp = await gh(
-      `/repos/${repo}/compare/main...${encodeURIComponent(workBranch)}`,
-      token,
+    const mapCommits = (list: any[]) =>
+      (list || []).map((c: any) => ({
+        sha: String(c.sha).slice(0, 7),
+        message: String(c.commit?.message || "").split("\n")[0],
+        author: c.commit?.author?.name ?? null,
+        date: c.commit?.author?.date ?? null,
+        url: c.html_url ?? null,
+      }));
+
+    // 1) Estado real da main: últimos commits que estão publicados nela.
+    const mainBranch = await gh(`/repos/${repo}/branches/main`, token);
+    const mainCommits = mapCommits(
+      await gh(`/repos/${repo}/commits?sha=main&per_page=15`, token),
     );
 
-
-    const pending = (cmp.commits || []).map((c: any) => ({
-      sha: String(c.sha).slice(0, 7),
-      message: String(c.commit?.message || "").split("\n")[0],
-      author: c.commit?.author?.name ?? null,
-      date: c.commit?.author?.date ?? null,
-      url: c.html_url ?? null,
-    }));
-
-    const [mainBranch, workBranchInfo] = await Promise.all([
-      gh(`/repos/${repo}/branches/main`, token),
-      gh(`/repos/${repo}/branches/${encodeURIComponent(workBranch)}`, token),
-    ]);
+    // 2) Branch de trabalho (opcional): commits que ainda não entraram na main.
+    let workExists = false;
+    let workBranchInfo: any = null;
+    let pending: ReturnType<typeof mapCommits> = [];
+    let aheadBy = 0;
+    let behindBy = 0;
+    try {
+      workBranchInfo = await gh(
+        `/repos/${repo}/branches/${encodeURIComponent(workBranch)}`,
+        token,
+      );
+      workExists = true;
+      const cmp = await gh(
+        `/repos/${repo}/compare/main...${encodeURIComponent(workBranch)}`,
+        token,
+      );
+      pending = mapCommits(cmp.commits);
+      aheadBy = cmp.ahead_by ?? pending.length;
+      behindBy = cmp.behind_by ?? 0;
+    } catch (_e) {
+      // Branch não existe (ex.: já mesclada e removida) — a main continua sendo verificada.
+      workExists = false;
+    }
 
     const head = (b: any) => ({
       sha: String(b?.commit?.sha || "").slice(0, 7),
@@ -104,17 +123,20 @@ Deno.serve(async (req) => {
       configured: true,
       repo,
       work_branch: workBranch,
+      work_branch_exists: workExists,
       // 0 pendentes = tudo que está na branch já foi mesclado na main.
       in_sync: pending.length === 0,
-      ahead_by: cmp.ahead_by ?? pending.length,
-      behind_by: cmp.behind_by ?? 0,
+      ahead_by: aheadBy,
+      behind_by: behindBy,
       pending_commits: pending,
       main: head(mainBranch),
-      work: head(workBranchInfo),
+      main_commits: mainCommits,
+      work: workExists ? head(workBranchInfo) : null,
       // Versão das edge functions que está realmente rodando em produção.
       functions_version: FUNCTIONS_VERSION,
       checked_at: new Date().toISOString(),
     });
+
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("git-sync-status:", msg);
