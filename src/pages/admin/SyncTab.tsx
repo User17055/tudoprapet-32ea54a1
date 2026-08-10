@@ -19,15 +19,18 @@ type SyncStatus = {
   message?: string;
   repo?: string;
   work_branch?: string;
+  work_branch_exists?: boolean;
   in_sync?: boolean;
   ahead_by?: number;
   behind_by?: number;
   pending_commits?: Commit[];
   main?: { sha: string; message: string; date?: string | null };
-  work?: { sha: string; message: string; date?: string | null };
+  main_commits?: Commit[];
+  work?: { sha: string; message: string; date?: string | null } | null;
   functions_version?: string;
   checked_at?: string;
 };
+
 
 const REFRESH_MS = 60_000;
 
@@ -135,9 +138,17 @@ export default function SyncTab() {
                 <div className="mb-1 flex items-center gap-2 font-medium">
                   <GitBranch className="h-4 w-4" /> {status.work_branch}
                 </div>
-                <div className="font-mono text-xs">{status.work?.sha}</div>
-                <div className="text-muted-foreground">{status.work?.message}</div>
-                <div className="text-xs text-muted-foreground">{when(status.work?.date)}</div>
+                {status.work_branch_exists === false ? (
+                  <div className="text-muted-foreground">
+                    Branch não encontrada no repositório (já mesclada ou removida).
+                  </div>
+                ) : (
+                  <>
+                    <div className="font-mono text-xs">{status.work?.sha}</div>
+                    <div className="text-muted-foreground">{status.work?.message}</div>
+                    <div className="text-xs text-muted-foreground">{when(status.work?.date)}</div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -164,7 +175,31 @@ export default function SyncTab() {
             </Card>
           )}
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Últimos commits na main</CardTitle>
+              <CardDescription>
+                O que está de fato publicado na main de {status.repo}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {(status.main_commits ?? []).map((c) => (
+                <div key={c.sha} className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
+                  <Badge className="font-mono">{c.sha}</Badge>
+                  <span className="flex-1">{c.message}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {c.author} · {when(c.date)}
+                  </span>
+                </div>
+              ))}
+              {(status.main_commits ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhum commit retornado.</p>
+              )}
+            </CardContent>
+          </Card>
+
           <p className="text-xs text-muted-foreground">
+
             Edge functions publicadas: versão {status.functions_version}
           </p>
         </>
