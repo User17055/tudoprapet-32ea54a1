@@ -108,7 +108,16 @@ export default function SyncTab() {
             </CardTitle>
             <CardDescription>{status.message}</CardDescription>
           </CardHeader>
+          {(status.available_repos ?? []).length > 0 && (
+            <CardContent className="space-y-1 text-sm">
+              <p className="text-muted-foreground">Repositórios acessíveis por este token:</p>
+              {status.available_repos!.map((r) => (
+                <div key={r} className="font-mono text-xs">{r}</div>
+              ))}
+            </CardContent>
+          )}
         </Card>
+
       ) : status ? (
         <>
           <Card>
