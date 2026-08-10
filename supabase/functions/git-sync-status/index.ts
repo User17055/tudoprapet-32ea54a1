@@ -137,7 +137,9 @@ Deno.serve(async (req) => {
     return json({
       configured: true,
       repo,
+      main_branch: mainName,
       work_branch: workBranch,
+
       work_branch_exists: workExists,
       // 0 pendentes = tudo que está na branch já foi mesclado na main.
       in_sync: pending.length === 0,
