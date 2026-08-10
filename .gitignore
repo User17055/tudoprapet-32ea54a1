@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+printer-agent/config.json
+printer-agent/state.json
+release/
 
 # Editor directories and files
 .vscode/*

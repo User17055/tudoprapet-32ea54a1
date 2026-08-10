@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
-import { Loader2, PackageOpen } from "lucide-react";
+import { ProductCardSkeleton } from "@/components/ProductCardSkeleton";
+import { PackageOpen } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProductAudience } from "@/hooks/useProductAudience";
@@ -91,8 +92,17 @@ export const ProductGrid = () => {
         </div>
 
         {loading || audienceLoading || franchiseeLoading || variationsLoading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="overflow-hidden" aria-label="Carregando produtos">
+            <div className="flex gap-2 md:gap-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="w-[45%] flex-shrink-0 flex-grow-0 md:w-[200px]"
+                >
+                  <ProductCardSkeleton />
+                </div>
+              ))}
+            </div>
           </div>
         ) : (() => {
           const audienceVisible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));

@@ -13,6 +13,7 @@ import { ProductImage } from "@/components/ProductImage";
 interface Props {
   product: ShopifyProduct;
   products?: ShopifyProduct[];
+  searchQuery?: string;
 }
 
 const formatPrice = (value: number) =>
@@ -23,24 +24,54 @@ const formatPrice = (value: number) =>
 
 const TWO_INSTALLMENTS_RATE = 0.0859;
 
-export const ProductCard = ({ product, products = [] }: Props) => {
+const EMPTY_PRODUCTS: ShopifyProduct[] = [];
+
+const extractMeasurements = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .match(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l)\b/g)
+    ?.map((term) => term.replace(/\s+/g, "").replace(",", ".")) || [];
+
+export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = "" }: Props) => {
   const navigate = useNavigate();
   const [selectedProduct, setSelectedProduct] = useState(product);
-
-  useEffect(() => {
-    setSelectedProduct(product);
-  }, [product]);
 
   const addItem = useCartStore((s) => s.addItem);
   const isLoading = useCartStore((s) => s.isLoading);
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice, isFranchisee } = useFranchisePrices();
   const { isVisibleTo } = useProductAudience();
-  const { getVariations } = useProductVariations();
+  const { getVariations, getVariationGroupName } = useProductVariations();
+  const initialVariationItems = getVariations(product.node.id).filter((item) =>
+    isVisibleTo(item.shopify_product_id, isFranchisee),
+  );
+  const initialVariationKey = initialVariationItems
+    .map((item) => `${item.shopify_product_id}:${item.label}`)
+    .join("|");
+
+  useEffect(() => {
+    const searchedMeasurements = extractMeasurements(searchQuery);
+    const matchedVariation = searchedMeasurements.length
+      ? initialVariationItems.find((item) => {
+          const itemMeasurements = extractMeasurements(`${item.label} ${item.shopify_product_title}`);
+          return searchedMeasurements.some((measurement) => itemMeasurements.includes(measurement));
+        })
+      : null;
+    const matchedProduct = matchedVariation
+      ? products.find((candidate) => candidate.node.id === matchedVariation.shopify_product_id)
+      : null;
+    setSelectedProduct(matchedProduct || product);
+    // The serialized key reruns this when asynchronously loaded variations change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product, products, searchQuery, initialVariationKey]);
+
   const { node } = selectedProduct;
   const variationItems = getVariations(node.id).filter((item) =>
     isVisibleTo(item.shopify_product_id, isFranchisee),
   );
+  const displayTitle = getVariationGroupName(node.id) || node.title;
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");
@@ -159,7 +190,7 @@ export const ProductCard = ({ product, products = [] }: Props) => {
               : ""
           }`}
         >
-          {node.title}
+          {displayTitle}
         </h3>
 
         {/* No toque nao existe hover, entao as variacoes ficam sempre visiveis acima
