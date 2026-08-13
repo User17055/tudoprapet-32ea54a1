@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,8 +23,10 @@ import { getDisplayOptions } from "@/lib/shopify";
 import { goToCheckout } from "@/lib/checkout";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
+import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
 
 const Cart = () => {
+  const navigate = useNavigate();
   const [checkingOut, setCheckingOut] = useState(false);
   const {
     items,
@@ -106,6 +108,14 @@ const Cart = () => {
   const handleCheckout = async () => {
     setCheckingOut(true);
     try {
+      if (customCheckoutEnabled) {
+        startCustomCheckout(
+          navigate,
+          items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+          "cart",
+        );
+        return;
+      }
       if (isFranchisee) {
         try {
           const lineItems = items.map((item) => ({

@@ -211,6 +211,203 @@ export interface DraftOrderResult {
   /** false = a chamada à Shopify falhou. true + invoiceUrl null = respondeu sem invoice_url. */
   requestOk: boolean;
   invoiceUrl: string | null;
+  draftOrderId: string | null;
+}
+
+export interface ShopifyVariantCheckoutDetail {
+  id: string;
+  numericId: number;
+  productId: string;
+  title: string;
+  productTitle: string;
+  price: number;
+  availableForSale: boolean;
+  quantityAvailable: number | null;
+  imageUrl: string | null;
+}
+
+export async function fetchVariantCheckoutDetails(
+  variantIds: string[],
+  storefrontToken: string,
+): Promise<Map<string, ShopifyVariantCheckoutDetail>> {
+  const result = await fetch(STOREFRONT_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Storefront-Access-Token": storefrontToken },
+    body: JSON.stringify({
+      query: `query($ids:[ID!]!){ nodes(ids:$ids){ ... on ProductVariant {
+        id title availableForSale quantityAvailable price { amount }
+        image { url }
+        product { id title }
+      } } }`,
+      variables: { ids: variantIds },
+    }),
+  });
+  if (!result.ok) throw new Error(`Falha ao consultar variantes Shopify (${result.status})`);
+  const body = await result.json();
+  if (body?.errors?.length) throw new Error("Shopify rejeitou a consulta de variantes");
+
+  const details = new Map<string, ShopifyVariantCheckoutDetail>();
+  for (const node of body?.data?.nodes ?? []) {
+    const price = Number(node?.price?.amount);
+    const numericId = Number(String(node?.id || "").split("/").pop());
+    if (!node?.id || !node?.product?.id || !Number.isFinite(price) || !Number.isSafeInteger(numericId)) continue;
+    details.set(node.id, {
+      id: node.id,
+      numericId,
+      productId: String(node.product.id),
+      title: String(node.title || ""),
+      productTitle: String(node.product?.title || "Produto"),
+      price,
+      availableForSale: Boolean(node.availableForSale),
+      quantityAvailable: Number.isFinite(Number(node.quantityAvailable)) ? Number(node.quantityAvailable) : null,
+      imageUrl: node.image?.url || null,
+    });
+  }
+  return details;
+}
+
+export interface ShopifyDeliveryOption {
+  handle: string;
+  code: string | null;
+  title: string;
+  description: string | null;
+  deliveryMethodType: string;
+  amount: number;
+  currencyCode: string;
+}
+
+export async function fetchShopifyDraftDeliveryOptions(input: {
+  items: Array<{ variantId: string; quantity: number }>;
+  customerName: string;
+  phone: string;
+  address: {
+    address1: string; number: string; address2?: string; neighborhood: string;
+    city: string; provinceCode: string; postalCode: string;
+  };
+}, adminToken: string): Promise<ShopifyDeliveryOption[]> {
+  const names = input.customerName.trim().split(/\s+/);
+  const firstName = names.shift() || "Cliente";
+  const response = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+    body: JSON.stringify({
+      query: `query DeliveryOptions($input: DraftOrderAvailableDeliveryOptionsInput!) {
+        draftOrderAvailableDeliveryOptions(input: $input, localPickupCount: 1) {
+          availableShippingRates { handle code title source price { amount currencyCode } }
+          availableLocalDeliveryRates { handle code title source price { amount currencyCode } }
+        }
+      }`,
+      variables: { input: {
+        lineItems: input.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+        marketRegionCountryCode: "BR",
+        shippingAddress: {
+          firstName,
+          lastName: names.join(" ") || firstName,
+          address1: `${input.address.address1}, ${input.address.number}`,
+          address2: [input.address.address2, input.address.neighborhood].filter(Boolean).join(" - ") || undefined,
+          city: input.address.city,
+          provinceCode: input.address.provinceCode,
+          zip: input.address.postalCode,
+          countryCode: "BR",
+          phone: `+55${input.phone.replace(/\D/g, "")}`,
+        },
+      } },
+    }),
+  });
+  if (!response.ok) throw new Error(`Falha ao calcular frete Shopify Admin (${response.status})`);
+  const body = await response.json();
+  if (body?.errors?.length) throw new Error(body.errors[0]?.message || "Shopify rejeitou o cálculo de frete");
+  const result = body?.data?.draftOrderAvailableDeliveryOptions;
+  const normalize = (rate: Record<string, unknown>, type: string): ShopifyDeliveryOption => ({
+    handle: String(rate.handle || ""),
+    code: typeof rate.code === "string" ? rate.code : null,
+    title: String(rate.title || "Entrega"),
+    description: typeof rate.source === "string" ? rate.source : null,
+    deliveryMethodType: type,
+    amount: Number((rate.price as { amount?: unknown })?.amount),
+    currencyCode: String((rate.price as { currencyCode?: unknown })?.currencyCode || "BRL"),
+  });
+  return [
+    ...(result?.availableShippingRates ?? []).map((rate: Record<string, unknown>) => normalize(rate, "SHIPPING")),
+    ...(result?.availableLocalDeliveryRates ?? []).map((rate: Record<string, unknown>) => normalize(rate, "LOCAL")),
+  ].filter((option: ShopifyDeliveryOption) => option.handle && Number.isFinite(option.amount));
+}
+
+export async function fetchShopifyDeliveryOptions(input: {
+  items: Array<{ variantId: string; quantity: number }>;
+  customerName: string;
+  email: string;
+  phone: string;
+  address: {
+    address1: string; number: string; address2?: string; neighborhood: string;
+    city: string; provinceCode: string; postalCode: string;
+  };
+}, storefrontToken: string): Promise<ShopifyDeliveryOption[]> {
+  const names = input.customerName.trim().split(/\s+/);
+  const firstName = names.shift() || "Cliente";
+  const lastName = names.join(" ") || firstName;
+  const result = await fetch(STOREFRONT_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Storefront-Access-Token": storefrontToken },
+    body: JSON.stringify({
+      query: `mutation ShippingOptions($input: CartInput!) {
+        cartCreate(input: $input) {
+          cart {
+            deliveryGroups(first: 10) { nodes {
+              deliveryOptions { handle code title description deliveryMethodType estimatedCost { amount currencyCode } }
+            } }
+          }
+          userErrors { field message }
+          warnings { message }
+        }
+      }`,
+      variables: {
+        input: {
+          lines: input.items.map((item) => ({ merchandiseId: item.variantId, quantity: item.quantity })),
+          buyerIdentity: { countryCode: "BR", email: input.email },
+          delivery: {
+            addresses: [{
+              selected: true,
+              oneTimeUse: true,
+              validationStrategy: "COUNTRY_CODE_ONLY",
+              address: { deliveryAddress: {
+                firstName,
+                lastName,
+                address1: `${input.address.address1}, ${input.address.number}`,
+                address2: [input.address.address2, input.address.neighborhood].filter(Boolean).join(" - ") || undefined,
+                city: input.address.city,
+                provinceCode: input.address.provinceCode,
+                zip: input.address.postalCode,
+                countryCode: "BR",
+                phone: `+55${input.phone.replace(/\D/g, "")}`,
+              } },
+            }],
+          },
+        },
+      },
+    }),
+  });
+  if (!result.ok) throw new Error(`Falha ao calcular frete Shopify (${result.status})`);
+  const body = await result.json();
+  const payload = body?.data?.cartCreate;
+  if (body?.errors?.length || payload?.userErrors?.length) {
+    throw new Error(payload?.userErrors?.[0]?.message || "Shopify rejeitou o endereço de entrega");
+  }
+  const options = (payload?.cart?.deliveryGroups?.nodes ?? [])
+    .flatMap((group: { deliveryOptions?: unknown[] }) => group.deliveryOptions ?? [])
+    .map((option: Record<string, unknown>) => ({
+      handle: String(option.handle || ""),
+      code: typeof option.code === "string" ? option.code : null,
+      title: String(option.title || "Entrega"),
+      description: typeof option.description === "string" ? option.description : null,
+      deliveryMethodType: String(option.deliveryMethodType || "SHIPPING"),
+      amount: Number((option.estimatedCost as { amount?: unknown })?.amount),
+      currencyCode: String((option.estimatedCost as { currencyCode?: unknown })?.currencyCode || "BRL"),
+    }))
+    .filter((option: ShopifyDeliveryOption) => option.handle && Number.isFinite(option.amount));
+  const unique = new Map<string, ShopifyDeliveryOption>();
+  for (const option of options) unique.set(option.handle, option);
+  return [...unique.values()];
 }
 
 export async function createDraftOrder(
@@ -226,9 +423,59 @@ export async function createDraftOrder(
   if (!draftRes.ok) {
     const errText = await draftRes.text();
     console.error("Draft order failed:", errText);
-    return { requestOk: false, invoiceUrl: null };
+    return { requestOk: false, invoiceUrl: null, draftOrderId: null };
   }
 
   const draftData = await draftRes.json();
-  return { requestOk: true, invoiceUrl: draftData?.draft_order?.invoice_url ?? null };
+  const draft = draftData?.draft_order;
+  return {
+    requestOk: true,
+    invoiceUrl: draft?.invoice_url ?? null,
+    draftOrderId: draft?.id ? String(draft.id) : null,
+  };
+}
+
+export interface CompleteDraftOrderResult {
+  requestOk: boolean;
+  orderId: string | null;
+  alreadyCompleted: boolean;
+}
+
+/** Conclui um draft já pago fora da Shopify, sem coletar novo pagamento. */
+export async function completeDraftOrder(
+  draftOrderId: string,
+  token: string,
+  paymentPending = false,
+): Promise<CompleteDraftOrderResult> {
+  const url = `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}/complete.json`;
+  const completed = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({ payment_pending: paymentPending }),
+  });
+
+  if (completed.ok) {
+    const body = await completed.json();
+    return {
+      requestOk: true,
+      orderId: body?.draft_order?.order_id ? String(body.draft_order.order_id) : null,
+      alreadyCompleted: false,
+    };
+  }
+
+  // Uma resposta pode ter se perdido depois de a Shopify concluir. Consulte o
+  // draft antes de considerar uma nova mutação.
+  const read = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
+    headers: { "X-Shopify-Access-Token": token },
+  });
+  if (read.ok) {
+    const body = await read.json();
+    const orderId = body?.draft_order?.order_id;
+    if (orderId) {
+      return { requestOk: true, orderId: String(orderId), alreadyCompleted: true };
+    }
+  }
+
+  console.error(`Falha ao concluir Draft Order ${draftOrderId}:`, completed.status, await completed.text());
+  return { requestOk: false, orderId: null, alreadyCompleted: false };
 }

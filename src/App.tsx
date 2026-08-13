@@ -21,6 +21,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
 const Profile = lazy(() => import("./pages/Profile.tsx"));
 const Catalog = lazy(() => import("./pages/Catalog.tsx"));
 const Cart = lazy(() => import("./pages/Cart.tsx"));
+const Checkout = lazy(() => import("./pages/Checkout.tsx"));
 
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const MeusPedidos = lazy(() => import("./pages/MeusPedidos.tsx"));
@@ -53,6 +54,7 @@ const AppContent = () => {
           <Route path="/" element={<Index />} />
           <Route path="/catalogo" element={<Catalog />} />
           <Route path="/carrinho" element={<Cart />} />
+          <Route path="/checkout" element={<Checkout />} />
           <Route path="/product/:handle" element={<ProductDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />

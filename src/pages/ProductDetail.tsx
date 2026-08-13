@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { cachedStorefrontApiRequest, fetchShopifyProductByHandle, getCachedShopifyProductByHandle, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
 import { useCartStore } from "@/stores/cartStore";
@@ -29,8 +29,10 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { goToCheckout } from "@/lib/checkout";
 import { ProductImage } from "@/components/ProductImage";
+import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
 
 const ProductDetail = () => {
+  const navigate = useNavigate();
   const { handle } = useParams<{ handle: string }>();
   const [product, setProduct] = useState<ShopifyProduct | null>(
     () => getCachedShopifyProductByHandle(handle),
@@ -294,6 +296,12 @@ const ProductDetail = () => {
   const handleBuyNow = async () => {
     if (!variant) return;
     setBuyingNow(true);
+
+    if (customCheckoutEnabled) {
+      startCustomCheckout(navigate, [{ variantId: variant.id, quantity }], "buy_now");
+      setBuyingNow(false);
+      return;
+    }
 
     if (isFranchisee) {
       try {

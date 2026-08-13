@@ -1,18 +1,24 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronRight,
   Crown,
   ExternalLink,
+  Loader2,
   LogOut,
   Mail,
+  MapPin,
   Package,
+  Plus,
   RotateCcw,
   ShieldCheck,
   ShoppingBag,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -40,6 +46,42 @@ interface OrderSummary {
   savings: number;
   order_status_url: string;
 }
+
+interface AccountAddress {
+  id: string | null;
+  label: string;
+  recipientName: string;
+  address1: string;
+  address2: string;
+  number: string;
+  neighborhood: string;
+  city: string;
+  provinceCode: string;
+  postalCode: string;
+  countryCode: "BR";
+  isDefaultShipping: boolean;
+}
+
+interface AccountContact {
+  name: string;
+  email: string;
+  cpfCnpj: string;
+  mobilePhone: string;
+}
+
+const emptyAccountAddress = (): AccountAddress => ({ id: null, label: "Casa", recipientName: "", address1: "", address2: "", number: "", neighborhood: "", city: "", provinceCode: "", postalCode: "", countryCode: "BR", isDefaultShipping: false });
+const onlyDigits = (value: string) => value.replace(/\D/g, "");
+const maskCep = (value: string) => onlyDigits(value).slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
+const maskCpfCnpj = (value: string) => {
+  const raw = onlyDigits(value).slice(0, 14);
+  if (raw.length <= 11) return raw.replace(/^(\d{3})(\d)/, "$1.$2").replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1-$2");
+  return raw.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\/\d{4})(\d)/, "$1-$2");
+};
+const maskPhone = (value: string) => {
+  const raw = onlyDigits(value).slice(0, 11);
+  if (raw.length < 3) return raw ? `(${raw}` : "";
+  return raw.length <= 10 ? raw.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2") : raw.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+};
 
 const formatCurrency = (value: number, currency = "BRL") =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
@@ -71,10 +113,23 @@ const Profile = () => {
   const { isSubscribed } = useSubscription();
   const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnToCheckout = searchParams.get("retorno") === "checkout";
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [totalSavings, setTotalSavings] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [addresses, setAddresses] = useState<AccountAddress[]>([]);
+  const [contact, setContact] = useState<AccountContact>({ name: "", email: "", cpfCnpj: "", mobilePhone: "" });
+  const [contactLoading, setContactLoading] = useState(true);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [contactError, setContactError] = useState("");
+  const [addressesLoading, setAddressesLoading] = useState(true);
+  const [addressFormOpen, setAddressFormOpen] = useState(false);
+  const [addressForm, setAddressForm] = useState<AccountAddress>(emptyAccountAddress);
+  const [addressBusy, setAddressBusy] = useState(false);
+  const [addressError, setAddressError] = useState("");
+  const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate("/login", { replace: true });
@@ -94,6 +149,45 @@ const Profile = () => {
       setOrdersLoading(false);
     });
   }, [user]);
+
+  const loadAddresses = useCallback(async () => {
+    if (!user) return;
+    setAddressesLoading(true);
+    const { data, error } = await supabase.functions.invoke("checkout-customer-data", { body: { action: "get" } });
+    if (!error && data?.customer) {
+      setContact({ name: String(data.customer.name || ""), email: String(data.customer.email || user.email || ""), cpfCnpj: maskCpfCnpj(String(data.customer.cpfCnpj || "")), mobilePhone: maskPhone(String(data.customer.mobilePhone || "")) });
+    }
+    if (!error && data?.addresses) {
+      setAddresses((data.addresses as Record<string, unknown>[]).filter((item) => typeof item.id === "string").map((item) => ({
+        id: String(item.id), label: String(item.label || "Casa"), recipientName: String(item.recipient_name || ""),
+        address1: String(item.address1 || ""), address2: String(item.address2 || ""), number: String(item.number || ""),
+        neighborhood: String(item.neighborhood || ""), city: String(item.city || ""), provinceCode: String(item.province_code || ""),
+        postalCode: maskCep(String(item.postal_code || "")), countryCode: "BR", isDefaultShipping: Boolean(item.is_default_shipping),
+      })));
+    }
+    setContactLoading(false);
+    setAddressesLoading(false);
+  }, [user]);
+
+  useEffect(() => { void loadAddresses(); }, [loadAddresses]);
+
+  useEffect(() => {
+    const cep = onlyDigits(addressForm.postalCode);
+    if (!addressFormOpen || cep.length !== 8) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCepLoading(true); setAddressError("");
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: controller.signal });
+        const data = await response.json() as { erro?: boolean; logradouro?: string; complemento?: string; bairro?: string; localidade?: string; uf?: string };
+        if (!response.ok || data.erro) { setAddressError("CEP não encontrado. Confira ou preencha manualmente."); return; }
+        setAddressForm((current) => ({ ...current, address1: data.logradouro || current.address1, address2: current.address2 || data.complemento || "", neighborhood: data.bairro || current.neighborhood, city: data.localidade || current.city, provinceCode: data.uf || current.provinceCode }));
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) setAddressError("Não foi possível consultar o CEP. Preencha manualmente.");
+      } finally { setCepLoading(false); }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [addressForm.postalCode, addressFormOpen]);
 
   if (loading || !user) {
     return (
@@ -115,6 +209,48 @@ const Profile = () => {
     await logout();
     toast.success("Sessão encerrada.");
     navigate("/");
+  };
+
+  const openNewAddress = () => {
+    setAddressForm({ ...emptyAccountAddress(), recipientName: fullName });
+    setAddressError("");
+    setAddressFormOpen(true);
+  };
+
+  const editAddress = (address: AccountAddress) => {
+    setAddressForm({ ...address });
+    setAddressError("");
+    setAddressFormOpen(true);
+  };
+
+  const saveAddress = async () => {
+    const required = addressForm.label.trim() && addressForm.recipientName.trim() && onlyDigits(addressForm.postalCode).length === 8 && addressForm.address1.trim() && addressForm.number.trim() && addressForm.neighborhood.trim() && addressForm.city.trim() && /^[A-Za-z]{2}$/.test(addressForm.provinceCode);
+    if (!required) { setAddressError("Preencha todos os campos obrigatórios do endereço."); return; }
+    setAddressBusy(true); setAddressError("");
+    const { error } = await supabase.functions.invoke("checkout-customer-data", { body: {
+      action: "save_address", addressId: addressForm.id, label: addressForm.label, recipientName: addressForm.recipientName,
+      address: addressForm, defaultShipping: addressForm.isDefaultShipping || addresses.length === 0, defaultBilling: addressForm.isDefaultShipping || addresses.length === 0,
+    } });
+    setAddressBusy(false);
+    if (error) { setAddressError("Não foi possível salvar o endereço. Tente novamente."); return; }
+    toast.success("Endereço salvo."); setAddressFormOpen(false); await loadAddresses();
+  };
+
+  const deleteAddress = async (addressId: string) => {
+    const { error } = await supabase.functions.invoke("checkout-customer-data", { body: { action: "delete_address", addressId } });
+    if (error) { toast.error("Não foi possível remover o endereço."); return; }
+    toast.success("Endereço removido."); await loadAddresses();
+  };
+
+  const saveContact = async () => {
+    if (contact.name.trim().length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email) || ![11, 14].includes(onlyDigits(contact.cpfCnpj).length) || ![10, 11].includes(onlyDigits(contact.mobilePhone).length)) {
+      setContactError("Preencha nome, e-mail, CPF ou CNPJ e celular corretamente."); return;
+    }
+    setContactBusy(true); setContactError("");
+    const { data, error } = await supabase.functions.invoke("checkout-customer-data", { body: { action: "save_contact", customer: contact, billingSameAsShipping: true } });
+    setContactBusy(false);
+    if (error || data?.error) { setContactError(data?.error || "Não foi possível salvar seus dados. Confira o CPF ou CNPJ."); return; }
+    toast.success("Dados pessoais salvos.");
   };
 
   const accountLinks = [
@@ -291,6 +427,31 @@ const Profile = () => {
               )}
             </aside>
 
+            <div className="space-y-6">
+            {returnToCheckout && <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold text-foreground">Complete o cadastro para finalizar sua compra</p><p className="text-sm text-muted-foreground">Depois de salvar seus dados e endereço, volte ao checkout.</p></div><Button asChild className="shrink-0"><Link to="/checkout">Voltar ao checkout</Link></Button></div>}
+            <section className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="border-b border-border px-5 py-4 md:px-6">
+                <h2 className="font-display text-lg font-bold text-foreground">Meus dados</h2>
+                <p className="text-sm text-muted-foreground">Usados na nota fiscal, cobrança e identificação dos seus pedidos.</p>
+              </div>
+              <div className="p-4 md:p-5">
+                {contactLoading ? <div className="h-24 animate-pulse rounded-xl bg-muted/60" /> : <><div className="grid gap-3 sm:grid-cols-2"><ProfileField label="Nome completo"><Input autoComplete="name" value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></ProfileField><ProfileField label="E-mail para nota e comprovante"><Input type="email" autoComplete="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></ProfileField><ProfileField label="CPF ou CNPJ"><Input inputMode="numeric" maxLength={18} placeholder="000.000.000-00" value={contact.cpfCnpj} onChange={(event) => setContact({ ...contact, cpfCnpj: maskCpfCnpj(event.target.value) })} /></ProfileField><ProfileField label="Celular"><Input inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 00000-0000" value={contact.mobilePhone} onChange={(event) => setContact({ ...contact, mobilePhone: maskPhone(event.target.value) })} /></ProfileField></div>{contactError && <p className="mt-3 text-sm font-medium text-destructive">{contactError}</p>}<Button type="button" className="mt-4 w-full sm:w-auto" disabled={contactBusy} onClick={() => void saveContact()}>{contactBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar meus dados</Button></>}
+              </div>
+            </section>
+            <section className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 md:px-6">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-foreground">Meus endereços</h2>
+                  <p className="text-sm text-muted-foreground">Use no checkout sem preencher tudo novamente.</p>
+                </div>
+                <Button type="button" size="sm" className="shrink-0 rounded-full" onClick={openNewAddress}><Plus className="mr-1.5 h-4 w-4" />Adicionar</Button>
+              </div>
+              <div className="p-4 md:p-5">
+                {addressesLoading ? <div className="h-20 animate-pulse rounded-xl bg-muted/60" /> : addresses.length === 0 && !addressFormOpen ? <div className="flex flex-col items-center py-8 text-center"><MapPin className="h-9 w-9 text-muted-foreground" /><p className="mt-3 font-bold">Nenhum endereço cadastrado</p><p className="mt-1 text-sm text-muted-foreground">Cadastre agora para agilizar sua próxima compra.</p><Button type="button" variant="outline" className="mt-4 rounded-full" onClick={openNewAddress}>Cadastrar endereço</Button></div> : <div className="grid gap-3 sm:grid-cols-2">{addresses.map((address) => <article key={address.id} className="relative rounded-xl border border-border p-4"><div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><MapPin className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong>{address.label}</strong>{address.isDefaultShipping && <Badge variant="outline" className="border-pet-green/30 bg-pet-green/10 text-pet-green">Padrão</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{address.address1}, {address.number}{address.address2 ? `, ${address.address2}` : ""}</p><p className="text-sm text-muted-foreground">{address.neighborhood} • {address.city}/{address.provinceCode} • {address.postalCode}</p></div></div><div className="mt-3 flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => editAddress(address)}>Editar</Button>{address.id && <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => void deleteAddress(address.id!)} aria-label={`Remover endereço ${address.label}`}><Trash2 className="h-4 w-4" /></Button>}</div></article>)}</div>}
+                {addressFormOpen && <div className="mt-4 rounded-xl border border-primary/20 bg-muted/20 p-4"><div className="mb-4 flex items-center justify-between"><h3 className="font-bold">{addressForm.id ? "Editar endereço" : "Novo endereço"}</h3><Button type="button" variant="ghost" size="sm" onClick={() => setAddressFormOpen(false)}>Cancelar</Button></div><div className="grid gap-3 sm:grid-cols-2"><ProfileField label="Nome do endereço"><Input placeholder="Casa, Trabalho..." value={addressForm.label} onChange={(event) => setAddressForm({ ...addressForm, label: event.target.value })} /></ProfileField><ProfileField label="Destinatário"><Input value={addressForm.recipientName} onChange={(event) => setAddressForm({ ...addressForm, recipientName: event.target.value })} /></ProfileField><ProfileField label="CEP"><div className="relative"><Input placeholder="00000-000" maxLength={9} inputMode="numeric" value={addressForm.postalCode} onChange={(event) => setAddressForm({ ...addressForm, postalCode: maskCep(event.target.value) })} />{cepLoading && <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-primary" />}</div></ProfileField><ProfileField label="Rua"><Input value={addressForm.address1} onChange={(event) => setAddressForm({ ...addressForm, address1: event.target.value })} /></ProfileField><ProfileField label="Número"><Input value={addressForm.number} onChange={(event) => setAddressForm({ ...addressForm, number: event.target.value })} /></ProfileField><ProfileField label="Complemento"><Input placeholder="Opcional" value={addressForm.address2} onChange={(event) => setAddressForm({ ...addressForm, address2: event.target.value })} /></ProfileField><ProfileField label="Bairro"><Input value={addressForm.neighborhood} onChange={(event) => setAddressForm({ ...addressForm, neighborhood: event.target.value })} /></ProfileField><ProfileField label="Cidade"><Input value={addressForm.city} onChange={(event) => setAddressForm({ ...addressForm, city: event.target.value })} /></ProfileField><ProfileField label="UF"><Input maxLength={2} value={addressForm.provinceCode} onChange={(event) => setAddressForm({ ...addressForm, provinceCode: event.target.value.toUpperCase() })} /></ProfileField></div><label className="mt-4 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={addressForm.isDefaultShipping} onChange={(event) => setAddressForm({ ...addressForm, isDefaultShipping: event.target.checked })} />Usar como endereço padrão</label>{addressError && <p className="mt-3 text-sm font-medium text-destructive">{addressError}</p>}<Button type="button" className="mt-4 w-full sm:w-auto" disabled={addressBusy} onClick={() => void saveAddress()}>{addressBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar endereço</Button></div>}
+              </div>
+            </section>
+
             <section className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 md:px-6">
                 <div>
@@ -414,6 +575,7 @@ const Profile = () => {
                 )}
               </div>
             </section>
+            </div>
           </div>
         </div>
       </main>
@@ -422,5 +584,9 @@ const Profile = () => {
     </div>
   );
 };
+
+function ProfileField({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="space-y-1.5"><Label className="text-sm">{label}</Label>{children}</div>;
+}
 
 export default Profile;

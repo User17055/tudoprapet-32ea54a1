@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { gsap } from "gsap";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -15,8 +15,10 @@ import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
 
 export const CartDrawer = () => {
+  const navigate = useNavigate();
   const [checkingOut, setCheckingOut] = useState(false);
   const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
@@ -87,6 +89,15 @@ export const CartDrawer = () => {
   const handleCheckout = async () => {
     setCheckingOut(true);
     try {
+      if (customCheckoutEnabled) {
+        setCartOpen(false);
+        startCustomCheckout(
+          navigate,
+          items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+          "cart",
+        );
+        return;
+      }
       if (isFranchisee) {
         try {
           const lineItems = items.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
