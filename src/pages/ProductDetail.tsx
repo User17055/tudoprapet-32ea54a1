@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { cachedStorefrontApiRequest, fetchShopifyProductByHandle, getCachedShopifyProductByHandle, PRODUCT_RECOMMENDATIONS_QUERY, PRODUCTS_QUERY, ShopifyProduct, createInstantCheckoutUrl } from "@/lib/shopify";
 import { ProductCard } from "@/components/ProductCard";
+import { isProductAvailable } from "@/lib/productAvailability";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
@@ -257,8 +258,8 @@ const ProductDetail = () => {
   );
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
-  const visibleRecommended = recommended.filter((item) =>
-    isVisibleTo(item.node.id, isFranchisee),
+  const visibleRecommended = recommended.filter(
+    (item) => isProductAvailable(item) && isVisibleTo(item.node.id, isFranchisee),
   );
   const mainImage = images[selectedImageIdx]?.node || images[0]?.node;
   const price = parseFloat(variant?.price?.amount || "0");

@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
+import { isProductAvailable } from "@/lib/productAvailability";
 
 interface FeaturedProduct {
   shopify_product_id: string;
@@ -45,7 +46,7 @@ export const ProductGrid = () => {
         setAllProducts(shopifyProducts);
         if (featuredData.error) {
           console.error("Failed to fetch featured products:", featuredData.error);
-          setProducts(shopifyProducts.slice(0, 12));
+          setProducts(shopifyProducts.filter(isProductAvailable).slice(0, 12));
           return;
         }
 
@@ -54,7 +55,7 @@ export const ProductGrid = () => {
         );
 
         if (featuredIds.length === 0) {
-          setProducts(shopifyProducts.slice(0, 12));
+          setProducts(shopifyProducts.filter(isProductAvailable).slice(0, 12));
           return;
         }
 
@@ -106,8 +107,9 @@ export const ProductGrid = () => {
           </div>
         ) : (() => {
           const audienceVisible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
-          const visibleIds = new Set(audienceVisible.map((product) => product.node.id));
-          const visible = audienceVisible.filter((product) => {
+          const available = audienceVisible.filter(isProductAvailable);
+          const visibleIds = new Set(available.map((product) => product.node.id));
+          const visible = available.filter((product) => {
             const group = getVariations(product.node.id);
             const representative = group.find((item) => visibleIds.has(item.shopify_product_id));
             return !representative || representative.shopify_product_id === product.node.id;

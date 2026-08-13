@@ -119,10 +119,7 @@ export const Header = () => {
         }
         if (cancelled) return;
 
-        const availableProducts = products
-          .filter((product) =>
-            product.node.variants.edges.some((variant) => variant.node.availableForSale),
-          )
+        const matchingProducts = products
           .filter((product) =>
             isAudienceVisibleTo(
               audienceMap.get(product.node.id) ?? null,
@@ -131,7 +128,7 @@ export const Header = () => {
           )
           .slice(0, 6);
 
-        setSearchResults(availableProducts);
+        setSearchResults(matchingProducts);
       } catch (error) {
         if (!cancelled) {
           console.error("Failed to load search preview:", error);
@@ -251,7 +248,7 @@ export const Header = () => {
         ) : (
           <div className="px-5 py-8 text-center">
             <Package className="mx-auto mb-2 h-7 w-7 text-muted-foreground" />
-            <p className="text-sm font-semibold text-foreground">Nenhum produto disponível</p>
+            <p className="text-sm font-semibold text-foreground">Nenhum produto encontrado</p>
             <p className="mt-1 text-xs text-muted-foreground">Tente buscar por outro nome.</p>
           </div>
         )}

@@ -26,6 +26,7 @@ import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { fuzzySearch } from "@/lib/fuzzySearch";
+import { isProductAvailable } from "@/lib/productAvailability";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -203,9 +204,16 @@ const Catalog = () => {
     getVariations,
     isVisibleTo,
   ]);
-  const audienceVisibleIds = useMemo(
-    () => new Set(audienceVisibleProducts.map((product) => product.node.id)),
-    [audienceVisibleProducts],
+  const hasRequestedSearch = requestedSearch.trim().length > 0;
+  const discoverableProducts = useMemo(
+    () => hasRequestedSearch
+      ? audienceVisibleProducts
+      : audienceVisibleProducts.filter(isProductAvailable),
+    [audienceVisibleProducts, hasRequestedSearch],
+  );
+  const discoverableIds = useMemo(
+    () => new Set(discoverableProducts.map((product) => product.node.id)),
+    [discoverableProducts],
   );
 
   // Build per-key value list (union of preset values + values used on products)
@@ -237,29 +245,29 @@ const Catalog = () => {
     productBrands.forEach((pb) => { if (pb.brand_id) productBrandMap.set(pb.shopify_product_id, pb.brand_id); });
     for (const b of brands) {
       let n = 0;
-      for (const p of audienceVisibleProducts) if (productBrandMap.get(p.node.id) === b.id) n++;
+      for (const p of discoverableProducts) if (productBrandMap.get(p.node.id) === b.id) n++;
       m.set(b.slug, n);
     }
     return m;
-  }, [brands, productBrands, audienceVisibleProducts]);
+  }, [brands, productBrands, discoverableProducts]);
 
   const priceCount = useMemo(() => {
-    return PRICE_RANGES.map((r) => audienceVisibleProducts.filter((p) => {
+    return PRICE_RANGES.map((r) => discoverableProducts.filter((p) => {
       const price = productPrice(p);
       return price >= r.min && price <= r.max;
     }).length);
-  }, [audienceVisibleProducts]);
+  }, [discoverableProducts]);
 
   const attrCount = (key: string, value: string) =>
     productAttrs.filter(
       (a) =>
-        audienceVisibleIds.has(a.shopify_product_id) &&
+        discoverableIds.has(a.shopify_product_id) &&
         a.attr_key === key &&
         a.attr_value === value,
     ).length;
 
   const filteredProducts = useMemo(() => {
-    let result = [...audienceVisibleProducts];
+    let result = [...discoverableProducts];
 
     // busca tolerante a erros de digitacao
     const term = requestedSearch.trim();
@@ -320,7 +328,7 @@ const Catalog = () => {
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
 
     return result;
-  }, [audienceVisibleProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+  }, [discoverableProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =
