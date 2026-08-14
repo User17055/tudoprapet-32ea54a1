@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { corsHeadersWith, jsonResponse } from "../_shared/cors.ts";
 import {
   mapAsaasPaymentStatus,
+  isPaidPaymentStatus,
   parseAsaasEvent,
   retryDelaySeconds,
   shouldApplyPaymentStatus,
@@ -18,6 +19,7 @@ interface PaymentRow {
   is_active: boolean;
   provider_payment_id: string | null;
   method: "pix" | "boleto" | "credit_card" | "terms";
+  pix_expires_at?: string | null;
 }
 
 interface EventRow {
@@ -111,7 +113,7 @@ async function flagDuplicatePayment(admin: SupabaseClient, payment: PaymentRow) 
   const { data: another, error } = await admin.from("payments")
     .select("id")
     .eq("checkout_session_id", payment.checkout_session_id)
-    .eq("status", "received")
+    .in("status", ["confirmed", "received"])
     .neq("id", payment.id)
     .limit(1)
     .maybeSingle();
@@ -128,14 +130,44 @@ async function flagDuplicatePayment(admin: SupabaseClient, payment: PaymentRow) 
   return true;
 }
 
+async function settlePaidPayment(
+  admin: SupabaseClient,
+  payment: PaymentRow,
+  status: "confirmed" | "received",
+  rawStatus: string,
+) {
+  const now = new Date().toISOString();
+  const { error: updateError } = await admin.from("payments").update({
+    status,
+    raw_status: rawStatus,
+    is_active: false,
+    ...(status === "confirmed" ? { confirmed_at: now } : { received_at: now }),
+  }).eq("id", payment.id);
+  if (updateError) throw updateError;
+
+  const paid = { ...payment, status, is_active: false };
+  const duplicate = await flagDuplicatePayment(admin, paid);
+  await enqueueCancellationOfOtherAttempts(admin, paid);
+  if (!duplicate) await finalizePaidCheckout(admin, paid);
+}
+
 async function processCancellationAction(admin: SupabaseClient, action: ActionRow) {
   const { data: payment, error } = await admin.from("payments")
-    .select("id,status,provider_payment_id")
+    .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
     .eq("id", action.payment_id)
     .single();
   if (error) throw error;
 
-  if (["received", "confirmed", "refunded", "chargeback"].includes(payment.status)) {
+  if (["received", "confirmed"].includes(payment.status)) {
+    await settlePaidPayment(
+      admin,
+      payment as PaymentRow,
+      payment.status as "confirmed" | "received",
+      String(payment.status).toUpperCase(),
+    );
+    return;
+  }
+  if (["refunded", "chargeback"].includes(payment.status)) {
     // A corrida foi vencida pelo pagamento; o webhook é a autoridade financeira.
     return;
   }
@@ -155,13 +187,7 @@ async function processCancellationAction(admin: SupabaseClient, action: ActionRo
     const localStatus = remoteStatus === "RECEIVED" || remoteStatus === "RECEIVED_IN_CASH"
       ? "received"
       : "confirmed";
-    const { error: paidError } = await admin.from("payments").update({
-      status: localStatus,
-      is_active: localStatus !== "received",
-      raw_status: remoteStatus,
-      ...(localStatus === "received" ? { received_at: new Date().toISOString() } : {}),
-    }).eq("id", payment.id);
-    if (paidError) throw paidError;
+    await settlePaidPayment(admin, payment as PaymentRow, localStatus, remoteStatus);
     return;
   }
 
@@ -173,6 +199,89 @@ async function processCancellationAction(admin: SupabaseClient, action: ActionRo
     provider_deleted_at: new Date().toISOString(),
   }).eq("id", payment.id);
   if (cancelledError) throw cancelledError;
+}
+
+async function expirePixPayments(admin: SupabaseClient) {
+  const now = new Date().toISOString();
+  const { data, error } = await admin.from("payments")
+    .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
+    .eq("method", "pix")
+    .eq("is_active", true)
+    .in("status", ["pending", "processing"])
+    .not("pix_expires_at", "is", null)
+    .lte("pix_expires_at", now)
+    .order("pix_expires_at", { ascending: true })
+    .limit(25);
+  if (error) throw error;
+
+  let paid = 0;
+  let queued = 0;
+  let failed = 0;
+  for (const row of (data ?? []) as PaymentRow[]) {
+    try {
+      if (!row.provider_payment_id) {
+        await admin.from("payments").update({ status: "cancelled", is_active: false })
+          .eq("id", row.id).in("status", ["pending", "processing"]);
+        await admin.from("checkout_sessions").update({ status: "expired" })
+          .eq("id", row.checkout_session_id).in("status", ["awaiting_payment", "payment_processing"]);
+        queued++;
+        continue;
+      }
+
+      const remote = await getAsaasPayment(row.provider_payment_id);
+      const remoteStatus = String(remote.status || "").toUpperCase();
+      if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+        const localStatus = remoteStatus === "CONFIRMED" ? "confirmed" : "received";
+        const reconciliationId = `reconcile:${row.provider_payment_id}:${remoteStatus}`;
+        const { error: eventError } = await admin.from("payment_events").upsert({
+          provider: "asaas",
+          provider_event_id: reconciliationId,
+          provider_payment_id: row.provider_payment_id,
+          event_type: `PAYMENT_${remoteStatus}`,
+          payload: {
+            id: reconciliationId,
+            event: `PAYMENT_${remoteStatus}`,
+            payment: {
+              id: row.provider_payment_id,
+              status: remoteStatus,
+              externalReference: remote.externalReference || null,
+            },
+          },
+        }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
+        if (eventError) throw eventError;
+        await settlePaidPayment(admin, row, localStatus, remoteStatus);
+        paid++;
+        continue;
+      }
+
+      if (!["PENDING", "OVERDUE"].includes(remoteStatus)) {
+        throw new Error(`Cobrança expirada com status inesperado: ${remoteStatus || "vazio"}`);
+      }
+
+      const { error: paymentError } = await admin.from("payments")
+        .update({ status: "cancellation_requested" })
+        .eq("id", row.id)
+        .in("status", ["pending", "processing"]);
+      if (paymentError) throw paymentError;
+      const { error: sessionError } = await admin.from("checkout_sessions")
+        .update({ status: "expired" })
+        .eq("id", row.checkout_session_id)
+        .in("status", ["awaiting_payment", "payment_processing"]);
+      if (sessionError) throw sessionError;
+      const { error: actionError } = await admin.from("payment_actions").upsert({
+        payment_id: row.id,
+        action_type: "cancel_provider_charge",
+        status: "PENDING",
+        next_attempt_at: now,
+      }, { onConflict: "payment_id,action_type", ignoreDuplicates: true });
+      if (actionError) throw actionError;
+      queued++;
+    } catch (expirationError) {
+      failed++;
+      console.error(`Falha ao expirar Pix ${row.id}:`, expirationError);
+    }
+  }
+  return { claimed: (data ?? []).length, paid, queued, failed };
 }
 
 async function processActions(admin: SupabaseClient) {
@@ -238,12 +347,13 @@ async function processEvent(admin: SupabaseClient, row: EventRow) {
     if (error) throw error;
   }
 
-  if (next === "received") {
-    const duplicate = await flagDuplicatePayment(admin, payment);
-    await enqueueCancellationOfOtherAttempts(admin, payment);
-    if (!duplicate) await finalizePaidCheckout(admin, payment);
-  } else if (next === "confirmed" && payment.method === "credit_card") {
-    await finalizePaidCheckout(admin, payment);
+  if (isPaidPaymentStatus(next) && !["refunded", "chargeback"].includes(payment.status)) {
+    await settlePaidPayment(
+      admin,
+      payment,
+      next,
+      parsed.providerStatus || parsed.eventType,
+    );
   }
 }
 
@@ -261,6 +371,13 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  let expirations;
+  try {
+    expirations = await expirePixPayments(admin);
+  } catch (expirationError) {
+    console.error("Falha ao expirar cobranças Pix:", expirationError);
+    return jsonResponse({ error: "Falha ao expirar cobranças Pix" }, 500);
+  }
   let actions;
   try {
     actions = await processActions(admin);
@@ -299,5 +416,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse({ events: { claimed: (data ?? []).length, processed, failed }, actions });
+  return jsonResponse({ events: { claimed: (data ?? []).length, processed, failed }, actions, expirations });
 });

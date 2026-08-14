@@ -102,7 +102,12 @@ export function shouldApplyPaymentStatus(
   return STATUS_RANK[next] >= STATUS_RANK[current];
 }
 
+export function isPaidPaymentStatus(
+  status: LocalPaymentStatus,
+): status is "confirmed" | "received" {
+  return status === "confirmed" || status === "received";
+}
+
 export function retryDelaySeconds(attempt: number): number {
   return Math.min(3600, Math.max(30, 30 * (2 ** Math.max(0, attempt - 1))));
 }
-

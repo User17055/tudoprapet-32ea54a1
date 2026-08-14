@@ -30,6 +30,7 @@ function safePaymentResponse(
   status: string,
   qr?: { encodedImage: string; payload: string; expirationDate: string } | null,
   invoiceUrl?: string | null,
+  pixExpiresAt?: string | null,
 ) {
   return {
     sessionId,
@@ -37,7 +38,8 @@ function safePaymentResponse(
     status,
     pixQrCode: qr?.encodedImage ?? null,
     pixCopyPaste: qr?.payload ?? null,
-    expiresAt: qr?.expirationDate ?? null,
+    expiresAt: pixExpiresAt ?? null,
+    providerExpiresAt: qr?.expirationDate ?? null,
     invoiceUrl: invoiceUrl ?? null,
   };
 }
@@ -121,7 +123,11 @@ Deno.serve(async (req) => {
       }
       if (active.provider_payment_id && method === "pix" && active.status !== "confirmed") {
         const qr = await getAsaasPixQrCode(active.provider_payment_id);
-        return jsonResponse(safePaymentResponse(sessionId, active.id, active.status, qr));
+        const pixExpiresAt = active.pix_expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        if (!active.pix_expires_at) {
+          await admin.from("payments").update({ pix_expires_at: pixExpiresAt }).eq("id", active.id);
+        }
+        return jsonResponse(safePaymentResponse(sessionId, active.id, active.status, qr, null, pixExpiresAt));
       }
       return jsonResponse(safePaymentResponse(sessionId, active.id, active.status, null));
     }
@@ -323,11 +329,15 @@ Deno.serve(async (req) => {
     }
 
     const qr = await getAsaasPixQrCode(providerPayment.id);
+    const pixExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     await Promise.all([
-      admin.from("payments").update({ provider_expires_at: qr.expirationDate }).eq("id", paymentAttempt.id),
+      admin.from("payments").update({
+        provider_expires_at: qr.expirationDate,
+        pix_expires_at: pixExpiresAt,
+      }).eq("id", paymentAttempt.id),
       admin.from("checkout_sessions").update({ status: "payment_processing" }).eq("id", sessionId),
     ]);
-    return jsonResponse(safePaymentResponse(sessionId, paymentAttempt.id, "pending", qr));
+    return jsonResponse(safePaymentResponse(sessionId, paymentAttempt.id, "pending", qr, null, pixExpiresAt));
   } catch (error) {
     console.error("checkout-payment:", error);
     const message = error instanceof Error ? error.message : "";

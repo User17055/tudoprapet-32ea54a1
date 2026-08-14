@@ -542,6 +542,11 @@ export default function Checkout() {
       });
       if (stopped || !data) return;
       if (data.summary) setSummary(data.summary);
+      if (data.payment?.expiresAt) {
+        setPayment((current) =>
+          current ? { ...current, expiresAt: data.payment.expiresAt } : current,
+        );
+      }
       if (["shopify_created", "credit_approved"].includes(data.status))
         finishSuccess();
       else if (["failed", "cancelled", "expired"].includes(data.status))
@@ -2075,13 +2080,49 @@ function CheckLine({
   );
 }
 function PaymentWaiting({ payment }: { payment: PaymentResult | null }) {
-  if (payment?.pixQrCode)
+  const [now, setNow] = useState(Date.now());
+  const expiresAt = payment?.expiresAt ? Date.parse(payment.expiresAt) : NaN;
+  const hasExpiration = Number.isFinite(expiresAt);
+  const remainingSeconds = hasExpiration
+    ? Math.max(0, Math.ceil((expiresAt - now) / 1000))
+    : null;
+  const expired = remainingSeconds === 0;
+
+  useEffect(() => {
+    if (!hasExpiration || expired) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [hasExpiration, expired]);
+
+  if (payment?.pixQrCode && expired)
+    return (
+      <div className="py-10 text-center sm:py-12">
+        <AlertCircle className="mx-auto mb-4 h-14 w-14 text-red-700" />
+        <h2 className="text-xl font-bold">Pix expirado</h2>
+        <p className="mx-auto mt-2 max-w-md text-slate-600">
+          O prazo de 15 minutos terminou. A cobrança será cancelada com
+          segurança e não pode mais ser reutilizada.
+        </p>
+      </div>
+    );
+
+  if (payment?.pixQrCode) {
+    const minutes = remainingSeconds === null
+      ? null
+      : Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds === null ? null : remainingSeconds % 60;
     return (
       <div className="text-center">
         <p className="mb-5 text-slate-600">
           Escaneie o QR Code ou copie o Pix. A confirmação aparece
           automaticamente.
         </p>
+        {minutes !== null && seconds !== null && (
+          <p className="mb-4 text-sm font-semibold text-blue-900" aria-live="polite">
+            Expira em {String(minutes).padStart(2, "0")}:
+            {String(seconds).padStart(2, "0")}
+          </p>
+        )}
         <img
           src={`data:image/png;base64,${payment.pixQrCode}`}
           alt="QR Code Pix"
@@ -2107,6 +2148,7 @@ function PaymentWaiting({ payment }: { payment: PaymentResult | null }) {
         <Wait />
       </div>
     );
+  }
   return (
     <div className="py-10 text-center sm:py-12">
       <CreditCard className="mx-auto mb-4 h-14 w-14 text-blue-900" />

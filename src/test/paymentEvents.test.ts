@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mapAsaasPaymentStatus,
+  isPaidPaymentStatus,
   parseAsaasEvent,
   retryDelaySeconds,
   shouldApplyPaymentStatus,
@@ -34,6 +35,13 @@ describe("eventos financeiros Asaas", () => {
     expect(mapAsaasPaymentStatus("PAYMENT_CHARGEBACK_REQUESTED", null)).toBe("chargeback");
   });
 
+  it("trata confirmação e recebimento como pagamento efetuado", () => {
+    expect(isPaidPaymentStatus("confirmed")).toBe(true);
+    expect(isPaidPaymentStatus("received")).toBe(true);
+    expect(isPaidPaymentStatus("pending")).toBe(false);
+    expect(isPaidPaymentStatus("cancelled")).toBe(false);
+  });
+
   it("não deixa evento atrasado rebaixar pagamento recebido", () => {
     expect(shouldApplyPaymentStatus("received", "pending")).toBe(false);
     expect(shouldApplyPaymentStatus("received", "overdue")).toBe(false);
@@ -47,4 +55,3 @@ describe("eventos financeiros Asaas", () => {
     expect(retryDelaySeconds(99)).toBe(3600);
   });
 });
-

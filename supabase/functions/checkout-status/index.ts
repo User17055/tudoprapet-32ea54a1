@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: payment } = await admin.from("payments")
-      .select("id,attempt_number,method,status,amount,due_date,provider_expires_at,created_at")
+      .select("id,attempt_number,method,status,amount,due_date,provider_expires_at,pix_expires_at,created_at")
       .eq("checkout_session_id", sessionId)
       .order("attempt_number", { ascending: false })
       .limit(1).maybeSingle();
@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
         status: payment.status,
         amount: payment.amount,
         dueDate: payment.due_date,
-        expiresAt: payment.provider_expires_at,
+        expiresAt: payment.pix_expires_at,
+        providerExpiresAt: payment.provider_expires_at,
       } : null,
       orderId: session.shopify_order_id,
       updatedAt: session.updated_at,
@@ -63,4 +64,3 @@ Deno.serve(async (req) => {
     return errorResponse("Não foi possível consultar o checkout", 500);
   }
 });
-
