@@ -230,21 +230,36 @@ export async function fetchVariantCheckoutDetails(
   variantIds: string[],
   storefrontToken: string,
 ): Promise<Map<string, ShopifyVariantCheckoutDetail>> {
-  const result = await fetch(STOREFRONT_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Storefront-Access-Token": storefrontToken },
-    body: JSON.stringify({
-      query: `query($ids:[ID!]!){ nodes(ids:$ids){ ... on ProductVariant {
-        id title availableForSale quantityAvailable price { amount }
+  const buildQuery = (withInventory: boolean) => `query($ids:[ID!]!){ nodes(ids:$ids){ ... on ProductVariant {
+        id title availableForSale ${withInventory ? "quantityAvailable" : ""} price { amount }
         image { url }
         product { id title }
-      } } }`,
-      variables: { ids: variantIds },
-    }),
-  });
-  if (!result.ok) throw new Error(`Falha ao consultar variantes Shopify (${result.status})`);
-  const body = await result.json();
-  if (body?.errors?.length) throw new Error("Shopify rejeitou a consulta de variantes");
+      } } }`;
+
+  const request = async (withInventory: boolean) => {
+    const result = await fetch(STOREFRONT_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Storefront-Access-Token": storefrontToken },
+      body: JSON.stringify({ query: buildQuery(withInventory), variables: { ids: variantIds } }),
+    });
+    if (!result.ok) throw new Error(`Falha ao consultar variantes Shopify (${result.status})`);
+    return await result.json();
+  };
+
+  let body = await request(true);
+  // O token Storefront pode não ter unauthenticated_read_product_inventory. Nesse
+  // caso seguimos apenas com availableForSale em vez de derrubar o checkout.
+  const inventoryDenied = (body?.errors ?? []).some((e: { message?: string }) =>
+    String(e?.message || "").includes("quantityAvailable")
+  );
+  if (inventoryDenied) {
+    console.warn("Storefront sem acesso a quantityAvailable; usando apenas availableForSale");
+    body = await request(false);
+  }
+  if (body?.errors?.length) {
+    console.error("Storefront variantes:", JSON.stringify(body.errors).slice(0, 800));
+    throw new Error("Shopify rejeitou a consulta de variantes");
+  }
 
   const details = new Map<string, ShopifyVariantCheckoutDetail>();
   for (const node of body?.data?.nodes ?? []) {

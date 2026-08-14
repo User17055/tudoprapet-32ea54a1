@@ -43,13 +43,14 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { supabase } from "@/integrations/supabase/client";
 import {
   customCheckoutEnabled,
   readCheckoutLaunch,
 } from "@/lib/customCheckout";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
-import { useCartStore } from "@/stores/cartStore";
+import { useCartStore, type CartItem } from "@/stores/cartStore";
 import { toast } from "sonner";
 
 type Customer = {
@@ -358,7 +359,7 @@ export default function Checkout() {
           },
         )
       : null;
-    return () => fieldsAnimation?.kill();
+    return () => { fieldsAnimation?.kill(); };
   }, [validationAttempt]);
 
   useEffect(() => {
@@ -1519,7 +1520,7 @@ function PaymentCheckoutScreen({
   children,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
   address: Address;
   addressLabel: string;
   deliveryMode: "pick_up" | "shipping";
@@ -2133,24 +2134,39 @@ function CheckoutBag({
   onRemove,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
   editable: boolean;
   busy: boolean;
   onQuantity: (variantId: string, quantity: number) => void;
   onRemove: (variantId: string) => void;
 }) {
+  const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice } = useFranchisePrices();
+  const catalogPrices = new Map(
+    cartItems.map((item) => [item.variantId, Number(item.price.amount)]),
+  );
   const list =
     summary?.items ??
     cartItems.map((item) => ({
       variantId: item.variantId,
-      productTitle: item.product.title,
+      productTitle: item.product.node.title,
       variantTitle: item.variantTitle,
-      imageUrl: item.product.featuredImage?.url,
+      imageUrl: item.product.node.images?.edges?.[0]?.node?.url,
       quantity: item.quantity,
       unitPrice: Number(item.price.amount),
       lineTotal: Number(item.price.amount) * item.quantity,
     }));
+  // Preço especial (franquia/assinante) para exibir o valor original cortado.
+  const pricing = (variantId: string, unitPrice: number) => {
+    const catalog = catalogPrices.get(variantId) ?? unitPrice;
+    const special =
+      getFranchisePrice(variantId) ?? getSubscriberPrice(variantId) ?? null;
+    const effective =
+      special !== null && special < catalog ? special : Math.min(unitPrice, catalog);
+    return { catalog, effective, hasDiscount: effective < catalog };
+  };
   if (!list.length) return null;
+
   return (
     <section className="mb-7" aria-labelledby="bag-title">
       <div className="mb-3 flex items-center justify-between">
@@ -2224,9 +2240,30 @@ function CheckoutBag({
                     Quantidade: <strong>{item.quantity}</strong>
                   </p>
                 )}
-                <p className="text-sm font-bold text-slate-950 sm:text-base">
-                  {money(item.lineTotal)}
-                </p>
+                {(() => {
+                  const { catalog, effective, hasDiscount } = pricing(
+                    item.variantId,
+                    item.unitPrice,
+                  );
+                  return (
+                    <div className="text-right">
+                      {hasDiscount && (
+                        <p className="text-[11px] text-slate-400 line-through">
+                          {money(catalog * item.quantity)}
+                        </p>
+                      )}
+                      <p className="text-sm font-bold text-slate-950 sm:text-base">
+                        {money(effective * item.quantity)}
+                      </p>
+                      {hasDiscount && (
+                        <p className="text-[11px] font-semibold text-emerald-700">
+                          Seu desconto aplicado
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
               </div>
             </div>
             {editable && (
@@ -2377,14 +2414,25 @@ function SummaryTotals({
   cartItems,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
 }) {
+  const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice } = useFranchisePrices();
   const cartSubtotal = cartItems.reduce(
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
   );
+  // Antes da sessão de checkout existir, o desconto de assinante/franquia
+  // é calculado no cliente para já aparecer no resumo.
+  const cartDiscount = cartItems.reduce((acc, item) => {
+    const catalogPrice = Number(item.price.amount);
+    const special =
+      getFranchisePrice(item.variantId) ?? getSubscriberPrice(item.variantId);
+    if (special === null || special >= catalogPrice) return acc;
+    return acc + (catalogPrice - special) * item.quantity;
+  }, 0);
   const subtotal = summary?.subtotal ?? cartSubtotal;
-  const discount = summary?.discount ?? 0;
+  const discount = summary?.discount ?? cartDiscount;
   const total = summary?.total ?? Math.max(0, subtotal - discount);
   return (
     <div className="space-y-3 text-sm text-slate-600">
@@ -2418,7 +2466,7 @@ function OrderSummary({
   cartItems,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
@@ -2438,7 +2486,7 @@ function MobileOrderSummary({
   cartItems,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
