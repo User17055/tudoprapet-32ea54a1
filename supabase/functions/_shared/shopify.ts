@@ -465,7 +465,8 @@ export interface CompleteDraftOrderResult {
 
 /**
  * O mercado Brasil da Shopify exige o CPF/CNPJ como credencial fiscal do pedido.
- * Sem esse campo a conclusão do draft falha com "Enter a valid CPF/CNPJ".
+ * A credencial só é aceita quando os endereços do draft têm país BR — sem isso a
+ * conclusão falha com "Enter a valid CPF/CNPJ".
  */
 export async function setDraftOrderTaxCredential(
   draftOrderId: string,
@@ -475,19 +476,41 @@ export async function setDraftOrderTaxCredential(
   const value = String(cpfCnpj || "").replace(/\D/g, "");
   if (value.length !== 11 && value.length !== 14) return false;
 
+  const read = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
+    headers: { "X-Shopify-Access-Token": token },
+  });
+  const draft = read.ok ? (await read.json())?.draft_order : null;
+  const brAddress = (address: Record<string, unknown> | null | undefined) => address
+    ? {
+      firstName: address.first_name,
+      lastName: address.last_name,
+      address1: address.address1,
+      address2: address.address2 || undefined,
+      city: address.city,
+      zip: address.zip,
+      phone: address.phone,
+      provinceCode: address.province_code || undefined,
+      countryCode: "BR",
+    }
+    : undefined;
+
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
     body: JSON.stringify({
-      query: `mutation SetTaxCredential($id: ID!, $ext: [LocalizationExtensionInput!]) {
-        draftOrderUpdate(id: $id, input: { localizationExtensions: $ext }) {
-          draftOrder { id }
+      query: `mutation SetTaxCredential($id: ID!, $input: DraftOrderInput!) {
+        draftOrderUpdate(id: $id, input: $input) {
+          draftOrder { id localizationExtensions(first: 5) { nodes { key value } } }
           userErrors { field message }
         }
       }`,
       variables: {
         id: `gid://shopify/DraftOrder/${draftOrderId}`,
-        ext: [{ key: "TAX_CREDENTIAL_BR", value }],
+        input: {
+          shippingAddress: brAddress(draft?.shipping_address),
+          billingAddress: brAddress(draft?.billing_address),
+          localizationExtensions: [{ key: "TAX_CREDENTIAL_BR", value }],
+        },
       },
     }),
   });
@@ -502,8 +525,15 @@ export async function setDraftOrderTaxCredential(
     console.error(`CPF/CNPJ rejeitado no draft ${draftOrderId}:`, JSON.stringify(body?.errors ?? errors));
     return false;
   }
+  const stored = body?.data?.draftOrderUpdate?.draftOrder?.localizationExtensions?.nodes ?? [];
+  const persisted = stored.some((node: { key?: string; value?: string }) => node?.value === value);
+  if (!persisted) {
+    console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
+    return false;
+  }
   return true;
 }
+
 
 /** Conclui um draft já pago fora da Shopify, sem coletar novo pagamento. */
 export async function completeDraftOrder(
