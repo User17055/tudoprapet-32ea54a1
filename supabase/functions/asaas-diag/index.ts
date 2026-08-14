@@ -18,16 +18,30 @@ Deno.serve(async (req) => {
   const baseUrl = (Deno.env.get("ASAAS_API_URL") || "https://api-sandbox.asaas.com/v3").replace(/\/$/, "");
   const environment = baseUrl.includes("sandbox") ? "sandbox" : "production";
 
+  let requestedId: string | null = null;
+  try {
+    const body = await req.json();
+    if (body && typeof body.paymentId === "string" && body.paymentId.trim()) requestedId = body.paymentId.trim();
+  } catch { requestedId = null; }
+
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: payment } = await admin.from("payments")
-    .select("id,provider_payment_id,status,amount,checkout_session_id,created_at")
-    .eq("method", "pix").not("provider_payment_id", "is", null)
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const baseQuery = admin.from("payments")
+    .select("id,provider_payment_id,status,amount,checkout_session_id,created_at");
+  const { data: payment } = requestedId
+    ? await baseQuery.eq("provider_payment_id", requestedId).maybeSingle()
+    : await baseQuery.eq("method", "pix").not("provider_payment_id", "is", null)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
   if (!payment?.provider_payment_id) return jsonResponse({ baseUrl, environment, payment: null });
 
   const remote = await getAsaasPayment(payment.provider_payment_id);
-  const qr = await getAsaasPixQrCode(payment.provider_payment_id);
+  let qr: { encodedImage?: string; payload?: string; expirationDate?: string } = {};
+  let qrError: string | null = null;
+  try {
+    qr = await getAsaasPixQrCode(payment.provider_payment_id);
+  } catch (error) {
+    qrError = error instanceof Error ? error.message : String(error);
+  }
   let pngValid = false;
   try {
     const bytes = Uint8Array.from(atob(qr.encodedImage), (c) => c.charCodeAt(0));
@@ -50,6 +64,7 @@ Deno.serve(async (req) => {
       createdAt: payment.created_at,
       checkoutSessionId: payment.checkout_session_id,
     },
+    qrError,
     qr: {
       encodedImageLength: qr.encodedImage?.length ?? 0,
       pngValid,
