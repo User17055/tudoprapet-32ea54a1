@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { supabase } from "@/integrations/supabase/client";
 import {
   customCheckoutEnabled,
@@ -2458,12 +2459,23 @@ function SummaryTotals({
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
 }) {
+  const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice } = useFranchisePrices();
   const cartSubtotal = cartItems.reduce(
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
   );
+  // Antes da sessão de checkout existir, o desconto de assinante/franquia
+  // é calculado no cliente para já aparecer no resumo.
+  const cartDiscount = cartItems.reduce((acc, item) => {
+    const catalogPrice = Number(item.price.amount);
+    const special =
+      getFranchisePrice(item.variantId) ?? getSubscriberPrice(item.variantId);
+    if (special === null || special >= catalogPrice) return acc;
+    return acc + (catalogPrice - special) * item.quantity;
+  }, 0);
   const subtotal = summary?.subtotal ?? cartSubtotal;
-  const discount = summary?.discount ?? 0;
+  const discount = summary?.discount ?? cartDiscount;
   const total = summary?.total ?? Math.max(0, subtotal - discount);
   return (
     <div className="space-y-3 text-sm text-slate-600">
