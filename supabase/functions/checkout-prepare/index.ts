@@ -5,7 +5,7 @@ import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } f
 import {
   addCheckoutServiceFee,
   buildDraftLineItems,
-  buildServiceFeeLineItem,
+  buildShippingLineWithServiceFee,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
 import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer, setDraftOrderTaxCredential } from "../_shared/shopify.ts";
