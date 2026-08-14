@@ -45,12 +45,13 @@ Deno.serve(async (req) => {
   if (!id) return jsonResponse({ error: "draft_order_id obrigatório" }, 400);
   if (action === "set_cpf") {
     const cpf = (url.searchParams.get("cpf") || "").replace(/\D/g, "");
-    const key = cpf.length > 11 ? "TAX_CREDENTIAL_BR" : "SHIPPING_CREDENTIAL_BR";
+    const key = url.searchParams.get("key") ||
+      (cpf.length > 11 ? "TAX_CREDENTIAL_BR" : "SHIPPING_CREDENTIAL_BR");
     const result = await graphql(
       token,
       `mutation SetCpf($id: ID!, $ext: [LocalizationExtensionInput!]) {
         draftOrderUpdate(id: $id, input: { localizationExtensions: $ext }) {
-          draftOrder { id }
+          draftOrder { id localizationExtensions(first: 5) { nodes { key value purpose } } }
           userErrors { field message }
         }
       }`,
@@ -58,6 +59,24 @@ Deno.serve(async (req) => {
     );
     return jsonResponse(result);
   }
+
+  if (action === "inspect") {
+    const result = await graphql(
+      token,
+      `query D($id: ID!) {
+        draftOrder(id: $id) {
+          id status
+          localizationExtensions(first: 5) { nodes { key value purpose title } }
+          billingAddress { countryCodeV2 provinceCode zip company phone }
+          customer { id displayName email localizationExtensions(first: 5) { nodes { key value } } }
+        }
+      }`,
+      { id: `gid://shopify/DraftOrder/${id}` },
+    );
+    return jsonResponse(result);
+  }
+
+
 
 
   if (action === "complete") {
