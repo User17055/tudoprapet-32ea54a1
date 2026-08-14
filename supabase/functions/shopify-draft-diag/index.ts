@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
   if (action === "validations") {
     const result = await graphql(
       token,
-      `{ validations(first: 10) { nodes { id title enabled app { title } } } }`,
+      `{ validations(first: 10) { nodes { id title enabled errorHistory { errorsFirstOccurredAt } } } }`,
     );
     return jsonResponse(result);
   }
