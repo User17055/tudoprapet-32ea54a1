@@ -327,7 +327,7 @@ Deno.serve(async (req) => {
       if (!shopifyToken || !session.shopify_draft_order_id) {
         throw new Error("Shopify não configurada para concluir pedido da franquia");
       }
-      const completed = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken, true);
+      const completed = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken, true, customer.cpfCnpj);
       if (!completed.requestOk || !completed.orderId) {
         throw new Error("Falha ao concluir pedido com prazo na Shopify");
       }

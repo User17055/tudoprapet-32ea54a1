@@ -8,7 +8,7 @@ import {
   buildServiceFeeLineItem,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
-import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer } from "../_shared/shopify.ts";
+import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer, setDraftOrderTaxCredential } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 
 function readFirstEnv(keys: string[]): string {
