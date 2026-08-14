@@ -2811,7 +2811,7 @@ function MobileOrderSummary({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-sm font-bold text-blue-950">
-          {money(summary?.total ?? cartTotal)}
+          {money(headerTotal)}
           <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
         </span>
       </summary>
