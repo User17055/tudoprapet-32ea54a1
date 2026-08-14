@@ -113,6 +113,7 @@ type CheckoutSummary = {
   serviceFee: number;
   shippingAmount?: number;
   shippingMethod?: string;
+  shippingCode?: string;
   total: number;
   items: SummaryItem[];
 };
@@ -126,6 +127,12 @@ type PaymentResult = {
 
 const ACTIVE_KEY = "tpp_checkout_active";
 const SERVICE_FEE = 3;
+const PICKUP_STORE_ADDRESS = String(
+  import.meta.env.VITE_PICKUP_STORE_ADDRESS || "",
+).trim();
+const PICKUP_STORE_HOURS = String(
+  import.meta.env.VITE_PICKUP_STORE_HOURS || "",
+).trim();
 const emptyAddress = (): Address => ({
   address1: "",
   address2: "",
@@ -1118,7 +1125,7 @@ export default function Checkout() {
         text="Escolha os produtos antes de abrir o checkout."
       />
     );
-  if (confirmed) return <Success payment={payment} />;
+  if (confirmed) return <Success payment={payment} summary={summary} />;
 
   const selectedShipping = shippingOptions.find(
     (option) => option.handle === shippingHandle,
@@ -1309,6 +1316,7 @@ export default function Checkout() {
                       {step === 4 && (
                         <PaymentWaiting
                           payment={payment}
+                          pickup={deliveryMode === "pick_up"}
                           cancelling={cancellingPix}
                           onCancel={() => void cancelPix("payment")}
                           onBack={() => void cancelPix("cart")}
@@ -2381,11 +2389,13 @@ function CheckLine({
 }
 function PaymentWaiting({
   payment,
+  pickup,
   cancelling,
   onCancel,
   onBack,
 }: {
   payment: PaymentResult | null;
+  pickup: boolean;
   cancelling: boolean;
   onCancel: () => void;
   onBack: () => void;
@@ -2410,9 +2420,26 @@ function PaymentWaiting({
         <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-emerald-600" />
         <h2 className="text-xl font-bold text-slate-950">Pagamento confirmado</h2>
         <p className="mx-auto mt-2 max-w-md text-slate-600">
-          Recebemos seu pagamento. Estamos preparando seu pedido na Shopify.
+          Recebemos seu pagamento e seu pedido entrou na fila de preparação.
         </p>
-        <Wait label="Finalizando pedido" />
+        {pickup && (
+          <div className="mx-auto mt-5 max-w-md rounded-xl border border-amber-300 bg-amber-50 p-4 text-left">
+            <p className="font-bold text-amber-950">Não vá até a loja ainda</p>
+            <p className="mt-1 text-sm leading-relaxed text-amber-900">
+              Aguarde nosso aviso informando que o pedido está pronto. A retirada
+              somente será liberada depois dessa confirmação.
+            </p>
+            {PICKUP_STORE_ADDRESS && PICKUP_STORE_HOURS && (
+              <div className="mt-3 border-t border-amber-200 pt-3 text-sm text-amber-950">
+                <p><strong>Local:</strong> {PICKUP_STORE_ADDRESS}</p>
+                <p className="mt-1"><strong>Funcionamento:</strong> {PICKUP_STORE_HOURS}</p>
+              </div>
+            )}
+          </div>
+        )}
+        <Wait
+          label={pickup ? "Registrando seu pedido" : "Preparando confirmação"}
+        />
       </div>
     );
   }
@@ -2941,7 +2968,14 @@ function MobileOrderSummary({
     </details>
   );
 }
-function Success({ payment }: { payment: PaymentResult | null }) {
+function Success({
+  payment,
+  summary,
+}: {
+  payment: PaymentResult | null;
+  summary: CheckoutSummary | null;
+}) {
+  const pickup = summary?.shippingCode === "pick_up";
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
       <div className="mx-auto max-w-lg text-center">
@@ -2953,6 +2987,46 @@ function Success({ payment }: { payment: PaymentResult | null }) {
             ? "Pedido aprovado no prazo da franquia."
             : "Pagamento confirmado e pedido em preparação."}
         </p>
+        {pickup && (
+          <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-left">
+            <p className="text-lg font-bold text-amber-950">
+              Aguarde o aviso de pedido pronto
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-amber-900">
+              Seu pagamento foi confirmado, mas a retirada ainda não está
+              liberada. Não se desloque até a loja agora. Enviaremos uma
+              confirmação quando os produtos estiverem separados e prontos para
+              retirada.
+            </p>
+            {PICKUP_STORE_ADDRESS && PICKUP_STORE_HOURS ? (
+              <div className="mt-4 space-y-3 rounded-xl bg-white/75 p-4 text-slate-800">
+                <div className="flex items-start gap-3">
+                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-blue-900" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Local de retirada
+                    </p>
+                    <p className="mt-1 text-sm font-semibold">{PICKUP_STORE_ADDRESS}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Store className="mt-0.5 h-5 w-5 shrink-0 text-blue-900" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Horário de funcionamento
+                    </p>
+                    <p className="mt-1 text-sm font-semibold">{PICKUP_STORE_HOURS}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm font-semibold text-amber-950">
+                O endereço e o horário de retirada serão informados junto com o
+                aviso de pedido pronto.
+              </p>
+            )}
+          </div>
+        )}
         {payment?.invoiceUrl && (
           <Button className="mt-6" asChild>
             <a href={payment.invoiceUrl} target="_blank" rel="noreferrer">
