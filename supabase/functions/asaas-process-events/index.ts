@@ -80,7 +80,7 @@ async function enqueueCancellationOfOtherAttempts(
 
 async function finalizePaidCheckout(admin: SupabaseClient, payment: PaymentRow) {
   const { data: session, error } = await admin.from("checkout_sessions")
-    .select("id,status,shopify_draft_order_id,shopify_order_id")
+    .select("id,status,shopify_draft_order_id,shopify_order_id,customer_snapshot")
     .eq("id", payment.checkout_session_id)
     .single();
   if (error) throw error;
@@ -99,8 +99,10 @@ async function finalizePaidCheckout(admin: SupabaseClient, payment: PaymentRow) 
   const shopifyToken = shopifyAdminToken();
   if (!shopifyToken) throw new Error("SHOPIFY_ACCESS_TOKEN ausente");
 
-  const result = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken);
+  const cpfCnpj = (session.customer_snapshot as { cpfCnpj?: string } | null)?.cpfCnpj ?? null;
+  const result = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken, false, cpfCnpj);
   if (!result.requestOk || !result.orderId) throw new Error("Falha ao concluir Draft Order Shopify");
+
 
   const { error: completedError } = await admin.from("checkout_sessions").update({
     status: "shopify_created",
