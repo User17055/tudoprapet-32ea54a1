@@ -610,7 +610,14 @@ export async function setDraftOrderTaxCredential(
     console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
     return false;
   }
+  const after = body?.data?.draftOrderUpdate?.draftOrder?.lineItems?.nodes ?? [];
+  if (after.length !== existingLineItems.length) {
+    console.error(
+      `Draft ${draftOrderId} ficou com ${after.length} linhas (esperado ${existingLineItems.length}) após gravar CPF/CNPJ.`,
+    );
+  }
   return true;
+
 }
 
 
