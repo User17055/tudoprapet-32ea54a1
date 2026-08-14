@@ -2219,6 +2219,11 @@ function CheckoutBag({
   onQuantity: (variantId: string, quantity: number) => void;
   onRemove: (variantId: string) => void;
 }) {
+  const { getSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice } = useFranchisePrices();
+  const catalogPrices = new Map(
+    cartItems.map((item) => [item.variantId, Number(item.price.amount)]),
+  );
   const list =
     summary?.items ??
     cartItems.map((item) => ({
@@ -2230,7 +2235,17 @@ function CheckoutBag({
       unitPrice: Number(item.price.amount),
       lineTotal: Number(item.price.amount) * item.quantity,
     }));
+  // Preço especial (franquia/assinante) para exibir o valor original cortado.
+  const pricing = (variantId: string, unitPrice: number) => {
+    const catalog = catalogPrices.get(variantId) ?? unitPrice;
+    const special =
+      getFranchisePrice(variantId) ?? getSubscriberPrice(variantId) ?? null;
+    const effective =
+      special !== null && special < catalog ? special : Math.min(unitPrice, catalog);
+    return { catalog, effective, hasDiscount: effective < catalog };
+  };
   if (!list.length) return null;
+
   return (
     <section className="mb-7" aria-labelledby="bag-title">
       <div className="mb-3 flex items-center justify-between">
