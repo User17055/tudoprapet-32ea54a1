@@ -116,10 +116,10 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
   }
   const body = raw as Record<string, unknown>;
   const parsedItems = parseCheckoutItems(body.items);
-  if (!parsedItems.ok) return { ok: false, message: parsedItems.message };
+  if (!parsedItems.ok) return { ok: false, message: (parsedItems as { message: string }).message };
 
   const parsedCustomer = parseCheckoutCustomer(body.customer);
-  if (!parsedCustomer.ok) return { ok: false, message: parsedCustomer.message };
+  if (!parsedCustomer.ok) return { ok: false, message: (parsedCustomer as { message: string }).message };
   const customer = parsedCustomer.value;
 
   const sourceDelivery = body.delivery && typeof body.delivery === "object"

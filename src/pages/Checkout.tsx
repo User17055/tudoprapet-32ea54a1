@@ -2222,9 +2222,9 @@ function CheckoutBag({
     summary?.items ??
     cartItems.map((item) => ({
       variantId: item.variantId,
-      productTitle: item.product.title,
+      productTitle: item.product.node.title,
       variantTitle: item.variantTitle,
-      imageUrl: item.product.featuredImage?.url,
+      imageUrl: item.product.node.images?.edges?.[0]?.node?.url,
       quantity: item.quantity,
       unitPrice: Number(item.price.amount),
       lineTotal: Number(item.price.amount) * item.quantity,
