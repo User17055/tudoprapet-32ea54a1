@@ -729,8 +729,10 @@ export default function Checkout() {
   }, [address, resumeAfterAddressSave]);
   const nextPayment = () => {
     if (isFranchisee) {
+      setValidationAttempt(null);
       setMessage("");
-      return setStep(2);
+      void confirmOrder();
+      return;
     }
     if (paymentMethod === "credit_card" && !savedPaymentId) {
       if (!validAddress(effectiveBilling)) {
@@ -752,10 +754,10 @@ export default function Checkout() {
     }
     setValidationAttempt(null);
     setMessage("");
-    setStep(2);
+    void confirmOrder();
   };
 
-  const confirmOrder = async () => {
+  async function confirmOrder() {
     if (previewMode)
       return setMessage(
         "Modo de demonstração: nenhuma cobrança ou pedido será criado.",
@@ -819,7 +821,7 @@ export default function Checkout() {
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   const changeBagQuantity = async (variantId: string, quantity: number) => {
     if (previewMode) {
@@ -979,6 +981,13 @@ export default function Checkout() {
         selectedShipping={selectedShipping}
         busy={busy}
         message={message}
+        submitLabel={
+          isFranchisee
+            ? "Finalizar pedido"
+            : paymentMethod === "pix"
+              ? "Gerar Pix e finalizar"
+              : "Pagar com cartão"
+        }
         onBack={() => {
           setMessage("");
           setStep(0);
@@ -1042,7 +1051,7 @@ export default function Checkout() {
           </h1>
           {step > 0 && (
             <div data-checkout-enter className="lg:hidden">
-              <Steps current={Math.min(step, 2)} />
+              <Steps current={Math.min(step, 1)} />
             </div>
           )}
           <div data-checkout-enter className="mb-4 lg:hidden">
@@ -1076,14 +1085,14 @@ export default function Checkout() {
                 <Card className="overflow-hidden rounded-xl border border-slate-200 shadow-none">
                   <CardHeader className="border-b border-slate-100 px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
-                      {step < 3 ? `Etapa ${step + 1} de 3` : "Pagamento"}
+                      {step < 2 ? `Etapa ${step + 1} de 2` : "Pagamento"}
                     </p>
                     <CardTitle className="text-xl tracking-tight text-slate-900 sm:text-2xl">
                       {
                         [
                           "",
                           "Pagamento",
-                          "Revise seu pedido",
+                          "",
                           "",
                           payment?.pixQrCode
                             ? "Pague com Pix"
@@ -1135,27 +1144,6 @@ export default function Checkout() {
                           loggedIn={Boolean(user)}
                           onBack={() => setStep(0)}
                           onNext={nextPayment}
-                        />
-                      )}
-                      {step === 2 && (
-                        <Review
-                          customer={customer}
-                          deliveryMode={deliveryMode}
-                          address={address}
-                          billingSame={billingSame}
-                          paymentLabel={
-                            isFranchisee
-                              ? "Prazo da franquia"
-                              : paymentMethod === "pix"
-                                ? "Pix"
-                                : savedPaymentId
-                                  ? `Cartão final ${savedPayments.find((item) => item.id === savedPaymentId)?.lastFour}`
-                                  : `Cartão final ${digits(card.number).slice(-4)}`
-                          }
-                          shipping={selectedShipping}
-                          busy={busy}
-                          onBack={() => setStep(1)}
-                          onConfirm={confirmOrder}
                         />
                       )}
                       {step === 4 && <PaymentWaiting payment={payment} />}
@@ -1220,20 +1208,20 @@ export default function Checkout() {
 }
 
 function Steps({ current }: { current: number }) {
-  const labels = ["Entrega", "Pagamento", "Revisão"];
+  const labels = ["Entrega", "Pagamento"];
   return (
     <ol
       aria-label="Etapas do checkout"
-      className="relative mb-5 grid grid-cols-3 sm:mb-7"
+      className="relative mb-5 grid grid-cols-2 sm:mb-7"
     >
       <span
         aria-hidden
-        className="absolute left-[16.66%] right-[16.66%] top-3.5 h-px bg-slate-200"
+        className="absolute left-1/4 right-1/4 top-3.5 h-px bg-slate-200"
       />
       <span
         aria-hidden
-        className="absolute left-[16.66%] top-3.5 h-px bg-blue-800 transition-[width] duration-500"
-        style={{ width: `${(current / 2) * 66.66}%` }}
+        className="absolute left-1/4 top-3.5 h-px bg-blue-800 transition-[width] duration-500"
+        style={{ width: `${current * 50}%` }}
       />
       {labels.map((label, index) => (
         <li
@@ -1525,6 +1513,7 @@ function PaymentCheckoutScreen({
   selectedShipping,
   busy,
   message,
+  submitLabel,
   onBack,
   onNext,
   children,
@@ -1537,6 +1526,7 @@ function PaymentCheckoutScreen({
   selectedShipping?: ShippingOption;
   busy: boolean;
   message: string;
+  submitLabel: string;
   onBack: () => void;
   onNext: () => void;
   children: ReactNode;
@@ -1651,8 +1641,8 @@ function PaymentCheckoutScreen({
               disabled={busy}
               onClick={onNext}
             >
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Revisar
-              e pagar
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {busy ? "Processando..." : submitLabel}
             </Button>
           </aside>
         </div>
@@ -1849,7 +1839,7 @@ function PaymentStep(props: {
         <Nav
           back={props.onBack}
           next={props.onNext}
-          nextLabel="Revisar pedido"
+          nextLabel="Finalizar pedido"
         />
       </div>
     );
@@ -1993,82 +1983,13 @@ function PaymentStep(props: {
           )}
         </div>
       )}
-      <Nav back={props.onBack} next={props.onNext} nextLabel="Revisar pedido" />
-    </div>
-  );
-}
-function Review({
-  customer,
-  deliveryMode,
-  address,
-  billingSame,
-  paymentLabel,
-  shipping,
-  busy,
-  onBack,
-  onConfirm,
-}: {
-  customer: Customer;
-  deliveryMode: "pick_up" | "shipping";
-  address: Address;
-  billingSame: boolean;
-  paymentLabel: string;
-  shipping?: ShippingOption;
-  busy: boolean;
-  onBack: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <ReviewLine
-        icon={<UserRound />}
-        title="Cliente"
-        text={`${customer.name} • ${customer.email}`}
-      />
-      <ReviewLine
-        icon={<MapPin />}
-        title="Entrega"
-        text={
-          deliveryMode === "pick_up"
-            ? "Retirada na loja"
-            : `${address.address1}, ${address.number} — ${address.city}/${address.provinceCode}${shipping ? ` • ${shipping.title}` : ""}`
+      <Nav
+        back={props.onBack}
+        next={props.onNext}
+        nextLabel={
+          props.method === "pix" ? "Gerar Pix e finalizar" : "Pagar com cartão"
         }
       />
-      <ReviewLine icon={<CreditCard />} title="Pagamento" text={paymentLabel} />
-      {deliveryMode === "shipping" && (
-        <p className="text-xs text-slate-500">
-          Endereço fiscal{" "}
-          {billingSame ? "igual ao de entrega" : "informado separadamente"}.
-        </p>
-      )}
-      <Nav
-        busy={busy}
-        back={onBack}
-        next={onConfirm}
-        nextLabel={busy ? "Criando pedido..." : "Confirmar e pagar"}
-      />
-    </div>
-  );
-}
-function ReviewLine({
-  icon,
-  title,
-  text,
-}: {
-  icon: ReactNode;
-  title: string;
-  text: string;
-}) {
-  return (
-    <div
-      data-step-item
-      className="flex min-w-0 gap-3 rounded-xl border p-3.5 sm:p-4"
-    >
-      <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
-      <div className="min-w-0">
-        <strong>{title}</strong>
-        <p className="break-words text-sm text-slate-600">{text}</p>
-      </div>
     </div>
   );
 }
