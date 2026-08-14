@@ -2,6 +2,16 @@ import { corsHeadersWith, jsonResponse } from "../_shared/cors.ts";
 import { ADMIN_API, shopifyAdminToken } from "../_shared/shopify.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
 
+async function graphql(token: string, query: string, variables: Record<string, unknown> = {}) {
+  const res = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({ query, variables }),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text.slice(0, 6000) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token") });
@@ -13,11 +23,40 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
+  const action = url.searchParams.get("action") || "read";
   const id = url.searchParams.get("draft_order_id");
-  if (!id) return jsonResponse({ error: "draft_order_id obrigatório" }, 400);
 
   const token = shopifyAdminToken();
   if (!token) return jsonResponse({ error: "SHOPIFY_ACCESS_TOKEN ausente" }, 500);
+
+  if (action === "validations") {
+    const result = await graphql(
+      token,
+      `{ validations(first: 10) { nodes { id title enabled app { title } } } }`,
+    );
+    return jsonResponse(result);
+  }
+
+  if (action === "shop") {
+    const result = await graphql(token, `{ shop { name myshopifyDomain } }`);
+    return jsonResponse(result);
+  }
+
+  if (!id) return jsonResponse({ error: "draft_order_id obrigatório" }, 400);
+
+  if (action === "complete") {
+    const result = await graphql(
+      token,
+      `mutation Complete($id: ID!) {
+        draftOrderComplete(id: $id, paymentPending: false) {
+          draftOrder { id status order { id legacyResourceId } }
+          userErrors { field message }
+        }
+      }`,
+      { id: `gid://shopify/DraftOrder/${id}` },
+    );
+    return jsonResponse(result);
+  }
 
   const res = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(id)}.json`, {
     headers: { "X-Shopify-Access-Token": token },
