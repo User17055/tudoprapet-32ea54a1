@@ -2778,9 +2778,11 @@ function OrderSummary({
 function MobileOrderSummary({
   summary,
   cartItems,
+  shippingOverride,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
+  shippingOverride?: ShippingSummaryOverride;
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
