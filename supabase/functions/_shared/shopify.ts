@@ -585,7 +585,7 @@ export async function setDraftOrderTaxCredential(
         input: {
           shippingAddress: brAddress(draft?.shipping_address),
           billingAddress: brAddress(draft?.billing_address),
-          ...(existingLineItems?.length ? { lineItems: existingLineItems } : {}),
+          lineItems: existingLineItems,
           ...(shippingLine ? { shippingLine } : {}),
           localizationExtensions: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
