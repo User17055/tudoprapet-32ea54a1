@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
         .select("id,brand,last_four,holder_name,is_default")
         .eq("user_id", userId).is("revoked_at", null).order("is_default", { ascending: false }).order("updated_at", { ascending: false });
       const { data: accountProfile } = await admin.from("profiles")
-        .select("name,is_franchisee").eq("user_id", userId).maybeSingle();
+        .select("name,cpf,is_franchisee").eq("user_id", userId).maybeSingle();
 
       // Primeiro acesso: usa o último checkout concluído sem duplicar dados.
       if (!profile || !(addresses ?? []).length) {
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
           cpfCnpj: profile.cpf_cnpj,
           mobilePhone: profile.mobile_phone,
           billingSameAsShipping: profile.billing_same_as_shipping,
-        } : { name: accountProfile?.name || "", email: email || "", cpfCnpj: "", mobilePhone: "", billingSameAsShipping: true },
+        } : { name: accountProfile?.name || "", email: email || "", cpfCnpj: accountProfile?.cpf || "", mobilePhone: "", billingSameAsShipping: true },
         addresses: addresses ?? [],
         paymentMethods: methods ?? [],
         isFranchisee: Boolean(accountProfile?.is_franchisee),

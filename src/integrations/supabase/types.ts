@@ -918,6 +918,7 @@ export type Database = {
         Row: {
           acquisition_source: string | null
           created_at: string
+          cpf: string | null
           email: string | null
           id: string
           is_franchisee: boolean
@@ -929,6 +930,7 @@ export type Database = {
         Insert: {
           acquisition_source?: string | null
           created_at?: string
+          cpf?: string | null
           email?: string | null
           id?: string
           is_franchisee?: boolean
@@ -940,6 +942,7 @@ export type Database = {
         Update: {
           acquisition_source?: string | null
           created_at?: string
+          cpf?: string | null
           email?: string | null
           id?: string
           is_franchisee?: boolean

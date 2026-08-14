@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Circle, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { CheckCircle2, Circle, CreditCard, Lock, Mail, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthLayout } from '@/components/auth/AuthLayout';
 import { AuthField } from '@/components/auth/AuthField';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { cpfDigits, isValidCpf, maskCpf } from '@/lib/cpf';
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ const Register = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [acquisitionSource, setAcquisitionSource] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -47,6 +49,10 @@ const Register = () => {
     e.preventDefault();
     if (!isPasswordSecure) {
       toast.error('Crie uma senha segura seguindo todos os requisitos.');
+      return;
+    }
+    if (!isValidCpf(cpf)) {
+      toast.error('Informe um CPF valido.');
       return;
     }
     if (!acquisitionSource) {
@@ -74,6 +80,7 @@ const Register = () => {
         firstName,
         lastName,
         email,
+        cpf: cpfDigits(cpf),
         password,
         acquisitionSource,
         referralCode: normalizedReferralCode,
@@ -144,6 +151,20 @@ const Register = () => {
           onChange={(e) => setEmail(e.target.value)}
           required
           placeholder="seu@email.com"
+        />
+
+        <AuthField
+          id="cpf"
+          label="CPF"
+          icon={CreditCard}
+          inputMode="numeric"
+          autoComplete="off"
+          value={cpf}
+          onChange={(e) => setCpf(maskCpf(e.target.value))}
+          required
+          maxLength={14}
+          placeholder="000.000.000-00"
+          aria-invalid={cpf.length === 14 && !isValidCpf(cpf)}
         />
 
         <div className="space-y-2">
