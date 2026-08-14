@@ -111,6 +111,20 @@ Deno.serve(async (req) => {
   }
 
 
+  if (action === "cancel_order") {
+    const result = await graphql(
+      token,
+      `mutation Cancel($id: ID!) {
+        orderCancel(orderId: $id, reason: OTHER, refund: false, restock: true, staffNote: "Pagamento estornado no Asaas") {
+          job { id }
+          orderCancelUserErrors { field message }
+        }
+      }`,
+      { id: `gid://shopify/Order/${id}` },
+    );
+    return jsonResponse(result);
+  }
+
   if (action === "complete") {
     const result = await graphql(
       token,
