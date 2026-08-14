@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { corsHeadersWith, jsonResponse } from "../_shared/cors.ts";
 import {
   mapAsaasPaymentStatus,
+  isPaidAsaasProviderStatus,
   isPaidPaymentStatus,
   parseAsaasEvent,
   retryDelaySeconds,
@@ -121,19 +122,61 @@ async function recoverPaidCheckouts(admin: SupabaseClient) {
   if (error) throw error;
 
   let recovered = 0;
+  let skipped = 0;
   let failed = 0;
   for (const session of data ?? []) {
     try {
-      await finalizePaidCheckout(admin, {
-        checkout_session_id: String(session.id),
-      } as PaymentRow);
+      const { data: payment, error: paymentError } = await admin.from("payments")
+        .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
+        .eq("checkout_session_id", session.id)
+        .not("provider_payment_id", "is", null)
+        .order("attempt_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (paymentError) throw paymentError;
+      if (!payment?.provider_payment_id) {
+        skipped++;
+        console.error(`Checkout ${session.id} sem cobrança Asaas para validar recuperação`);
+        continue;
+      }
+
+      // Nunca confie apenas no estado local ao recuperar uma venda. O Asaas é a
+      // autoridade financeira e pode ter recebido um estorno/chargeback enquanto
+      // o worker estava indisponível.
+      const remote = await getAsaasPayment(payment.provider_payment_id);
+      const remoteStatus = String(remote.status || "").toUpperCase();
+      if (!isPaidAsaasProviderStatus(remoteStatus)) {
+        const remoteLocalStatus = mapAsaasPaymentStatus("", remoteStatus);
+        if (remoteLocalStatus && ["refunded", "chargeback", "cancelled", "failed"].includes(remoteLocalStatus)) {
+          const { error: paymentUpdateError } = await admin.from("payments").update({
+            status: remoteLocalStatus,
+            raw_status: remoteStatus,
+            is_active: false,
+          }).eq("id", payment.id);
+          if (paymentUpdateError) throw paymentUpdateError;
+
+          const sessionStatus = remoteLocalStatus === "failed" ? "failed" : "cancelled";
+          const { error: sessionUpdateError } = await admin.from("checkout_sessions")
+            .update({ status: sessionStatus })
+            .eq("id", session.id)
+            .is("shopify_order_id", null);
+          if (sessionUpdateError) throw sessionUpdateError;
+        }
+        skipped++;
+        console.error(
+          `Recuperação bloqueada para checkout ${session.id}: Asaas ${remoteStatus || "SEM_STATUS"}`,
+        );
+        continue;
+      }
+
+      await finalizePaidCheckout(admin, payment as PaymentRow);
       recovered++;
     } catch (recoveryError) {
       failed++;
       console.error(`Falha ao recuperar checkout pago ${session.id}:`, recoveryError);
     }
   }
-  return { checked: (data ?? []).length, recovered, failed };
+  return { checked: (data ?? []).length, recovered, skipped, failed };
 }
 
 async function reconcileOpenPixPayments(admin: SupabaseClient) {
@@ -154,7 +197,7 @@ async function reconcileOpenPixPayments(admin: SupabaseClient) {
     try {
       const remote = await getAsaasPayment(row.provider_payment_id!);
       const remoteStatus = String(remote.status || "").toUpperCase();
-      if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+      if (isPaidAsaasProviderStatus(remoteStatus)) {
         const localStatus = remoteStatus === "CONFIRMED" ? "confirmed" : "received";
         await settlePaidPayment(admin, row, localStatus, remoteStatus);
         paid++;
@@ -243,7 +286,7 @@ async function processCancellationAction(admin: SupabaseClient, action: ActionRo
 
   const remote = await getAsaasPayment(payment.provider_payment_id);
   const remoteStatus = String(remote.status || "").toUpperCase();
-  if (["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+  if (isPaidAsaasProviderStatus(remoteStatus)) {
     const localStatus = remoteStatus === "RECEIVED" || remoteStatus === "RECEIVED_IN_CASH"
       ? "received"
       : "confirmed";
@@ -290,7 +333,7 @@ async function expirePixPayments(admin: SupabaseClient) {
 
       const remote = await getAsaasPayment(row.provider_payment_id);
       const remoteStatus = String(remote.status || "").toUpperCase();
-      if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+      if (isPaidAsaasProviderStatus(remoteStatus)) {
         const localStatus = remoteStatus === "CONFIRMED" ? "confirmed" : "received";
         const reconciliationId = `reconcile:${row.provider_payment_id}:${remoteStatus}`;
         const { error: eventError } = await admin.from("payment_events").upsert({

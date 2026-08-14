@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mapAsaasPaymentStatus,
+  isPaidAsaasProviderStatus,
   isPaidPaymentStatus,
   parseAsaasEvent,
   retryDelaySeconds,
@@ -40,6 +41,15 @@ describe("eventos financeiros Asaas", () => {
     expect(isPaidPaymentStatus("received")).toBe(true);
     expect(isPaidPaymentStatus("pending")).toBe(false);
     expect(isPaidPaymentStatus("cancelled")).toBe(false);
+  });
+
+  it("só autoriza criar venda para status pago confirmado no Asaas", () => {
+    expect(isPaidAsaasProviderStatus("CONFIRMED")).toBe(true);
+    expect(isPaidAsaasProviderStatus("RECEIVED")).toBe(true);
+    expect(isPaidAsaasProviderStatus("RECEIVED_IN_CASH")).toBe(true);
+    expect(isPaidAsaasProviderStatus("REFUNDED")).toBe(false);
+    expect(isPaidAsaasProviderStatus("CHARGEBACK_REQUESTED")).toBe(false);
+    expect(isPaidAsaasProviderStatus("PENDING")).toBe(false);
   });
 
   it("não deixa evento atrasado rebaixar pagamento recebido", () => {

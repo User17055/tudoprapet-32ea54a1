@@ -108,6 +108,13 @@ export function isPaidPaymentStatus(
   return status === "confirmed" || status === "received";
 }
 
+/** Estados remotos que autorizam criar a venda. Todo outro estado deve bloquear. */
+export function isPaidAsaasProviderStatus(status: string | null | undefined): boolean {
+  return ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(
+    String(status || "").toUpperCase(),
+  );
+}
+
 export function retryDelaySeconds(attempt: number): number {
   return Math.min(3600, Math.max(30, 30 * (2 ** Math.max(0, attempt - 1))));
 }
