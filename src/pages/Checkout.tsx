@@ -2319,9 +2319,30 @@ function CheckoutBag({
                     Quantidade: <strong>{item.quantity}</strong>
                   </p>
                 )}
-                <p className="text-sm font-bold text-slate-950 sm:text-base">
-                  {money(item.lineTotal)}
-                </p>
+                {(() => {
+                  const { catalog, effective, hasDiscount } = pricing(
+                    item.variantId,
+                    item.unitPrice,
+                  );
+                  return (
+                    <div className="text-right">
+                      {hasDiscount && (
+                        <p className="text-[11px] text-slate-400 line-through">
+                          {money(catalog * item.quantity)}
+                        </p>
+                      )}
+                      <p className="text-sm font-bold text-slate-950 sm:text-base">
+                        {money(effective * item.quantity)}
+                      </p>
+                      {hasDiscount && (
+                        <p className="text-[11px] font-semibold text-emerald-700">
+                          Seu desconto aplicado
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
               </div>
             </div>
             {editable && (
