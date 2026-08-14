@@ -121,6 +121,147 @@ export type Database = {
           },
         ]
       }
+      checkout_customer_profiles: {
+        Row: {
+          asaas_customer_id: string | null
+          billing_same_as_shipping: boolean
+          cpf_cnpj: string
+          created_at: string
+          full_name: string
+          invoice_email: string
+          mobile_phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asaas_customer_id?: string | null
+          billing_same_as_shipping?: boolean
+          cpf_cnpj: string
+          created_at?: string
+          full_name: string
+          invoice_email: string
+          mobile_phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asaas_customer_id?: string | null
+          billing_same_as_shipping?: boolean
+          cpf_cnpj?: string
+          created_at?: string
+          full_name?: string
+          invoice_email?: string
+          mobile_phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      checkout_rate_limits: {
+        Row: {
+          key_hash: string
+          request_count: number
+          updated_at: string
+          window_started_at: string
+        }
+        Insert: {
+          key_hash: string
+          request_count?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Update: {
+          key_hash?: string
+          request_count?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
+      checkout_sessions: {
+        Row: {
+          address_snapshot: Json
+          anonymous_access_token_expires_at: string | null
+          anonymous_access_token_hash: string | null
+          billing_address_snapshot: Json
+          checkout_version: string
+          created_at: string
+          currency: string
+          customer_snapshot: Json
+          customer_type: string
+          discount: number
+          id: string
+          inventory_reserved_until: string | null
+          items_snapshot: Json
+          pricing_snapshot: Json
+          session_expires_at: string | null
+          shipping_amount: number
+          shipping_code: string | null
+          shipping_method: string | null
+          shopify_draft_order_id: string | null
+          shopify_order_id: string | null
+          status: string
+          subtotal: number
+          total: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          address_snapshot?: Json
+          anonymous_access_token_expires_at?: string | null
+          anonymous_access_token_hash?: string | null
+          billing_address_snapshot?: Json
+          checkout_version?: string
+          created_at?: string
+          currency?: string
+          customer_snapshot?: Json
+          customer_type: string
+          discount?: number
+          id?: string
+          inventory_reserved_until?: string | null
+          items_snapshot?: Json
+          pricing_snapshot?: Json
+          session_expires_at?: string | null
+          shipping_amount?: number
+          shipping_code?: string | null
+          shipping_method?: string | null
+          shopify_draft_order_id?: string | null
+          shopify_order_id?: string | null
+          status?: string
+          subtotal: number
+          total: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          address_snapshot?: Json
+          anonymous_access_token_expires_at?: string | null
+          anonymous_access_token_hash?: string | null
+          billing_address_snapshot?: Json
+          checkout_version?: string
+          created_at?: string
+          currency?: string
+          customer_snapshot?: Json
+          customer_type?: string
+          discount?: number
+          id?: string
+          inventory_reserved_until?: string | null
+          items_snapshot?: Json
+          pricing_snapshot?: Json
+          session_expires_at?: string | null
+          shipping_amount?: number
+          shipping_code?: string | null
+          shipping_method?: string | null
+          shopify_draft_order_id?: string | null
+          shopify_order_id?: string | null
+          status?: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       club_members: {
         Row: {
           created_at: string
@@ -142,6 +283,111 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string | null
+        }
+        Relationships: []
+      }
+      customer_addresses: {
+        Row: {
+          address1: string
+          address2: string | null
+          city: string
+          country_code: string
+          created_at: string
+          id: string
+          is_default_billing: boolean
+          is_default_shipping: boolean
+          label: string
+          neighborhood: string
+          number: string
+          postal_code: string
+          province_code: string
+          recipient_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address1: string
+          address2?: string | null
+          city: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          is_default_billing?: boolean
+          is_default_shipping?: boolean
+          label?: string
+          neighborhood: string
+          number: string
+          postal_code: string
+          province_code: string
+          recipient_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address1?: string
+          address2?: string | null
+          city?: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          is_default_billing?: boolean
+          is_default_shipping?: boolean
+          label?: string
+          neighborhood?: string
+          number?: string
+          postal_code?: string
+          province_code?: string
+          recipient_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      customer_payment_methods: {
+        Row: {
+          brand: string | null
+          created_at: string
+          holder_name: string | null
+          id: string
+          is_default: boolean
+          last_four: string
+          provider: string
+          provider_customer_id: string
+          revoked_at: string | null
+          token_ciphertext: string
+          token_iv: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          holder_name?: string | null
+          id?: string
+          is_default?: boolean
+          last_four: string
+          provider?: string
+          provider_customer_id: string
+          revoked_at?: string | null
+          token_ciphertext: string
+          token_iv: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          holder_name?: string | null
+          id?: string
+          is_default?: boolean
+          last_four?: string
+          provider?: string
+          provider_customer_id?: string
+          revoked_at?: string | null
+          token_ciphertext?: string
+          token_iv?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -196,6 +442,42 @@ export type Database = {
         }
         Relationships: []
       }
+      franchise_credit_accounts: {
+        Row: {
+          block_on_any_open_invoice: boolean
+          blocked_at: string | null
+          blocked_reason: string | null
+          created_at: string
+          credit_limit: number | null
+          manually_blocked: boolean
+          payment_term_days: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          block_on_any_open_invoice?: boolean
+          blocked_at?: string | null
+          blocked_reason?: string | null
+          created_at?: string
+          credit_limit?: number | null
+          manually_blocked?: boolean
+          payment_term_days?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          block_on_any_open_invoice?: boolean
+          blocked_at?: string | null
+          blocked_reason?: string | null
+          created_at?: string
+          credit_limit?: number | null
+          manually_blocked?: boolean
+          payment_term_days?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       franchise_prices: {
         Row: {
           created_at: string
@@ -246,6 +528,178 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
+      }
+      payment_actions: {
+        Row: {
+          action_type: string
+          attempts: number
+          created_at: string
+          id: string
+          locked_at: string | null
+          next_attempt_at: string | null
+          payment_id: string
+          processed_at: string | null
+          processing_error: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          action_type: string
+          attempts?: number
+          created_at?: string
+          id?: string
+          locked_at?: string | null
+          next_attempt_at?: string | null
+          payment_id: string
+          processed_at?: string | null
+          processing_error?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          attempts?: number
+          created_at?: string
+          id?: string
+          locked_at?: string | null
+          next_attempt_at?: string | null
+          payment_id?: string
+          processed_at?: string | null
+          processing_error?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_actions_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_events: {
+        Row: {
+          attempts: number
+          event_type: string
+          id: string
+          locked_at: string | null
+          next_attempt_at: string | null
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          provider: string
+          provider_event_id: string
+          provider_payment_id: string | null
+          received_at: string
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          event_type: string
+          id?: string
+          locked_at?: string | null
+          next_attempt_at?: string | null
+          payload: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          provider: string
+          provider_event_id: string
+          provider_payment_id?: string | null
+          received_at?: string
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          event_type?: string
+          id?: string
+          locked_at?: string | null
+          next_attempt_at?: string | null
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          provider?: string
+          provider_event_id?: string
+          provider_payment_id?: string | null
+          received_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          attempt_number: number
+          checkout_session_id: string
+          confirmed_at: string | null
+          created_at: string
+          due_date: string | null
+          external_reference: string
+          id: string
+          is_active: boolean
+          method: string
+          provider: string
+          provider_customer_id: string | null
+          provider_deleted_at: string | null
+          provider_expires_at: string | null
+          provider_payment_id: string | null
+          raw_status: string | null
+          received_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          attempt_number: number
+          checkout_session_id: string
+          confirmed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          external_reference: string
+          id?: string
+          is_active?: boolean
+          method: string
+          provider: string
+          provider_customer_id?: string | null
+          provider_deleted_at?: string | null
+          provider_expires_at?: string | null
+          provider_payment_id?: string | null
+          raw_status?: string | null
+          received_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          attempt_number?: number
+          checkout_session_id?: string
+          confirmed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          external_reference?: string
+          id?: string
+          is_active?: boolean
+          method?: string
+          provider?: string
+          provider_customer_id?: string | null
+          provider_deleted_at?: string | null
+          provider_expires_at?: string | null
+          provider_payment_id?: string | null
+          raw_status?: string | null
+          received_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_checkout_session_id_fkey"
+            columns: ["checkout_session_id"]
+            isOneToOne: false
+            referencedRelation: "checkout_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       print_jobs: {
         Row: {
@@ -615,6 +1069,96 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_payment_actions: {
+        Args: { p_limit?: number }
+        Returns: {
+          action_type: string
+          attempts: number
+          created_at: string
+          id: string
+          locked_at: string | null
+          next_attempt_at: string | null
+          payment_id: string
+          processed_at: string | null
+          processing_error: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "payment_actions"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_payment_events: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempts: number
+          event_type: string
+          id: string
+          locked_at: string | null
+          next_attempt_at: string | null
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          provider: string
+          provider_event_id: string
+          provider_payment_id: string | null
+          received_at: string
+          status: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "payment_events"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      consume_checkout_rate_limit: {
+        Args: {
+          p_key_hash: string
+          p_limit?: number
+          p_window_seconds?: number
+        }
+        Returns: number
+      }
+      create_payment_attempt: {
+        Args: {
+          p_amount: number
+          p_checkout_session_id: string
+          p_due_date?: string
+          p_method: string
+          p_provider: string
+        }
+        Returns: {
+          amount: number
+          attempt_number: number
+          checkout_session_id: string
+          confirmed_at: string | null
+          created_at: string
+          due_date: string | null
+          external_reference: string
+          id: string
+          is_active: boolean
+          method: string
+          provider: string
+          provider_customer_id: string | null
+          provider_deleted_at: string | null
+          provider_expires_at: string | null
+          provider_payment_id: string | null
+          raw_status: string | null
+          received_at: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -623,6 +1167,39 @@ export type Database = {
         Returns: boolean
       }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      save_customer_address: {
+        Args: {
+          p_address: Json
+          p_address_id?: string
+          p_default_billing?: boolean
+          p_default_shipping?: boolean
+          p_user_id: string
+        }
+        Returns: {
+          address1: string
+          address2: string | null
+          city: string
+          country_code: string
+          created_at: string
+          id: string
+          is_default_billing: boolean
+          is_default_shipping: boolean
+          label: string
+          neighborhood: string
+          number: string
+          postal_code: string
+          province_code: string
+          recipient_name: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customer_addresses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       validate_referral_code: { Args: { _code: string }; Returns: boolean }
     }
     Enums: {
