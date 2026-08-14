@@ -1,7 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeadersWith, jsonResponse } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
-import { getAsaasPayment, getAsaasPixQrCode } from "../_shared/asaas.ts";
+import {
+  createAsaasPayment,
+  deleteAsaasPayment,
+  findOrCreateAsaasCustomer,
+  getAsaasPayment,
+  getAsaasPixQrCode,
+} from "../_shared/asaas.ts";
+
 
 // Diagnóstico temporário do Pix no ambiente Sandbox. Protegido pelo token do worker.
 Deno.serve(async (req) => {
@@ -19,10 +26,59 @@ Deno.serve(async (req) => {
   const environment = baseUrl.includes("sandbox") ? "sandbox" : "production";
 
   let requestedId: string | null = null;
+  let probePix = false;
   try {
     const body = await req.json();
     if (body && typeof body.paymentId === "string" && body.paymentId.trim()) requestedId = body.paymentId.trim();
+    if (body && body.probePix === true) probePix = true;
   } catch { requestedId = null; }
+
+  // Sonda Pix: cria e apaga uma cobrança de R$ 1 para validar a chave Pix da conta.
+  if (probePix) {
+    const reference = `diag-pix-${Date.now()}`;
+    try {
+      const customer = await findOrCreateAsaasCustomer({
+        externalReference: "diag-pix-customer",
+        name: "Diagnostico TudoPraPet",
+        cpfCnpj: "24971563792",
+        email: "diagnostico@tudoprapet.com.br",
+      });
+      const payment = await createAsaasPayment({
+        customer,
+        billingType: "PIX",
+        value: 1,
+        dueDate: new Date().toISOString().slice(0, 10),
+        description: "Diagnostico Pix",
+        externalReference: reference,
+      });
+      let qrOk = false;
+      let qrPrefix = "";
+      let probeQrError: string | null = null;
+      try {
+        const qr = await getAsaasPixQrCode(payment.id);
+        qrOk = (qr.payload || "").startsWith("000201");
+        qrPrefix = (qr.payload || "").slice(0, 40);
+      } catch (error) {
+        probeQrError = error instanceof Error ? error.message : String(error);
+      }
+      let deleted = false;
+      try {
+        deleted = (await deleteAsaasPayment(payment.id)).deleted;
+      } catch { deleted = false; }
+      return jsonResponse({
+        baseUrl,
+        environment,
+        probePix: { ok: qrOk, paymentId: payment.id, status: payment.status, qrPrefix, probeQrError, deleted },
+      });
+    } catch (error) {
+      return jsonResponse({
+        baseUrl,
+        environment,
+        probePix: { ok: false, error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  }
+
 
   // Sonda de credencial: confirma que a chave atual responde no ambiente configurado.
   let account: Record<string, unknown> | null = null;
