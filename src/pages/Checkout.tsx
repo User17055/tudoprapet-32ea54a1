@@ -2808,7 +2808,7 @@ function MobileOrderSummary({
         </span>
       </summary>
       <div className="border-t border-slate-200 bg-white px-3.5 py-4">
-        <SummaryTotals summary={summary} cartItems={cartItems} />
+        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
       </div>
     </details>
   );
