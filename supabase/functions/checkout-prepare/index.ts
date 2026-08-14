@@ -259,6 +259,9 @@ Deno.serve(async (req) => {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
       return errorResponse("Falha ao preparar pedido na Shopify", 502);
     }
+    // Mercado Brasil: sem a credencial fiscal a conclusão do draft é rejeitada.
+    await setDraftOrderTaxCredential(draft.draftOrderId, input.customer.cpfCnpj, shopifyToken);
+
 
     const { error: draftUpdateError } = await admin.from("checkout_sessions")
       .update({ shopify_draft_order_id: draft.draftOrderId })
