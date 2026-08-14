@@ -639,7 +639,6 @@ export type Database = {
           id: string
           is_active: boolean
           method: string
-          pix_expires_at: string | null
           provider: string
           provider_customer_id: string | null
           provider_deleted_at: string | null
@@ -661,7 +660,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           method: string
-          pix_expires_at?: string | null
           provider: string
           provider_customer_id?: string | null
           provider_deleted_at?: string | null
@@ -683,7 +681,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           method?: string
-          pix_expires_at?: string | null
           provider?: string
           provider_customer_id?: string | null
           provider_deleted_at?: string | null
@@ -1145,7 +1142,6 @@ export type Database = {
           id: string
           is_active: boolean
           method: string
-          pix_expires_at: string | null
           provider: string
           provider_customer_id: string | null
           provider_deleted_at: string | null
