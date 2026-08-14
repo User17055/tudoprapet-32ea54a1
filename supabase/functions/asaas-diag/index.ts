@@ -1,7 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeadersWith, jsonResponse } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
-import { getAsaasPayment, getAsaasPixQrCode } from "../_shared/asaas.ts";
+import {
+  createAsaasPayment,
+  deleteAsaasPayment,
+  findOrCreateAsaasCustomer,
+  getAsaasPayment,
+  getAsaasPixQrCode,
+} from "../_shared/asaas.ts";
+
 
 // Diagnóstico temporário do Pix no ambiente Sandbox. Protegido pelo token do worker.
 Deno.serve(async (req) => {
