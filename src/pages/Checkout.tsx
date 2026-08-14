@@ -2791,6 +2791,14 @@ function MobileOrderSummary({
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
   ) + SERVICE_FEE;
+  const headerTotal = shippingOverride
+    ? Math.max(
+        0,
+        (summary
+          ? summary.subtotal - summary.discount + (summary.serviceFee ?? SERVICE_FEE)
+          : cartTotal) + shippingOverride.amount,
+      )
+    : summary?.total ?? cartTotal;
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
