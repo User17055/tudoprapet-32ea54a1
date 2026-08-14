@@ -43,6 +43,22 @@ Deno.serve(async (req) => {
   }
 
   if (!id) return jsonResponse({ error: "draft_order_id obrigatório" }, 400);
+  if (action === "set_cpf") {
+    const cpf = (url.searchParams.get("cpf") || "").replace(/\D/g, "");
+    const key = cpf.length > 11 ? "TAX_CREDENTIAL_BR" : "SHIPPING_CREDENTIAL_BR";
+    const result = await graphql(
+      token,
+      `mutation SetCpf($id: ID!, $ext: [LocalizationExtensionInput!]) {
+        draftOrderUpdate(id: $id, input: { localizationExtensions: $ext }) {
+          draftOrder { id }
+          userErrors { field message }
+        }
+      }`,
+      { id: `gid://shopify/DraftOrder/${id}`, ext: [{ key, value: cpf }] },
+    );
+    return jsonResponse(result);
+  }
+
 
   if (action === "complete") {
     const result = await graphql(
