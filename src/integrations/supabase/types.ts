@@ -194,6 +194,7 @@ export type Database = {
           inventory_reserved_until: string | null
           items_snapshot: Json
           pricing_snapshot: Json
+          service_fee: number
           session_expires_at: string | null
           shipping_amount: number
           shipping_code: string | null
@@ -221,6 +222,7 @@ export type Database = {
           inventory_reserved_until?: string | null
           items_snapshot?: Json
           pricing_snapshot?: Json
+          service_fee?: number
           session_expires_at?: string | null
           shipping_amount?: number
           shipping_code?: string | null
@@ -248,6 +250,7 @@ export type Database = {
           inventory_reserved_until?: string | null
           items_snapshot?: Json
           pricing_snapshot?: Json
+          service_fee?: number
           session_expires_at?: string | null
           shipping_amount?: number
           shipping_code?: string | null
