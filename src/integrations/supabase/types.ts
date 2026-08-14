@@ -121,6 +121,42 @@ export type Database = {
           },
         ]
       }
+      checkout_customer_profiles: {
+        Row: {
+          asaas_customer_id: string | null
+          billing_same_as_shipping: boolean
+          cpf_cnpj: string
+          created_at: string
+          full_name: string
+          invoice_email: string
+          mobile_phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asaas_customer_id?: string | null
+          billing_same_as_shipping?: boolean
+          cpf_cnpj: string
+          created_at?: string
+          full_name: string
+          invoice_email: string
+          mobile_phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asaas_customer_id?: string | null
+          billing_same_as_shipping?: boolean
+          cpf_cnpj?: string
+          created_at?: string
+          full_name?: string
+          invoice_email?: string
+          mobile_phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       checkout_rate_limits: {
         Row: {
           key_hash: string
@@ -147,6 +183,7 @@ export type Database = {
           address_snapshot: Json
           anonymous_access_token_expires_at: string | null
           anonymous_access_token_hash: string | null
+          billing_address_snapshot: Json
           checkout_version: string
           created_at: string
           currency: string
@@ -173,6 +210,7 @@ export type Database = {
           address_snapshot?: Json
           anonymous_access_token_expires_at?: string | null
           anonymous_access_token_hash?: string | null
+          billing_address_snapshot?: Json
           checkout_version?: string
           created_at?: string
           currency?: string
@@ -199,6 +237,7 @@ export type Database = {
           address_snapshot?: Json
           anonymous_access_token_expires_at?: string | null
           anonymous_access_token_hash?: string | null
+          billing_address_snapshot?: Json
           checkout_version?: string
           created_at?: string
           currency?: string
@@ -244,6 +283,111 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string | null
+        }
+        Relationships: []
+      }
+      customer_addresses: {
+        Row: {
+          address1: string
+          address2: string | null
+          city: string
+          country_code: string
+          created_at: string
+          id: string
+          is_default_billing: boolean
+          is_default_shipping: boolean
+          label: string
+          neighborhood: string
+          number: string
+          postal_code: string
+          province_code: string
+          recipient_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address1: string
+          address2?: string | null
+          city: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          is_default_billing?: boolean
+          is_default_shipping?: boolean
+          label?: string
+          neighborhood: string
+          number: string
+          postal_code: string
+          province_code: string
+          recipient_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address1?: string
+          address2?: string | null
+          city?: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          is_default_billing?: boolean
+          is_default_shipping?: boolean
+          label?: string
+          neighborhood?: string
+          number?: string
+          postal_code?: string
+          province_code?: string
+          recipient_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      customer_payment_methods: {
+        Row: {
+          brand: string | null
+          created_at: string
+          holder_name: string | null
+          id: string
+          is_default: boolean
+          last_four: string
+          provider: string
+          provider_customer_id: string
+          revoked_at: string | null
+          token_ciphertext: string
+          token_iv: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          holder_name?: string | null
+          id?: string
+          is_default?: boolean
+          last_four: string
+          provider?: string
+          provider_customer_id: string
+          revoked_at?: string | null
+          token_ciphertext: string
+          token_iv: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          holder_name?: string | null
+          id?: string
+          is_default?: boolean
+          last_four?: string
+          provider?: string
+          provider_customer_id?: string
+          revoked_at?: string | null
+          token_ciphertext?: string
+          token_iv?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -1023,6 +1167,39 @@ export type Database = {
         Returns: boolean
       }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      save_customer_address: {
+        Args: {
+          p_address: Json
+          p_address_id?: string
+          p_default_billing?: boolean
+          p_default_shipping?: boolean
+          p_user_id: string
+        }
+        Returns: {
+          address1: string
+          address2: string | null
+          city: string
+          country_code: string
+          created_at: string
+          id: string
+          is_default_billing: boolean
+          is_default_shipping: boolean
+          label: string
+          neighborhood: string
+          number: string
+          postal_code: string
+          province_code: string
+          recipient_name: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customer_addresses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       validate_referral_code: { Args: { _code: string }; Returns: boolean }
     }
     Enums: {
