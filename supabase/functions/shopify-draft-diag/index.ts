@@ -76,7 +76,39 @@ Deno.serve(async (req) => {
     return jsonResponse(result);
   }
 
-
+  if (action === "fix_country") {
+    const cpf = (url.searchParams.get("cpf") || "").replace(/\D/g, "");
+    const read = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(id)}.json`, {
+      headers: { "X-Shopify-Access-Token": token },
+    });
+    const draft = (await read.json())?.draft_order;
+    const patch = (addr: Record<string, unknown> | null) => addr
+      ? {
+        firstName: addr.first_name, lastName: addr.last_name,
+        address1: addr.address1, address2: addr.address2 || undefined,
+        city: addr.city, zip: addr.zip, phone: addr.phone,
+        provinceCode: addr.province_code || "SP", countryCode: "BR",
+      }
+      : undefined;
+    const result = await graphql(
+      token,
+      `mutation FixCountry($id: ID!, $input: DraftOrderInput!) {
+        draftOrderUpdate(id: $id, input: $input) {
+          draftOrder { id localizationExtensions(first: 5) { nodes { key value } } }
+          userErrors { field message }
+        }
+      }`,
+      {
+        id: `gid://shopify/DraftOrder/${id}`,
+        input: {
+          shippingAddress: patch(draft?.shipping_address ?? null),
+          billingAddress: patch(draft?.billing_address ?? null),
+          localizationExtensions: cpf ? [{ key: "TAX_CREDENTIAL_BR", value: cpf }] : undefined,
+        },
+      },
+    );
+    return jsonResponse(result);
+  }
 
 
   if (action === "complete") {
