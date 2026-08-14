@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductCardSkeleton } from "@/components/ProductCardSkeleton";
 import { ShopifyProduct, cachedStorefrontApiRequest, BEST_SELLING_PRODUCTS_QUERY, fetchAllShopifyProducts } from "@/lib/shopify";
-import { ChevronRight, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoreHorizontal, PackageOpen, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,6 +44,8 @@ const PRICE_RANGES = [
   { label: "+ R$ 200,00", min: 200, max: Infinity },
 ];
 
+const PRODUCTS_PER_PAGE = 24;
+
 const normalizeSlug = (value: string) =>
   value
     .normalize("NFD")
@@ -72,6 +74,9 @@ const Catalog = () => {
   const [priceRangeIdxs, setPriceRangeIdxs] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState("relevance");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsTopRef = useRef<HTMLDivElement>(null);
+  const paginationInitializedRef = useRef(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -329,6 +334,46 @@ const Catalog = () => {
 
     return result;
   }, [discoverableProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const paginatedProducts = useMemo(
+    () => filteredProducts.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE),
+    [filteredProducts, currentPage],
+  );
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+    const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+    if (currentPage <= 4) [2, 3, 4, 5].forEach((page) => pages.add(page));
+    if (currentPage >= totalPages - 3) {
+      [totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1].forEach((page) => pages.add(page));
+    }
+    const ordered = [...pages].filter((page) => page >= 1 && page <= totalPages).sort((a, b) => a - b);
+    const items: Array<number | "ellipsis"> = [];
+    ordered.forEach((page, index) => {
+      if (index > 0 && page - ordered[index - 1] > 1) items.push("ellipsis");
+      items.push(page);
+    });
+    return items;
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!paginationInitializedRef.current) {
+      paginationInitializedRef.current = true;
+      return;
+    }
+    setCurrentPage(1);
+  }, [requestedSearch, categorySlug, categoryId, brandSlugs, attrValues, priceRangeIdxs, sort]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  const changePage = (page: number) => {
+    const nextPage = Math.min(Math.max(page, 1), totalPages);
+    if (nextPage === currentPage) return;
+    setCurrentPage(nextPage);
+    requestAnimationFrame(() => resultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
   const hasRefinementFilters =
@@ -688,7 +733,7 @@ const Catalog = () => {
               </SheetContent>
             </Sheet>
 
-            <div>
+            <div ref={resultsTopRef} className="scroll-mt-24">
               {activeChips.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   {activeChips.map((chip) => (
@@ -738,7 +783,7 @@ const Catalog = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-12 md:grid-cols-3 xl:grid-cols-4">
-                  {filteredProducts.map((product) => (
+                  {paginatedProducts.map((product) => (
                     <ProductCard
                       key={product.node.id}
                       product={product}
@@ -747,6 +792,57 @@ const Catalog = () => {
                     />
                   ))}
                 </div>
+              )}
+
+              {!catalogLoading && filteredProducts.length > 0 && totalPages > 1 && (
+                <nav className="relative mt-14 flex min-h-10 items-center justify-center" aria-label="Paginação do catálogo">
+                  <p className="hidden text-xs text-muted-foreground md:absolute md:left-0 md:block">
+                    Página {currentPage} de {totalPages}
+                  </p>
+                  <div className="flex items-center justify-center gap-1 sm:gap-2">
+                    <button
+                      type="button"
+                      onClick={() => changePage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Página anterior"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    {paginationItems.map((item, index) => item === "ellipsis" ? (
+                      <span key={`ellipsis-${index}`} className="flex h-9 w-7 items-center justify-center text-muted-foreground" aria-hidden="true">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        key={item}
+                        onClick={() => changePage(item)}
+                        aria-label={`Ir para a página ${item}`}
+                        aria-current={item === currentPage ? "page" : undefined}
+                        className={`h-9 min-w-9 rounded-full px-2 text-sm transition ${
+                          item === currentPage
+                            ? "bg-slate-950 font-bold text-white"
+                            : "text-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => changePage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-foreground transition hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Próxima página"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="absolute -bottom-5 text-xs text-muted-foreground md:hidden">
+                    Página {currentPage} de {totalPages}
+                  </p>
+                </nav>
               )}
             </div>
           </div>

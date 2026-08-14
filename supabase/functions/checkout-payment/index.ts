@@ -53,10 +53,15 @@ function parseCard(raw: unknown) {
   const number = String(value.number || "").replace(/\D/g, "");
   const holderName = String(value.holderName || "").trim().slice(0, 120);
   const expiryMonth = String(value.expiryMonth || "").replace(/\D/g, "").padStart(2, "0").slice(-2);
-  const expiryYear = String(value.expiryYear || "").replace(/\D/g, "").slice(-4);
+  const rawExpiryYear = String(value.expiryYear || "").replace(/\D/g, "").slice(-4);
+  const expiryYear = rawExpiryYear.length === 2 ? `20${rawExpiryYear}` : rawExpiryYear;
   const ccv = String(value.ccv || "").replace(/\D/g, "").slice(0, 4);
+  const expiryDate = Number(`${expiryYear}${expiryMonth}`);
+  const now = new Date();
+  const currentMonth = Number(`${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`);
   if (number.length < 13 || number.length > 19 || holderName.length < 2 ||
-    !/^(0[1-9]|1[0-2])$/.test(expiryMonth) || !/^20\d{2}$/.test(expiryYear) || !/^\d{3,4}$/.test(ccv)) {
+    !/^(0[1-9]|1[0-2])$/.test(expiryMonth) || !/^20\d{2}$/.test(expiryYear) ||
+    expiryDate < currentMonth || !/^\d{3,4}$/.test(ccv)) {
     throw new Error("Dados do cartão inválidos");
   }
   return { number, holderName, expiryMonth, expiryYear, ccv };
@@ -342,6 +347,18 @@ Deno.serve(async (req) => {
     console.error("checkout-payment:", error);
     const message = error instanceof Error ? error.message : "";
     if (message.includes("Dados do cartão inválidos")) return errorResponse(message, 400);
+    if (/Asaas 400:.*invalid_billingType/i.test(message)) {
+      return errorResponse("O pagamento por cartão ainda não está habilitado nesta conta. Use Pix ou fale com o atendimento.", 503);
+    }
+    if (/Asaas 400:.*invalid_creditCard/i.test(message)) {
+      return errorResponse("Transação não autorizada. Confira os dados do cartão ou tente outro cartão.", 402);
+    }
+    if (/Asaas 400:/.test(message)) {
+      return errorResponse("Não foi possível validar o cartão e os dados do titular. Confira as informações e tente novamente.", 400);
+    }
+    if (/Asaas 401:/.test(message)) {
+      return errorResponse("Pagamento temporariamente indisponível. Tente novamente mais tarde.", 503);
+    }
     if (/Asaas 4\d\d:/.test(message)) return errorResponse("Pagamento recusado. Confira os dados ou use outra forma de pagamento.", 402);
     return errorResponse("Não foi possível iniciar o pagamento", 500);
   }

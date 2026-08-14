@@ -201,6 +201,22 @@ const errorText = (error: unknown, fallback: string) =>
     ? String((error as { message: unknown }).message || fallback)
     : fallback;
 
+const edgeFunctionErrorText = async (error: unknown, fallback: string) => {
+  if (error && typeof error === "object" && "context" in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const payload = await context.clone().json() as { error?: unknown; message?: unknown };
+        const detail = payload.error || payload.message;
+        if (typeof detail === "string" && detail.trim()) return detail.trim();
+      } catch {
+        // Respostas sem JSON usam a mensagem padrão abaixo.
+      }
+    }
+  }
+  return errorText(error, fallback);
+};
+
 export default function Checkout() {
   const previewMode =
     import.meta.env.DEV &&
@@ -791,11 +807,10 @@ export default function Checkout() {
         await supabase.functions.invoke("checkout-prepare", {
           body: { items, customer, delivery, billingAddress: effectiveBilling },
         });
-      if (prepareError || prepared?.error)
-        throw new Error(
-          prepared?.error ||
-            errorText(prepareError, "Falha ao preparar pedido."),
-        );
+      if (prepareError || prepared?.error) {
+        const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
+        throw new Error(detail);
+      }
       const active = {
         sessionId: prepared.sessionId,
         accessToken: prepared.accessToken,
@@ -818,11 +833,10 @@ export default function Checkout() {
         await supabase.functions.invoke("checkout-payment", {
           body: paymentBody,
         });
-      if (paymentError || paymentData?.error)
-        throw new Error(
-          paymentData?.error ||
-            errorText(paymentError, "Falha ao criar cobrança."),
-        );
+      if (paymentError || paymentData?.error) {
+        const detail = paymentData?.error || await edgeFunctionErrorText(paymentError, "Falha ao criar cobrança.");
+        throw new Error(detail);
+      }
       setPayment(paymentData);
       storeActive(active, prepared.summary, paymentData);
       setStep(4);
@@ -1960,11 +1974,12 @@ function PaymentStep(props: {
                     onChange={(e) =>
                       props.setCard({
                         ...props.card,
-                        expiryYear: e.target.value,
+                        expiryYear: e.target.value.replace(/\D/g, "").slice(0, 4),
                       })
                     }
                     inputMode="numeric"
                     autoComplete="cc-exp-year"
+                    placeholder="AAAA ou AA"
                   />
                 </Field>
                 <Field label="CVV">
