@@ -81,17 +81,21 @@ Deno.serve(async (req) => {
   return jsonResponse({
     baseUrl,
     environment,
+    account,
+    accountError,
+    remoteError,
     payment: {
       localId: payment.id,
       providerPaymentId: payment.provider_payment_id,
       localStatus: payment.status,
-      remoteStatus: remote.status,
+      remoteStatus: remote.status ?? null,
       amount: payment.amount,
-      dueDate: remote.dueDate,
-      invoiceUrl: remote.invoiceUrl,
+      dueDate: remote.dueDate ?? null,
+      invoiceUrl: remote.invoiceUrl ?? null,
       createdAt: payment.created_at,
       checkoutSessionId: payment.checkout_session_id,
     },
+
     qrError,
     qr: {
       encodedImageLength: qr.encodedImage?.length ?? 0,
