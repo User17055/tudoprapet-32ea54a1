@@ -9,6 +9,13 @@ import {
 } from "./pickup.ts";
 
 export const SHOP_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
+
+/** Mantém todas as Edge Functions usando o mesmo token Admin da Shopify. */
+export function shopifyAdminToken(): string {
+  return Deno.env.get("SHOPIFY_ACCESS_TOKEN") ||
+    Deno.env.get("SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2") ||
+    "";
+}
 export const ADMIN_API = `https://${SHOP_DOMAIN}/admin/api/2025-07`;
 export const STOREFRONT_API = `https://${SHOP_DOMAIN}/api/2025-07/graphql.json`;
 

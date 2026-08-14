@@ -9,6 +9,7 @@ import {
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
 import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer } from "../_shared/shopify.ts";
+import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -177,12 +178,13 @@ Deno.serve(async (req) => {
     let shippingMethod = shippingLabel(input.delivery.code);
     let shippingCode: "pick_up" | "pac" | "sedex" | "local_delivery" | "shipping" = input.delivery.code;
     if (input.delivery.code !== "pick_up" && input.delivery.address) {
-      const options = await fetchShopifyDraftDeliveryOptions({
+      const providerOptions = await fetchShopifyDraftDeliveryOptions({
         items: input.items,
         customerName: input.customer.name,
         phone: input.customer.mobilePhone,
         address: input.delivery.address,
       }, shopifyToken);
+      const options = applyDeliveryPolicy(input.delivery.address, providerOptions);
       const selected = options.find((option) => option.handle === input.delivery.optionHandle);
       if (!selected) return errorResponse("A modalidade de frete expirou. Calcule novamente.", 409);
       shippingAmount = money(selected.amount);

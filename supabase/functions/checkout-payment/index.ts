@@ -10,7 +10,7 @@ import {
   getAsaasPixQrCode,
   type AsaasPayment, type AsaasPaymentInput,
 } from "../_shared/asaas.ts";
-import { completeDraftOrder } from "../_shared/shopify.ts";
+import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 
@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
     if (paymentUpdateError) throw paymentUpdateError;
 
     if (session.customer_type === "franchise") {
-      const shopifyToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN") || "";
+      const shopifyToken = shopifyAdminToken();
       if (!shopifyToken || !session.shopify_draft_order_id) {
         throw new Error("Shopify não configurada para concluir pedido da franquia");
       }

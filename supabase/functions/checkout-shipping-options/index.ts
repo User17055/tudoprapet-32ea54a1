@@ -4,6 +4,7 @@ import { parseCheckoutAddress, parseCheckoutCustomer } from "../_shared/checkout
 import { parseCheckoutItems } from "../_shared/validation.ts";
 import { fetchShopifyDraftDeliveryOptions } from "../_shared/shopify.ts";
 import { optionalCheckoutUser } from "../_shared/checkout-access.ts";
+import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 
 function shopifyToken(): string {
   return Deno.env.get("SHOPIFY_ACCESS_TOKEN") || Deno.env.get("SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2") || "";
@@ -38,12 +39,13 @@ Deno.serve(async (req) => {
     if (!address.ok) return errorResponse(address.message, 400);
     const token = shopifyToken();
     if (!token) return errorResponse("Shopify não configurada", 500);
-    const options = await fetchShopifyDraftDeliveryOptions({
+    const providerOptions = await fetchShopifyDraftDeliveryOptions({
       items: items.value,
       customerName: customer.value.name,
       phone: customer.value.mobilePhone,
       address: address.value,
     }, token);
+    const options = applyDeliveryPolicy(address.value, providerOptions);
     if (!options.length) return errorResponse("Nenhuma forma de entrega disponível para este endereço", 409);
     return jsonResponse({ options });
   } catch (error) {

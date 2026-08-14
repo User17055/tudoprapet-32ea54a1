@@ -8,7 +8,7 @@ import {
   shouldApplyPaymentStatus,
   type LocalPaymentStatus,
 } from "../_shared/payment-events.ts";
-import { completeDraftOrder } from "../_shared/shopify.ts";
+import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
 import { deleteAsaasPayment, getAsaasPayment } from "../_shared/asaas.ts";
 
@@ -96,7 +96,7 @@ async function finalizePaidCheckout(admin: SupabaseClient, payment: PaymentRow) 
   if (!session.shopify_draft_order_id) {
     throw new Error("Pagamento recebido sem Draft Order Shopify");
   }
-  const shopifyToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN") || "";
+  const shopifyToken = shopifyAdminToken();
   if (!shopifyToken) throw new Error("SHOPIFY_ACCESS_TOKEN ausente");
 
   const result = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken);
@@ -107,6 +107,64 @@ async function finalizePaidCheckout(admin: SupabaseClient, payment: PaymentRow) 
     shopify_order_id: result.orderId,
   }).eq("id", session.id).is("shopify_order_id", null);
   if (completedError) throw completedError;
+}
+
+async function recoverPaidCheckouts(admin: SupabaseClient) {
+  const { data, error } = await admin.from("checkout_sessions")
+    .select("id")
+    .eq("status", "paid_pending_shopify")
+    .is("shopify_order_id", null)
+    .order("updated_at", { ascending: true })
+    .limit(25);
+  if (error) throw error;
+
+  let recovered = 0;
+  let failed = 0;
+  for (const session of data ?? []) {
+    try {
+      await finalizePaidCheckout(admin, {
+        checkout_session_id: String(session.id),
+      } as PaymentRow);
+      recovered++;
+    } catch (recoveryError) {
+      failed++;
+      console.error(`Falha ao recuperar checkout pago ${session.id}:`, recoveryError);
+    }
+  }
+  return { checked: (data ?? []).length, recovered, failed };
+}
+
+async function reconcileOpenPixPayments(admin: SupabaseClient) {
+  const { data, error } = await admin.from("payments")
+    .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
+    .eq("method", "pix")
+    .eq("is_active", true)
+    .in("status", ["pending", "processing"])
+    .not("provider_payment_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(25);
+  if (error) throw error;
+
+  let paid = 0;
+  let pending = 0;
+  let failed = 0;
+  for (const row of (data ?? []) as PaymentRow[]) {
+    try {
+      const remote = await getAsaasPayment(row.provider_payment_id!);
+      const remoteStatus = String(remote.status || "").toUpperCase();
+      if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+        const localStatus = remoteStatus === "CONFIRMED" ? "confirmed" : "received";
+        await settlePaidPayment(admin, row, localStatus, remoteStatus);
+        paid++;
+      } else {
+        pending++;
+      }
+    } catch (reconciliationError) {
+      failed++;
+      console.error(`Falha ao conciliar Pix ${row.id}:`, reconciliationError);
+    }
+  }
+  return { checked: (data ?? []).length, paid, pending, failed };
 }
 
 async function flagDuplicatePayment(admin: SupabaseClient, payment: PaymentRow) {
@@ -383,7 +441,16 @@ Deno.serve(async (req) => {
     actions = await processActions(admin);
   } catch (actionError) {
     console.error("Falha ao reivindicar ações financeiras:", actionError);
-    return jsonResponse({ error: "Falha ao processar ações financeiras" }, 500);
+      return jsonResponse({ error: "Falha ao processar ações financeiras" }, 500);
+  }
+  let reconciliation;
+  let recovery;
+  try {
+    reconciliation = await reconcileOpenPixPayments(admin);
+    recovery = await recoverPaidCheckouts(admin);
+  } catch (reconciliationError) {
+    console.error("Falha na conciliação financeira:", reconciliationError);
+    return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
   }
   const { data, error } = await admin.rpc("claim_payment_events", { p_limit: 25 });
   if (error) return jsonResponse({ error: "Falha ao reivindicar eventos" }, 500);
@@ -416,5 +483,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse({ events: { claimed: (data ?? []).length, processed, failed }, actions, expirations });
+  return jsonResponse({
+    events: { claimed: (data ?? []).length, processed, failed },
+    actions,
+    expirations,
+    reconciliation,
+    recovery,
+  });
 });

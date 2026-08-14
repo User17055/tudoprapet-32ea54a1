@@ -273,6 +273,9 @@ export default function Checkout() {
   const [resumeAfterAddressSave, setResumeAfterAddressSave] = useState(false);
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [shippingHandle, setShippingHandle] = useState("");
+  const [shippingAvailabilityLoading, setShippingAvailabilityLoading] =
+    useState(false);
+  const [shippingQuoteKey, setShippingQuoteKey] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"pix" | "credit_card">(
     "pix",
   );
@@ -636,6 +639,80 @@ export default function Checkout() {
     [11, 14].includes(digits(customer.cpfCnpj).length) &&
     digits(customer.mobilePhone).length >= 10;
   const validAddress = validAddressValue;
+  const currentShippingQuoteKey = JSON.stringify({
+    items: items.map(({ variantId, quantity }) => ({ variantId, quantity })),
+    customer: {
+      name: customer.name.trim(),
+      email: customer.email.trim().toLowerCase(),
+      cpfCnpj: digits(customer.cpfCnpj),
+      mobilePhone: digits(customer.mobilePhone),
+    },
+    address,
+  });
+
+  useEffect(() => {
+    const addressReady = validAddressValue(address);
+    const customerReady =
+      customer.name.trim().length >= 2 &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email) &&
+      [11, 14].includes(digits(customer.cpfCnpj).length) &&
+      digits(customer.mobilePhone).length >= 10;
+
+    if (!addressReady || !customerReady || !items.length) {
+      setShippingOptions([]);
+      setShippingHandle("");
+      setShippingQuoteKey("");
+      setShippingAvailabilityLoading(false);
+      return;
+    }
+
+    if (previewMode) {
+      const demo: ShippingOption[] = [
+        {
+          handle: "preview-local-presidente-prudente",
+          code: "LOCAL_DELIVERY",
+          title: "Entrega em Presidente Prudente",
+          description: "Entrega local para Presidente Prudente/SP",
+          amount: 10,
+          currencyCode: "BRL",
+        },
+      ];
+      setShippingOptions(demo);
+      setShippingHandle(demo[0].handle);
+      setShippingQuoteKey(currentShippingQuoteKey);
+      setShippingAvailabilityLoading(false);
+      return;
+    }
+
+    let active = true;
+    setShippingAvailabilityLoading(true);
+    setShippingOptions([]);
+    setShippingHandle("");
+    const timer = window.setTimeout(async () => {
+      const { data, error } = await supabase.functions.invoke(
+        "checkout-shipping-options",
+        { body: { items, customer, address } },
+      );
+      if (!active) return;
+      const options: ShippingOption[] =
+        !error && !data?.error && Array.isArray(data?.options)
+          ? data.options
+          : [];
+      setShippingOptions(options);
+      setShippingHandle(options[0]?.handle || "");
+      setShippingQuoteKey(options.length ? currentShippingQuoteKey : "");
+      setShippingAvailabilityLoading(false);
+      if (!options.length) setDeliveryMode("pick_up");
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+    // A chave muda somente quando os dados usados na cotação mudam.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentShippingQuoteKey, previewMode]);
+
   const effectiveBilling =
     deliveryMode === "shipping" && billingSame ? address : billingAddress;
   const markInvalid = (invalidStep: number) =>
@@ -736,51 +813,44 @@ export default function Checkout() {
       );
     }
     if (deliveryMode === "shipping") {
-      if (previewMode) {
-        const demo = [
-          {
-            handle: "preview-pac",
-            code: "PAC",
-            title: "PAC",
-            description: "Entrega estimada de demonstração",
-            amount: 18.9,
-            currencyCode: "BRL",
-          },
-        ];
-        setShippingOptions(demo);
-        setShippingHandle(demo[0].handle);
-        setStep(1);
-        return;
-      }
-      setBusy(true);
-      const { data, error } = await supabase.functions.invoke(
-        "checkout-shipping-options",
-        { body: { items, customer, address } },
-      );
-      setBusy(false);
-      if (error || data?.error || !data?.options?.length)
+      if (shippingAvailabilityLoading)
         return setMessage(
-          data?.error ||
-            "Não foi possível calcular o frete para este endereço.",
+          "Aguarde enquanto verificamos a entrega para este endereço.",
         );
-      setShippingOptions(data.options);
-      setShippingHandle((current) =>
-        current &&
-        data.options.some((option: ShippingOption) => option.handle === current)
-          ? current
-          : data.options[0].handle,
-      );
+      if (
+        shippingQuoteKey !== currentShippingQuoteKey ||
+        !shippingOptions.length ||
+        !shippingHandle
+      ) {
+        setDeliveryMode("pick_up");
+        return setMessage(
+          "Entrega no endereço não está disponível para este CEP. Selecione a retirada gratuita na loja.",
+        );
+      }
     }
     setValidationAttempt(null);
     setStep(1);
   };
   useEffect(() => {
     if (!resumeAfterAddressSave || !validAddress(address)) return;
+    if (
+      deliveryMode === "shipping" &&
+      (shippingAvailabilityLoading ||
+        shippingQuoteKey !== currentShippingQuoteKey)
+    )
+      return;
     setResumeAfterAddressSave(false);
     void nextDelivery();
     // A continuação acontece uma única vez após o novo endereço entrar no estado.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, resumeAfterAddressSave]);
+  }, [
+    address,
+    currentShippingQuoteKey,
+    deliveryMode,
+    resumeAfterAddressSave,
+    shippingAvailabilityLoading,
+    shippingQuoteKey,
+  ]);
   const nextPayment = () => {
     if (isFranchisee) {
       setValidationAttempt(null);
@@ -1092,6 +1162,7 @@ export default function Checkout() {
       >
         <PaymentStep
           franchise={isFranchisee}
+          deliveryMode={deliveryMode}
           method={paymentMethod}
           setMethod={setPaymentMethod}
           shippingOptions={shippingOptions}
@@ -1136,6 +1207,11 @@ export default function Checkout() {
               shippingOverride={
                 step === 0 && deliveryMode === "pick_up"
                   ? { title: "Retirada na loja", amount: 0 }
+                  : step === 0 && selectedShipping
+                    ? {
+                        title: selectedShipping.title,
+                        amount: selectedShipping.amount,
+                      }
                   : undefined
               }
             />
@@ -1212,6 +1288,7 @@ export default function Checkout() {
                       {step === 1 && (
                         <PaymentStep
                           franchise={isFranchisee}
+                          deliveryMode={deliveryMode}
                           method={paymentMethod}
                           setMethod={setPaymentMethod}
                           shippingOptions={shippingOptions}
@@ -1264,6 +1341,8 @@ export default function Checkout() {
                   addressLabel={selectedSavedAddress?.label || addressLabel}
                   isSaved={Boolean(selectedSavedAddress)}
                   loggedIn
+                  shippingAvailable={shippingOptions.length > 0}
+                  shippingLoading={shippingAvailabilityLoading}
                 />
               )}
               <div className="hidden lg:block">
@@ -1273,6 +1352,11 @@ export default function Checkout() {
                   shippingOverride={
                     step === 0 && deliveryMode === "pick_up"
                       ? { title: "Retirada na loja", amount: 0 }
+                      : step === 0 && selectedShipping
+                        ? {
+                            title: selectedShipping.title,
+                            amount: selectedShipping.amount,
+                          }
                       : undefined
                   }
                 />
@@ -1451,6 +1535,8 @@ function DeliverySidebar({
   addressLabel,
   isSaved,
   loggedIn,
+  shippingAvailable,
+  shippingLoading,
 }: {
   searchedCep: string;
   setSearchedCep: (value: string) => void;
@@ -1460,6 +1546,8 @@ function DeliverySidebar({
   addressLabel: string;
   isSaved: boolean;
   loggedIn: boolean;
+  shippingAvailable: boolean;
+  shippingLoading: boolean;
 }) {
   const completeAddress = validAddressValue(address);
   const hasCep = digits(searchedCep).length === 8;
@@ -1522,13 +1610,24 @@ function DeliverySidebar({
               Escolha a forma de entrega
             </p>
             <div className="space-y-2.5">
-              <Choice
-                active={mode === "shipping"}
-                onClick={() => setMode("shipping")}
-                icon={<PackageCheck />}
-                title="Entrega no endereço"
-                text="Frete calculado antes do pagamento"
-              />
+              {shippingLoading && (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando entrega para este endereço...
+                </div>
+              )}
+              {shippingAvailable && !shippingLoading && (
+                <Choice
+                  active={mode === "shipping"}
+                  onClick={() => setMode("shipping")}
+                  icon={<PackageCheck />}
+                  title="Entrega no endereço"
+                  text="Frete calculado para o endereço informado"
+                />
+              )}
               <Choice
                 active={mode === "pick_up"}
                 onClick={() => setMode("pick_up")}
@@ -1536,9 +1635,20 @@ function DeliverySidebar({
                 title="Retirada na loja"
                 text="Sem custo de entrega"
               />
+              {!shippingAvailable &&
+                !shippingLoading &&
+                completeAddress &&
+                isSaved && (
+                <p className="px-1 text-xs text-slate-500">
+                  Entrega no endereço indisponível para este CEP.
+                </p>
+              )}
             </div>
           </div>
-          {mode === "shipping" && completeAddress && isSaved && (
+          {mode === "shipping" &&
+            shippingAvailable &&
+            completeAddress &&
+            isSaved && (
             <div className="mt-5">
               <p className="mb-2 text-sm font-bold text-slate-900">
                 Endereço de entrega
@@ -1978,6 +2088,7 @@ function AddressRegistrationSheet({
 }
 function PaymentStep(props: {
   franchise: boolean;
+  deliveryMode: "pick_up" | "shipping";
   method: "pix" | "credit_card";
   setMethod: (v: "pix" | "credit_card") => void;
   shippingOptions: ShippingOption[];
@@ -2025,26 +2136,27 @@ function PaymentStep(props: {
     );
   return (
     <div className="space-y-5">
-      {props.shippingOptions.length > 0 && (
-        <div>
-          <p className="mb-2 font-semibold">Modalidade de entrega</p>
-          <div className="space-y-2">
-            {props.shippingOptions.map((option) => (
-              <Choice
-                key={option.handle}
-                active={props.shippingHandle === option.handle}
-                onClick={() => props.setShippingHandle(option.handle)}
-                icon={<MapPin className="h-5 w-5" />}
-                title={`${option.title} — ${money(option.amount)}`}
-                text={
-                  option.description ||
-                  "Tarifa calculada para o endereço informado"
-                }
-              />
-            ))}
+      {props.deliveryMode === "shipping" &&
+        props.shippingOptions.length > 0 && (
+          <div>
+            <p className="mb-2 font-semibold">Modalidade de entrega</p>
+            <div className="space-y-2">
+              {props.shippingOptions.map((option) => (
+                <Choice
+                  key={option.handle}
+                  active={props.shippingHandle === option.handle}
+                  onClick={() => props.setShippingHandle(option.handle)}
+                  icon={<MapPin className="h-5 w-5" />}
+                  title={`${option.title} — ${money(option.amount)}`}
+                  text={
+                    option.description ||
+                    "Tarifa calculada para o endereço informado"
+                  }
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Choice
           active={props.method === "pix"}
