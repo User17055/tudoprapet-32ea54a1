@@ -917,6 +917,7 @@ export type Database = {
       profiles: {
         Row: {
           acquisition_source: string | null
+          cpf: string | null
           created_at: string
           email: string | null
           id: string
@@ -928,6 +929,7 @@ export type Database = {
         }
         Insert: {
           acquisition_source?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -939,6 +941,7 @@ export type Database = {
         }
         Update: {
           acquisition_source?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -1171,6 +1174,7 @@ export type Database = {
         Returns: boolean
       }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      is_valid_cpf: { Args: { value: string }; Returns: boolean }
       save_customer_address: {
         Args: {
           p_address: Json
