@@ -1130,7 +1130,15 @@ export default function Checkout() {
             </div>
           )}
           <div data-checkout-enter className="mb-4 lg:hidden">
-            <MobileOrderSummary summary={summary} cartItems={cartItems} />
+            <MobileOrderSummary
+              summary={summary}
+              cartItems={cartItems}
+              shippingOverride={
+                step === 0 && deliveryMode === "pick_up"
+                  ? { title: "Retirada na loja", amount: 0 }
+                  : undefined
+              }
+            />
             {step === 0 && (
               <DeliveryCheckoutAction
                 message={message}
@@ -1259,7 +1267,15 @@ export default function Checkout() {
                 />
               )}
               <div className="hidden lg:block">
-                <OrderSummary summary={summary} cartItems={cartItems} />
+                <OrderSummary
+                  summary={summary}
+                  cartItems={cartItems}
+                  shippingOverride={
+                    step === 0 && deliveryMode === "pick_up"
+                      ? { title: "Retirada na loja", amount: 0 }
+                      : undefined
+                  }
+                />
                 {step === 0 && (
                   <DeliveryCheckoutAction
                     message={message}
@@ -2770,9 +2786,11 @@ function OrderSummary({
 function MobileOrderSummary({
   summary,
   cartItems,
+  shippingOverride,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
+  shippingOverride?: ShippingSummaryOverride;
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
@@ -2781,6 +2799,14 @@ function MobileOrderSummary({
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
   ) + SERVICE_FEE;
+  const headerTotal = shippingOverride
+    ? Math.max(
+        0,
+        (summary
+          ? summary.subtotal - summary.discount + (summary.serviceFee ?? SERVICE_FEE)
+          : cartTotal) + shippingOverride.amount,
+      )
+    : summary?.total ?? cartTotal;
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
@@ -2793,12 +2819,12 @@ function MobileOrderSummary({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-sm font-bold text-blue-950">
-          {money(summary?.total ?? cartTotal)}
+          {money(headerTotal)}
           <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
         </span>
       </summary>
       <div className="border-t border-slate-200 bg-white px-3.5 py-4">
-        <SummaryTotals summary={summary} cartItems={cartItems} />
+        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
       </div>
     </details>
   );
