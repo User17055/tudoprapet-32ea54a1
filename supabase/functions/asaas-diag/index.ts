@@ -24,6 +24,24 @@ Deno.serve(async (req) => {
     if (body && typeof body.paymentId === "string" && body.paymentId.trim()) requestedId = body.paymentId.trim();
   } catch { requestedId = null; }
 
+  // Sonda de credencial: confirma que a chave atual responde no ambiente configurado.
+  let account: Record<string, unknown> | null = null;
+  let accountError: string | null = null;
+  try {
+    const apiKey = Deno.env.get("ASAAS_API_KEY")?.trim() || "";
+    const probe = await fetch(`${baseUrl}/myAccount`, {
+      headers: { access_token: apiKey, "Content-Type": "application/json" },
+    });
+    const text = await probe.text();
+    account = {
+      httpStatus: probe.status,
+      ok: probe.ok,
+      snippet: text.slice(0, 300),
+    };
+  } catch (error) {
+    accountError = error instanceof Error ? error.message : String(error);
+  }
+
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const baseQuery = admin.from("payments")
     .select("id,provider_payment_id,status,amount,checkout_session_id,created_at");
@@ -32,9 +50,19 @@ Deno.serve(async (req) => {
     : await baseQuery.eq("method", "pix").not("provider_payment_id", "is", null)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
-  if (!payment?.provider_payment_id) return jsonResponse({ baseUrl, environment, payment: null });
+  if (!payment?.provider_payment_id) {
+    return jsonResponse({ baseUrl, environment, account, accountError, payment: null });
+  }
 
-  const remote = await getAsaasPayment(payment.provider_payment_id);
+
+  let remote: Record<string, unknown> = {};
+  let remoteError: string | null = null;
+  try {
+    remote = await getAsaasPayment(payment.provider_payment_id) as Record<string, unknown>;
+  } catch (error) {
+    remoteError = error instanceof Error ? error.message : String(error);
+  }
+
   let qr: { encodedImage?: string; payload?: string; expirationDate?: string } = {};
   let qrError: string | null = null;
   try {
@@ -53,17 +81,21 @@ Deno.serve(async (req) => {
   return jsonResponse({
     baseUrl,
     environment,
+    account,
+    accountError,
+    remoteError,
     payment: {
       localId: payment.id,
       providerPaymentId: payment.provider_payment_id,
       localStatus: payment.status,
-      remoteStatus: remote.status,
+      remoteStatus: remote.status ?? null,
       amount: payment.amount,
-      dueDate: remote.dueDate,
-      invoiceUrl: remote.invoiceUrl,
+      dueDate: remote.dueDate ?? null,
+      invoiceUrl: remote.invoiceUrl ?? null,
       createdAt: payment.created_at,
       checkoutSessionId: payment.checkout_session_id,
     },
+
     qrError,
     qr: {
       encodedImageLength: qr.encodedImage?.length ?? 0,
