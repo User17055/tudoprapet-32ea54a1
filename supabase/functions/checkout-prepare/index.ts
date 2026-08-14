@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
     const lineItems = buildDraftLineItems(input.items, specialPriceMap, currentPriceMap, discountTitle);
-    lineItems.push(buildServiceFeeLineItem());
+
     const draft = await createDraftOrder({
       line_items: lineItems,
       customer: { id: shopifyCustomerId },
