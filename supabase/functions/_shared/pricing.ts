@@ -6,6 +6,22 @@ export interface LineItem {
   quantity: number;
 }
 
+export const CHECKOUT_SERVICE_FEE = 3;
+
+export function addCheckoutServiceFee(total: number): number {
+  return Number((total + CHECKOUT_SERVICE_FEE).toFixed(2));
+}
+
+export function buildServiceFeeLineItem(): Record<string, unknown> {
+  return {
+    title: "Taxa de serviço",
+    price: CHECKOUT_SERVICE_FEE.toFixed(2),
+    quantity: 1,
+    taxable: false,
+    requires_shipping: false,
+  };
+}
+
 export function gidToNumericId(gid: string): string {
   const parts = gid.split("/");
   return parts[parts.length - 1];

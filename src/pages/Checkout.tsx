@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Copy,
   CreditCard,
+  CircleHelp,
   Loader2,
   LockKeyhole,
   MapPin,
@@ -33,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -103,6 +105,7 @@ type SummaryItem = {
 type CheckoutSummary = {
   subtotal: number;
   discount: number;
+  serviceFee: number;
   shippingAmount?: number;
   shippingMethod?: string;
   total: number;
@@ -117,6 +120,7 @@ type PaymentResult = {
 };
 
 const ACTIVE_KEY = "tpp_checkout_active";
+const SERVICE_FEE = 3;
 const emptyAddress = (): Address => ({
   address1: "",
   address2: "",
@@ -150,8 +154,9 @@ const PREVIEW_ADDRESS: SavedAddress = {
 const PREVIEW_SUMMARY: CheckoutSummary = {
   subtotal: 159.8,
   discount: 20,
+  serviceFee: SERVICE_FEE,
   shippingAmount: 0,
-  total: 139.8,
+  total: 142.8,
   items: [
     {
       variantId: "preview-racao",
@@ -2475,7 +2480,8 @@ function SummaryTotals({
   }, 0);
   const subtotal = summary?.subtotal ?? cartSubtotal;
   const discount = summary?.discount ?? cartDiscount;
-  const total = summary?.total ?? Math.max(0, subtotal - discount);
+  const serviceFee = summary?.serviceFee ?? SERVICE_FEE;
+  const total = summary?.total ?? Math.max(0, subtotal - discount + serviceFee);
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
@@ -2495,6 +2501,26 @@ function SummaryTotals({
             ? money(summary.shippingAmount)
             : "A calcular"}
         </span>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5">
+          Taxa de serviço
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-blue-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-800"
+                aria-label="Entenda a taxa de serviço"
+              >
+                <CircleHelp className="h-4 w-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-72 text-sm leading-relaxed text-slate-600">
+              Esta taxa contribui para os custos de processamento, segurança e manutenção da nossa operação. Com ela, conseguimos acompanhar seu pedido, oferecer suporte quando necessário e manter uma experiência de compra rápida, confiável e organizada do início ao fim.
+            </PopoverContent>
+          </Popover>
+        </span>
+        <span className="font-medium text-slate-900">{money(serviceFee)}</span>
       </div>
       <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-bold text-slate-950">
         <span>Total</span>
@@ -2536,7 +2562,7 @@ function MobileOrderSummary({
   const cartTotal = cartItems.reduce(
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
-  );
+  ) + SERVICE_FEE;
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">

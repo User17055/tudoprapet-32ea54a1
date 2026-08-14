@@ -2,7 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken } from "../_shared/checkout-access.ts";
 import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } from "../_shared/checkout-input.ts";
-import { buildDraftLineItems } from "../_shared/pricing.ts";
+import {
+  addCheckoutServiceFee,
+  buildDraftLineItems,
+  buildServiceFeeLineItem,
+  CHECKOUT_SERVICE_FEE,
+} from "../_shared/pricing.ts";
 import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer } from "../_shared/shopify.ts";
 
 function readFirstEnv(keys: string[]): string {
@@ -189,6 +194,7 @@ Deno.serve(async (req) => {
         : "shipping";
       total = money(total + shippingAmount);
     }
+    total = addCheckoutServiceFee(total);
 
     const accessToken = newCheckoutAccessToken();
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);
@@ -200,6 +206,7 @@ Deno.serve(async (req) => {
       status: "awaiting_payment",
       subtotal,
       discount,
+      service_fee: CHECKOUT_SERVICE_FEE,
       shipping_amount: shippingAmount,
       total,
       shipping_method: shippingMethod,
@@ -208,7 +215,7 @@ Deno.serve(async (req) => {
       address_snapshot: input.delivery.address ?? {},
       billing_address_snapshot: input.billingAddress ?? input.delivery.address ?? {},
       items_snapshot: itemsSnapshot,
-      pricing_snapshot: { customerType, calculatedAt: new Date().toISOString() },
+      pricing_snapshot: { customerType, serviceFee: CHECKOUT_SERVICE_FEE, calculatedAt: new Date().toISOString() },
       anonymous_access_token_hash: accessTokenHash,
       anonymous_access_token_expires_at: tokenExpiresAt,
       session_expires_at: sessionExpiresAt,
@@ -225,6 +232,7 @@ Deno.serve(async (req) => {
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
     const lineItems = buildDraftLineItems(input.items, specialPriceMap, currentPriceMap, discountTitle);
+    lineItems.push(buildServiceFeeLineItem());
     const draft = await createDraftOrder({
       line_items: lineItems,
       customer: { id: shopifyCustomerId },
@@ -260,7 +268,7 @@ Deno.serve(async (req) => {
       accessToken,
       customerType,
       status: "awaiting_payment",
-      summary: { subtotal, discount, shippingAmount, total, shippingMethod, shippingCode, items: itemsSnapshot },
+      summary: { subtotal, discount, serviceFee: CHECKOUT_SERVICE_FEE, shippingAmount, total, shippingMethod, shippingCode, items: itemsSnapshot },
     });
   } catch (error) {
     console.error("checkout-prepare:", error);

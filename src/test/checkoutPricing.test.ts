@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  addCheckoutServiceFee,
   buildDraftLineItems,
+  buildServiceFeeLineItem,
+  CHECKOUT_SERVICE_FEE,
   gidToNumericId,
   type LineItem,
 } from "../../supabase/functions/_shared/pricing.ts";
+
+describe("taxa de serviço do checkout", () => {
+  it("soma R$ 3,00 ao total calculado no servidor", () => {
+    expect(CHECKOUT_SERVICE_FEE).toBe(3);
+    expect(addCheckoutServiceFee(40.9)).toBe(43.9);
+  });
+
+  it("cria uma linha separada para o pedido Shopify", () => {
+    expect(buildServiceFeeLineItem()).toEqual({
+      title: "Taxa de serviço",
+      price: "3.00",
+      quantity: 1,
+      taxable: false,
+      requires_shipping: false,
+    });
+  });
+});
 
 const VARIANT_A = "gid://shopify/ProductVariant/111";
 const VARIANT_B = "gid://shopify/ProductVariant/222";
