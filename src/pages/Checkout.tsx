@@ -49,7 +49,7 @@ import {
   readCheckoutLaunch,
 } from "@/lib/customCheckout";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
-import { useCartStore } from "@/stores/cartStore";
+import { useCartStore, type CartItem } from "@/stores/cartStore";
 import { toast } from "sonner";
 
 type Customer = {
@@ -358,7 +358,7 @@ export default function Checkout() {
           },
         )
       : null;
-    return () => fieldsAnimation?.kill();
+    return () => { fieldsAnimation?.kill(); };
   }, [validationAttempt]);
 
   useEffect(() => {
@@ -1530,7 +1530,7 @@ function PaymentCheckoutScreen({
   children,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
   address: Address;
   addressLabel: string;
   deliveryMode: "pick_up" | "shipping";
@@ -2212,7 +2212,7 @@ function CheckoutBag({
   onRemove,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
   editable: boolean;
   busy: boolean;
   onQuantity: (variantId: string, quantity: number) => void;
@@ -2456,7 +2456,7 @@ function SummaryTotals({
   cartItems,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
 }) {
   const cartSubtotal = cartItems.reduce(
     (total, item) => total + Number(item.price.amount) * item.quantity,
@@ -2497,7 +2497,7 @@ function OrderSummary({
   cartItems,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
@@ -2517,7 +2517,7 @@ function MobileOrderSummary({
   cartItems,
 }: {
   summary: CheckoutSummary | null;
-  cartItems: ReturnType<typeof useCartStore>["items"];
+  cartItems: CartItem[];
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
