@@ -12,15 +12,20 @@ export function addCheckoutServiceFee(total: number): number {
   return Number((total + CHECKOUT_SERVICE_FEE).toFixed(2));
 }
 
-export function buildServiceFeeLineItem(): Record<string, unknown> {
+/**
+ * A taxa de serviço NÃO é um produto: ela entra na linha de frete do pedido,
+ * assim o pedido da Shopify mostra apenas os itens comprados de verdade.
+ */
+export function buildShippingLineWithServiceFee(
+  title: string,
+  shippingAmount: number,
+): { title: string; price: string } {
   return {
-    title: "Taxa de serviço",
-    price: CHECKOUT_SERVICE_FEE.toFixed(2),
-    quantity: 1,
-    taxable: false,
-    requires_shipping: false,
+    title: `${title} + taxa de serviço`,
+    price: (shippingAmount + CHECKOUT_SERVICE_FEE).toFixed(2),
   };
 }
+
 
 export function gidToNumericId(gid: string): string {
   const parts = gid.split("/");

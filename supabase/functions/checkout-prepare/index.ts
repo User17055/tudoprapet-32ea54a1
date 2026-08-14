@@ -5,7 +5,7 @@ import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } f
 import {
   addCheckoutServiceFee,
   buildDraftLineItems,
-  buildServiceFeeLineItem,
+  buildShippingLineWithServiceFee,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
 import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer, setDraftOrderTaxCredential } from "../_shared/shopify.ts";
@@ -234,13 +234,13 @@ Deno.serve(async (req) => {
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
     const lineItems = buildDraftLineItems(input.items, specialPriceMap, currentPriceMap, discountTitle);
-    lineItems.push(buildServiceFeeLineItem());
+
     const draft = await createDraftOrder({
       line_items: lineItems,
       customer: { id: shopifyCustomerId },
       email: input.customer.email,
       use_customer_default_address: input.delivery.code === "pick_up",
-      shipping_line: { title: shippingMethod, price: shippingAmount.toFixed(2) },
+      shipping_line: buildShippingLineWithServiceFee(shippingMethod, shippingAmount),
       ...(input.delivery.address ? {
         shipping_address: shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone),
       } : {}),

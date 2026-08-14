@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addCheckoutServiceFee,
   buildDraftLineItems,
-  buildServiceFeeLineItem,
+  buildShippingLineWithServiceFee,
   CHECKOUT_SERVICE_FEE,
   gidToNumericId,
   type LineItem,
@@ -14,16 +14,18 @@ describe("taxa de serviço do checkout", () => {
     expect(addCheckoutServiceFee(40.9)).toBe(43.9);
   });
 
-  it("cria uma linha separada para o pedido Shopify", () => {
-    expect(buildServiceFeeLineItem()).toEqual({
-      title: "Taxa de serviço",
+  it("cobra a taxa na linha de frete, nunca como produto", () => {
+    expect(buildShippingLineWithServiceFee("PAC", 24.9)).toEqual({
+      title: "PAC + taxa de serviço",
+      price: "27.90",
+    });
+    expect(buildShippingLineWithServiceFee("Retirada na loja", 0)).toEqual({
+      title: "Retirada na loja + taxa de serviço",
       price: "3.00",
-      quantity: 1,
-      taxable: false,
-      requires_shipping: false,
     });
   });
 });
+
 
 const VARIANT_A = "gid://shopify/ProductVariant/111";
 const VARIANT_B = "gid://shopify/ProductVariant/222";

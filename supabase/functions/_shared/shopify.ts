@@ -495,43 +495,80 @@ export async function setDraftOrderTaxCredential(
     : undefined;
 
   // draftOrderUpdate sobrescreve as linhas do draft: se lineItems não for
-  // enviado, a Shopify apaga os itens existentes. Reenviamos o que já existe.
-  const existingLineItems = Array.isArray(draft?.line_items)
-    ? (draft.line_items as Record<string, unknown>[]).map((li) => {
-      const quantity = Number(li.quantity) || 1;
-      const appliedDiscount = li.applied_discount
-        ? {
-          title: (li.applied_discount as Record<string, unknown>).title || undefined,
-          description: (li.applied_discount as Record<string, unknown>).description || undefined,
-          valueType: String((li.applied_discount as Record<string, unknown>).value_type || "FIXED_AMOUNT")
-            .toUpperCase(),
-          value: Number((li.applied_discount as Record<string, unknown>).value) || 0,
+  // enviado, a Shopify apaga os itens existentes. Lemos o draft por GraphQL
+  // (mesmo formato do input) e reenviamos exatamente o que já existe.
+  const currentRes = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({
+      query: `query DraftLines($id: ID!) {
+        draftOrder(id: $id) {
+          shippingLine { title originalPriceSet { shopMoney { amount } } }
+          lineItems(first: 100) {
+            nodes {
+              quantity
+              title
+              requiresShipping
+              taxable
+              variant { id }
+              originalUnitPriceSet { shopMoney { amount } }
+              appliedDiscount { title description valueType value }
+            }
+          }
         }
-        : undefined;
-      if (li.variant_id) {
-        return {
-          variantId: `gid://shopify/ProductVariant/${li.variant_id}`,
-          quantity,
-          appliedDiscount,
-        };
-      }
-      return {
-        title: li.title,
-        originalUnitPrice: String(li.price ?? "0"),
-        quantity,
-        requiresShipping: Boolean(li.requires_shipping),
-        taxable: Boolean(li.taxable),
-        appliedDiscount,
-      };
-    })
-    : undefined;
+      }`,
+      variables: { id: `gid://shopify/DraftOrder/${draftOrderId}` },
+    }),
+  });
+  const currentBody = currentRes.ok ? await currentRes.json() : null;
+  const currentNodes = currentBody?.data?.draftOrder?.lineItems?.nodes as
+    | Record<string, unknown>[]
+    | undefined;
+  if (!Array.isArray(currentNodes) || currentNodes.length === 0) {
+    console.error(
+      `Não foi possível ler as linhas do draft ${draftOrderId} — CPF/CNPJ não gravado para não apagar itens.`,
+      currentRes.status,
+      JSON.stringify(currentBody?.errors ?? null),
+    );
+    return false;
+  }
 
-  const shippingLine = draft?.shipping_line
+  const existingLineItems = currentNodes.map((node) => {
+    const discount = node.appliedDiscount as Record<string, unknown> | null;
+    const appliedDiscount = discount
+      ? {
+        title: discount.title || undefined,
+        description: discount.description || undefined,
+        valueType: String(discount.valueType || "FIXED_AMOUNT").toUpperCase(),
+        value: Number(discount.value) || 0,
+      }
+      : undefined;
+    const quantity = Number(node.quantity) || 1;
+    const variantId = (node.variant as { id?: string } | null)?.id;
+    if (variantId) return { variantId, quantity, appliedDiscount };
+    const unitPrice = (node.originalUnitPriceSet as
+      | { shopMoney?: { amount?: string } }
+      | undefined)?.shopMoney?.amount ?? "0";
+    return {
+      title: node.title,
+      originalUnitPrice: String(unitPrice),
+      quantity,
+      requiresShipping: Boolean(node.requiresShipping),
+      taxable: Boolean(node.taxable),
+      appliedDiscount,
+    };
+  });
+
+  const currentShipping = currentBody?.data?.draftOrder?.shippingLine as
+    | { title?: string; originalPriceSet?: { shopMoney?: { amount?: string } } }
+    | null;
+  const shippingLine = currentShipping
     ? {
-      title: (draft.shipping_line as Record<string, unknown>).title,
-      price: String((draft.shipping_line as Record<string, unknown>).price ?? "0"),
+      title: currentShipping.title,
+      price: String(currentShipping.originalPriceSet?.shopMoney?.amount ?? "0"),
     }
     : undefined;
+
 
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
@@ -548,7 +585,7 @@ export async function setDraftOrderTaxCredential(
         input: {
           shippingAddress: brAddress(draft?.shipping_address),
           billingAddress: brAddress(draft?.billing_address),
-          ...(existingLineItems?.length ? { lineItems: existingLineItems } : {}),
+          lineItems: existingLineItems,
           ...(shippingLine ? { shippingLine } : {}),
           localizationExtensions: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
@@ -573,7 +610,14 @@ export async function setDraftOrderTaxCredential(
     console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
     return false;
   }
+  const after = body?.data?.draftOrderUpdate?.draftOrder?.lineItems?.nodes ?? [];
+  if (after.length !== existingLineItems.length) {
+    console.error(
+      `Draft ${draftOrderId} ficou com ${after.length} linhas (esperado ${existingLineItems.length}) após gravar CPF/CNPJ.`,
+    );
+  }
   return true;
+
 }
 
 
