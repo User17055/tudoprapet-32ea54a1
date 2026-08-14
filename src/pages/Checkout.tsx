@@ -1130,7 +1130,15 @@ export default function Checkout() {
             </div>
           )}
           <div data-checkout-enter className="mb-4 lg:hidden">
-            <MobileOrderSummary summary={summary} cartItems={cartItems} />
+            <MobileOrderSummary
+              summary={summary}
+              cartItems={cartItems}
+              shippingOverride={
+                step === 0 && deliveryMode === "pick_up"
+                  ? { title: "Retirada na loja", amount: 0 }
+                  : undefined
+              }
+            />
             {step === 0 && (
               <DeliveryCheckoutAction
                 message={message}
