@@ -55,7 +55,14 @@ Deno.serve(async (req) => {
   }
 
 
-  const remote = await getAsaasPayment(payment.provider_payment_id);
+  let remote: Record<string, unknown> = {};
+  let remoteError: string | null = null;
+  try {
+    remote = await getAsaasPayment(payment.provider_payment_id) as Record<string, unknown>;
+  } catch (error) {
+    remoteError = error instanceof Error ? error.message : String(error);
+  }
+
   let qr: { encodedImage?: string; payload?: string; expirationDate?: string } = {};
   let qrError: string | null = null;
   try {
