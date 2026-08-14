@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
       customer: { id: shopifyCustomerId },
       email: input.customer.email,
       use_customer_default_address: input.delivery.code === "pick_up",
-      shipping_line: { title: shippingMethod, price: shippingAmount.toFixed(2) },
+      shipping_line: buildShippingLineWithServiceFee(shippingMethod, shippingAmount),
       ...(input.delivery.address ? {
         shipping_address: shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone),
       } : {}),
