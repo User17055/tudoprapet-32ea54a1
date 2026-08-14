@@ -3,8 +3,10 @@ import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { canAccessCheckout, optionalCheckoutUser } from "../_shared/checkout-access.ts";
 import {
   createAsaasPayment,
+  deleteAsaasPayment,
   findAsaasPaymentByExternalReference,
   findOrCreateAsaasCustomer,
+  getAsaasPayment,
   getAsaasPixQrCode,
   type AsaasPayment, type AsaasPaymentInput,
 } from "../_shared/asaas.ts";
@@ -84,10 +86,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
+  let requestedAction = "";
   try {
     const auth = await optionalCheckoutUser(req);
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
     const body = await req.json() as Record<string, unknown>;
+    requestedAction = typeof body.action === "string" ? body.action : "";
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
     const accessToken = typeof body.accessToken === "string" ? body.accessToken : null;
     if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return errorResponse("Checkout inválido", 400);
@@ -102,7 +106,19 @@ Deno.serve(async (req) => {
     if (!(await canAccessCheckout(session, auth.user?.id ?? null, accessToken))) {
       return errorResponse("Acesso negado ao checkout", 403);
     }
-    if (["paid", "paid_pending_shopify", "shopify_created", "cancelled", "expired"].includes(session.status)) {
+    const serviceFee = Number(session.service_fee);
+    const expectedTotal = Number((
+      Number(session.subtotal) - Number(session.discount) +
+      Number(session.shipping_amount) + serviceFee
+    ).toFixed(2));
+    if (body.action !== "cancel_pix" && (serviceFee !== 3 || Number(session.total) !== expectedTotal)) {
+      return errorResponse("O total deste checkout está desatualizado. Volte à sacola e tente novamente.", 409);
+    }
+    if (body.action === "cancel_pix" && session.status === "cancelled") {
+      return jsonResponse({ sessionId, cancelled: true });
+    }
+    const cancellingExpiredPix = body.action === "cancel_pix" && session.status === "expired";
+    if (!cancellingExpiredPix && ["paid", "paid_pending_shopify", "shopify_created", "cancelled", "expired"].includes(session.status)) {
       return jsonResponse({ sessionId, status: session.status, orderId: session.shopify_order_id });
     }
 
@@ -113,6 +129,55 @@ Deno.serve(async (req) => {
       .eq("is_active", true)
       .in("status", ["pending", "processing", "cancellation_requested", "confirmed"])
       .order("attempt_number", { ascending: false }).limit(1).maybeSingle();
+
+    if (body.action === "cancel_pix") {
+      if (!active) return jsonResponse({ sessionId, cancelled: true });
+      if (active.method !== "pix") return errorResponse("A cobrança ativa não é Pix", 409);
+      if (active.status === "confirmed") {
+        return errorResponse("Este Pix já foi confirmado e não pode ser cancelado", 409);
+      }
+      if (active.provider_payment_id) {
+        const remote = await getAsaasPayment(active.provider_payment_id);
+        const remoteStatus = String(remote.status || "").toUpperCase();
+        if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+          const eventId = `cancel-race:${active.provider_payment_id}:${remoteStatus}`;
+          await admin.from("payment_events").upsert({
+            provider: "asaas",
+            provider_event_id: eventId,
+            provider_payment_id: active.provider_payment_id,
+            event_type: `PAYMENT_${remoteStatus}`,
+            payload: {
+              id: eventId,
+              event: `PAYMENT_${remoteStatus}`,
+              payment: {
+                id: active.provider_payment_id,
+                status: remoteStatus,
+                externalReference: remote.externalReference || active.external_reference,
+              },
+            },
+          }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
+          wakeWorker();
+          return errorResponse("Este Pix acabou de ser confirmado e não pode mais ser cancelado", 409);
+        }
+        if (!["PENDING", "OVERDUE"].includes(remoteStatus)) {
+          return errorResponse("O Pix mudou de status e não pode ser cancelado agora", 409);
+        }
+        const deleted = await deleteAsaasPayment(active.provider_payment_id);
+        if (!deleted.deleted) throw new Error("Asaas não confirmou o cancelamento do Pix");
+      }
+      const now = new Date().toISOString();
+      const { error: cancelError } = await admin.from("payments").update({
+        status: "cancelled",
+        is_active: false,
+        provider_deleted_at: now,
+      }).eq("id", active.id).in("status", ["pending", "processing", "cancellation_requested"]);
+      if (cancelError) throw cancelError;
+      const { error: sessionCancelError } = await admin.from("checkout_sessions")
+        .update({ status: "cancelled" }).eq("id", sessionId)
+        .in("status", ["awaiting_payment", "payment_processing"]);
+      if (sessionCancelError) throw sessionCancelError;
+      return jsonResponse({ sessionId, paymentId: active.id, cancelled: true });
+    }
 
     if (active) {
       if (active.status === "cancellation_requested") {
@@ -194,6 +259,9 @@ Deno.serve(async (req) => {
 
     let submittedCard: ReturnType<typeof parseCard> | null = null;
     if (method === "credit_card") {
+      if (Number(body.installments ?? 1) !== 1) {
+        return errorResponse("No momento, o cartão está disponível somente em 1x", 400);
+      }
       const ip = clientIp(req);
       if (!ip) throw new Error("Não foi possível identificar a origem do pagamento");
       createInput.remoteIp = ip;
@@ -346,6 +414,9 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("checkout-payment:", error);
     const message = error instanceof Error ? error.message : "";
+    if (requestedAction === "cancel_pix") {
+      return errorResponse("Não foi possível confirmar o cancelamento do Pix. Tente novamente.", 502);
+    }
     if (message.includes("Dados do cartão inválidos")) return errorResponse(message, 400);
     if (/Asaas 400:.*invalid_billingType/i.test(message)) {
       return errorResponse("O pagamento por cartão ainda não está habilitado nesta conta. Use Pix ou fale com o atendimento.", 503);

@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   Check,
@@ -24,6 +24,7 @@ import {
   Store,
   Trash2,
   UserRound,
+  XCircle,
 } from "lucide-react";
 import { gsap } from "gsap";
 import logo from "@/assets/tpp-logo.svg";
@@ -218,6 +219,7 @@ const edgeFunctionErrorText = async (error: unknown, fallback: string) => {
 };
 
 export default function Checkout() {
+  const navigate = useNavigate();
   const previewMode =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("preview") === "1";
@@ -290,6 +292,8 @@ export default function Checkout() {
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cancellingPix, setCancellingPix] = useState(false);
+  const [cardFailure, setCardFailure] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState("");
   const [recommended, setRecommended] = useState<ShopifyProduct[]>([]);
@@ -791,6 +795,7 @@ export default function Checkout() {
       );
     setBusy(true);
     setMessage("");
+    if (paymentMethod === "credit_card") setCardFailure(null);
     try {
       const selectedShipping = shippingOptions.find(
         (option) => option.handle === shippingHandle,
@@ -823,6 +828,7 @@ export default function Checkout() {
         method: isFranchisee ? "terms" : paymentMethod,
       };
       if (paymentMethod === "credit_card" && !isFranchisee) {
+        paymentBody.installments = 1;
         if (savedPaymentId) paymentBody.savedPaymentMethodId = savedPaymentId;
         else {
           paymentBody.card = card;
@@ -842,11 +848,44 @@ export default function Checkout() {
       setStep(4);
       if (paymentData.status === "credit_approved") finishSuccess();
     } catch (error) {
-      setMessage(errorText(error, "Não foi possível concluir o checkout."));
+      const detail = errorText(error, "Não foi possível concluir o checkout.");
+      setMessage(detail);
+      if (paymentMethod === "credit_card") setCardFailure(detail);
     } finally {
       setBusy(false);
     }
   }
+
+  const cancelPix = async (destination: "payment" | "cart" = "payment") => {
+    if (!credentials || cancellingPix) return;
+    setCancellingPix(true);
+    setMessage("");
+    try {
+      const { data, error } = await supabase.functions.invoke("checkout-payment", {
+        body: { ...credentials, action: "cancel_pix" },
+      });
+      if (error || data?.error) {
+        const detail = data?.error || await edgeFunctionErrorText(error, "Não foi possível cancelar o Pix.");
+        throw new Error(detail);
+      }
+      if (data?.cancelled !== true) {
+        throw new Error("O pagamento já mudou de status e não pode ser cancelado.");
+      }
+      sessionStorage.removeItem(ACTIVE_KEY);
+      setCredentials(null);
+      setPayment(null);
+      if (destination === "cart") {
+        navigate("/carrinho");
+      } else {
+        setStep(1);
+        setMessage("Pix cancelado. Escolha a forma de pagamento para continuar.");
+      }
+    } catch (error) {
+      setMessage(errorText(error, "Não foi possível cancelar o Pix."));
+    } finally {
+      setCancellingPix(false);
+    }
+  };
 
   const changeBagQuantity = async (variantId: string, quantity: number) => {
     if (previewMode) {
@@ -1005,6 +1044,15 @@ export default function Checkout() {
         deliveryMode={deliveryMode}
         selectedShipping={selectedShipping}
         busy={busy}
+        processingCard={busy && paymentMethod === "credit_card"}
+        cardFailure={cardFailure}
+        onDismissCardFailure={() => setCardFailure(null)}
+        onChoosePixAfterFailure={() => {
+          setCardFailure(null);
+          setMessage("");
+          setSavedPaymentId("");
+          setPaymentMethod("pix");
+        }}
         message={message}
         submitLabel={
           isFranchisee
@@ -1171,7 +1219,14 @@ export default function Checkout() {
                           onNext={nextPayment}
                         />
                       )}
-                      {step === 4 && <PaymentWaiting payment={payment} />}
+                      {step === 4 && (
+                        <PaymentWaiting
+                          payment={payment}
+                          cancelling={cancellingPix}
+                          onCancel={() => void cancelPix("payment")}
+                          onBack={() => void cancelPix("cart")}
+                        />
+                      )}
                       {validationAttempt?.step === step && message && (
                         <InlineFormError message={message} />
                       )}
@@ -1537,6 +1592,10 @@ function PaymentCheckoutScreen({
   deliveryMode,
   selectedShipping,
   busy,
+  processingCard,
+  cardFailure,
+  onDismissCardFailure,
+  onChoosePixAfterFailure,
   message,
   submitLabel,
   onBack,
@@ -1550,6 +1609,10 @@ function PaymentCheckoutScreen({
   deliveryMode: "pick_up" | "shipping";
   selectedShipping?: ShippingOption;
   busy: boolean;
+  processingCard: boolean;
+  cardFailure: string | null;
+  onDismissCardFailure: () => void;
+  onChoosePixAfterFailure: () => void;
   message: string;
   submitLabel: string;
   onBack: () => void;
@@ -1567,28 +1630,22 @@ function PaymentCheckoutScreen({
   return (
     <main className="min-h-screen bg-white">
       <header className="border-b border-slate-200">
-        <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between px-4 sm:h-20 sm:px-6">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto flex h-16 max-w-[1240px] items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-0">
+          <Link to="/" aria-label="Voltar para a TudoPraPet">
+            <img src={logo} alt="TudoPraPet" className="w-32 sm:w-44" />
+          </Link>
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 sm:gap-3 sm:text-sm">
             <button
               type="button"
               onClick={onBack}
-              aria-label="Voltar para a sacola"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+              className="flex items-center gap-1 hover:underline"
             >
-              <ChevronDown className="h-5 w-5 rotate-90" />
-            </button>
-            <img src={logo} alt="TudoPraPet" className="w-28 sm:w-36" />
-          </div>
-          <div className="flex items-center gap-3 text-xs font-semibold text-slate-700 sm:text-sm">
-            <button
-              type="button"
-              onClick={onBack}
-              className="hidden hover:underline sm:block"
-            >
-              Voltar para a sacola
+              <ChevronDown className="h-4 w-4 rotate-90" />
+              <span className="hidden sm:inline">Voltar para a sacola</span>
+              <span className="sm:hidden">Voltar</span>
             </button>
             <span className="hidden h-5 w-px bg-slate-300 sm:block" />
-            <span className="flex items-center gap-1.5">
+            <span className="hidden items-center gap-1.5 sm:flex">
               <LockKeyhole className="h-4 w-4" />
               Ambiente seguro
             </span>
@@ -1675,6 +1732,57 @@ function PaymentCheckoutScreen({
       <footer className="mt-10 border-t border-slate-200 bg-slate-50 py-5 text-center text-xs text-slate-500">
         © 2026 TudoPraPet. Todos os direitos reservados.
       </footer>
+      {processingCard && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="card-processing-title"
+            aria-describedby="card-processing-description"
+            className="w-full max-w-sm rounded-2xl bg-white p-7 text-center shadow-2xl"
+          >
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-800" aria-hidden="true" />
+            </div>
+            <h2 id="card-processing-title" className="text-xl font-bold text-slate-950">
+              Processando seu pagamento
+            </h2>
+            <p id="card-processing-description" className="mt-2 text-sm leading-relaxed text-slate-600">
+              Estamos validando os dados com segurança junto ao emissor do cartão. Isso pode levar alguns segundos.
+            </p>
+            <p className="mt-4 text-xs font-medium text-slate-500">
+              Não feche nem atualize esta página.
+            </p>
+          </div>
+        </div>
+      )}
+      {!processingCard && cardFailure && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="card-failure-title"
+            aria-describedby="card-failure-description"
+            className="w-full max-w-sm rounded-2xl bg-white p-7 text-center shadow-2xl"
+          >
+            <XCircle className="mx-auto h-16 w-16 text-red-600" aria-hidden="true" />
+            <h2 id="card-failure-title" className="mt-4 text-xl font-bold text-slate-950">
+              Pagamento não aprovado
+            </h2>
+            <p id="card-failure-description" className="mt-2 text-sm leading-relaxed text-slate-600">
+              {cardFailure}
+            </p>
+            <div className="mt-6 grid gap-2">
+              <Button type="button" className="h-11 bg-blue-900 hover:bg-blue-800" onClick={onDismissCardFailure}>
+                Conferir cartão e tentar novamente
+              </Button>
+              <Button type="button" variant="outline" className="h-11" onClick={onChoosePixAfterFailure}>
+                Escolher Pix
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -1908,6 +2016,19 @@ function PaymentStep(props: {
       </div>
       {props.method === "credit_card" && (
         <div className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="card-installments" className="text-sm font-bold text-slate-900">
+              Parcelas
+            </label>
+            <select
+              id="card-installments"
+              value="1"
+              onChange={() => undefined}
+              className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="1">1x no cartão (à vista)</option>
+            </select>
+          </div>
           {props.saved.map((item) => (
             <Choice
               key={item.id}
@@ -1999,7 +2120,7 @@ function PaymentStep(props: {
                 <CheckLine
                   checked={props.saveCard}
                   onChange={props.setSaveCard}
-                  label="Salvar este cartão de forma tokenizada"
+                  label="Salvar cartão"
                 />
               )}
               <p className="text-xs text-slate-500">
@@ -2099,7 +2220,17 @@ function CheckLine({
     </label>
   );
 }
-function PaymentWaiting({ payment }: { payment: PaymentResult | null }) {
+function PaymentWaiting({
+  payment,
+  cancelling,
+  onCancel,
+  onBack,
+}: {
+  payment: PaymentResult | null;
+  cancelling: boolean;
+  onCancel: () => void;
+  onBack: () => void;
+}) {
   const [now, setNow] = useState(Date.now());
   const expiresAt = payment?.expiresAt ? Date.parse(payment.expiresAt) : NaN;
   const hasExpiration = Number.isFinite(expiresAt);
@@ -2123,6 +2254,10 @@ function PaymentWaiting({ payment }: { payment: PaymentResult | null }) {
           O prazo de 15 minutos terminou. A cobrança será cancelada com
           segurança e não pode mais ser reutilizada.
         </p>
+        <Button type="button" variant="outline" className="mt-6" disabled={cancelling} onClick={onBack}>
+          {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {cancelling ? "Cancelando Pix..." : "Voltar à sacola"}
+        </Button>
       </div>
     );
 
@@ -2166,6 +2301,25 @@ function PaymentWaiting({ payment }: { payment: PaymentResult | null }) {
           </Button>
         </div>
         <Wait />
+        <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
+          <Button type="button" variant="ghost" disabled={cancelling} onClick={onBack}>
+            {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Voltar à sacola
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={cancelling}
+            onClick={onCancel}
+            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+          >
+            {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {cancelling ? "Cancelando Pix..." : "Cancelar Pix e trocar pagamento"}
+          </Button>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Ao voltar à sacola, este Pix será cancelado antes de sair da página.
+        </p>
       </div>
     );
   }
