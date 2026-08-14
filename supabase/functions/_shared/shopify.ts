@@ -463,18 +463,64 @@ export interface CompleteDraftOrderResult {
   alreadyCompleted: boolean;
 }
 
+/**
+ * O mercado Brasil da Shopify exige o CPF/CNPJ como credencial fiscal do pedido.
+ * Sem esse campo a conclusão do draft falha com "Enter a valid CPF/CNPJ".
+ */
+export async function setDraftOrderTaxCredential(
+  draftOrderId: string,
+  cpfCnpj: string,
+  token: string,
+): Promise<boolean> {
+  const value = String(cpfCnpj || "").replace(/\D/g, "");
+  if (value.length !== 11 && value.length !== 14) return false;
+
+  const response = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({
+      query: `mutation SetTaxCredential($id: ID!, $ext: [LocalizationExtensionInput!]) {
+        draftOrderUpdate(id: $id, input: { localizationExtensions: $ext }) {
+          draftOrder { id }
+          userErrors { field message }
+        }
+      }`,
+      variables: {
+        id: `gid://shopify/DraftOrder/${draftOrderId}`,
+        ext: [{ key: "TAX_CREDENTIAL_BR", value }],
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(`Falha ao gravar CPF/CNPJ no draft ${draftOrderId}:`, response.status, await response.text());
+    return false;
+  }
+  const body = await response.json();
+  const errors = body?.data?.draftOrderUpdate?.userErrors ?? [];
+  if (body?.errors || errors.length) {
+    console.error(`CPF/CNPJ rejeitado no draft ${draftOrderId}:`, JSON.stringify(body?.errors ?? errors));
+    return false;
+  }
+  return true;
+}
+
 /** Conclui um draft já pago fora da Shopify, sem coletar novo pagamento. */
 export async function completeDraftOrder(
   draftOrderId: string,
   token: string,
   paymentPending = false,
+  cpfCnpj?: string | null,
 ): Promise<CompleteDraftOrderResult> {
+  if (cpfCnpj) await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token);
+
   const url = `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}/complete.json`;
   const completed = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
     body: JSON.stringify({ payment_pending: paymentPending }),
   });
+
 
   if (completed.ok) {
     const body = await completed.json();
