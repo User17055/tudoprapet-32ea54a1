@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
           id status
           localizationExtensions(first: 5) { nodes { key value purpose title } }
           billingAddress { countryCodeV2 provinceCode zip company phone }
-          customer { id displayName email localizationExtensions(first: 5) { nodes { key value } } }
+          customer { id displayName email }
         }
       }`,
       { id: `gid://shopify/DraftOrder/${id}` },
