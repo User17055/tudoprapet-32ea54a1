@@ -94,6 +94,10 @@ type ShippingOption = {
   amount: number;
   currencyCode: string;
 };
+type ShippingSummaryOverride = {
+  title: string;
+  amount: number;
+};
 type SummaryItem = {
   variantId: string;
   productTitle: string;
@@ -561,15 +565,27 @@ export default function Checkout() {
   useEffect(() => {
     if (!credentials || confirmed || previewMode) return;
     let stopped = false;
+    let checking = false;
     const check = async () => {
+      if (checking) return;
+      checking = true;
       const { data } = await supabase.functions.invoke("checkout-status", {
         body: credentials,
       });
+      checking = false;
       if (stopped || !data) return;
-      if (data.summary) setSummary(data.summary);
-      if (data.payment?.expiresAt) {
+      if (data.summary) {
+        setSummary(data.summary);
+      }
+      if (data.payment) {
         setPayment((current) =>
-          current ? { ...current, expiresAt: data.payment.expiresAt } : current,
+          current
+            ? {
+                ...current,
+                status: data.payment.status || current.status,
+                expiresAt: data.payment.expiresAt || current.expiresAt,
+              }
+            : current,
         );
       }
       if (["shopify_created", "credit_approved"].includes(data.status))
@@ -580,10 +596,17 @@ export default function Checkout() {
         );
     };
     void check();
-    const timer = window.setInterval(check, 3_000);
+    const checkWhenVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    const timer = window.setInterval(check, 2_000);
+    window.addEventListener("focus", checkWhenVisible);
+    document.addEventListener("visibilitychange", checkWhenVisible);
     return () => {
       stopped = true;
       window.clearInterval(timer);
+      window.removeEventListener("focus", checkWhenVisible);
+      document.removeEventListener("visibilitychange", checkWhenVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [credentials, confirmed, previewMode]);
@@ -906,7 +929,7 @@ export default function Checkout() {
           subtotal,
           total: Math.max(
             0,
-            subtotal - current.discount + (current.shippingAmount || 0),
+            subtotal - current.discount + (current.shippingAmount || 0) + (current.serviceFee || SERVICE_FEE),
           ),
         };
       });
@@ -931,7 +954,7 @@ export default function Checkout() {
           subtotal,
           total: Math.max(
             0,
-            subtotal - current.discount + (current.shippingAmount || 0),
+            subtotal - current.discount + (current.shippingAmount || 0) + (current.serviceFee || SERVICE_FEE),
           ),
         };
       });
@@ -983,7 +1006,7 @@ export default function Checkout() {
           subtotal,
           total: Math.max(
             0,
-            subtotal - current.discount + (current.shippingAmount || 0),
+            subtotal - current.discount + (current.shippingAmount || 0) + (current.serviceFee || SERVICE_FEE),
           ),
         };
       });
@@ -1093,28 +1116,7 @@ export default function Checkout() {
       className="min-h-screen overflow-x-hidden bg-white pb-24"
     >
       <div className="mx-auto max-w-[1240px]">
-        <header
-          data-checkout-enter
-          className="flex h-16 items-center justify-between border-b border-slate-200 px-4 sm:h-20 sm:px-6 lg:px-0"
-        >
-          <Link to="/" aria-label="Voltar para a TudoPraPet">
-            <img src={logo} alt="TudoPraPet" className="w-32 sm:w-44" />
-          </Link>
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 sm:gap-2 sm:text-sm">
-            <LockKeyhole className="h-4 w-4" /> Ambiente seguro
-          </div>
-        </header>
-        <div
-          data-checkout-enter
-          className="flex min-h-10 items-center justify-center gap-2 border-b border-slate-100 bg-[#faf8f5] px-4 py-2 text-center text-xs text-slate-700 sm:text-sm"
-        >
-          <PackageCheck className="h-4 w-4 shrink-0 text-blue-800" />
-          <strong>Entrega calculada pelo seu CEP</strong>
-          <span className="hidden text-slate-400 sm:inline">•</span>
-          <span className="hidden sm:inline">
-            retirada na loja também disponível
-          </span>
-        </div>
+        <CheckoutHeader />
         <div className="px-4 pt-5 sm:px-6 sm:pt-7 lg:px-0 lg:pt-8">
           <h1
             data-checkout-enter
@@ -1584,6 +1586,45 @@ function DeliveryCheckoutAction({
     </div>
   );
 }
+function CheckoutHeader({ onBack }: { onBack?: () => void }) {
+  return (
+    <>
+      <header
+        data-checkout-enter
+        className="flex h-16 items-center justify-between border-b border-slate-200 px-4 sm:h-20 sm:px-6 lg:px-0"
+      >
+        <Link to="/" aria-label="Voltar para a TudoPraPet">
+          <img src={logo} alt="TudoPraPet" className="w-32 sm:w-44" />
+        </Link>
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 sm:gap-3 sm:text-sm">
+          {onBack && (
+            <>
+              <button type="button" onClick={onBack} className="flex items-center gap-1 hover:underline">
+                <ChevronDown className="h-4 w-4 rotate-90" />
+                <span className="hidden sm:inline">Voltar para a sacola</span>
+                <span className="sm:hidden">Voltar</span>
+              </button>
+              <span className="hidden h-5 w-px bg-slate-300 sm:block" />
+            </>
+          )}
+          <span className="flex items-center gap-1.5">
+            <LockKeyhole className="h-4 w-4" />
+            <span className="hidden sm:inline">Ambiente seguro</span>
+          </span>
+        </div>
+      </header>
+      <div
+        data-checkout-enter
+        className="flex min-h-10 items-center justify-center gap-2 border-b border-slate-100 bg-[#faf8f5] px-4 py-2 text-center text-xs text-slate-700 sm:text-sm"
+      >
+        <PackageCheck className="h-4 w-4 shrink-0 text-blue-800" />
+        <strong>Entrega calculada pelo seu CEP</strong>
+        <span className="hidden text-slate-400 sm:inline">•</span>
+        <span className="hidden sm:inline">retirada na loja também disponível</span>
+      </div>
+    </>
+  );
+}
 function PaymentCheckoutScreen({
   summary,
   cartItems,
@@ -1629,32 +1670,12 @@ function PaymentCheckoutScreen({
   };
   return (
     <main className="min-h-screen bg-white">
-      <header className="border-b border-slate-200">
-        <div className="mx-auto flex h-16 max-w-[1240px] items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-0">
-          <Link to="/" aria-label="Voltar para a TudoPraPet">
-            <img src={logo} alt="TudoPraPet" className="w-32 sm:w-44" />
-          </Link>
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 sm:gap-3 sm:text-sm">
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-1 hover:underline"
-            >
-              <ChevronDown className="h-4 w-4 rotate-90" />
-              <span className="hidden sm:inline">Voltar para a sacola</span>
-              <span className="sm:hidden">Voltar</span>
-            </button>
-            <span className="hidden h-5 w-px bg-slate-300 sm:block" />
-            <span className="hidden items-center gap-1.5 sm:flex">
-              <LockKeyhole className="h-4 w-4" />
-              Ambiente seguro
-            </span>
-          </div>
-        </div>
-      </header>
-      <div className="mx-auto max-w-[1120px] px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-[1240px]">
+        <CheckoutHeader onBack={onBack} />
+      </div>
+      <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8 lg:px-0">
         <h1 className="mb-5 text-2xl font-bold text-slate-950">Pagamento</h1>
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px] xl:gap-10">
           <div className="space-y-6">
             <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
               <h2 className="mb-1 font-bold text-slate-900">
@@ -1714,7 +1735,17 @@ function PaymentCheckoutScreen({
               Alterar forma de entrega ou endereço
             </button>
             <div className="rounded-xl border border-slate-200 p-5">
-              <OrderSummary summary={summary} cartItems={cartItems} />
+              <OrderSummary
+                summary={summary}
+                cartItems={cartItems}
+                shippingOverride={
+                  deliveryMode === "pick_up"
+                    ? { title: "Retirada na loja", amount: 0 }
+                    : selectedShipping
+                      ? { title: selectedShipping.title, amount: selectedShipping.amount }
+                      : undefined
+                }
+              />
             </div>
             <Button
               type="button"
@@ -2245,6 +2276,19 @@ function PaymentWaiting({
     return () => window.clearInterval(timer);
   }, [hasExpiration, expired]);
 
+  if (payment && ["confirmed", "received"].includes(payment.status)) {
+    return (
+      <div className="py-10 text-center sm:py-12" aria-live="polite">
+        <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-emerald-600" />
+        <h2 className="text-xl font-bold text-slate-950">Pagamento confirmado</h2>
+        <p className="mx-auto mt-2 max-w-md text-slate-600">
+          Recebemos seu pagamento. Estamos preparando seu pedido na Shopify.
+        </p>
+        <Wait label="Finalizando pedido" />
+      </div>
+    );
+  }
+
   if (payment?.pixQrCode && expired)
     return (
       <div className="py-10 text-center sm:py-12">
@@ -2334,10 +2378,10 @@ function PaymentWaiting({
     </div>
   );
 }
-function Wait() {
+function Wait({ label = "Aguardando confirmação" }: { label?: string }) {
   return (
     <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-600">
-      <Loader2 className="h-4 w-4 animate-spin" /> Aguardando confirmação
+      <Loader2 className="h-4 w-4 animate-spin" /> {label}
     </div>
   );
 }
@@ -2628,9 +2672,11 @@ function RecommendedCard({
 function SummaryTotals({
   summary,
   cartItems,
+  shippingOverride,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
+  shippingOverride?: ShippingSummaryOverride;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
@@ -2650,7 +2696,10 @@ function SummaryTotals({
   const subtotal = summary?.subtotal ?? cartSubtotal;
   const discount = summary?.discount ?? cartDiscount;
   const serviceFee = summary?.serviceFee ?? SERVICE_FEE;
-  const total = summary?.total ?? Math.max(0, subtotal - discount + serviceFee);
+  const shippingAmount = shippingOverride?.amount ?? summary?.shippingAmount ?? 0;
+  const shippingMethod = shippingOverride?.title ?? summary?.shippingMethod;
+  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + serviceFee);
+  const total = shippingOverride ? liveTotal : summary?.total ?? liveTotal;
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
@@ -2664,11 +2713,9 @@ function SummaryTotals({
         </div>
       )}
       <div className="flex justify-between">
-        <span>{summary?.shippingMethod || "Entrega"}</span>
+        <span>{shippingMethod || "Entrega"}</span>
         <span className="font-medium text-slate-900">
-          {summary?.shippingAmount
-            ? money(summary.shippingAmount)
-            : "A calcular"}
+          {shippingMethod ? (shippingAmount > 0 ? money(shippingAmount) : "Grátis") : "A calcular"}
         </span>
       </div>
       <div className="flex items-center justify-between gap-3">
@@ -2701,16 +2748,18 @@ function SummaryTotals({
 function OrderSummary({
   summary,
   cartItems,
+  shippingOverride,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
+  shippingOverride?: ShippingSummaryOverride;
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
       <h2 className="mb-5 text-center text-xl font-bold text-slate-900">
         Resumo do pedido
       </h2>
-      <SummaryTotals summary={summary} cartItems={cartItems} />
+      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
       <div className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-[#faf8f5] px-4 py-3 text-xs font-medium text-slate-600">
         <LockKeyhole className="h-4 w-4 text-blue-800" />
         Pagamento processado com segurança
