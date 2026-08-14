@@ -494,13 +494,52 @@ export async function setDraftOrderTaxCredential(
     }
     : undefined;
 
+  // draftOrderUpdate sobrescreve as linhas do draft: se lineItems não for
+  // enviado, a Shopify apaga os itens existentes. Reenviamos o que já existe.
+  const existingLineItems = Array.isArray(draft?.line_items)
+    ? (draft.line_items as Record<string, unknown>[]).map((li) => {
+      const quantity = Number(li.quantity) || 1;
+      const appliedDiscount = li.applied_discount
+        ? {
+          title: (li.applied_discount as Record<string, unknown>).title || undefined,
+          description: (li.applied_discount as Record<string, unknown>).description || undefined,
+          valueType: String((li.applied_discount as Record<string, unknown>).value_type || "FIXED_AMOUNT")
+            .toUpperCase(),
+          value: Number((li.applied_discount as Record<string, unknown>).value) || 0,
+        }
+        : undefined;
+      if (li.variant_id) {
+        return {
+          variantId: `gid://shopify/ProductVariant/${li.variant_id}`,
+          quantity,
+          appliedDiscount,
+        };
+      }
+      return {
+        title: li.title,
+        originalUnitPrice: String(li.price ?? "0"),
+        quantity,
+        requiresShipping: Boolean(li.requires_shipping),
+        taxable: Boolean(li.taxable),
+        appliedDiscount,
+      };
+    })
+    : undefined;
+
+  const shippingLine = draft?.shipping_line
+    ? {
+      title: (draft.shipping_line as Record<string, unknown>).title,
+      price: String((draft.shipping_line as Record<string, unknown>).price ?? "0"),
+    }
+    : undefined;
+
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
     body: JSON.stringify({
       query: `mutation SetTaxCredential($id: ID!, $input: DraftOrderInput!) {
         draftOrderUpdate(id: $id, input: $input) {
-          draftOrder { id localizationExtensions(first: 5) { nodes { key value } } }
+          draftOrder { id localizationExtensions(first: 5) { nodes { key value } } lineItems(first: 50) { nodes { quantity title } } }
           userErrors { field message }
         }
       }`,
@@ -509,11 +548,14 @@ export async function setDraftOrderTaxCredential(
         input: {
           shippingAddress: brAddress(draft?.shipping_address),
           billingAddress: brAddress(draft?.billing_address),
+          ...(existingLineItems?.length ? { lineItems: existingLineItems } : {}),
+          ...(shippingLine ? { shippingLine } : {}),
           localizationExtensions: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
       },
     }),
   });
+
 
   if (!response.ok) {
     console.error(`Falha ao gravar CPF/CNPJ no draft ${draftOrderId}:`, response.status, await response.text());
