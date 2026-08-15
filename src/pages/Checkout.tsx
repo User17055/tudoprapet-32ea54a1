@@ -312,6 +312,17 @@ export default function Checkout() {
     previewMode ? PREVIEW_SUMMARY : null,
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
+  const { getSubscriberPrice: cardSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice: cardFranchisePrice } = useFranchisePrices();
+  // Sem sessão de checkout ainda, o desconto de assinante/franquia é calculado
+  // no cliente — sem isso o parcelamento usava o valor cheio dos produtos.
+  const localCartDiscount = cartItems.reduce((acc, item) => {
+    const catalogPrice = Number(item.price.amount);
+    const special =
+      cardFranchisePrice(item.variantId) ?? cardSubscriberPrice(item.variantId);
+    if (special === null || special >= catalogPrice) return acc;
+    return acc + (catalogPrice - special) * item.quantity;
+  }, 0);
   const cardBaseTotal = Math.max(
     0,
     (summary?.subtotal ??
@@ -319,7 +330,7 @@ export default function Checkout() {
         (acc, item) => acc + Number(item.price.amount) * item.quantity,
         0,
       )) -
-      (summary?.discount ?? 0) +
+      (summary?.discount ?? localCartDiscount) +
       (deliveryMode === "pick_up"
         ? 0
         : (shippingOptions.find((option) => option.handle === shippingHandle)
@@ -331,6 +342,11 @@ export default function Checkout() {
     installments,
     maxInstallmentsFor(cardBaseTotal),
   );
+  const selectedCardPlan =
+    paymentMethod === "credit_card" && !isFranchisee
+      ? cardPlans.find((plan) => plan.installments === selectedInstallments) ??
+        null
+      : null;
   const [busy, setBusy] = useState(false);
   const [cancellingPix, setCancellingPix] = useState(false);
   const [cardFailure, setCardFailure] = useState<string | null>(null);
