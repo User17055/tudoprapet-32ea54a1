@@ -277,10 +277,10 @@ Deno.serve(async (req) => {
       // Juros do parcelamento são do cliente: o valor cobrado é recalculado
       // aqui no servidor, nunca aceito do navegador.
       cardPlan = installmentPlan(Number(session.total), requested);
+      createInput.value = cardPlan.installmentValue;
       if (cardPlan.installments > 1) {
         createInput.installmentCount = cardPlan.installments;
         createInput.totalValue = cardPlan.chargedTotal;
-        createInput.value = cardPlan.installmentValue;
       }
       const ip = clientIp(req);
       if (!ip) throw new Error("Não foi possível identificar a origem do pagamento");
@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
       provider_payment_id: providerPayment.id,
       raw_status: providerPayment.status,
       status: directStatus,
-      ...(cardPlan && cardPlan.installments > 1 ? { amount: cardPlan.chargedTotal } : {}),
+      ...(cardPlan ? { amount: cardPlan.chargedTotal } : {}),
       ...(directStatus === "confirmed" ? { confirmed_at: new Date().toISOString() } : {}),
       ...(directStatus === "received" ? { received_at: new Date().toISOString(), is_active: false } : {}),
     }).eq("id", paymentAttempt.id);

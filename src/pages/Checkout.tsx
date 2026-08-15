@@ -2240,10 +2240,16 @@ function PaymentStep(props: {
               const plan = props.plans.find(
                 (item) => item.installments === props.installments,
               );
-              if (!plan || plan.interestAmount <= 0) return null;
+              if (!plan) return null;
+              if (plan.installments === 1)
+                return (
+                  <p className="text-xs text-slate-500">
+                    Total no cartão à vista: {money(plan.chargedTotal)}.
+                  </p>
+                );
               return (
                 <p className="text-xs text-slate-500">
-                  Parcelado com juros de {money(plan.interestAmount)} —
+                  Juros do parcelamento: {money(plan.chargedTotal - props.plans[0].chargedTotal)} —
                   à vista sai por {money(props.plans[0].chargedTotal)}.
                 </p>
               );
