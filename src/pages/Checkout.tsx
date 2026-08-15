@@ -295,6 +295,23 @@ export default function Checkout() {
   const [savedPayments, setSavedPayments] = useState<SavedPayment[]>([]);
   const [savedPaymentId, setSavedPaymentId] = useState("");
   const [installments, setInstallments] = useState(1);
+  const [saveCard, setSaveCard] = useState(true);
+  const [card, setCard] = useState({
+    holderName: "",
+    number: "",
+    expiryMonth: "",
+    expiryYear: "",
+    ccv: "",
+  });
+  const [isFranchisee, setIsFranchisee] = useState(false);
+  const [credentials, setCredentials] = useState<{
+    sessionId: string;
+    accessToken: string;
+  } | null>(null);
+  const [summary, setSummary] = useState<CheckoutSummary | null>(
+    previewMode ? PREVIEW_SUMMARY : null,
+  );
+  const [payment, setPayment] = useState<PaymentResult | null>(null);
   const cardBaseTotal = Math.max(
     0,
     (summary?.subtotal ??
@@ -314,23 +331,6 @@ export default function Checkout() {
     installments,
     maxInstallmentsFor(cardBaseTotal),
   );
-  const [saveCard, setSaveCard] = useState(true);
-  const [card, setCard] = useState({
-    holderName: "",
-    number: "",
-    expiryMonth: "",
-    expiryYear: "",
-    ccv: "",
-  });
-  const [isFranchisee, setIsFranchisee] = useState(false);
-  const [credentials, setCredentials] = useState<{
-    sessionId: string;
-    accessToken: string;
-  } | null>(null);
-  const [summary, setSummary] = useState<CheckoutSummary | null>(
-    previewMode ? PREVIEW_SUMMARY : null,
-  );
-  const [payment, setPayment] = useState<PaymentResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [cancellingPix, setCancellingPix] = useState(false);
   const [cardFailure, setCardFailure] = useState<string | null>(null);
