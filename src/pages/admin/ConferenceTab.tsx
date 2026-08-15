@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EyeOff, Loader2, Package, RefreshCw, Search, Tag, Users, type LucideIcon } from "lucide-react";
+import { EyeOff, Loader2, Package, Printer, RefreshCw, Search, Tag, Users, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
@@ -26,6 +26,13 @@ type PriceFilter = "todos" | "com_preco" | "sem_preco";
 
 const money = (value: number, currency = "BRL") =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value || 0);
+
+const escapeHtml = (value: unknown) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;");
 
 function visibilityLabel(audience: ProductAudience | null) {
   if (!audience) return "Oculto";
@@ -126,6 +133,69 @@ export default function ConferenceTab() {
   );
   const missingSubscriberPrices = rows.filter((row) => row.subscriberPrice === null).length;
 
+  const printConference = () => {
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      toast.error("O navegador bloqueou a janela de impressão");
+      return;
+    }
+    popup.opener = null;
+    const printedAt = new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    const tableRows = filteredRows.map((row) => {
+      const salePrice = Number(row.variant.price.amount);
+      const currency = row.variant.price.currencyCode || "BRL";
+      const variantTitle = row.variant.title === "Default Title" ? "Produto único" : row.variant.title;
+      return `
+        <tr>
+          <td><strong>${escapeHtml(row.productTitle)}</strong>${row.vendor ? `<br><small>${escapeHtml(row.vendor)}</small>` : ""}</td>
+          <td>${escapeHtml(variantTitle)}</td>
+          <td class="money">${escapeHtml(money(salePrice, currency))}</td>
+          <td class="money">${row.subscriberPrice === null ? "—" : escapeHtml(money(row.subscriberPrice, currency))}</td>
+          <td>${escapeHtml(visibilityLabel(row.audience))}</td>
+          <td>${row.variant.availableForSale ? "Disponível" : "Esgotado"}</td>
+          <td class="check">□</td>
+        </tr>`;
+    }).join("");
+
+    popup.document.write(`<!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <title>Conferência do catálogo</title>
+          <style>
+            @page { size: A4 landscape; margin: 10mm; }
+            * { box-sizing: border-box; }
+            body { margin: 0; color: #111827; font: 11px Arial, sans-serif; }
+            h1 { margin: 0 0 4px; color: #0a1931; font-size: 20px; }
+            .meta { display: flex; justify-content: space-between; margin-bottom: 12px; color: #4b5563; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            th, td { border: 1px solid #9ca3af; padding: 5px 6px; vertical-align: middle; overflow-wrap: anywhere; }
+            th { background: #e5e7eb; text-align: left; font-size: 10px; text-transform: uppercase; }
+            th:nth-child(1) { width: 27%; }
+            th:nth-child(2) { width: 14%; }
+            th:nth-child(3), th:nth-child(4) { width: 12%; }
+            th:nth-child(5) { width: 15%; }
+            th:nth-child(6) { width: 11%; }
+            th:nth-child(7) { width: 9%; text-align: center; }
+            tr { break-inside: avoid; }
+            small { color: #6b7280; }
+            .money { text-align: right; white-space: nowrap; }
+            .check { text-align: center; font-size: 22px; line-height: 1; }
+          </style>
+        </head>
+        <body>
+          <h1>Conferência do catálogo</h1>
+          <div class="meta"><span>${filteredRows.length} variações</span><span>Impresso em ${escapeHtml(printedAt)}</span></div>
+          <table>
+            <thead><tr><th>Produto</th><th>Variação</th><th>Venda</th><th>Assinante</th><th>Visibilidade</th><th>Disponibilidade</th><th>Conferido</th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          <script>window.addEventListener('load', () => { window.print(); });<\/script>
+        </body>
+      </html>`);
+    popup.document.close();
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -175,6 +245,10 @@ export default function ConferenceTab() {
               <Button variant="outline" size="sm" className="h-9" onClick={() => void load()} disabled={loading}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 Atualizar
+              </Button>
+              <Button size="sm" className="h-9" onClick={printConference} disabled={loading || filteredRows.length === 0}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir conferência
               </Button>
             </div>
           </div>
