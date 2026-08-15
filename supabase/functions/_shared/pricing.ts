@@ -89,6 +89,31 @@ export function cardFeePercent(installments: number): number {
   return installments <= 6 ? 3.49 : 3.99;
 }
 
+// Antecipação automática ativada na conta Asaas. Taxas reais (GET /myAccount/fees):
+// crédito à vista = 1,25% ao mês; parcelado = 1,70% ao mês.
+// O prazo normal de recebimento é 32 dias (1ª parcela) e +30 dias por parcela
+// seguinte, então o custo médio da antecipação é a taxa mensal multiplicada
+// pelo prazo médio em meses. Esse custo também é repassado ao cliente.
+export const ANTICIPATION_ENABLED = true;
+export const ANTICIPATION_DETACHED_MONTHLY_PERCENT = 1.25;
+export const ANTICIPATION_INSTALLMENT_MONTHLY_PERCENT = 1.7;
+const CARD_DAYS_TO_RECEIVE = 32;
+
+export function anticipationFeePercent(installments: number): number {
+  if (!ANTICIPATION_ENABLED) return 0;
+  const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
+  const averageMonths = CARD_DAYS_TO_RECEIVE / 30 + (n - 1) / 2;
+  const monthly = n <= 1
+    ? ANTICIPATION_DETACHED_MONTHLY_PERCENT
+    : ANTICIPATION_INSTALLMENT_MONTHLY_PERCENT;
+  return Number((monthly * averageMonths).toFixed(4));
+}
+
+/** Percentual total retido pela Asaas (taxa do cartão + antecipação). */
+export function totalCardCostPercent(installments: number): number {
+  return Number((cardFeePercent(installments) + anticipationFeePercent(installments)).toFixed(4));
+}
+
 export interface InstallmentPlan {
   installments: number;
   installmentValue: number;
@@ -109,7 +134,7 @@ export function maxInstallmentsFor(total: number): number {
 /** Plano de parcelamento com os juros da Asaas repassados ao cliente. */
 export function installmentPlan(total: number, installments: number): InstallmentPlan {
   const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
-  const percent = cardFeePercent(n) / 100;
+  const percent = totalCardCostPercent(n) / 100;
   const gross = (total + CARD_OPERATION_FEE) / (1 - percent);
   const installmentValue = Math.ceil(gross / n * 100) / 100;
   const chargedTotal = round2(installmentValue * n);
@@ -120,6 +145,7 @@ export function installmentPlan(total: number, installments: number): Installmen
     interestAmount: round2(chargedTotal - total),
   };
 }
+
 
 /** Opções exibidas ao cliente, da menor para a maior quantidade de parcelas. */
 export function installmentOptions(total: number): InstallmentPlan[] {

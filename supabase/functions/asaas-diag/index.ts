@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
           headers: { access_token: apiKey, "Content-Type": "application/json" },
         });
         const text = await probe.text();
-        results[path] = { httpStatus: probe.status, body: text.slice(0, 2000) };
+        results[path] = { httpStatus: probe.status, body: text.slice(0, 8000) };
       } catch (error) {
         results[path] = { error: error instanceof Error ? error.message : String(error) };
       }

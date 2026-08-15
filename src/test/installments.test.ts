@@ -38,3 +38,17 @@ describe("parcelamento no cartão", () => {
     expect(client.maxInstallmentsFor(4)).toBe(1);
   });
 });
+
+describe("antecipação automática", () => {
+  it("repassa a taxa de antecipação ao cliente", () => {
+    for (const total of TOTALS) {
+      for (let n = 1; n <= client.maxInstallmentsFor(total); n += 1) {
+        const plan = client.installmentPlan(total, n);
+        const percent = client.totalCardCostPercent(n) / 100;
+        const net = plan.chargedTotal * (1 - percent) - client.CARD_OPERATION_FEE;
+        expect(net).toBeGreaterThanOrEqual(total - 0.01);
+        expect(client.anticipationFeePercent(n)).toBe(server.anticipationFeePercent(n));
+      }
+    }
+  });
+});
