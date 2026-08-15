@@ -2828,10 +2828,12 @@ function SummaryTotals({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
