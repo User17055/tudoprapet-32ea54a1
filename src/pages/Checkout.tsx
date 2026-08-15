@@ -2937,6 +2937,14 @@ function SummaryTotals({
   const total = shippingOverride
     ? liveTotal
     : Math.max(0, (summary?.total ?? liveTotal) - (showServiceFee ? 0 : serviceFee));
+  // No cartão o cliente paga a taxa da operadora: o total exibido acompanha o
+  // valor realmente cobrado, calculado sobre o total já com desconto.
+  const activeCardPlan =
+    cardPlan && total > 0 ? installmentPlan(total, cardPlan.installments) : null;
+  const cardInterest = activeCardPlan
+    ? Math.max(0, Number((activeCardPlan.chargedTotal - total).toFixed(2)))
+    : 0;
+  const displayTotal = activeCardPlan ? activeCardPlan.chargedTotal : total;
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
