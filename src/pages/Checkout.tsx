@@ -3038,11 +3038,13 @@ function MobileOrderSummary({
   cartItems,
   shippingOverride,
   showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
   showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
