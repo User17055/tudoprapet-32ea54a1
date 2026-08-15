@@ -2878,6 +2878,7 @@ function SummaryTotals({
           {shippingMethod ? (shippingAmount > 0 ? money(shippingAmount) : "Grátis") : "A calcular"}
         </span>
       </div>
+      {showServiceFee && (
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5">
           Taxa de serviço
@@ -2898,6 +2899,7 @@ function SummaryTotals({
         </span>
         <span className="font-medium text-slate-900">{money(serviceFee)}</span>
       </div>
+      )}
       <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-bold text-slate-950">
         <span>Total</span>
         <span>{money(total)}</span>
