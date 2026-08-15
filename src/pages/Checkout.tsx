@@ -2982,8 +2982,6 @@ function MobileOrderSummary({
         <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
       </div>
     </details>
-      </div>
-    </details>
   );
 }
 function Success({
