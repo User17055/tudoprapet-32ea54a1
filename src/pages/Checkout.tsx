@@ -1358,6 +1358,7 @@ export default function Checkout() {
                 <OrderSummary
                   summary={summary}
                   cartItems={cartItems}
+                  showServiceFee={step !== 0}
                   shippingOverride={
                     step === 0 && deliveryMode === "pick_up"
                       ? { title: "Retirada na loja", amount: 0 }
