@@ -66,21 +66,25 @@ function nextLink(linkHeader: string | null): string | null {
 async function recoverPaidOrders(
   adminDb: any,
   shopifyToken: string,
-): Promise<{ recovered: number; pending: number }> {
+): Promise<{
+  recovered: number;
+  pending: number;
+  pendingSales: Array<{ id: string; customerName: string; total: number; createdAt: string }>;
+}> {
   const { data: sessions, error: sessionsError } = await adminDb
     .from("checkout_sessions")
-    .select("id,shopify_draft_order_id,customer_snapshot")
+    .select("id,shopify_draft_order_id,customer_snapshot,total,created_at")
     .is("shopify_order_id", null)
     .in("status", ["payment_processing", "paid", "paid_pending_shopify"])
     .order("updated_at", { ascending: true })
     .limit(20);
   if (sessionsError) {
     console.error("Falha ao carregar vendas pagas sem pedido:", sessionsError);
-    return { recovered: 0, pending: 0 };
+    return { recovered: 0, pending: 0, pendingSales: [] };
   }
 
   const sessionIds = (sessions || []).map((row: any) => row.id);
-  if (!sessionIds.length) return { recovered: 0, pending: 0 };
+  if (!sessionIds.length) return { recovered: 0, pending: 0, pendingSales: [] };
   const { data: paidPayments, error: paymentsError } = await adminDb
     .from("payments")
     .select("checkout_session_id")
@@ -88,12 +92,13 @@ async function recoverPaidOrders(
     .in("status", ["confirmed", "received"]);
   if (paymentsError) {
     console.error("Falha ao validar vendas pagas sem pedido:", paymentsError);
-    return { recovered: 0, pending: 0 };
+    return { recovered: 0, pending: 0, pendingSales: [] };
   }
   const paidSessionIds = new Set((paidPayments || []).map((row: any) => row.checkout_session_id));
 
   let recoveredThisRequest = 0;
   let pending = paidSessionIds.size;
+  const recoveredSessionIds = new Set<string>();
   for (const session of sessions || []) {
     if (!paidSessionIds.has(session.id)) continue;
     // Nao deixe a recuperacao de um lote antigo atrasar o carregamento da tela.
@@ -126,8 +131,17 @@ async function recoverPaidOrders(
     }
     recoveredThisRequest++;
     pending--;
+    recoveredSessionIds.add(session.id);
   }
-  return { recovered: recoveredThisRequest, pending: Math.max(0, pending) };
+  const pendingSales = (sessions || [])
+    .filter((session: any) => paidSessionIds.has(session.id) && !recoveredSessionIds.has(session.id))
+    .map((session: any) => ({
+      id: session.id,
+      customerName: String(session.customer_snapshot?.name || "Cliente não identificado"),
+      total: Number(session.total || 0),
+      createdAt: String(session.created_at || ""),
+    }));
+  return { recovered: recoveredThisRequest, pending: Math.max(0, pending), pendingSales };
 }
 
 function normalize(order: any, delivery = deliveryLabel(order)) {

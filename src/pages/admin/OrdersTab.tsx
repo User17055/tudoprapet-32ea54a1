@@ -11,10 +11,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
+interface PendingSyncSale {
+  id: string;
+  customerName: string;
+  total: number;
+  createdAt: string;
+}
 interface OrdersResponse {
   orders: PrintableOrder[];
   count: number;
-  recovery?: { recovered: number; pending: number };
+  recovery?: {
+    recovered: number;
+    pending: number;
+    pendingSales?: PendingSyncSale[];
+  };
 }
 interface PrintQueueResponse { job_id: string; already_queued?: boolean; functions_version?: string }
 interface PrintStatusResponse {
@@ -48,6 +58,7 @@ export default function OrdersTab() {
   const [zplOrder, setZplOrder] = useState<PrintableOrder | null>(null);
   const [printingId, setPrintingId] = useState<string | number | null>(null);
   const [syncPending, setSyncPending] = useState(0);
+  const [pendingSales, setPendingSales] = useState<PendingSyncSale[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +68,7 @@ export default function OrdersTab() {
       const response = data as OrdersResponse;
       setOrders(response?.orders || []);
       setSyncPending(response?.recovery?.pending || 0);
+      setPendingSales(response?.recovery?.pendingSales || []);
       const recovered = response?.recovery?.recovered || 0;
       if (recovered > 0) {
         toast.success(`${recovered} venda(s) paga(s) recuperada(s) na Shopify`);
@@ -174,6 +186,19 @@ export default function OrdersTab() {
           <CardContent className="p-4 text-sm text-amber-900">
             <p className="font-bold">{syncPending} venda(s) paga(s) aguardando sincronização com a Shopify</p>
             <p className="mt-1 text-xs">A recuperação automática continuará tentando. Atualize a lista em instantes; a venda não fica mais invisível para a operação.</p>
+            {pendingSales && pendingSales.length > 0 && (
+              <ul className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-xs">
+                {pendingSales.slice(0, 5).map((sale) => (
+                  <li key={sale.id} className="flex flex-wrap justify-between gap-x-4">
+                    <span className="font-semibold">{sale.customerName}</span>
+                    <span>
+                      {money(sale.total)}
+                      {sale.createdAt ? ` · ${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}
