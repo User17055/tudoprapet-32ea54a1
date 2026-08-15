@@ -576,7 +576,7 @@ export async function setDraftOrderTaxCredential(
     body: JSON.stringify({
       query: `mutation SetTaxCredential($id: ID!, $input: DraftOrderInput!) {
         draftOrderUpdate(id: $id, input: $input) {
-          draftOrder { id localizationExtensions(first: 5) { nodes { key value } } lineItems(first: 50) { nodes { quantity title } } }
+          draftOrder { id localizedFields(first: 5) { nodes { key value } } lineItems(first: 50) { nodes { quantity title } } }
           userErrors { field message }
         }
       }`,
@@ -587,7 +587,7 @@ export async function setDraftOrderTaxCredential(
           billingAddress: brAddress(draft?.billing_address),
           lineItems: existingLineItems,
           ...(shippingLine ? { shippingLine } : {}),
-          localizationExtensions: [{ key: "TAX_CREDENTIAL_BR", value }],
+          localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
       },
     }),
@@ -604,7 +604,7 @@ export async function setDraftOrderTaxCredential(
     console.error(`CPF/CNPJ rejeitado no draft ${draftOrderId}:`, JSON.stringify(body?.errors ?? errors));
     return false;
   }
-  const stored = body?.data?.draftOrderUpdate?.draftOrder?.localizationExtensions?.nodes ?? [];
+  const stored = body?.data?.draftOrderUpdate?.draftOrder?.localizedFields?.nodes ?? [];
   const persisted = stored.some((node: { key?: string; value?: string }) => node?.value === value);
   if (!persisted) {
     console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
@@ -628,7 +628,25 @@ export async function completeDraftOrder(
   paymentPending = false,
   cpfCnpj?: string | null,
 ): Promise<CompleteDraftOrderResult> {
-  if (cpfCnpj) await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token);
+  // Idempotencia vem antes da atualizacao fiscal: um draft ja concluido nao
+  // aceita draftOrderUpdate, mas ainda deve devolver o pedido existente.
+  const existing = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
+    headers: { "X-Shopify-Access-Token": token },
+  });
+  if (existing.ok) {
+    const body = await existing.json();
+    const existingOrderId = body?.draft_order?.order_id;
+    if (existingOrderId) {
+      return { requestOk: true, orderId: String(existingOrderId), alreadyCompleted: true };
+    }
+  }
+
+  // Nunca conclua um pedido brasileiro sem confirmar que a credencial fiscal
+  // persistiu. Continuar apesar da falha deixava a venda paga presa em Rascunhos.
+  if (cpfCnpj && !(await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token))) {
+    console.error(`Draft ${draftOrderId} nao concluido: CPF/CNPJ nao persistiu`);
+    return { requestOk: false, orderId: null, alreadyCompleted: false };
+  }
 
   const url = `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}/complete.json`;
   const completed = await fetch(url, {

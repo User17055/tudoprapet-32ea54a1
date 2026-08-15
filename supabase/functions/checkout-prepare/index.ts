@@ -268,15 +268,25 @@ Deno.serve(async (req) => {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
       return errorResponse("Falha ao preparar pedido na Shopify", 502);
     }
-    // Mercado Brasil: sem a credencial fiscal a conclusão do draft é rejeitada.
-    await setDraftOrderTaxCredential(draft.draftOrderId, input.customer.cpfCnpj, shopifyToken);
-
-
+    // Grave o vinculo imediatamente. Mesmo que a credencial fiscal seja
+    // rejeitada, o rascunho continua rastreavel para diagnostico/recuperacao.
     const { error: draftUpdateError } = await admin.from("checkout_sessions")
       .update({ shopify_draft_order_id: draft.draftOrderId })
       .eq("id", session.id);
     if (draftUpdateError) throw draftUpdateError;
 
+    // Mercado Brasil: valide a persistencia antes de liberar qualquer cobranca.
+    // Se a Shopify rejeitar o CPF/CNPJ, o cliente nao chega ao Asaas e nenhuma
+    // venda paga fica presa em Rascunhos.
+    const taxCredentialStored = await setDraftOrderTaxCredential(
+      draft.draftOrderId,
+      input.customer.cpfCnpj,
+      shopifyToken,
+    );
+    if (!taxCredentialStored) {
+      await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
+      return errorResponse("Não foi possível registrar o CPF/CNPJ no pedido. Confira os dados e tente novamente.", 422);
+    }
     return jsonResponse({
       sessionId: session.id,
       accessToken,
