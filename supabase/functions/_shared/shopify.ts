@@ -461,6 +461,30 @@ export interface CompleteDraftOrderResult {
   requestOk: boolean;
   orderId: string | null;
   alreadyCompleted: boolean;
+  error: string | null;
+}
+
+export interface TaxCredentialResult {
+  ok: boolean;
+  error: string | null;
+}
+
+function shopifyErrorMessage(value: unknown, fallback: string): string {
+  if (!value) return fallback;
+  const entries = Array.isArray(value) ? value : [value];
+  const messages = entries.map((entry) => {
+    if (typeof entry === "string") return entry;
+    if (entry && typeof entry === "object") {
+      const item = entry as { message?: unknown; field?: unknown };
+      const message = typeof item.message === "string" ? item.message : "";
+      const field = Array.isArray(item.field) ? item.field.join(".") : String(item.field || "");
+      return [field, message].filter(Boolean).join(": ");
+    }
+    return "";
+  }).filter(Boolean);
+  return (messages.join("; ") || fallback)
+    .replace(/\b\d{11,14}\b/g, "[documento protegido]")
+    .slice(0, 500);
 }
 
 /**
@@ -472,14 +496,19 @@ export async function setDraftOrderTaxCredential(
   draftOrderId: string,
   cpfCnpj: string,
   token: string,
-): Promise<boolean> {
+): Promise<TaxCredentialResult> {
   const value = String(cpfCnpj || "").replace(/\D/g, "");
-  if (value.length !== 11 && value.length !== 14) return false;
+  if (value.length !== 11 && value.length !== 14) {
+    return { ok: false, error: "CPF/CNPJ ausente ou com quantidade de digitos invalida." };
+  }
 
   const read = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
     headers: { "X-Shopify-Access-Token": token },
   });
   const draft = read.ok ? (await read.json())?.draft_order : null;
+  if (!draft) {
+    return { ok: false, error: `Shopify nao permitiu ler o rascunho (HTTP ${read.status}).` };
+  }
   const brAddress = (address: Record<string, unknown> | null | undefined) => address
     ? {
       firstName: address.first_name,
@@ -494,9 +523,8 @@ export async function setDraftOrderTaxCredential(
     }
     : undefined;
 
-  // draftOrderUpdate sobrescreve as linhas do draft: se lineItems não for
-  // enviado, a Shopify apaga os itens existentes. Lemos o draft por GraphQL
-  // (mesmo formato do input) e reenviamos exatamente o que já existe.
+  // Leitura apenas diagnostica o conteúdo existente. A atualização abaixo não
+  // reenvia os itens: alterar só os campos informados preserva produtos e descontos.
   const currentRes = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
@@ -530,10 +558,9 @@ export async function setDraftOrderTaxCredential(
       currentRes.status,
       JSON.stringify(currentBody?.errors ?? null),
     );
-    return false;
   }
 
-  const existingLineItems = currentNodes.map((node) => {
+  const existingLineItems = (currentNodes || []).map((node) => {
     const discount = node.appliedDiscount as Record<string, unknown> | null;
     const appliedDiscount = discount
       ? {
@@ -583,10 +610,12 @@ export async function setDraftOrderTaxCredential(
       variables: {
         id: `gid://shopify/DraftOrder/${draftOrderId}`,
         input: {
+          marketRegionCountryCode: "BR",
           shippingAddress: brAddress(draft?.shipping_address),
-          billingAddress: brAddress(draft?.billing_address),
-          lineItems: existingLineItems,
-          ...(shippingLine ? { shippingLine } : {}),
+          // Retirada não possui shipping_address. Ainda assim a credencial fiscal
+          // brasileira precisa de um contexto BR; o país de cobrança é suficiente
+          // e não transforma a retirada em envio.
+          billingAddress: brAddress(draft?.billing_address) || { countryCode: "BR" },
           localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
       },
@@ -595,28 +624,29 @@ export async function setDraftOrderTaxCredential(
 
 
   if (!response.ok) {
-    console.error(`Falha ao gravar CPF/CNPJ no draft ${draftOrderId}:`, response.status, await response.text());
-    return false;
+    const responseText = await response.text();
+    console.error(`Falha ao gravar CPF/CNPJ no draft ${draftOrderId}:`, response.status, responseText);
+    return {
+      ok: false,
+      error: shopifyErrorMessage(responseText, `Shopify rejeitou o CPF/CNPJ (HTTP ${response.status}).`),
+    };
   }
   const body = await response.json();
   const errors = body?.data?.draftOrderUpdate?.userErrors ?? [];
   if (body?.errors || errors.length) {
     console.error(`CPF/CNPJ rejeitado no draft ${draftOrderId}:`, JSON.stringify(body?.errors ?? errors));
-    return false;
+    return {
+      ok: false,
+      error: shopifyErrorMessage(body?.errors ?? errors, "Shopify rejeitou o CPF/CNPJ do rascunho."),
+    };
   }
   const stored = body?.data?.draftOrderUpdate?.draftOrder?.localizedFields?.nodes ?? [];
   const persisted = stored.some((node: { key?: string; value?: string }) => node?.value === value);
   if (!persisted) {
     console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
-    return false;
+    return { ok: false, error: "A Shopify aceitou a atualizacao, mas nao gravou o CPF/CNPJ no rascunho." };
   }
-  const after = body?.data?.draftOrderUpdate?.draftOrder?.lineItems?.nodes ?? [];
-  if (after.length !== existingLineItems.length) {
-    console.error(
-      `Draft ${draftOrderId} ficou com ${after.length} linhas (esperado ${existingLineItems.length}) após gravar CPF/CNPJ.`,
-    );
-  }
-  return true;
+  return { ok: true, error: null };
 
 }
 
@@ -637,31 +667,54 @@ export async function completeDraftOrder(
     const body = await existing.json();
     const existingOrderId = body?.draft_order?.order_id;
     if (existingOrderId) {
-      return { requestOk: true, orderId: String(existingOrderId), alreadyCompleted: true };
+      return { requestOk: true, orderId: String(existingOrderId), alreadyCompleted: true, error: null };
     }
   }
 
   // Nunca conclua um pedido brasileiro sem confirmar que a credencial fiscal
   // persistiu. Continuar apesar da falha deixava a venda paga presa em Rascunhos.
-  if (cpfCnpj && !(await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token))) {
-    console.error(`Draft ${draftOrderId} nao concluido: CPF/CNPJ nao persistiu`);
-    return { requestOk: false, orderId: null, alreadyCompleted: false };
+  if (cpfCnpj) {
+    const taxCredential = await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token);
+    if (!taxCredential.ok) {
+      console.error(`Draft ${draftOrderId} nao concluido:`, taxCredential.error);
+      return { requestOk: false, orderId: null, alreadyCompleted: false, error: taxCredential.error };
+    }
   }
 
-  const url = `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}/complete.json`;
-  const completed = await fetch(url, {
-    method: "PUT",
+  const completed = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-    body: JSON.stringify({ payment_pending: paymentPending }),
+    body: JSON.stringify({
+      query: `mutation CompleteDraft($id: ID!, $paymentPending: Boolean) {
+        draftOrderComplete(id: $id, paymentPending: $paymentPending) {
+          draftOrder { id order { id legacyResourceId } }
+          userErrors { field message }
+        }
+      }`,
+      variables: {
+        id: `gid://shopify/DraftOrder/${draftOrderId}`,
+        paymentPending,
+      },
+    }),
   });
 
-
-  if (completed.ok) {
-    const body = await completed.json();
+  const completionText = await completed.text();
+  let completionBody: any = null;
+  try {
+    completionBody = completionText ? JSON.parse(completionText) : null;
+  } catch {
+    completionBody = null;
+  }
+  const completionPayload = completionBody?.data?.draftOrderComplete;
+  const completedOrder = completionPayload?.draftOrder?.order;
+  const completedOrderId = completedOrder?.legacyResourceId || String(completedOrder?.id || "").split("/").pop();
+  const completionErrors = completionBody?.errors || completionPayload?.userErrors || [];
+  if (completed.ok && completedOrderId && !completionErrors.length) {
     return {
       requestOk: true,
-      orderId: body?.draft_order?.order_id ? String(body.draft_order.order_id) : null,
+      orderId: String(completedOrderId),
       alreadyCompleted: false,
+      error: null,
     };
   }
 
@@ -674,10 +727,18 @@ export async function completeDraftOrder(
     const body = await read.json();
     const orderId = body?.draft_order?.order_id;
     if (orderId) {
-      return { requestOk: true, orderId: String(orderId), alreadyCompleted: true };
+      return { requestOk: true, orderId: String(orderId), alreadyCompleted: true, error: null };
     }
   }
 
-  console.error(`Falha ao concluir Draft Order ${draftOrderId}:`, completed.status, await completed.text());
-  return { requestOk: false, orderId: null, alreadyCompleted: false };
+  console.error(`Falha ao concluir Draft Order ${draftOrderId}:`, completed.status, completionText);
+  return {
+    requestOk: false,
+    orderId: null,
+    alreadyCompleted: false,
+    error: shopifyErrorMessage(
+      completionErrors.length ? completionErrors : completionText,
+      `Shopify nao concluiu o rascunho (HTTP ${completed.status}).`,
+    ),
+  };
 }

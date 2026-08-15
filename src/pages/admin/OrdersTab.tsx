@@ -16,10 +16,12 @@ interface PendingSyncSale {
   customerName: string;
   total: number;
   createdAt: string;
+  error?: string;
 }
 interface OrdersResponse {
   orders: PrintableOrder[];
   count: number;
+  functions_version?: string;
   recovery?: {
     recovered: number;
     pending: number;
@@ -33,6 +35,7 @@ interface PrintStatusResponse {
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 const MINIMUM_PRINT_FUNCTION_VERSION = "2026-08-10.8";
+const MINIMUM_RECOVERY_FUNCTION_VERSION = "2026-08-15.1";
 
 const FINANCIAL: Record<string, string> = {
   pending: "Pendente", authorized: "Autorizado", partially_paid: "Parcialmente pago", paid: "Pago",
@@ -69,6 +72,12 @@ export default function OrdersTab() {
       setOrders(response?.orders || []);
       setSyncPending(response?.recovery?.pending || 0);
       setPendingSales(response?.recovery?.pendingSales || []);
+      if (!response?.functions_version || response.functions_version < MINIMUM_RECOVERY_FUNCTION_VERSION) {
+        toast.warning("A recuperação de vendas ainda não foi publicada no servidor", {
+          description: "O site foi atualizado, mas a Edge Function admin-orders continua antiga. Publique essa função para concluir os rascunhos pagos.",
+          duration: 15_000,
+        });
+      }
       const recovered = response?.recovery?.recovered || 0;
       if (recovered > 0) {
         toast.success(`${recovered} venda(s) paga(s) recuperada(s) na Shopify`);
@@ -189,12 +198,10 @@ export default function OrdersTab() {
             {pendingSales && pendingSales.length > 0 && (
               <ul className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-xs">
                 {pendingSales.slice(0, 5).map((sale) => (
-                  <li key={sale.id} className="flex flex-wrap justify-between gap-x-4">
+                  <li key={sale.id} className="grid gap-0.5 rounded-md border border-amber-200 bg-white/60 p-2 sm:grid-cols-[1fr_auto]">
                     <span className="font-semibold">{sale.customerName}</span>
-                    <span>
-                      {money(sale.total)}
-                      {sale.createdAt ? ` · ${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}
-                    </span>
+                    <span>{money(sale.total)}{sale.createdAt ? ` · ${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}</span>
+                    {sale.error && <span className="text-red-700 sm:col-span-2"><strong>Motivo da Shopify:</strong> {sale.error}</span>}
                   </li>
                 ))}
               </ul>

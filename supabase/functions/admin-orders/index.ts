@@ -71,21 +71,38 @@ async function recoverPaidOrders(
 ): Promise<{
   recovered: number;
   pending: number;
-  pendingSales: Array<{ id: string; customerName: string; total: number; createdAt: string }>;
+  pendingSales: Array<{ id: string; customerName: string; total: number; createdAt: string; error?: string }>;
 }> {
   const { data: sessions, error: sessionsError } = await adminDb
     .from("checkout_sessions")
-    .select("id,shopify_draft_order_id,customer_snapshot,total,created_at")
+    .select("id,user_id,shopify_draft_order_id,customer_snapshot,total,created_at")
     .is("shopify_order_id", null)
     // Inclui awaiting_payment porque a cobranca pode ter sido criada no Asaas
     // antes de uma falha ao atualizar o estado local. O status remoto continua
     // sendo a autoridade antes de qualquer recuperacao.
-    .in("status", ["awaiting_payment", "payment_processing", "paid", "paid_pending_shopify", "expired", "cancelled"])
+    .in("status", ["awaiting_payment", "payment_processing", "paid", "paid_pending_shopify", "expired", "cancelled", "failed"])
     .order("updated_at", { ascending: false })
-    .limit(30);
+    .limit(100);
   if (sessionsError) {
     console.error("Falha ao carregar vendas pagas sem pedido:", sessionsError);
     return { recovered: 0, pending: 0, pendingSales: [] };
+  }
+
+  // Sessões antigas podem não ter o CPF no snapshot. Quando a compra pertence
+  // a uma conta, recupere-o do perfil salvo para também reparar esses drafts.
+  const profileCpfByUser = new Map<string, string>();
+  const userIdsMissingCpf = [...new Set((sessions || [])
+    .filter((row: any) => row.user_id && !row.customer_snapshot?.cpfCnpj)
+    .map((row: any) => String(row.user_id)))];
+  if (userIdsMissingCpf.length) {
+    const { data: profiles, error: profilesError } = await adminDb
+      .from("checkout_customer_profiles")
+      .select("user_id,cpf_cnpj")
+      .in("user_id", userIdsMissingCpf);
+    if (profilesError) console.error("Falha ao recuperar CPF de perfis antigos:", profilesError);
+    for (const profile of profiles || []) {
+      if (profile.user_id && profile.cpf_cnpj) profileCpfByUser.set(String(profile.user_id), String(profile.cpf_cnpj));
+    }
   }
 
   const sessionIds = (sessions || []).map((row: any) => row.id);
@@ -139,6 +156,7 @@ async function recoverPaidOrders(
   let recoveredThisRequest = 0;
   let pending = paidSessionIds.size;
   const recoveredSessionIds = new Set<string>();
+  const pendingErrors = new Map<string, string>();
   for (const session of sessions || []) {
     if (!paidSessionIds.has(session.id)) continue;
     // Nao deixe a recuperacao de um lote antigo atrasar o carregamento da tela.
@@ -146,9 +164,10 @@ async function recoverPaidOrders(
     if (recoveredThisRequest >= 3) break;
     if (!session.shopify_draft_order_id) {
       console.error(`Venda paga ${session.id} esta sem Draft Order Shopify`);
+      pendingErrors.set(session.id, "Esta venda paga nao possui um rascunho vinculado na Shopify.");
       continue;
     }
-    const cpfCnpj = session.customer_snapshot?.cpfCnpj || null;
+    const cpfCnpj = session.customer_snapshot?.cpfCnpj || profileCpfByUser.get(String(session.user_id || "")) || null;
     const completed = await completeDraftOrder(
       session.shopify_draft_order_id,
       shopifyToken,
@@ -159,6 +178,7 @@ async function recoverPaidOrders(
       await adminDb.from("checkout_sessions").update({ status: "paid_pending_shopify" })
         .eq("id", session.id).is("shopify_order_id", null);
       console.error(`Venda paga ${session.id} ainda nao pode ser concluida na Shopify`);
+      pendingErrors.set(session.id, completed.error || "A Shopify ainda nao permitiu concluir este rascunho.");
       continue;
     }
     const { error: updateError } = await adminDb.from("checkout_sessions").update({
@@ -180,6 +200,7 @@ async function recoverPaidOrders(
       customerName: String(session.customer_snapshot?.name || "Cliente não identificado"),
       total: Number(session.total || 0),
       createdAt: String(session.created_at || ""),
+      error: pendingErrors.get(session.id),
     }));
   return { recovered: recoveredThisRequest, pending: Math.max(0, pending), pendingSales };
 }
@@ -323,7 +344,13 @@ Deno.serve(async (req) => {
       const batch = selected.slice(start, start + 5);
       orders.push(...await Promise.all(batch.map(async (order: any) => normalize(order, await resolvedDeliveryLabel(order, shopifyToken)))));
     }
-    return jsonResponse({ orders, count: orders.length, recovery, server_time: new Date().toISOString() });
+    return jsonResponse({
+      orders,
+      count: orders.length,
+      recovery,
+      functions_version: FUNCTIONS_VERSION,
+      server_time: new Date().toISOString(),
+    });
   } catch (error) {
     console.error("admin-orders:", error);
     return errorResponse("Erro interno ao carregar pedidos", 500);

@@ -283,8 +283,9 @@ Deno.serve(async (req) => {
       input.customer.cpfCnpj,
       shopifyToken,
     );
-    if (!taxCredentialStored) {
+    if (!taxCredentialStored.ok) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
+      console.error(`CPF/CNPJ rejeitado no checkout ${session.id}:`, taxCredentialStored.error);
       return errorResponse("Não foi possível registrar o CPF/CNPJ no pedido. Confira os dados e tente novamente.", 422);
     }
     return jsonResponse({
