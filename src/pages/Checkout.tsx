@@ -3012,18 +3012,20 @@ function OrderSummary({
   cartItems,
   shippingOverride,
   showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
   showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
       <h2 className="mb-5 text-center text-xl font-bold text-slate-900">
         Resumo do pedido
       </h2>
-      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
+      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} cardPlan={cardPlan} />
       <div className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-[#faf8f5] px-4 py-3 text-xs font-medium text-slate-600">
         <LockKeyhole className="h-4 w-4 text-blue-800" />
         Pagamento processado com segurança
