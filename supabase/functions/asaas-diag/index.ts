@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   // Sonda de tarifas: mostra as taxas da conta, inclusive as de parcelamento no cartão.
   if (probeFees) {
     const apiKey = Deno.env.get("ASAAS_API_KEY")?.trim() || "";
-    const paths = ["/myAccount/fees", "/anticipations/limits", "/anticipations/simulate"];
+    const paths = ["/myAccount/fees", "/myAccount/paymentCheckoutConfig", "/installments?limit=1"];
     const results: Record<string, unknown> = {};
     for (const path of paths) {
       try {
