@@ -1211,6 +1211,7 @@ export default function Checkout() {
             <MobileOrderSummary
               summary={summary}
               cartItems={cartItems}
+              showServiceFee={step !== 0}
               shippingOverride={
                 step === 0 && deliveryMode === "pick_up"
                   ? { title: "Retirada na loja", amount: 0 }
@@ -1357,6 +1358,7 @@ export default function Checkout() {
                 <OrderSummary
                   summary={summary}
                   cartItems={cartItems}
+                  showServiceFee={step !== 0}
                   shippingOverride={
                     step === 0 && deliveryMode === "pick_up"
                       ? { title: "Retirada na loja", amount: 0 }
@@ -2828,10 +2830,12 @@ function SummaryTotals({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
@@ -2851,10 +2855,13 @@ function SummaryTotals({
   const subtotal = summary?.subtotal ?? cartSubtotal;
   const discount = summary?.discount ?? cartDiscount;
   const serviceFee = summary?.serviceFee ?? SERVICE_FEE;
+  const appliedFee = showServiceFee ? serviceFee : 0;
   const shippingAmount = shippingOverride?.amount ?? summary?.shippingAmount ?? 0;
   const shippingMethod = shippingOverride?.title ?? summary?.shippingMethod;
-  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + serviceFee);
-  const total = shippingOverride ? liveTotal : summary?.total ?? liveTotal;
+  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + appliedFee);
+  const total = shippingOverride
+    ? liveTotal
+    : Math.max(0, (summary?.total ?? liveTotal) - (showServiceFee ? 0 : serviceFee));
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
@@ -2873,6 +2880,7 @@ function SummaryTotals({
           {shippingMethod ? (shippingAmount > 0 ? money(shippingAmount) : "Grátis") : "A calcular"}
         </span>
       </div>
+      {showServiceFee && (
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5">
           Taxa de serviço
@@ -2893,6 +2901,7 @@ function SummaryTotals({
         </span>
         <span className="font-medium text-slate-900">{money(serviceFee)}</span>
       </div>
+      )}
       <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-bold text-slate-950">
         <span>Total</span>
         <span>{money(total)}</span>
@@ -2904,17 +2913,19 @@ function OrderSummary({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
       <h2 className="mb-5 text-center text-xl font-bold text-slate-900">
         Resumo do pedido
       </h2>
-      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
+      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
       <div className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-[#faf8f5] px-4 py-3 text-xs font-medium text-slate-600">
         <LockKeyhole className="h-4 w-4 text-blue-800" />
         Pagamento processado com segurança
@@ -2926,26 +2937,33 @@ function MobileOrderSummary({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
     cartItems.reduce((total, item) => total + item.quantity, 0);
+  const fee = showServiceFee ? SERVICE_FEE : 0;
   const cartTotal = cartItems.reduce(
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
-  ) + SERVICE_FEE;
+  ) + fee;
   const headerTotal = shippingOverride
     ? Math.max(
         0,
         (summary
-          ? summary.subtotal - summary.discount + (summary.serviceFee ?? SERVICE_FEE)
+          ? summary.subtotal - summary.discount + (showServiceFee ? summary.serviceFee ?? SERVICE_FEE : 0)
           : cartTotal) + shippingOverride.amount,
       )
-    : summary?.total ?? cartTotal;
+    : Math.max(
+        0,
+        (summary?.total ?? cartTotal) -
+          (showServiceFee ? 0 : summary?.serviceFee ?? SERVICE_FEE),
+      );
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
@@ -2963,7 +2981,7 @@ function MobileOrderSummary({
         </span>
       </summary>
       <div className="border-t border-slate-200 bg-white px-3.5 py-4">
-        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
+        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
       </div>
     </details>
   );
