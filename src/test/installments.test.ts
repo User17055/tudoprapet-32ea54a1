@@ -14,13 +14,13 @@ describe("parcelamento no cartão", () => {
     }
   });
 
-  it("não cobra juros no à vista", () => {
-    expect(client.installmentPlan(43.9, 1)).toEqual({
-      installments: 1,
-      installmentValue: 43.9,
-      chargedTotal: 43.9,
-      interestAmount: 0,
-    });
+  it("também repassa a taxa no à vista", () => {
+    const plan = client.installmentPlan(43.9, 1);
+    expect(plan.installments).toBe(1);
+    expect(plan.installmentValue).toBe(plan.chargedTotal);
+    expect(plan.chargedTotal).toBeGreaterThan(43.9);
+    const net = plan.chargedTotal * (1 - 2.99 / 100) - client.CARD_OPERATION_FEE;
+    expect(net).toBeGreaterThanOrEqual(43.9);
   });
 
   it("repassa a taxa da Asaas ao cliente no parcelado", () => {

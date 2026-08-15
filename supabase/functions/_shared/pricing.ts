@@ -85,7 +85,7 @@ export const CARD_OPERATION_FEE = 0.49;
 
 /** Percentual da Asaas por faixa: até 6x = 3,49%; até 12x = 3,99%. */
 export function cardFeePercent(installments: number): number {
-  if (installments <= 1) return 0;
+  if (installments <= 1) return 2.99;
   return installments <= 6 ? 3.49 : 3.99;
 }
 
@@ -109,10 +109,6 @@ export function maxInstallmentsFor(total: number): number {
 /** Plano de parcelamento com os juros da Asaas repassados ao cliente. */
 export function installmentPlan(total: number, installments: number): InstallmentPlan {
   const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
-  if (n === 1) {
-    const single = round2(total);
-    return { installments: 1, installmentValue: single, chargedTotal: single, interestAmount: 0 };
-  }
   const percent = cardFeePercent(n) / 100;
   const gross = (total + CARD_OPERATION_FEE) / (1 - percent);
   const installmentValue = Math.ceil(gross / n * 100) / 100;
