@@ -34,6 +34,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   installmentLabel,
   installmentOptions,
+  installmentPlan,
   maxInstallmentsFor,
   type InstallmentPlan,
 } from "@/lib/installments";
