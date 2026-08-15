@@ -2853,10 +2853,13 @@ function SummaryTotals({
   const subtotal = summary?.subtotal ?? cartSubtotal;
   const discount = summary?.discount ?? cartDiscount;
   const serviceFee = summary?.serviceFee ?? SERVICE_FEE;
+  const appliedFee = showServiceFee ? serviceFee : 0;
   const shippingAmount = shippingOverride?.amount ?? summary?.shippingAmount ?? 0;
   const shippingMethod = shippingOverride?.title ?? summary?.shippingMethod;
-  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + serviceFee);
-  const total = shippingOverride ? liveTotal : summary?.total ?? liveTotal;
+  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + appliedFee);
+  const total = shippingOverride
+    ? liveTotal
+    : Math.max(0, (summary?.total ?? liveTotal) - (showServiceFee ? 0 : serviceFee));
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
