@@ -11,6 +11,27 @@ export function cardFeePercent(installments: number): number {
   return installments <= 6 ? 3.49 : 3.99;
 }
 
+// Antecipação automática ativa na conta Asaas: 1,25%/mês à vista e 1,70%/mês
+// no parcelado, sobre o prazo médio de recebimento (32 dias + 30 por parcela).
+export const ANTICIPATION_ENABLED = true;
+export const ANTICIPATION_DETACHED_MONTHLY_PERCENT = 1.25;
+export const ANTICIPATION_INSTALLMENT_MONTHLY_PERCENT = 1.7;
+const CARD_DAYS_TO_RECEIVE = 32;
+
+export function anticipationFeePercent(installments: number): number {
+  if (!ANTICIPATION_ENABLED) return 0;
+  const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
+  const averageMonths = CARD_DAYS_TO_RECEIVE / 30 + (n - 1) / 2;
+  const monthly = n <= 1
+    ? ANTICIPATION_DETACHED_MONTHLY_PERCENT
+    : ANTICIPATION_INSTALLMENT_MONTHLY_PERCENT;
+  return Number((monthly * averageMonths).toFixed(4));
+}
+
+export function totalCardCostPercent(installments: number): number {
+  return Number((cardFeePercent(installments) + anticipationFeePercent(installments)).toFixed(4));
+}
+
 export interface InstallmentPlan {
   installments: number;
   installmentValue: number;
@@ -29,7 +50,7 @@ export function maxInstallmentsFor(total: number): number {
 
 export function installmentPlan(total: number, installments: number): InstallmentPlan {
   const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
-  const percent = cardFeePercent(n) / 100;
+  const percent = totalCardCostPercent(n) / 100;
   const gross = (total + CARD_OPERATION_FEE) / (1 - percent);
   const installmentValue = Math.ceil((gross / n) * 100) / 100;
   const chargedTotal = round2(installmentValue * n);
@@ -40,6 +61,7 @@ export function installmentPlan(total: number, installments: number): Installmen
     interestAmount: round2(chargedTotal - total),
   };
 }
+
 
 export function installmentOptions(total: number): InstallmentPlan[] {
   const max = maxInstallmentsFor(total);
