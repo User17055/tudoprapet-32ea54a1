@@ -27,11 +27,33 @@ Deno.serve(async (req) => {
 
   let requestedId: string | null = null;
   let probePix = false;
+  let probeFees = false;
   try {
     const body = await req.json();
     if (body && typeof body.paymentId === "string" && body.paymentId.trim()) requestedId = body.paymentId.trim();
     if (body && body.probePix === true) probePix = true;
+    if (body && body.probeFees === true) probeFees = true;
   } catch { requestedId = null; }
+
+  // Sonda de tarifas: mostra as taxas da conta, inclusive as de parcelamento no cartão.
+  if (probeFees) {
+    const apiKey = Deno.env.get("ASAAS_API_KEY")?.trim() || "";
+    const paths = ["/myAccount/fees", "/myAccount/paymentCheckoutConfig", "/installments?limit=1"];
+    const results: Record<string, unknown> = {};
+    for (const path of paths) {
+      try {
+        const probe = await fetch(`${baseUrl}${path}`, {
+          headers: { access_token: apiKey, "Content-Type": "application/json" },
+        });
+        const text = await probe.text();
+        results[path] = { httpStatus: probe.status, body: text.slice(0, 8000) };
+      } catch (error) {
+        results[path] = { error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    return jsonResponse({ baseUrl, environment, fees: results });
+  }
+
 
   // Sonda Pix: cria e apaga uma cobrança de R$ 1 para validar a chave Pix da conta.
   if (probePix) {

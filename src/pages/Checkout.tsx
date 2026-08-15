@@ -31,6 +31,13 @@ import logo from "@/assets/tpp-logo.svg";
 import bravectoImage from "@/assets/bravecto.jpg";
 import defenzaImage from "@/assets/defenza.jpg";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  installmentLabel,
+  installmentOptions,
+  installmentPlan,
+  maxInstallmentsFor,
+  type InstallmentPlan,
+} from "@/lib/installments";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -288,6 +295,7 @@ export default function Checkout() {
   );
   const [savedPayments, setSavedPayments] = useState<SavedPayment[]>([]);
   const [savedPaymentId, setSavedPaymentId] = useState("");
+  const [installments, setInstallments] = useState(1);
   const [saveCard, setSaveCard] = useState(true);
   const [card, setCard] = useState({
     holderName: "",
@@ -305,6 +313,41 @@ export default function Checkout() {
     previewMode ? PREVIEW_SUMMARY : null,
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
+  const { getSubscriberPrice: cardSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice: cardFranchisePrice } = useFranchisePrices();
+  // Sem sessão de checkout ainda, o desconto de assinante/franquia é calculado
+  // no cliente — sem isso o parcelamento usava o valor cheio dos produtos.
+  const localCartDiscount = cartItems.reduce((acc, item) => {
+    const catalogPrice = Number(item.price.amount);
+    const special =
+      cardFranchisePrice(item.variantId) ?? cardSubscriberPrice(item.variantId);
+    if (special === null || special >= catalogPrice) return acc;
+    return acc + (catalogPrice - special) * item.quantity;
+  }, 0);
+  const cardBaseTotal = Math.max(
+    0,
+    (summary?.subtotal ??
+      cartItems.reduce(
+        (acc, item) => acc + Number(item.price.amount) * item.quantity,
+        0,
+      )) -
+      (summary?.discount ?? localCartDiscount) +
+      (deliveryMode === "pick_up"
+        ? 0
+        : (shippingOptions.find((option) => option.handle === shippingHandle)
+            ?.amount ?? summary?.shippingAmount ?? 0)) +
+      (summary?.serviceFee ?? SERVICE_FEE),
+  );
+  const cardPlans = installmentOptions(cardBaseTotal);
+  const selectedInstallments = Math.min(
+    installments,
+    maxInstallmentsFor(cardBaseTotal),
+  );
+  const selectedCardPlan =
+    paymentMethod === "credit_card" && !isFranchisee
+      ? cardPlans.find((plan) => plan.installments === selectedInstallments) ??
+        null
+      : null;
   const [busy, setBusy] = useState(false);
   const [cancellingPix, setCancellingPix] = useState(false);
   const [cardFailure, setCardFailure] = useState<string | null>(null);
@@ -928,7 +971,7 @@ export default function Checkout() {
         method: isFranchisee ? "terms" : paymentMethod,
       };
       if (paymentMethod === "credit_card" && !isFranchisee) {
-        paymentBody.installments = 1;
+        paymentBody.installments = selectedInstallments;
         if (savedPaymentId) paymentBody.savedPaymentMethodId = savedPaymentId;
         else {
           paymentBody.card = card;
@@ -1137,6 +1180,7 @@ export default function Checkout() {
   if (step === 1)
     return (
       <PaymentCheckoutScreen
+        cardPlan={selectedCardPlan}
         summary={summary}
         cartItems={cartItems}
         address={address}
@@ -1178,6 +1222,9 @@ export default function Checkout() {
           saved={savedPayments}
           savedId={savedPaymentId}
           setSavedId={setSavedPaymentId}
+          plans={cardPlans}
+          installments={selectedInstallments}
+          setInstallments={setInstallments}
           card={card}
           setCard={setCard}
           saveCard={saveCard}
@@ -1227,7 +1274,6 @@ export default function Checkout() {
                 message={message}
                 registrationRequired={addressRegistrationRequired}
                 busy={busy || customerDataLoading}
-                onRegister={openAddressRegistration}
                 onContinue={nextDelivery}
               />
             )}
@@ -1304,6 +1350,9 @@ export default function Checkout() {
                           saved={savedPayments}
                           savedId={savedPaymentId}
                           setSavedId={setSavedPaymentId}
+                          plans={cardPlans}
+                          installments={selectedInstallments}
+                          setInstallments={setInstallments}
                           card={card}
                           setCard={setCard}
                           saveCard={saveCard}
@@ -1373,7 +1422,6 @@ export default function Checkout() {
                     message={message}
                     registrationRequired={addressRegistrationRequired}
                     busy={busy || customerDataLoading}
-                    onRegister={openAddressRegistration}
                     onContinue={nextDelivery}
                   />
                 )}
@@ -1382,6 +1430,18 @@ export default function Checkout() {
           </div>
         </div>
       </div>
+      <AddressRegistrationPrompt
+        open={addressRegistrationRequired}
+        onOpenChange={(open) => {
+          setAddressRegistrationRequired(open);
+          if (!open) setMessage("");
+        }}
+        onRegister={() => {
+          setAddressRegistrationRequired(false);
+          setMessage("");
+          openAddressRegistration();
+        }}
+      />
       <AddressRegistrationSheet
         open={addressSheetOpen}
         setOpen={setAddressSheetOpen}
@@ -1447,27 +1507,31 @@ function Choice({
   icon,
   title,
   text,
+  disabled = false,
 }: {
   active: boolean;
   onClick: () => void;
   icon: ReactNode;
   title: string;
   text: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       data-step-item
       type="button"
       onClick={onClick}
-      className={`flex min-h-[72px] w-full touch-manipulation items-center gap-3 rounded-lg border px-4 py-3 text-left transition-[border-color,background-color,transform] duration-200 active:scale-[0.99] ${active ? "border-blue-800 bg-blue-50/50" : "border-slate-200 bg-white hover:border-slate-400"}`}
+      disabled={disabled}
+      aria-disabled={disabled}
+      className={`flex min-h-[72px] w-full touch-manipulation items-center gap-3 rounded-lg border px-4 py-3 text-left transition-[border-color,background-color,transform] duration-200 ${disabled ? "cursor-not-allowed border-slate-200 bg-slate-100 opacity-65" : active ? "border-blue-800 bg-blue-50/50 active:scale-[0.99]" : "border-slate-200 bg-white hover:border-slate-400 active:scale-[0.99]"}`}
     >
       <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md [&>svg]:h-5 [&>svg]:w-5 ${active ? "text-blue-900" : "text-slate-700"}`}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md [&>svg]:h-5 [&>svg]:w-5 ${disabled ? "text-slate-400" : active ? "text-blue-900" : "text-slate-700"}`}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <strong className="block text-sm leading-tight text-slate-900">
+        <strong className={`block text-sm leading-tight ${disabled ? "text-slate-500" : "text-slate-900"}`}>
           {title}
         </strong>
         <small className="mt-1 block leading-snug text-slate-500">{text}</small>
@@ -1627,15 +1691,22 @@ function DeliverySidebar({
                   Verificando entrega para este endereço...
                 </div>
               )}
-              {shippingAvailable && !shippingLoading && (
-                <Choice
-                  active={mode === "shipping"}
-                  onClick={() => setMode("shipping")}
-                  icon={<PackageCheck />}
-                  title="Entrega no endereço"
-                  text="Frete calculado para o endereço informado"
-                />
-              )}
+              <Choice
+                active={mode === "shipping" && shippingAvailable}
+                onClick={() => setMode("shipping")}
+                icon={<PackageCheck />}
+                title="Entrega no endereço"
+                text={
+                  shippingLoading
+                    ? "Verificando disponibilidade para este endereço"
+                    : shippingAvailable
+                      ? "Frete calculado para o endereço informado"
+                      : completeAddress && isSaved
+                        ? "Disponível somente em Presidente Prudente"
+                        : "Cadastre o endereço para verificar a entrega"
+                }
+                disabled={shippingLoading || !shippingAvailable}
+              />
               <Choice
                 active={mode === "pick_up"}
                 onClick={() => setMode("pick_up")}
@@ -1643,14 +1714,6 @@ function DeliverySidebar({
                 title="Retirada na loja"
                 text="Sem custo de entrega"
               />
-              {!shippingAvailable &&
-                !shippingLoading &&
-                completeAddress &&
-                isSaved && (
-                <p className="px-1 text-xs text-slate-500">
-                  Entrega no endereço indisponível para este CEP.
-                </p>
-              )}
             </div>
           </div>
           {mode === "shipping" &&
@@ -1678,33 +1741,21 @@ function DeliveryCheckoutAction({
   message,
   registrationRequired,
   busy,
-  onRegister,
   onContinue,
 }: {
   message: string;
   registrationRequired: boolean;
   busy: boolean;
-  onRegister: () => void;
   onContinue: () => void;
 }) {
   return (
     <div className="mt-4">
-      {message && (
+      {message && !registrationRequired && (
         <div
           role="alert"
           className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
         >
           <p>{message}</p>
-          {registrationRequired && (
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3 bg-red-700 text-white hover:bg-red-800"
-              onClick={onRegister}
-            >
-              Cadastrar endereço
-            </Button>
-          )}
         </div>
       )}
       <Button
@@ -1718,6 +1769,40 @@ function DeliveryCheckoutAction({
         {busy ? "Carregando..." : "Ir para pagamento"}
       </Button>
     </div>
+  );
+}
+function AddressRegistrationPrompt({
+  open,
+  onOpenChange,
+  onRegister,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRegister: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100%_-_2rem)] p-0 sm:max-w-lg">
+        <DialogHeader className="border-b border-slate-200 px-5 pb-5 pt-6 pr-14 text-left sm:px-6">
+          <DialogTitle className="text-xl text-slate-950">
+            Cadastre seu endereço
+          </DialogTitle>
+          <DialogDescription className="pt-2 text-base leading-relaxed text-slate-600">
+            Este CEP ainda não possui um endereço cadastrado. Complete os dados
+            para continuar ao pagamento.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="px-5 pb-5 sm:px-6 sm:pb-6">
+          <Button
+            type="button"
+            className="h-11 w-full bg-blue-700 hover:bg-blue-800 sm:w-auto sm:min-w-44"
+            onClick={onRegister}
+          >
+            Cadastrar endereço
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 function CheckoutHeader({ onBack }: { onBack?: () => void }) {
@@ -1776,7 +1861,9 @@ function PaymentCheckoutScreen({
   onBack,
   onNext,
   children,
+  cardPlan,
 }: {
+  cardPlan?: InstallmentPlan | null;
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   address: Address;
@@ -1879,6 +1966,7 @@ function PaymentCheckoutScreen({
                       ? { title: selectedShipping.title, amount: selectedShipping.amount }
                       : undefined
                 }
+                cardPlan={cardPlan}
               />
             </div>
             <Button
@@ -2105,6 +2193,9 @@ function PaymentStep(props: {
   saved: SavedPayment[];
   savedId: string;
   setSavedId: (v: string) => void;
+  plans: InstallmentPlan[];
+  installments: number;
+  setInstallments: (v: number) => void;
   card: {
     holderName: string;
     number: string;
@@ -2189,12 +2280,34 @@ function PaymentStep(props: {
             </label>
             <select
               id="card-installments"
-              value="1"
-              onChange={() => undefined}
+              value={String(props.installments)}
+              onChange={(event) => props.setInstallments(Number(event.target.value))}
               className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
             >
-              <option value="1">1x no cartão (à vista)</option>
+              {props.plans.map((plan) => (
+                <option key={plan.installments} value={String(plan.installments)}>
+                  {installmentLabel(plan, money)}
+                </option>
+              ))}
             </select>
+            {(() => {
+              const plan = props.plans.find(
+                (item) => item.installments === props.installments,
+              );
+              if (!plan) return null;
+              if (plan.installments === 1)
+                return (
+                  <p className="text-xs text-slate-500">
+                    Total no cartão à vista: {money(plan.chargedTotal)}.
+                  </p>
+                );
+              return (
+                <p className="text-xs text-slate-500">
+                  Juros do parcelamento: {money(plan.chargedTotal - props.plans[0].chargedTotal)} —
+                  à vista sai por {money(props.plans[0].chargedTotal)}.
+                </p>
+              );
+            })()}
           </div>
           {props.saved.map((item) => (
             <Choice
@@ -2828,10 +2941,14 @@ function SummaryTotals({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
@@ -2851,10 +2968,21 @@ function SummaryTotals({
   const subtotal = summary?.subtotal ?? cartSubtotal;
   const discount = summary?.discount ?? cartDiscount;
   const serviceFee = summary?.serviceFee ?? SERVICE_FEE;
+  const appliedFee = showServiceFee ? serviceFee : 0;
   const shippingAmount = shippingOverride?.amount ?? summary?.shippingAmount ?? 0;
   const shippingMethod = shippingOverride?.title ?? summary?.shippingMethod;
-  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + serviceFee);
-  const total = shippingOverride ? liveTotal : summary?.total ?? liveTotal;
+  const liveTotal = Math.max(0, subtotal - discount + shippingAmount + appliedFee);
+  const total = shippingOverride
+    ? liveTotal
+    : Math.max(0, (summary?.total ?? liveTotal) - (showServiceFee ? 0 : serviceFee));
+  // No cartão o cliente paga a taxa da operadora: o total exibido acompanha o
+  // valor realmente cobrado, calculado sobre o total já com desconto.
+  const activeCardPlan =
+    cardPlan && total > 0 ? installmentPlan(total, cardPlan.installments) : null;
+  const cardInterest = activeCardPlan
+    ? Math.max(0, Number((activeCardPlan.chargedTotal - total).toFixed(2)))
+    : 0;
+  const displayTotal = activeCardPlan ? activeCardPlan.chargedTotal : total;
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
@@ -2873,6 +3001,7 @@ function SummaryTotals({
           {shippingMethod ? (shippingAmount > 0 ? money(shippingAmount) : "Grátis") : "A calcular"}
         </span>
       </div>
+      {showServiceFee && (
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5">
           Taxa de serviço
@@ -2893,10 +3022,25 @@ function SummaryTotals({
         </span>
         <span className="font-medium text-slate-900">{money(serviceFee)}</span>
       </div>
+      )}
+      {cardInterest > 0 && (
+        <div className="flex justify-between">
+          <span>Juros do cartão</span>
+          <span className="font-medium text-slate-900">
+            +{money(cardInterest)}
+          </span>
+        </div>
+      )}
       <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-bold text-slate-950">
         <span>Total</span>
-        <span>{money(total)}</span>
+        <span>{money(displayTotal)}</span>
       </div>
+      {activeCardPlan && activeCardPlan.installments > 1 && (
+        <p className="text-right text-xs text-slate-500">
+          {activeCardPlan.installments}x de{" "}
+          {money(activeCardPlan.installmentValue)} no cartão
+        </p>
+      )}
     </div>
   );
 }
@@ -2904,17 +3048,21 @@ function OrderSummary({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
       <h2 className="mb-5 text-center text-xl font-bold text-slate-900">
         Resumo do pedido
       </h2>
-      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
+      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} cardPlan={cardPlan} />
       <div className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-[#faf8f5] px-4 py-3 text-xs font-medium text-slate-600">
         <LockKeyhole className="h-4 w-4 text-blue-800" />
         Pagamento processado com segurança
@@ -2926,26 +3074,39 @@ function MobileOrderSummary({
   summary,
   cartItems,
   shippingOverride,
+  showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
+  showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
     cartItems.reduce((total, item) => total + item.quantity, 0);
+  const fee = showServiceFee ? SERVICE_FEE : 0;
   const cartTotal = cartItems.reduce(
     (total, item) => total + Number(item.price.amount) * item.quantity,
     0,
-  ) + SERVICE_FEE;
+  ) + fee;
   const headerTotal = shippingOverride
     ? Math.max(
         0,
         (summary
-          ? summary.subtotal - summary.discount + (summary.serviceFee ?? SERVICE_FEE)
+          ? summary.subtotal - summary.discount + (showServiceFee ? summary.serviceFee ?? SERVICE_FEE : 0)
           : cartTotal) + shippingOverride.amount,
       )
-    : summary?.total ?? cartTotal;
+    : Math.max(
+        0,
+        (summary?.total ?? cartTotal) -
+          (showServiceFee ? 0 : summary?.serviceFee ?? SERVICE_FEE),
+      );
+  const headerDisplayTotal =
+    cardPlan && headerTotal > 0
+      ? installmentPlan(headerTotal, cardPlan.installments).chargedTotal
+      : headerTotal;
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
@@ -2958,12 +3119,12 @@ function MobileOrderSummary({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-sm font-bold text-blue-950">
-          {money(headerTotal)}
+          {money(headerDisplayTotal)}
           <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
         </span>
       </summary>
       <div className="border-t border-slate-200 bg-white px-3.5 py-4">
-        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} />
+        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} cardPlan={cardPlan} />
       </div>
     </details>
   );

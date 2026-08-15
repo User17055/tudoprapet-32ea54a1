@@ -18,6 +18,8 @@ export interface AsaasPaymentInput {
   dueDate: string;
   description: string;
   externalReference: string;
+  installmentCount?: number;
+  totalValue?: number;
   creditCardToken?: string;
   creditCard?: {
     holderName: string; number: string; expiryMonth: string; expiryYear: string; ccv: string;

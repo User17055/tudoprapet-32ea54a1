@@ -12,15 +12,20 @@ export function addCheckoutServiceFee(total: number): number {
   return Number((total + CHECKOUT_SERVICE_FEE).toFixed(2));
 }
 
-export function buildServiceFeeLineItem(): Record<string, unknown> {
+/**
+ * A taxa de serviço NÃO é um produto: ela entra na linha de frete do pedido,
+ * assim o pedido da Shopify mostra apenas os itens comprados de verdade.
+ */
+export function buildShippingLineWithServiceFee(
+  title: string,
+  shippingAmount: number,
+): { title: string; price: string } {
   return {
-    title: "Taxa de serviço",
-    price: CHECKOUT_SERVICE_FEE.toFixed(2),
-    quantity: 1,
-    taxable: false,
-    requires_shipping: false,
+    title: `${title} + taxa de serviço`,
+    price: (shippingAmount + CHECKOUT_SERVICE_FEE).toFixed(2),
   };
 }
+
 
 export function gidToNumericId(gid: string): string {
   const parts = gid.split("/");
@@ -59,4 +64,93 @@ export function buildDraftLineItems(
     }
     return li;
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// Parcelamento no cartão — juros repassados ao cliente.
+//
+// As taxas abaixo são exatamente as da conta Asaas da TudoPraPet
+// (GET /myAccount/fees): tarifa fixa por operação + percentual por faixa de
+// parcelas. O parcelado é "grossed up" para que o valor líquido recebido
+// continue igual ao total do pedido — ou seja, o custo do parcelamento é do
+// cliente. O à vista (1x) permanece sem acréscimo.
+//
+// IMPORTANTE: espelhado em src/lib/installments.ts (test garante a igualdade).
+// ---------------------------------------------------------------------------
+
+export const MAX_INSTALLMENTS = 12;
+export const MIN_INSTALLMENT_VALUE = 5;
+export const CARD_OPERATION_FEE = 0.49;
+
+/** Percentual da Asaas por faixa: até 6x = 3,49%; até 12x = 3,99%. */
+export function cardFeePercent(installments: number): number {
+  if (installments <= 1) return 2.99;
+  return installments <= 6 ? 3.49 : 3.99;
+}
+
+// Antecipação automática ativada na conta Asaas. Taxas reais (GET /myAccount/fees):
+// crédito à vista = 1,25% ao mês; parcelado = 1,70% ao mês.
+// O prazo normal de recebimento é 32 dias (1ª parcela) e +30 dias por parcela
+// seguinte, então o custo médio da antecipação é a taxa mensal multiplicada
+// pelo prazo médio em meses. Esse custo também é repassado ao cliente.
+export const ANTICIPATION_ENABLED = true;
+export const ANTICIPATION_DETACHED_MONTHLY_PERCENT = 1.25;
+export const ANTICIPATION_INSTALLMENT_MONTHLY_PERCENT = 1.7;
+const CARD_DAYS_TO_RECEIVE = 32;
+
+export function anticipationFeePercent(installments: number): number {
+  if (!ANTICIPATION_ENABLED) return 0;
+  const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
+  const averageMonths = CARD_DAYS_TO_RECEIVE / 30 + (n - 1) / 2;
+  const monthly = n <= 1
+    ? ANTICIPATION_DETACHED_MONTHLY_PERCENT
+    : ANTICIPATION_INSTALLMENT_MONTHLY_PERCENT;
+  return Number((monthly * averageMonths).toFixed(4));
+}
+
+/** Percentual total retido pela Asaas (taxa do cartão + antecipação). */
+export function totalCardCostPercent(installments: number): number {
+  return Number((cardFeePercent(installments) + anticipationFeePercent(installments)).toFixed(4));
+}
+
+export interface InstallmentPlan {
+  installments: number;
+  installmentValue: number;
+  chargedTotal: number;
+  interestAmount: number;
+}
+
+function round2(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+/** Maior número de parcelas possível respeitando a parcela mínima. */
+export function maxInstallmentsFor(total: number): number {
+  const limit = Math.floor(total / MIN_INSTALLMENT_VALUE);
+  return Math.max(1, Math.min(MAX_INSTALLMENTS, limit || 1));
+}
+
+/** Plano de parcelamento com os juros da Asaas repassados ao cliente. */
+export function installmentPlan(total: number, installments: number): InstallmentPlan {
+  const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
+  const percent = totalCardCostPercent(n) / 100;
+  const gross = (total + CARD_OPERATION_FEE) / (1 - percent);
+  const installmentValue = Math.ceil(gross / n * 100) / 100;
+  const chargedTotal = round2(installmentValue * n);
+  return {
+    installments: n,
+    installmentValue,
+    chargedTotal,
+    interestAmount: round2(chargedTotal - total),
+  };
+}
+
+
+/** Opções exibidas ao cliente, da menor para a maior quantidade de parcelas. */
+export function installmentOptions(total: number): InstallmentPlan[] {
+  const max = maxInstallmentsFor(total);
+  const options: InstallmentPlan[] = [];
+  for (let n = 1; n <= max; n += 1) options.push(installmentPlan(total, n));
+  return options;
 }

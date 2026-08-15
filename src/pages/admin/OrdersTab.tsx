@@ -11,7 +11,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
-interface OrdersResponse { orders: PrintableOrder[]; count: number }
+interface PendingSyncSale {
+  id: string;
+  customerName: string;
+  total: number;
+  createdAt: string;
+  error?: string;
+}
+interface OrdersResponse {
+  orders: PrintableOrder[];
+  count: number;
+  functions_version?: string;
+  recovery?: {
+    recovered: number;
+    pending: number;
+    pendingSales?: PendingSyncSale[];
+  };
+}
 interface PrintQueueResponse { job_id: string; already_queued?: boolean; functions_version?: string }
 interface PrintStatusResponse {
   job: { status: "queued" | "printed" | "error"; error_message: string | null; printed_at: string | null };
@@ -19,6 +35,7 @@ interface PrintStatusResponse {
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 const MINIMUM_PRINT_FUNCTION_VERSION = "2026-08-10.8";
+const MINIMUM_RECOVERY_FUNCTION_VERSION = "2026-08-15.1";
 
 const FINANCIAL: Record<string, string> = {
   pending: "Pendente", authorized: "Autorizado", partially_paid: "Parcialmente pago", paid: "Pago",
@@ -43,12 +60,29 @@ export default function OrdersTab() {
   const [status, setStatus] = useState("all");
   const [zplOrder, setZplOrder] = useState<PrintableOrder | null>(null);
   const [printingId, setPrintingId] = useState<string | number | null>(null);
+  const [syncPending, setSyncPending] = useState(0);
+  const [pendingSales, setPendingSales] = useState<PendingSyncSale[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.functions.invoke("admin-orders", { body: { action: "list" } });
     if (error) toast.error("Não foi possível carregar os pedidos", { description: error.message });
-    else setOrders((data as OrdersResponse)?.orders || []);
+    else {
+      const response = data as OrdersResponse;
+      setOrders(response?.orders || []);
+      setSyncPending(response?.recovery?.pending || 0);
+      setPendingSales(response?.recovery?.pendingSales || []);
+      if (!response?.functions_version || response.functions_version < MINIMUM_RECOVERY_FUNCTION_VERSION) {
+        toast.warning("A recuperação de vendas ainda não foi publicada no servidor", {
+          description: "O site foi atualizado, mas a Edge Function admin-orders continua antiga. Publique essa função para concluir os rascunhos pagos.",
+          duration: 15_000,
+        });
+      }
+      const recovered = response?.recovery?.recovered || 0;
+      if (recovered > 0) {
+        toast.success(`${recovered} venda(s) paga(s) recuperada(s) na Shopify`);
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -155,6 +189,26 @@ export default function OrdersTab() {
       <Card className="border-blue-200 bg-blue-50/60"><CardContent className="flex items-center gap-3 p-4">
         <Cloud className="h-5 w-5 text-blue-700" /><div><p className="text-sm font-bold">Impressão ZPL remota</p><p className="text-xs text-muted-foreground">O botão envia o pedido pela nuvem ao computador conectado à Zebra. Pedidos novos também são impressos automaticamente, sem reimprimir o histórico.</p></div>
       </CardContent></Card>
+
+      {syncPending > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-900">
+            <p className="font-bold">{syncPending} venda(s) paga(s) aguardando sincronização com a Shopify</p>
+            <p className="mt-1 text-xs">A recuperação automática continuará tentando. Atualize a lista em instantes; a venda não fica mais invisível para a operação.</p>
+            {pendingSales && pendingSales.length > 0 && (
+              <ul className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-xs">
+                {pendingSales.slice(0, 5).map((sale) => (
+                  <li key={sale.id} className="grid gap-0.5 rounded-md border border-amber-200 bg-white/60 p-2 sm:grid-cols-[1fr_auto]">
+                    <span className="font-semibold">{sale.customerName}</span>
+                    <span>{money(sale.total)}{sale.createdAt ? ` · ${new Date(sale.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}</span>
+                    {sale.error && <span className="text-red-700 sm:col-span-2"><strong>Motivo da Shopify:</strong> {sale.error}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card><CardContent className="p-0">
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div> : filtered.length === 0 ? <p className="py-16 text-center text-muted-foreground">Nenhum pedido encontrado.</p> :

@@ -182,9 +182,10 @@ async function recoverPaidCheckouts(admin: SupabaseClient) {
 async function reconcileOpenPixPayments(admin: SupabaseClient) {
   const { data, error } = await admin.from("payments")
     .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
-    .eq("method", "pix")
     .eq("is_active", true)
-    .in("status", ["pending", "processing"])
+    // Tambem reconcilia cartoes: uma aprovacao pode ter sido persistida sem que
+    // o disparo em background conseguisse concluir o draft na Shopify.
+    .in("status", ["pending", "processing", "confirmed"])
     .not("provider_payment_id", "is", null)
     .order("created_at", { ascending: true })
     .limit(25);
@@ -466,7 +467,11 @@ Deno.serve(async (req) => {
 
   const expected = Deno.env.get("PAYMENT_WORKER_TOKEN") || "";
   const received = req.headers.get("x-payment-worker-token") || "";
-  if (!expected || !timingSafeEqual(expected, received)) {
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const workerAuthorized = Boolean(expected && timingSafeEqual(expected, received));
+  const cronAuthorized = Boolean(serviceRole && timingSafeEqual(serviceRole, bearer));
+  if (!workerAuthorized && !cronAuthorized) {
     return jsonResponse({ error: "Não autorizado" }, 401);
   }
 
