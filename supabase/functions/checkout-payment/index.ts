@@ -337,6 +337,7 @@ Deno.serve(async (req) => {
       provider_payment_id: providerPayment.id,
       raw_status: providerPayment.status,
       status: directStatus,
+      ...(cardPlan && cardPlan.installments > 1 ? { amount: cardPlan.chargedTotal } : {}),
       ...(directStatus === "confirmed" ? { confirmed_at: new Date().toISOString() } : {}),
       ...(directStatus === "received" ? { received_at: new Date().toISOString(), is_active: false } : {}),
     }).eq("id", paymentAttempt.id);
