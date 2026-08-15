@@ -1180,6 +1180,7 @@ export default function Checkout() {
   if (step === 1)
     return (
       <PaymentCheckoutScreen
+        cardPlan={selectedCardPlan}
         summary={summary}
         cartItems={cartItems}
         address={address}
@@ -1827,7 +1828,9 @@ function PaymentCheckoutScreen({
   onBack,
   onNext,
   children,
+  cardPlan,
 }: {
+  cardPlan?: InstallmentPlan | null;
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   address: Address;
@@ -1930,6 +1933,7 @@ function PaymentCheckoutScreen({
                       ? { title: selectedShipping.title, amount: selectedShipping.amount }
                       : undefined
                 }
+                cardPlan={cardPlan}
               />
             </div>
             <Button
