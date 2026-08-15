@@ -31,6 +31,40 @@ interface FulfillmentOrderLike {
   delivery_method?: { method_type?: string };
 }
 
+function pickupEvidenceFromOrder(order: Record<string, unknown>): boolean {
+  const tags = String(order.tags || "").toLowerCase();
+  const attributes = Array.isArray(order.note_attributes)
+    ? order.note_attributes.map((item: { name?: string; value?: string }) =>
+      `${item?.name || ""}=${item?.value || ""}`
+    ).join(" ").toLowerCase()
+    : "";
+  return /(^|,)\s*(retirada|pick_up)\s*(,|$)/.test(tags) ||
+    /shipping_code\s*=\s*pick_up|delivery_method_type\s*=\s*pick_up/.test(attributes);
+}
+
+async function resolvePickupEvidence(
+  payload: Record<string, unknown>,
+  orderId: string,
+  shopDomain: string | null,
+): Promise<boolean> {
+  if (pickupEvidenceFromOrder(payload)) return true;
+  const adminToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
+  const numericId = orderId.replace(/\D/g, "");
+  if (!shopDomain || !adminToken || !numericId) return false;
+  try {
+    const response = await fetch(
+      `https://${shopDomain}/admin/api/2025-07/orders/${numericId}.json?fields=tags,note_attributes`,
+      { headers: { "X-Shopify-Access-Token": adminToken } },
+    );
+    if (!response.ok) return false;
+    const body = await response.json();
+    return pickupEvidenceFromOrder(body?.order || {});
+  } catch (error) {
+    console.error(`Falha ao verificar marcacao de retirada do pedido ${orderId}:`, error);
+    return false;
+  }
+}
+
 async function resolveDeliveryMethodType(
   payloadFulfillmentOrder: FulfillmentOrderLike,
   orderId: string,
@@ -174,6 +208,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Draft Orders pagos fora da Shopify nao recebem method_type=pick_up da
+    // plataforma. Nesses pedidos, tags e atributos gravados pelo nosso checkout
+    // sao a fonte autoritativa para distinguir retirada de entrega.
+    const explicitPickup = await resolvePickupEvidence(payload, resolvedOrderId, shopDomain);
+
 
     // Aviso de retirada só vale para pedido que É de retirada. Sem esta checagem,
     // todo pedido de entrega despachado disparava "venha buscar na loja".
@@ -181,7 +220,7 @@ Deno.serve(async (req) => {
     // Quando não conseguimos determinar o método (payload sem o dado e Admin API
     // indisponível), seguimos com o envio: deixar de avisar um cliente que veio
     // buscar é pior do que uma mensagem indevida ocasional. O caso fica em log.
-    if (isReadyToPickup) {
+    if (isReadyToPickup && !explicitPickup) {
       const methodType = await resolveDeliveryMethodType(fo, resolvedOrderId, shopDomain);
       if (methodType === null) {
         console.warn(`Delivery method indeterminado para o pedido ${resolvedOrderId} — enviando mesmo assim`);
@@ -339,7 +378,9 @@ Deno.serve(async (req) => {
       // pedido de ENTREGA ganharia "Codigo de retirada" — e o cliente veria um
       // código de retirada no e-mail. Só resolvemos o método aqui (uma chamada
       // à Admin API) quando há código a gravar fora do evento de "pronto".
-      const methodType = isReadyToPickup
+      const methodType = explicitPickup
+        ? "pick_up"
+        : isReadyToPickup
         ? null
         : await resolveDeliveryMethodType(fo, resolvedOrderId, shopDomain);
 

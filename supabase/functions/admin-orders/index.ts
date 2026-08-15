@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
+import { completeDraftOrder } from "../_shared/shopify.ts";
 
 const SHOP = "petjoy-deals-hb8r9.myshopify.com";
 const API = "2025-07";
@@ -60,6 +61,73 @@ function nextLink(linkHeader: string | null): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+async function recoverPaidOrders(
+  adminDb: any,
+  shopifyToken: string,
+): Promise<{ recovered: number; pending: number }> {
+  const { data: sessions, error: sessionsError } = await adminDb
+    .from("checkout_sessions")
+    .select("id,shopify_draft_order_id,customer_snapshot")
+    .is("shopify_order_id", null)
+    .in("status", ["payment_processing", "paid", "paid_pending_shopify"])
+    .order("updated_at", { ascending: true })
+    .limit(20);
+  if (sessionsError) {
+    console.error("Falha ao carregar vendas pagas sem pedido:", sessionsError);
+    return { recovered: 0, pending: 0 };
+  }
+
+  const sessionIds = (sessions || []).map((row: any) => row.id);
+  if (!sessionIds.length) return { recovered: 0, pending: 0 };
+  const { data: paidPayments, error: paymentsError } = await adminDb
+    .from("payments")
+    .select("checkout_session_id")
+    .in("checkout_session_id", sessionIds)
+    .in("status", ["confirmed", "received"]);
+  if (paymentsError) {
+    console.error("Falha ao validar vendas pagas sem pedido:", paymentsError);
+    return { recovered: 0, pending: 0 };
+  }
+  const paidSessionIds = new Set((paidPayments || []).map((row: any) => row.checkout_session_id));
+
+  let recoveredThisRequest = 0;
+  let pending = paidSessionIds.size;
+  for (const session of sessions || []) {
+    if (!paidSessionIds.has(session.id)) continue;
+    // Nao deixe a recuperacao de um lote antigo atrasar o carregamento da tela.
+    // O cron processa o restante e cada nova consulta recupera mais um lote.
+    if (recoveredThisRequest >= 3) break;
+    if (!session.shopify_draft_order_id) {
+      console.error(`Venda paga ${session.id} esta sem Draft Order Shopify`);
+      continue;
+    }
+    const cpfCnpj = session.customer_snapshot?.cpfCnpj || null;
+    const completed = await completeDraftOrder(
+      session.shopify_draft_order_id,
+      shopifyToken,
+      false,
+      cpfCnpj,
+    );
+    if (!completed.requestOk || !completed.orderId) {
+      await adminDb.from("checkout_sessions").update({ status: "paid_pending_shopify" })
+        .eq("id", session.id).is("shopify_order_id", null);
+      console.error(`Venda paga ${session.id} ainda nao pode ser concluida na Shopify`);
+      continue;
+    }
+    const { error: updateError } = await adminDb.from("checkout_sessions").update({
+      status: "shopify_created",
+      shopify_order_id: completed.orderId,
+    }).eq("id", session.id).is("shopify_order_id", null);
+    if (updateError) {
+      console.error(`Pedido Shopify ${completed.orderId} criado, mas a sessao ${session.id} nao foi atualizada:`, updateError);
+      continue;
+    }
+    recoveredThisRequest++;
+    pending--;
+  }
+  return { recovered: recoveredThisRequest, pending: Math.max(0, pending) };
 }
 
 function normalize(order: any, delivery = deliveryLabel(order)) {
@@ -171,6 +239,10 @@ Deno.serve(async (req) => {
   if (!shopifyToken) return errorResponse("SHOPIFY_ACCESS_TOKEN não configurado", 500);
 
   try {
+    // Ao abrir Pedidos, recupera tambem vendas antigas cujo pagamento foi
+    // confirmado mas cuja conclusao do Draft Order falhou anteriormente.
+    const recovery = await recoverPaidOrders(adminDb, shopifyToken);
+
     const since = body.since || url.searchParams.get("since") || "";
     const requestedLimit = Math.min(Math.max(Number(body.limit || url.searchParams.get("limit") || (isAgent ? 50 : 100)), 1), 250);
     const query = new URLSearchParams({ status: "any", limit: String(Math.min(requestedLimit, 250)), order: "created_at desc", fields: FIELDS });
@@ -197,7 +269,7 @@ Deno.serve(async (req) => {
       const batch = selected.slice(start, start + 5);
       orders.push(...await Promise.all(batch.map(async (order: any) => normalize(order, await resolvedDeliveryLabel(order, shopifyToken)))));
     }
-    return jsonResponse({ orders, count: orders.length, server_time: new Date().toISOString() });
+    return jsonResponse({ orders, count: orders.length, recovery, server_time: new Date().toISOString() });
   } catch (error) {
     console.error("admin-orders:", error);
     return errorResponse("Erro interno ao carregar pedidos", 500);

@@ -412,7 +412,33 @@ Deno.serve(async (req) => {
             },
           },
         }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
-        wakeWorker();
+
+        // Cartao aprovado deve virar pedido Shopify ainda nesta requisicao. O
+        // worker continua como retentativa, mas deixa de ser o unico caminho:
+        // se o disparo em background falhar, a venda nao fica invisivel.
+        const shopifyToken = shopifyAdminToken();
+        if (shopifyToken && session.shopify_draft_order_id) {
+          const completed = await completeDraftOrder(
+            session.shopify_draft_order_id,
+            shopifyToken,
+            false,
+            customer.cpfCnpj,
+          );
+          if (completed.requestOk && completed.orderId) {
+            await admin.from("checkout_sessions").update({
+              status: "shopify_created",
+              shopify_order_id: completed.orderId,
+            }).eq("id", sessionId).is("shopify_order_id", null);
+          } else {
+            await admin.from("checkout_sessions").update({ status: "paid_pending_shopify" })
+              .eq("id", sessionId).is("shopify_order_id", null);
+            wakeWorker();
+          }
+        } else {
+          await admin.from("checkout_sessions").update({ status: "paid_pending_shopify" })
+            .eq("id", sessionId).is("shopify_order_id", null);
+          wakeWorker();
+        }
       }
       return jsonResponse({
         ...safePaymentResponse(sessionId, paymentAttempt.id, directStatus, null),

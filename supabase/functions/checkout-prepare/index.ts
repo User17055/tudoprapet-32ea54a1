@@ -239,7 +239,10 @@ Deno.serve(async (req) => {
       line_items: lineItems,
       customer: { id: shopifyCustomerId },
       email: input.customer.email,
-      use_customer_default_address: input.delivery.code === "pick_up",
+      // Nao copie o endereco de entrega padrao em pedidos de retirada. Quando o
+      // draft de retirada recebe shipping_address, a Shopify cria o fulfillment
+      // como envio mesmo que a linha esteja nomeada "Retirada na loja".
+      use_customer_default_address: false,
       shipping_line: buildShippingLineWithServiceFee(shippingMethod, shippingAmount),
       ...(input.delivery.address ? {
         shipping_address: shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone),
@@ -247,11 +250,17 @@ Deno.serve(async (req) => {
       ...((input.billingAddress || input.delivery.address) ? {
         billing_address: shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone),
       } : {}),
-      tags: `checkout-proprio,asaas,${customerType}`,
+      tags: [
+        "checkout-proprio",
+        "asaas",
+        customerType,
+        ...(shippingCode === "pick_up" ? ["retirada", "pick_up"] : []),
+      ].join(","),
       note: `Checkout TudoPraPet ${session.id}`,
       note_attributes: [
         { name: "checkout_session_id", value: session.id },
         { name: "shipping_code", value: shippingCode },
+        { name: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
         { name: "shipping_option_handle", value: input.delivery.optionHandle || "pick_up" },
       ],
     }, shopifyToken);

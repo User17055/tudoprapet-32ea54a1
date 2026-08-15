@@ -11,7 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
-interface OrdersResponse { orders: PrintableOrder[]; count: number }
+interface OrdersResponse {
+  orders: PrintableOrder[];
+  count: number;
+  recovery?: { recovered: number; pending: number };
+}
 interface PrintQueueResponse { job_id: string; already_queued?: boolean; functions_version?: string }
 interface PrintStatusResponse {
   job: { status: "queued" | "printed" | "error"; error_message: string | null; printed_at: string | null };
@@ -43,12 +47,21 @@ export default function OrdersTab() {
   const [status, setStatus] = useState("all");
   const [zplOrder, setZplOrder] = useState<PrintableOrder | null>(null);
   const [printingId, setPrintingId] = useState<string | number | null>(null);
+  const [syncPending, setSyncPending] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.functions.invoke("admin-orders", { body: { action: "list" } });
     if (error) toast.error("Não foi possível carregar os pedidos", { description: error.message });
-    else setOrders((data as OrdersResponse)?.orders || []);
+    else {
+      const response = data as OrdersResponse;
+      setOrders(response?.orders || []);
+      setSyncPending(response?.recovery?.pending || 0);
+      const recovered = response?.recovery?.recovered || 0;
+      if (recovered > 0) {
+        toast.success(`${recovered} venda(s) paga(s) recuperada(s) na Shopify`);
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -155,6 +168,15 @@ export default function OrdersTab() {
       <Card className="border-blue-200 bg-blue-50/60"><CardContent className="flex items-center gap-3 p-4">
         <Cloud className="h-5 w-5 text-blue-700" /><div><p className="text-sm font-bold">Impressão ZPL remota</p><p className="text-xs text-muted-foreground">O botão envia o pedido pela nuvem ao computador conectado à Zebra. Pedidos novos também são impressos automaticamente, sem reimprimir o histórico.</p></div>
       </CardContent></Card>
+
+      {syncPending > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-900">
+            <p className="font-bold">{syncPending} venda(s) paga(s) aguardando sincronização com a Shopify</p>
+            <p className="mt-1 text-xs">A recuperação automática continuará tentando. Atualize a lista em instantes; a venda não fica mais invisível para a operação.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card><CardContent className="p-0">
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div> : filtered.length === 0 ? <p className="py-16 text-center text-muted-foreground">Nenhum pedido encontrado.</p> :
