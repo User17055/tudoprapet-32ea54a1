@@ -2,6 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 import { completeDraftOrder } from "../_shared/shopify.ts";
+import { getAsaasPayment } from "../_shared/asaas.ts";
+import { isPaidAsaasProviderStatus, mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 
 const SHOP = "petjoy-deals-hb8r9.myshopify.com";
 const API = "2025-07";
@@ -75,9 +77,12 @@ async function recoverPaidOrders(
     .from("checkout_sessions")
     .select("id,shopify_draft_order_id,customer_snapshot,total,created_at")
     .is("shopify_order_id", null)
-    .in("status", ["payment_processing", "paid", "paid_pending_shopify"])
-    .order("updated_at", { ascending: true })
-    .limit(20);
+    // Inclui awaiting_payment porque a cobranca pode ter sido criada no Asaas
+    // antes de uma falha ao atualizar o estado local. O status remoto continua
+    // sendo a autoridade antes de qualquer recuperacao.
+    .in("status", ["awaiting_payment", "payment_processing", "paid", "paid_pending_shopify", "expired", "cancelled"])
+    .order("updated_at", { ascending: false })
+    .limit(30);
   if (sessionsError) {
     console.error("Falha ao carregar vendas pagas sem pedido:", sessionsError);
     return { recovered: 0, pending: 0, pendingSales: [] };
@@ -87,14 +92,49 @@ async function recoverPaidOrders(
   if (!sessionIds.length) return { recovered: 0, pending: 0, pendingSales: [] };
   const { data: paidPayments, error: paymentsError } = await adminDb
     .from("payments")
-    .select("checkout_session_id")
+    .select("id,checkout_session_id,attempt_number,status,provider_payment_id")
     .in("checkout_session_id", sessionIds)
-    .in("status", ["confirmed", "received"]);
+    .not("provider_payment_id", "is", null)
+    .order("attempt_number", { ascending: false });
   if (paymentsError) {
     console.error("Falha ao validar vendas pagas sem pedido:", paymentsError);
     return { recovered: 0, pending: 0, pendingSales: [] };
   }
-  const paidSessionIds = new Set((paidPayments || []).map((row: any) => row.checkout_session_id));
+  // Um webhook perdido pode deixar o pagamento local como pending apesar de o
+  // Asaas ja ter confirmado. Consulte a fonte financeira antes de decidir se o
+  // Draft Order pode virar pedido Shopify. Tambem evita recuperar uma cobranca
+  // que depois foi estornada.
+  const latestPaymentBySession = new Map<string, any>();
+  for (const payment of paidPayments || []) {
+    if (!latestPaymentBySession.has(payment.checkout_session_id)) {
+      latestPaymentBySession.set(payment.checkout_session_id, payment);
+    }
+  }
+  const paidSessionIds = new Set<string>();
+  const candidates = [...latestPaymentBySession.values()];
+  for (let start = 0; start < candidates.length; start += 5) {
+    const batch = candidates.slice(start, start + 5);
+    await Promise.all(batch.map(async (payment: any) => {
+      try {
+        const remote = await getAsaasPayment(payment.provider_payment_id);
+        const remoteStatus = String(remote.status || "").toUpperCase();
+        if (!isPaidAsaasProviderStatus(remoteStatus)) return;
+        const localStatus = mapAsaasPaymentStatus("", remoteStatus);
+        if (!localStatus || !["confirmed", "received"].includes(localStatus)) return;
+        const now = new Date().toISOString();
+        const { error: paymentUpdateError } = await adminDb.from("payments").update({
+          status: localStatus,
+          raw_status: remoteStatus,
+          is_active: false,
+          ...(localStatus === "confirmed" ? { confirmed_at: now } : { received_at: now }),
+        }).eq("id", payment.id);
+        if (paymentUpdateError) throw paymentUpdateError;
+        paidSessionIds.add(payment.checkout_session_id);
+      } catch (error) {
+        console.error(`Falha ao conferir pagamento Asaas ${payment.provider_payment_id}:`, error);
+      }
+    }));
+  }
 
   let recoveredThisRequest = 0;
   let pending = paidSessionIds.size;
