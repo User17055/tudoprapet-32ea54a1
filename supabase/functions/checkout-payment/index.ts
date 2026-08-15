@@ -13,6 +13,13 @@ import {
 import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
+import {
+  installmentPlan,
+  MAX_INSTALLMENTS,
+  maxInstallmentsFor,
+  MIN_INSTALLMENT_VALUE,
+  type InstallmentPlan,
+} from "../_shared/pricing.ts";
 
 function dateInSaoPaulo(addDays = 0): string {
   const date = new Date(Date.now() + addDays * 86_400_000);
