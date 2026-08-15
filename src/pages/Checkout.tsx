@@ -3066,6 +3066,10 @@ function MobileOrderSummary({
         (summary?.total ?? cartTotal) -
           (showServiceFee ? 0 : summary?.serviceFee ?? SERVICE_FEE),
       );
+  const headerDisplayTotal =
+    cardPlan && headerTotal > 0
+      ? installmentPlan(headerTotal, cardPlan.installments).chargedTotal
+      : headerTotal;
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
