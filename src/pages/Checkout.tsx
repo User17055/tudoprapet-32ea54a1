@@ -1275,7 +1275,6 @@ export default function Checkout() {
                 message={message}
                 registrationRequired={addressRegistrationRequired}
                 busy={busy || customerDataLoading}
-                onRegister={openAddressRegistration}
                 onContinue={nextDelivery}
               />
             )}
@@ -1425,7 +1424,6 @@ export default function Checkout() {
                     message={message}
                     registrationRequired={addressRegistrationRequired}
                     busy={busy || customerDataLoading}
-                    onRegister={openAddressRegistration}
                     onContinue={nextDelivery}
                   />
                 )}
@@ -1434,6 +1432,18 @@ export default function Checkout() {
           </div>
         </div>
       </div>
+      <AddressRegistrationPrompt
+        open={addressRegistrationRequired}
+        onOpenChange={(open) => {
+          setAddressRegistrationRequired(open);
+          if (!open) setMessage("");
+        }}
+        onRegister={() => {
+          setAddressRegistrationRequired(false);
+          setMessage("");
+          openAddressRegistration();
+        }}
+      />
       <AddressRegistrationSheet
         open={addressSheetOpen}
         setOpen={setAddressSheetOpen}
@@ -1499,27 +1509,31 @@ function Choice({
   icon,
   title,
   text,
+  disabled = false,
 }: {
   active: boolean;
   onClick: () => void;
   icon: ReactNode;
   title: string;
   text: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       data-step-item
       type="button"
       onClick={onClick}
-      className={`flex min-h-[72px] w-full touch-manipulation items-center gap-3 rounded-lg border px-4 py-3 text-left transition-[border-color,background-color,transform] duration-200 active:scale-[0.99] ${active ? "border-blue-800 bg-blue-50/50" : "border-slate-200 bg-white hover:border-slate-400"}`}
+      disabled={disabled}
+      aria-disabled={disabled}
+      className={`flex min-h-[72px] w-full touch-manipulation items-center gap-3 rounded-lg border px-4 py-3 text-left transition-[border-color,background-color,transform] duration-200 ${disabled ? "cursor-not-allowed border-slate-200 bg-slate-100 opacity-65" : active ? "border-blue-800 bg-blue-50/50 active:scale-[0.99]" : "border-slate-200 bg-white hover:border-slate-400 active:scale-[0.99]"}`}
     >
       <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md [&>svg]:h-5 [&>svg]:w-5 ${active ? "text-blue-900" : "text-slate-700"}`}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md [&>svg]:h-5 [&>svg]:w-5 ${disabled ? "text-slate-400" : active ? "text-blue-900" : "text-slate-700"}`}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <strong className="block text-sm leading-tight text-slate-900">
+        <strong className={`block text-sm leading-tight ${disabled ? "text-slate-500" : "text-slate-900"}`}>
           {title}
         </strong>
         <small className="mt-1 block leading-snug text-slate-500">{text}</small>
@@ -1679,15 +1693,22 @@ function DeliverySidebar({
                   Verificando entrega para este endereço...
                 </div>
               )}
-              {shippingAvailable && !shippingLoading && (
-                <Choice
-                  active={mode === "shipping"}
-                  onClick={() => setMode("shipping")}
-                  icon={<PackageCheck />}
-                  title="Entrega no endereço"
-                  text="Frete calculado para o endereço informado"
-                />
-              )}
+              <Choice
+                active={mode === "shipping" && shippingAvailable}
+                onClick={() => setMode("shipping")}
+                icon={<PackageCheck />}
+                title="Entrega no endereço"
+                text={
+                  shippingLoading
+                    ? "Verificando disponibilidade para este endereço"
+                    : shippingAvailable
+                      ? "Frete calculado para o endereço informado"
+                      : completeAddress && isSaved
+                        ? "Disponível somente em Presidente Prudente"
+                        : "Cadastre o endereço para verificar a entrega"
+                }
+                disabled={shippingLoading || !shippingAvailable}
+              />
               <Choice
                 active={mode === "pick_up"}
                 onClick={() => setMode("pick_up")}
@@ -1695,14 +1716,6 @@ function DeliverySidebar({
                 title="Retirada na loja"
                 text="Sem custo de entrega"
               />
-              {!shippingAvailable &&
-                !shippingLoading &&
-                completeAddress &&
-                isSaved && (
-                <p className="px-1 text-xs text-slate-500">
-                  Entrega no endereço indisponível para este CEP.
-                </p>
-              )}
             </div>
           </div>
           {mode === "shipping" &&
@@ -1730,33 +1743,21 @@ function DeliveryCheckoutAction({
   message,
   registrationRequired,
   busy,
-  onRegister,
   onContinue,
 }: {
   message: string;
   registrationRequired: boolean;
   busy: boolean;
-  onRegister: () => void;
   onContinue: () => void;
 }) {
   return (
     <div className="mt-4">
-      {message && (
+      {message && !registrationRequired && (
         <div
           role="alert"
           className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
         >
           <p>{message}</p>
-          {registrationRequired && (
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3 bg-red-700 text-white hover:bg-red-800"
-              onClick={onRegister}
-            >
-              Cadastrar endereço
-            </Button>
-          )}
         </div>
       )}
       <Button
@@ -1770,6 +1771,40 @@ function DeliveryCheckoutAction({
         {busy ? "Carregando..." : "Ir para pagamento"}
       </Button>
     </div>
+  );
+}
+function AddressRegistrationPrompt({
+  open,
+  onOpenChange,
+  onRegister,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRegister: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100%_-_2rem)] p-0 sm:max-w-lg">
+        <DialogHeader className="border-b border-slate-200 px-5 pb-5 pt-6 pr-14 text-left sm:px-6">
+          <DialogTitle className="text-xl text-slate-950">
+            Cadastre seu endereço
+          </DialogTitle>
+          <DialogDescription className="pt-2 text-base leading-relaxed text-slate-600">
+            Este CEP ainda não possui um endereço cadastrado. Complete os dados
+            para continuar ao pagamento.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="px-5 pb-5 sm:px-6 sm:pb-6">
+          <Button
+            type="button"
+            className="h-11 w-full bg-blue-700 hover:bg-blue-800 sm:w-auto sm:min-w-44"
+            onClick={onRegister}
+          >
+            Cadastrar endereço
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 function CheckoutHeader({ onBack }: { onBack?: () => void }) {
