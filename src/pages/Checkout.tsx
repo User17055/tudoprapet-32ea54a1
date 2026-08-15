@@ -34,6 +34,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   installmentLabel,
   installmentOptions,
+  installmentPlan,
   maxInstallmentsFor,
   type InstallmentPlan,
 } from "@/lib/installments";
@@ -312,6 +313,17 @@ export default function Checkout() {
     previewMode ? PREVIEW_SUMMARY : null,
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
+  const { getSubscriberPrice: cardSubscriberPrice } = useSubscriberPrices();
+  const { getFranchisePrice: cardFranchisePrice } = useFranchisePrices();
+  // Sem sessão de checkout ainda, o desconto de assinante/franquia é calculado
+  // no cliente — sem isso o parcelamento usava o valor cheio dos produtos.
+  const localCartDiscount = cartItems.reduce((acc, item) => {
+    const catalogPrice = Number(item.price.amount);
+    const special =
+      cardFranchisePrice(item.variantId) ?? cardSubscriberPrice(item.variantId);
+    if (special === null || special >= catalogPrice) return acc;
+    return acc + (catalogPrice - special) * item.quantity;
+  }, 0);
   const cardBaseTotal = Math.max(
     0,
     (summary?.subtotal ??
@@ -319,7 +331,7 @@ export default function Checkout() {
         (acc, item) => acc + Number(item.price.amount) * item.quantity,
         0,
       )) -
-      (summary?.discount ?? 0) +
+      (summary?.discount ?? localCartDiscount) +
       (deliveryMode === "pick_up"
         ? 0
         : (shippingOptions.find((option) => option.handle === shippingHandle)
@@ -331,6 +343,11 @@ export default function Checkout() {
     installments,
     maxInstallmentsFor(cardBaseTotal),
   );
+  const selectedCardPlan =
+    paymentMethod === "credit_card" && !isFranchisee
+      ? cardPlans.find((plan) => plan.installments === selectedInstallments) ??
+        null
+      : null;
   const [busy, setBusy] = useState(false);
   const [cancellingPix, setCancellingPix] = useState(false);
   const [cardFailure, setCardFailure] = useState<string | null>(null);
@@ -1163,6 +1180,7 @@ export default function Checkout() {
   if (step === 1)
     return (
       <PaymentCheckoutScreen
+        cardPlan={selectedCardPlan}
         summary={summary}
         cartItems={cartItems}
         address={address}
@@ -1810,7 +1828,9 @@ function PaymentCheckoutScreen({
   onBack,
   onNext,
   children,
+  cardPlan,
 }: {
+  cardPlan?: InstallmentPlan | null;
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   address: Address;
@@ -1913,6 +1933,7 @@ function PaymentCheckoutScreen({
                       ? { title: selectedShipping.title, amount: selectedShipping.amount }
                       : undefined
                 }
+                cardPlan={cardPlan}
               />
             </div>
             <Button
@@ -2888,11 +2909,13 @@ function SummaryTotals({
   cartItems,
   shippingOverride,
   showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
   showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
@@ -2919,6 +2942,14 @@ function SummaryTotals({
   const total = shippingOverride
     ? liveTotal
     : Math.max(0, (summary?.total ?? liveTotal) - (showServiceFee ? 0 : serviceFee));
+  // No cartão o cliente paga a taxa da operadora: o total exibido acompanha o
+  // valor realmente cobrado, calculado sobre o total já com desconto.
+  const activeCardPlan =
+    cardPlan && total > 0 ? installmentPlan(total, cardPlan.installments) : null;
+  const cardInterest = activeCardPlan
+    ? Math.max(0, Number((activeCardPlan.chargedTotal - total).toFixed(2)))
+    : 0;
+  const displayTotal = activeCardPlan ? activeCardPlan.chargedTotal : total;
   return (
     <div className="space-y-3 text-sm text-slate-600">
       <div className="flex justify-between">
@@ -2959,10 +2990,24 @@ function SummaryTotals({
         <span className="font-medium text-slate-900">{money(serviceFee)}</span>
       </div>
       )}
+      {cardInterest > 0 && (
+        <div className="flex justify-between">
+          <span>Juros do cartão</span>
+          <span className="font-medium text-slate-900">
+            +{money(cardInterest)}
+          </span>
+        </div>
+      )}
       <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-bold text-slate-950">
         <span>Total</span>
-        <span>{money(total)}</span>
+        <span>{money(displayTotal)}</span>
       </div>
+      {activeCardPlan && activeCardPlan.installments > 1 && (
+        <p className="text-right text-xs text-slate-500">
+          {activeCardPlan.installments}x de{" "}
+          {money(activeCardPlan.installmentValue)} no cartão
+        </p>
+      )}
     </div>
   );
 }
@@ -2971,18 +3016,20 @@ function OrderSummary({
   cartItems,
   shippingOverride,
   showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
   showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   return (
     <div className="mx-auto h-fit max-w-sm">
       <h2 className="mb-5 text-center text-xl font-bold text-slate-900">
         Resumo do pedido
       </h2>
-      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
+      <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} cardPlan={cardPlan} />
       <div className="mt-6 flex items-center justify-center gap-2 rounded-lg bg-[#faf8f5] px-4 py-3 text-xs font-medium text-slate-600">
         <LockKeyhole className="h-4 w-4 text-blue-800" />
         Pagamento processado com segurança
@@ -2995,11 +3042,13 @@ function MobileOrderSummary({
   cartItems,
   shippingOverride,
   showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
   showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
@@ -3021,6 +3070,10 @@ function MobileOrderSummary({
         (summary?.total ?? cartTotal) -
           (showServiceFee ? 0 : summary?.serviceFee ?? SERVICE_FEE),
       );
+  const headerDisplayTotal =
+    cardPlan && headerTotal > 0
+      ? installmentPlan(headerTotal, cardPlan.installments).chargedTotal
+      : headerTotal;
   return (
     <details className="group overflow-hidden rounded-xl bg-slate-50">
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
@@ -3033,12 +3086,12 @@ function MobileOrderSummary({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-sm font-bold text-blue-950">
-          {money(headerTotal)}
+          {money(headerDisplayTotal)}
           <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
         </span>
       </summary>
       <div className="border-t border-slate-200 bg-white px-3.5 py-4">
-        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
+        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} cardPlan={cardPlan} />
       </div>
     </details>
   );
