@@ -532,6 +532,30 @@ export type Database = {
         }
         Relationships: []
       }
+      site_maintenance: {
+        Row: {
+          enabled: boolean
+          ends_at: string | null
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          ends_at?: string | null
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          ends_at?: string | null
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       payment_actions: {
         Row: {
           action_type: string

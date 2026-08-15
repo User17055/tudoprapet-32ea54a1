@@ -12,6 +12,7 @@ import Index from "./pages/Index.tsx";
 import logo from "@/assets/tpp-logo.svg";
 
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { MaintenanceGate } from "@/components/MaintenanceGate";
 
 const ProductDetail = lazy(() => import("./pages/ProductDetail.tsx"));
 const Login = lazy(() => import("./pages/Login.tsx"));
@@ -49,25 +50,25 @@ const AppContent = () => {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/catalogo" element={<Catalog />} />
-          <Route path="/carrinho" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/product/:handle" element={<ProductDetail />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/cadastro" element={<Register />} />
-          <Route path="/esqueci-senha" element={<ForgotPassword />} />
-          <Route path="/redefinir-senha" element={<ResetPassword />} />
-          <Route path="/perfil" element={<Profile />} />
-          
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/meus-pedidos" element={<MeusPedidos />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
-      
+      <MaintenanceGate>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/catalogo" element={<Catalog />} />
+            <Route path="/carrinho" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/product/:handle" element={<ProductDetail />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/cadastro" element={<Register />} />
+            <Route path="/esqueci-senha" element={<ForgotPassword />} />
+            <Route path="/redefinir-senha" element={<ResetPassword />} />
+            <Route path="/perfil" element={<Profile />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/meus-pedidos" element={<MeusPedidos />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </MaintenanceGate>
     </BrowserRouter>
   );
 };

@@ -30,6 +30,7 @@ import {
   Boxes,
   Receipt,
   GitBranch,
+  Wrench,
 
   type LucideIcon,
 } from "lucide-react";
@@ -51,6 +52,7 @@ import FranquiaTab from "./admin/FranquiaTab";
 import VariationsTab from "./admin/VariationsTab";
 import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
+import MaintenanceTab from "./admin/MaintenanceTab";
 
 interface SubPrice {
   id: string;
@@ -81,7 +83,7 @@ type SectionId =
   | "retirada"
   | "orders"
   | "sync"
-
+  | "maintenance"
   | "franquia";
 
 interface SectionDef {
@@ -125,6 +127,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "retirada", label: "Retirada", description: "Validar código de retirada do cliente", icon: Package, component: RetiradaTab },
       { id: "orders", label: "Pedidos", description: "Todos os pedidos da loja e impressão de comprovante", icon: Receipt, component: OrdersTab },
       { id: "sync", label: "Sincronização", description: "Commits da branch já publicados na main", icon: GitBranch, component: SyncTab },
+      { id: "maintenance", label: "Manutenção", description: "Bloqueio temporário da loja para visitantes", icon: Wrench, component: MaintenanceTab },
     ],
   },
 ];
