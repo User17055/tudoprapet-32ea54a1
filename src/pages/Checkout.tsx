@@ -3082,12 +3082,12 @@ function MobileOrderSummary({
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-sm font-bold text-blue-950">
-          {money(headerTotal)}
+          {money(headerDisplayTotal)}
           <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
         </span>
       </summary>
       <div className="border-t border-slate-200 bg-white px-3.5 py-4">
-        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} />
+        <SummaryTotals summary={summary} cartItems={cartItems} shippingOverride={shippingOverride} showServiceFee={showServiceFee} cardPlan={cardPlan} />
       </div>
     </details>
   );
