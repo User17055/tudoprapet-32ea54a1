@@ -2904,11 +2904,13 @@ function SummaryTotals({
   cartItems,
   shippingOverride,
   showServiceFee = true,
+  cardPlan = null,
 }: {
   summary: CheckoutSummary | null;
   cartItems: CartItem[];
   shippingOverride?: ShippingSummaryOverride;
   showServiceFee?: boolean;
+  cardPlan?: InstallmentPlan | null;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
