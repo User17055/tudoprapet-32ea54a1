@@ -13,6 +13,13 @@ import {
 import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
+import {
+  installmentPlan,
+  MAX_INSTALLMENTS,
+  maxInstallmentsFor,
+  MIN_INSTALLMENT_VALUE,
+  type InstallmentPlan,
+} from "../_shared/pricing.ts";
 
 function dateInSaoPaulo(addDays = 0): string {
   const date = new Date(Date.now() + addDays * 86_400_000);
@@ -257,10 +264,23 @@ Deno.serve(async (req) => {
       externalReference: paymentAttempt.external_reference,
     };
 
+    let cardPlan: InstallmentPlan | null = null;
     let submittedCard: ReturnType<typeof parseCard> | null = null;
     if (method === "credit_card") {
-      if (Number(body.installments ?? 1) !== 1) {
-        return errorResponse("No momento, o cartão está disponível somente em 1x", 400);
+      const requested = Math.trunc(Number(body.installments ?? 1));
+      if (!Number.isFinite(requested) || requested < 1 || requested > MAX_INSTALLMENTS) {
+        return errorResponse(`Parcelamento inválido: escolha de 1x a ${MAX_INSTALLMENTS}x`, 400);
+      }
+      if (requested > maxInstallmentsFor(Number(session.total))) {
+        return errorResponse(`Cada parcela precisa ser de no mínimo R$ ${MIN_INSTALLMENT_VALUE},00`, 400);
+      }
+      // Juros do parcelamento são do cliente: o valor cobrado é recalculado
+      // aqui no servidor, nunca aceito do navegador.
+      cardPlan = installmentPlan(Number(session.total), requested);
+      if (cardPlan.installments > 1) {
+        createInput.installmentCount = cardPlan.installments;
+        createInput.totalValue = cardPlan.chargedTotal;
+        createInput.value = cardPlan.installmentValue;
       }
       const ip = clientIp(req);
       if (!ip) throw new Error("Não foi possível identificar a origem do pagamento");
@@ -317,6 +337,7 @@ Deno.serve(async (req) => {
       provider_payment_id: providerPayment.id,
       raw_status: providerPayment.status,
       status: directStatus,
+      ...(cardPlan && cardPlan.installments > 1 ? { amount: cardPlan.chargedTotal } : {}),
       ...(directStatus === "confirmed" ? { confirmed_at: new Date().toISOString() } : {}),
       ...(directStatus === "received" ? { received_at: new Date().toISOString(), is_active: false } : {}),
     }).eq("id", paymentAttempt.id);

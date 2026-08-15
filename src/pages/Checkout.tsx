@@ -31,6 +31,12 @@ import logo from "@/assets/tpp-logo.svg";
 import bravectoImage from "@/assets/bravecto.jpg";
 import defenzaImage from "@/assets/defenza.jpg";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  installmentLabel,
+  installmentOptions,
+  maxInstallmentsFor,
+  type InstallmentPlan,
+} from "@/lib/installments";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -288,6 +294,7 @@ export default function Checkout() {
   );
   const [savedPayments, setSavedPayments] = useState<SavedPayment[]>([]);
   const [savedPaymentId, setSavedPaymentId] = useState("");
+  const [installments, setInstallments] = useState(1);
   const [saveCard, setSaveCard] = useState(true);
   const [card, setCard] = useState({
     holderName: "",
@@ -305,6 +312,25 @@ export default function Checkout() {
     previewMode ? PREVIEW_SUMMARY : null,
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
+  const cardBaseTotal = Math.max(
+    0,
+    (summary?.subtotal ??
+      cartItems.reduce(
+        (acc, item) => acc + Number(item.price.amount) * item.quantity,
+        0,
+      )) -
+      (summary?.discount ?? 0) +
+      (deliveryMode === "pick_up"
+        ? 0
+        : (shippingOptions.find((option) => option.handle === shippingHandle)
+            ?.amount ?? summary?.shippingAmount ?? 0)) +
+      (summary?.serviceFee ?? SERVICE_FEE),
+  );
+  const cardPlans = installmentOptions(cardBaseTotal);
+  const selectedInstallments = Math.min(
+    installments,
+    maxInstallmentsFor(cardBaseTotal),
+  );
   const [busy, setBusy] = useState(false);
   const [cancellingPix, setCancellingPix] = useState(false);
   const [cardFailure, setCardFailure] = useState<string | null>(null);
@@ -928,7 +954,7 @@ export default function Checkout() {
         method: isFranchisee ? "terms" : paymentMethod,
       };
       if (paymentMethod === "credit_card" && !isFranchisee) {
-        paymentBody.installments = 1;
+        paymentBody.installments = selectedInstallments;
         if (savedPaymentId) paymentBody.savedPaymentMethodId = savedPaymentId;
         else {
           paymentBody.card = card;
@@ -1178,6 +1204,9 @@ export default function Checkout() {
           saved={savedPayments}
           savedId={savedPaymentId}
           setSavedId={setSavedPaymentId}
+          plans={cardPlans}
+          installments={selectedInstallments}
+          setInstallments={setInstallments}
           card={card}
           setCard={setCard}
           saveCard={saveCard}
@@ -1305,6 +1334,9 @@ export default function Checkout() {
                           saved={savedPayments}
                           savedId={savedPaymentId}
                           setSavedId={setSavedPaymentId}
+                          plans={cardPlans}
+                          installments={selectedInstallments}
+                          setInstallments={setInstallments}
                           card={card}
                           setCard={setCard}
                           saveCard={saveCard}
@@ -2107,6 +2139,9 @@ function PaymentStep(props: {
   saved: SavedPayment[];
   savedId: string;
   setSavedId: (v: string) => void;
+  plans: InstallmentPlan[];
+  installments: number;
+  setInstallments: (v: number) => void;
   card: {
     holderName: string;
     number: string;
@@ -2191,12 +2226,28 @@ function PaymentStep(props: {
             </label>
             <select
               id="card-installments"
-              value="1"
-              onChange={() => undefined}
+              value={String(props.installments)}
+              onChange={(event) => props.setInstallments(Number(event.target.value))}
               className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-blue-700 focus:ring-2 focus:ring-blue-100"
             >
-              <option value="1">1x no cartão (à vista)</option>
+              {props.plans.map((plan) => (
+                <option key={plan.installments} value={String(plan.installments)}>
+                  {installmentLabel(plan, money)}
+                </option>
+              ))}
             </select>
+            {(() => {
+              const plan = props.plans.find(
+                (item) => item.installments === props.installments,
+              );
+              if (!plan || plan.interestAmount <= 0) return null;
+              return (
+                <p className="text-xs text-slate-500">
+                  Parcelado com juros de {money(plan.interestAmount)} —
+                  à vista sai por {money(props.plans[0].chargedTotal)}.
+                </p>
+              );
+            })()}
           </div>
           {props.saved.map((item) => (
             <Choice

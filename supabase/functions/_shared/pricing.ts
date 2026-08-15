@@ -65,3 +65,70 @@ export function buildDraftLineItems(
     return li;
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Parcelamento no cartão — juros repassados ao cliente.
+//
+// As taxas abaixo são exatamente as da conta Asaas da TudoPraPet
+// (GET /myAccount/fees): tarifa fixa por operação + percentual por faixa de
+// parcelas. O parcelado é "grossed up" para que o valor líquido recebido
+// continue igual ao total do pedido — ou seja, o custo do parcelamento é do
+// cliente. O à vista (1x) permanece sem acréscimo.
+//
+// IMPORTANTE: espelhado em src/lib/installments.ts (test garante a igualdade).
+// ---------------------------------------------------------------------------
+
+export const MAX_INSTALLMENTS = 12;
+export const MIN_INSTALLMENT_VALUE = 5;
+export const CARD_OPERATION_FEE = 0.49;
+
+/** Percentual da Asaas por faixa: até 6x = 3,49%; até 12x = 3,99%. */
+export function cardFeePercent(installments: number): number {
+  if (installments <= 1) return 0;
+  return installments <= 6 ? 3.49 : 3.99;
+}
+
+export interface InstallmentPlan {
+  installments: number;
+  installmentValue: number;
+  chargedTotal: number;
+  interestAmount: number;
+}
+
+function round2(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+/** Maior número de parcelas possível respeitando a parcela mínima. */
+export function maxInstallmentsFor(total: number): number {
+  const limit = Math.floor(total / MIN_INSTALLMENT_VALUE);
+  return Math.max(1, Math.min(MAX_INSTALLMENTS, limit || 1));
+}
+
+/** Plano de parcelamento com os juros da Asaas repassados ao cliente. */
+export function installmentPlan(total: number, installments: number): InstallmentPlan {
+  const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
+  if (n === 1) {
+    const single = round2(total);
+    return { installments: 1, installmentValue: single, chargedTotal: single, interestAmount: 0 };
+  }
+  const percent = cardFeePercent(n) / 100;
+  const gross = (total + CARD_OPERATION_FEE) / (1 - percent);
+  const installmentValue = Math.ceil(gross / n * 100) / 100;
+  const chargedTotal = round2(installmentValue * n);
+  return {
+    installments: n,
+    installmentValue,
+    chargedTotal,
+    interestAmount: round2(chargedTotal - total),
+  };
+}
+
+/** Opções exibidas ao cliente, da menor para a maior quantidade de parcelas. */
+export function installmentOptions(total: number): InstallmentPlan[] {
+  const max = maxInstallmentsFor(total);
+  const options: InstallmentPlan[] = [];
+  for (let n = 1; n <= max; n += 1) options.push(installmentPlan(total, n));
+  return options;
+}
