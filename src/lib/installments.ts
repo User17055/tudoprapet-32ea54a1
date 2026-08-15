@@ -7,7 +7,7 @@ export const MIN_INSTALLMENT_VALUE = 5;
 export const CARD_OPERATION_FEE = 0.49;
 
 export function cardFeePercent(installments: number): number {
-  if (installments <= 1) return 0;
+  if (installments <= 1) return 2.99;
   return installments <= 6 ? 3.49 : 3.99;
 }
 
@@ -29,10 +29,6 @@ export function maxInstallmentsFor(total: number): number {
 
 export function installmentPlan(total: number, installments: number): InstallmentPlan {
   const n = Math.max(1, Math.min(MAX_INSTALLMENTS, Math.trunc(installments) || 1));
-  if (n === 1) {
-    const single = round2(total);
-    return { installments: 1, installmentValue: single, chargedTotal: single, interestAmount: 0 };
-  }
   const percent = cardFeePercent(n) / 100;
   const gross = (total + CARD_OPERATION_FEE) / (1 - percent);
   const installmentValue = Math.ceil((gross / n) * 100) / 100;
@@ -53,6 +49,6 @@ export function installmentOptions(total: number): InstallmentPlan[] {
 }
 
 export function installmentLabel(plan: InstallmentPlan, money: (v: number) => string): string {
-  if (plan.installments === 1) return `1x de ${money(plan.chargedTotal)} (à vista, sem juros)`;
+  if (plan.installments === 1) return `1x de ${money(plan.chargedTotal)} (à vista)`;
   return `${plan.installments}x de ${money(plan.installmentValue)} — total ${money(plan.chargedTotal)}`;
 }
