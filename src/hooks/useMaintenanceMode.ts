@@ -12,19 +12,30 @@ export function useMaintenanceMode() {
   const [status, setStatus] = useState<MaintenanceStatus>(INACTIVE);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("site_maintenance")
-      .select("enabled, ends_at")
-      .eq("id", true)
-      .maybeSingle();
+    try {
+      const { data, error: queryError } = await supabase
+        .from("site_maintenance")
+        .select("enabled, ends_at")
+        .eq("id", true)
+        .maybeSingle();
 
-    // Em uma indisponibilidade do banco, a loja permanece aberta (fail-open).
-    if (!error && data) {
-      setStatus({ enabled: data.enabled, endsAt: data.ends_at });
+      // Em uma indisponibilidade do banco, a loja permanece aberta (fail-open).
+      if (queryError) {
+        setStatus(INACTIVE);
+        setError(queryError.message);
+      } else {
+        setError(null);
+        setStatus(data ? { enabled: data.enabled, endsAt: data.ends_at } : INACTIVE);
+      }
+    } catch (loadError) {
+      setStatus(INACTIVE);
+      setError(loadError instanceof Error ? loadError.message : "Falha ao consultar o modo de manutenção.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -51,5 +62,5 @@ export function useMaintenanceMode() {
   const active = status.enabled && Number.isFinite(endTime) && endTime > now;
   const remainingSeconds = active ? Math.max(0, Math.ceil((endTime - now) / 1_000)) : 0;
 
-  return { ...status, active, remainingSeconds, loading, reload: load };
+  return { ...status, active, remainingSeconds, loading, error, reload: load };
 }

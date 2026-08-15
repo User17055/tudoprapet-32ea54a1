@@ -63,6 +63,27 @@ export default function MaintenanceTab() {
 
   if (maintenance.loading) return <Loader2 className="h-6 w-6 animate-spin text-[#112f5f]" />;
 
+  if (maintenance.error) {
+    return (
+      <Card className="max-w-2xl border-red-200 bg-red-50 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-900">
+            <TriangleAlert className="h-5 w-5" />
+            Configuração do banco pendente
+          </CardTitle>
+          <CardDescription className="text-red-800/75">
+            O painel continua disponível, mas o modo de manutenção só poderá ser usado depois que a migração do banco for aplicada.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={() => maintenance.reload()} className="border-red-300 bg-white">
+            Tentar novamente
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="grid max-w-4xl gap-6 lg:grid-cols-[1.2fr_0.8fr]">
       <Card className="border-0 shadow-sm">

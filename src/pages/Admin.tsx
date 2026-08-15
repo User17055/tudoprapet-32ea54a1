@@ -30,7 +30,8 @@ import {
   Boxes,
   Receipt,
   GitBranch,
-
+  ClipboardCheck,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,6 +52,8 @@ import FranquiaTab from "./admin/FranquiaTab";
 import VariationsTab from "./admin/VariationsTab";
 import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
+import ConferenceTab from "./admin/ConferenceTab";
+import MaintenanceTab from "./admin/MaintenanceTab";
 
 interface SubPrice {
   id: string;
@@ -81,7 +84,8 @@ type SectionId =
   | "retirada"
   | "orders"
   | "sync"
-
+  | "conference"
+  | "maintenance"
   | "franquia";
 
 interface SectionDef {
