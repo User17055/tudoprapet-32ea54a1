@@ -2986,10 +2986,24 @@ function SummaryTotals({
         <span className="font-medium text-slate-900">{money(serviceFee)}</span>
       </div>
       )}
+      {cardInterest > 0 && (
+        <div className="flex justify-between">
+          <span>Juros do cartão</span>
+          <span className="font-medium text-slate-900">
+            +{money(cardInterest)}
+          </span>
+        </div>
+      )}
       <div className="flex justify-between border-t border-slate-200 pt-4 text-xl font-bold text-slate-950">
         <span>Total</span>
-        <span>{money(total)}</span>
+        <span>{money(displayTotal)}</span>
       </div>
+      {activeCardPlan && activeCardPlan.installments > 1 && (
+        <p className="text-right text-xs text-slate-500">
+          {activeCardPlan.installments}x de{" "}
+          {money(activeCardPlan.installmentValue)} no cartão
+        </p>
+      )}
     </div>
   );
 }
