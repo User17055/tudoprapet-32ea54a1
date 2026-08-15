@@ -295,6 +295,25 @@ export default function Checkout() {
   const [savedPayments, setSavedPayments] = useState<SavedPayment[]>([]);
   const [savedPaymentId, setSavedPaymentId] = useState("");
   const [installments, setInstallments] = useState(1);
+  const cardBaseTotal = Math.max(
+    0,
+    (summary?.subtotal ??
+      cartItems.reduce(
+        (acc, item) => acc + Number(item.price.amount) * item.quantity,
+        0,
+      )) -
+      (summary?.discount ?? 0) +
+      (deliveryMode === "pick_up"
+        ? 0
+        : (shippingOptions.find((option) => option.handle === shippingHandle)
+            ?.amount ?? summary?.shippingAmount ?? 0)) +
+      (summary?.serviceFee ?? SERVICE_FEE),
+  );
+  const cardPlans = installmentOptions(cardBaseTotal);
+  const selectedInstallments = Math.min(
+    installments,
+    maxInstallmentsFor(cardBaseTotal),
+  );
   const [saveCard, setSaveCard] = useState(true);
   const [card, setCard] = useState({
     holderName: "",
@@ -1140,24 +1159,6 @@ export default function Checkout() {
   const selectedSavedAddress = savedAddresses.find(
     (item) =>
       digits(item.postalCode) === digits(searchedCep) && validAddress(item),
-  );
-  const cardBaseTotal = Math.max(
-    0,
-    (summary?.subtotal ??
-      cartItems.reduce(
-        (acc, item) => acc + Number(item.price.amount) * item.quantity,
-        0,
-      )) -
-      (summary?.discount ?? 0) +
-      (deliveryMode === "pick_up"
-        ? 0
-        : (selectedShipping?.amount ?? summary?.shippingAmount ?? 0)) +
-      (summary?.serviceFee ?? SERVICE_FEE),
-  );
-  const cardPlans = installmentOptions(cardBaseTotal);
-  const selectedInstallments = Math.min(
-    installments,
-    maxInstallmentsFor(cardBaseTotal),
   );
   if (step === 1)
     return (
