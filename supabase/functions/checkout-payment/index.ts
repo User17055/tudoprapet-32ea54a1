@@ -146,9 +146,9 @@ Deno.serve(async (req) => {
         return errorResponse("Este Pix já foi confirmado e não pode ser cancelado", 409);
       }
       if (active.provider_payment_id) {
-        const remote = await getAsaasPayment(active.provider_payment_id);
-        const remoteStatus = String(remote.status || "").toUpperCase();
-        if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"].includes(remoteStatus)) {
+        const providerPaymentId = active.provider_payment_id;
+        const paidStatuses = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"];
+        const registerPaidRace = async (remote: AsaasPayment, remoteStatus: string) => {
           const eventId = `cancel-race:${active.provider_payment_id}:${remoteStatus}`;
           await admin.from("payment_events").upsert({
             provider: "asaas",
@@ -167,12 +167,61 @@ Deno.serve(async (req) => {
           }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
           wakeWorker();
           return errorResponse("Este Pix acabou de ser confirmado e não pode mais ser cancelado", 409);
+        };
+
+        const remote = await getAsaasPayment(providerPaymentId);
+        const remoteStatus = String(remote.status || "").toUpperCase();
+        if (paidStatuses.includes(remoteStatus)) {
+          return await registerPaidRace(remote, remoteStatus);
         }
-        if (!["PENDING", "OVERDUE"].includes(remoteStatus)) {
+        if (remote.deleted !== true && !["PENDING", "OVERDUE"].includes(remoteStatus)) {
           return errorResponse("O Pix mudou de status e não pode ser cancelado agora", 409);
         }
-        const deleted = await deleteAsaasPayment(active.provider_payment_id);
-        if (!deleted.deleted) throw new Error("Asaas não confirmou o cancelamento do Pix");
+
+        if (remote.deleted !== true) {
+          let deletionConfirmed = false;
+          let deletionError: unknown = null;
+          try {
+            const deleted = await deleteAsaasPayment(providerPaymentId);
+            deletionConfirmed = deleted.deleted === true;
+          } catch (error) {
+            deletionError = error;
+            // Uma segunda tentativa pode receber 404 porque a primeira já excluiu
+            // a cobrança. Como a consulta acima a encontrou, esse 404 confirma a
+            // exclusão concorrente e deve ser tratado como sucesso idempotente.
+            if ((error as Error & { status?: number }).status === 404) {
+              deletionConfirmed = true;
+            }
+          }
+
+          if (!deletionConfirmed) {
+            try {
+              const verified = await getAsaasPayment(providerPaymentId);
+              const verifiedStatus = String(verified.status || "").toUpperCase();
+              if (verified.deleted === true) {
+                deletionConfirmed = true;
+              } else if (paidStatuses.includes(verifiedStatus)) {
+                return await registerPaidRace(verified, verifiedStatus);
+              }
+            } catch (verificationError) {
+              // O Asaas documenta que uma cobrança já removida pode responder 404.
+              // Isso também cobre o caso em que o DELETE funcionou, mas a resposta
+              // se perdeu por timeout ou falha momentânea de rede.
+              if ((verificationError as Error & { status?: number }).status === 404) {
+                deletionConfirmed = true;
+              } else if (deletionError) {
+                throw deletionError;
+              } else {
+                throw verificationError;
+              }
+            }
+          }
+
+          if (!deletionConfirmed) {
+            if (deletionError) throw deletionError;
+            throw new Error("Asaas não confirmou o cancelamento do Pix");
+          }
+        }
       }
       const now = new Date().toISOString();
       const { error: cancelError } = await admin.from("payments").update({
