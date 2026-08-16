@@ -23,7 +23,3 @@ verify_jwt = false
 # Verificação de sincronização Andre -> main (só admin autenticado).
 [functions.git-sync-status]
 verify_jwt = true
-
-# Função temporária de diagnóstico (protegida por x-probe-token).
-[functions.tmp-shopify-probe]
-verify_jwt = false
