@@ -6,20 +6,21 @@ import {
 } from "../../supabase/functions/_shared/webhook.ts";
 
 describe("resolveHmacMode", () => {
-  it("only enables enforcement when explicitly asked", () => {
-    expect(resolveHmacMode("enforce")).toBe("enforce");
-    expect(resolveHmacMode("ENFORCE")).toBe("enforce");
-    expect(resolveHmacMode("  enforce  ")).toBe("enforce");
+  it("only disables enforcement when explicitly asked", () => {
+    expect(resolveHmacMode("monitor")).toBe("monitor");
+    expect(resolveHmacMode("MONITOR")).toBe("monitor");
+    expect(resolveHmacMode("  monitor  ")).toBe("monitor");
   });
 
-  it("defaults to monitor for anything else", () => {
-    // O padrão precisa ser seguro: ligar rejeição sem confirmar o segredo
-    // derruba o fluxo de retirada inteiro.
-    for (const raw of ["monitor", "", "  ", "true", "1", "yes", "enforcing", null, undefined]) {
-      expect(resolveHmacMode(raw)).toBe("monitor");
+  it("defaults to enforce for anything else", () => {
+    // Padrao seguro: webhook sem assinatura valida nao pode ser processado,
+    // senao qualquer pessoa desvia o codigo de retirada de um pedido real.
+    for (const raw of ["enforce", "", "  ", "true", "1", "yes", "monitoring", null, undefined]) {
+      expect(resolveHmacMode(raw)).toBe("enforce");
     }
   });
 });
+
 
 describe("timingSafeEqual", () => {
   it("matches identical strings", () => {
