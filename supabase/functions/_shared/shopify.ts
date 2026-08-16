@@ -648,14 +648,60 @@ export async function createFiscalDraftOrder(
   }
 
 
+  // Retirada: remove o endereço de entrega (evita fulfillment de envio) e
+  // restaura a shippingLine "Retirada na loja", que a Shopify limpa junto.
+  let invoiceUrl = draft.invoiceUrl ?? null;
+  if (isPickup) {
+    const clear = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query: `mutation ClearShipping($id: ID!, $input: DraftOrderInput!) {
+          draftOrderUpdate(id: $id, input: $input) {
+            draftOrder {
+              invoiceUrl
+              shippingAddress { countryCodeV2 }
+              shippingLine { title }
+              localizedFields(first: 5) { nodes { key value } }
+            }
+            userErrors { field message }
+          }
+        }`,
+        variables: {
+          id: `gid://shopify/DraftOrder/${draftOrderId}`,
+          input: { shippingAddress: null, shippingLine: shippingLineInput },
+        },
+      }),
+    });
+    const clearBody = await clear.json().catch(() => null);
+    const updated = clearBody?.data?.draftOrderUpdate?.draftOrder;
+    const clearErrors = clearBody?.errors?.length
+      ? clearBody.errors
+      : (clearBody?.data?.draftOrderUpdate?.userErrors ?? []);
+    const stillStored = hasCredential(updated?.localizedFields?.nodes ?? []);
+    console.log(
+      `retirada: endereco=${updated?.shippingAddress?.countryCodeV2 ?? "null"} frete=${updated?.shippingLine?.title ?? "null"} credencial=${stillStored} erros=${clearErrors.length}`,
+    );
+    if (!stillStored) {
+      return {
+        requestOk: false,
+        invoiceUrl,
+        draftOrderId,
+        taxCredentialStored: false,
+        error: "A credencial fiscal foi perdida ao ajustar o rascunho de retirada.",
+      };
+    }
+    invoiceUrl = updated?.invoiceUrl ?? invoiceUrl;
+  }
 
   return {
     requestOk: true,
-    invoiceUrl: draft.invoiceUrl ?? null,
+    invoiceUrl,
     draftOrderId,
     taxCredentialStored: true,
     error: null,
   };
+
 }
 
 export interface CompleteDraftOrderResult {
