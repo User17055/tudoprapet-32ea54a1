@@ -14,16 +14,15 @@ export type HmacMode = "enforce" | "monitor";
  * `monitor`  — assinatura é verificada e o resultado registrado, mas o webhook
  *              segue processando.
  *
- * O padrão é `monitor` deliberadamente. Passar a rejeitar sem antes confirmar
- * que o segredo está correto em produção derruba o fluxo de retirada inteiro:
- * nenhum cliente recebe código, e a falha é silenciosa do lado da loja.
- *
- * Procedimento para ligar: rodar em `monitor` alguns dias, confirmar nos logs
- * que não há `hmac=invalid`, e então definir SHOPIFY_WEBHOOK_HMAC_MODE=enforce.
+ * O padrão é `enforce`: aceitar payload forjado permitiria que qualquer pessoa
+ * redirecionasse o código de retirada de um pedido real para o próprio WhatsApp.
+ * O `monitor` continua disponível, mas só quando pedido explicitamente
+ * (SHOPIFY_WEBHOOK_HMAC_MODE=monitor) durante uma troca de segredo.
  */
 export function resolveHmacMode(raw: string | null | undefined): HmacMode {
-  return String(raw ?? "").trim().toLowerCase() === "enforce" ? "enforce" : "monitor";
+  return String(raw ?? "").trim().toLowerCase() === "monitor" ? "monitor" : "enforce";
 }
+
 
 /**
  * Comparação em tempo constante. Um `===` comum sai no primeiro byte diferente,
