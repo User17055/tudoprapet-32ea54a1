@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { siteMaintenanceTable } from "@/lib/maintenanceTable";
+
 
 export interface MaintenanceStatus {
   enabled: boolean;
@@ -16,11 +18,11 @@ export function useMaintenanceMode() {
 
   const load = useCallback(async () => {
     try {
-      const { data, error: queryError } = await supabase
-        .from("site_maintenance")
+      const { data, error: queryError } = await siteMaintenanceTable()
         .select("enabled, ends_at")
         .eq("id", true)
         .maybeSingle();
+
 
       // Em uma indisponibilidade do banco, a loja permanece aberta (fail-open).
       if (queryError) {
