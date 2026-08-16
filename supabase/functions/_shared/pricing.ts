@@ -6,23 +6,21 @@ export interface LineItem {
   quantity: number;
 }
 
-export const CHECKOUT_SERVICE_FEE = 3;
-
-export function addCheckoutServiceFee(total: number): number {
-  return Number((total + CHECKOUT_SERVICE_FEE).toFixed(2));
-}
+// Mantido no snapshot e no banco para compatibilidade com pedidos antigos.
+// Novos checkouts não cobram taxa operacional.
+export const CHECKOUT_SERVICE_FEE = 0;
 
 /**
- * A taxa de serviço NÃO é um produto: ela entra na linha de frete do pedido,
- * assim o pedido da Shopify mostra apenas os itens comprados de verdade.
+ * A forma de entrega é enviada separadamente dos produtos. Os itens do pedido
+ * continuam vinculados às variantes reais cadastradas na Shopify.
  */
-export function buildShippingLineWithServiceFee(
+export function buildShippingLine(
   title: string,
   shippingAmount: number,
 ): { title: string; price: string } {
   return {
-    title: `${title} + taxa de serviço`,
-    price: (shippingAmount + CHECKOUT_SERVICE_FEE).toFixed(2),
+    title,
+    price: shippingAmount.toFixed(2),
   };
 }
 

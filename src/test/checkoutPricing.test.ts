@@ -1,27 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
-  addCheckoutServiceFee,
   buildDraftLineItems,
-  buildShippingLineWithServiceFee,
+  buildShippingLine,
   CHECKOUT_SERVICE_FEE,
   gidToNumericId,
   type LineItem,
 } from "../../supabase/functions/_shared/pricing.ts";
 
-describe("taxa de serviço do checkout", () => {
-  it("soma R$ 3,00 ao total calculado no servidor", () => {
-    expect(CHECKOUT_SERVICE_FEE).toBe(3);
-    expect(addCheckoutServiceFee(40.9)).toBe(43.9);
+describe("checkout sem taxa de serviço", () => {
+  it("mantém a taxa operacional zerada para novos pedidos", () => {
+    expect(CHECKOUT_SERVICE_FEE).toBe(0);
   });
 
-  it("cobra a taxa na linha de frete, nunca como produto", () => {
-    expect(buildShippingLineWithServiceFee("PAC", 24.9)).toEqual({
-      title: "PAC + taxa de serviço",
-      price: "27.90",
+  it("mantém a modalidade de entrega separada dos produtos", () => {
+    expect(buildShippingLine("PAC", 24.9)).toEqual({
+      title: "PAC",
+      price: "24.90",
     });
-    expect(buildShippingLineWithServiceFee("Retirada na loja", 0)).toEqual({
-      title: "Retirada na loja + taxa de serviço",
-      price: "3.00",
+    expect(buildShippingLine("Retirada na loja", 0)).toEqual({
+      title: "Retirada na loja",
+      price: "0.00",
     });
   });
 });

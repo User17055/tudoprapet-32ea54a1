@@ -133,7 +133,7 @@ type PaymentResult = {
 };
 
 const ACTIVE_KEY = "tpp_checkout_active";
-const SERVICE_FEE = 3;
+const SERVICE_FEE = 0;
 const PICKUP_STORE_ADDRESS = String(
   import.meta.env.VITE_PICKUP_STORE_ADDRESS || "",
 ).trim();
@@ -175,7 +175,7 @@ const PREVIEW_SUMMARY: CheckoutSummary = {
   discount: 20,
   serviceFee: SERVICE_FEE,
   shippingAmount: 0,
-  total: 142.8,
+  total: 139.8,
   items: [
     {
       variantId: "preview-racao",
@@ -3001,7 +3001,7 @@ function SummaryTotals({
           {shippingMethod ? (shippingAmount > 0 ? money(shippingAmount) : "Grátis") : "A calcular"}
         </span>
       </div>
-      {showServiceFee && (
+      {showServiceFee && serviceFee > 0 && (
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5">
           Taxa de serviço

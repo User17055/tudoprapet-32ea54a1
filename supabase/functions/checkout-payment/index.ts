@@ -118,7 +118,9 @@ Deno.serve(async (req) => {
       Number(session.subtotal) - Number(session.discount) +
       Number(session.shipping_amount) + serviceFee
     ).toFixed(2));
-    if (body.action !== "cancel_pix" && (serviceFee !== 3 || Number(session.total) !== expectedTotal)) {
+    // Aceita a taxa gravada na própria sessão para não quebrar checkouts antigos
+    // que já foram preparados com R$ 3. Novas sessões são criadas com taxa zero.
+    if (body.action !== "cancel_pix" && Number(session.total) !== expectedTotal) {
       return errorResponse("O total deste checkout está desatualizado. Volte à sacola e tente novamente.", 409);
     }
     if (body.action === "cancel_pix" && session.status === "cancelled") {

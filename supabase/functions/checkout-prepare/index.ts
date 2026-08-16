@@ -3,9 +3,8 @@ import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken } from "../_shared/checkout-access.ts";
 import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } from "../_shared/checkout-input.ts";
 import {
-  addCheckoutServiceFee,
   buildDraftLineItems,
-  buildShippingLineWithServiceFee,
+  buildShippingLine,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
 import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer, setDraftOrderTaxCredential } from "../_shared/shopify.ts";
@@ -196,8 +195,6 @@ Deno.serve(async (req) => {
         : "shipping";
       total = money(total + shippingAmount);
     }
-    total = addCheckoutServiceFee(total);
-
     const accessToken = newCheckoutAccessToken();
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);
     const tokenExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
@@ -243,7 +240,9 @@ Deno.serve(async (req) => {
       // draft de retirada recebe shipping_address, a Shopify cria o fulfillment
       // como envio mesmo que a linha esteja nomeada "Retirada na loja".
       use_customer_default_address: false,
-      shipping_line: buildShippingLineWithServiceFee(shippingMethod, shippingAmount),
+      // A entrega fica separada dos produtos. Cada produto acima usa o
+      // variant_id real da Shopify, inclusive quando a modalidade é retirada.
+      shipping_line: buildShippingLine(shippingMethod, shippingAmount),
       ...(input.delivery.address ? {
         shipping_address: shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone),
       } : {}),
