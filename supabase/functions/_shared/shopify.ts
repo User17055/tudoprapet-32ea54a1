@@ -508,6 +508,37 @@ export async function createFiscalDraftOrder(
     };
   }
 
+  // Diagnóstico confirmado em produção (2025-07): a Shopify ignora
+  // localizedFields quando o draft não tem shippingAddress BR — sem erro algum.
+  // Então criamos sempre com um endereço BR e, na retirada, limpamos o endereço
+  // depois (a credencial fiscal continua gravada) restaurando a shippingLine.
+  const isPickup = !input.shippingAddress;
+  let creationShippingAddress = graphqlAddress(input.shippingAddress) ?? graphqlAddress(input.billingAddress);
+  if (!creationShippingAddress) {
+    const shopRes = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query: `{ shop { billingAddress { address1 city zip provinceCode countryCodeV2 } } }`,
+      }),
+    });
+    const shopAddress = (await shopRes.json().catch(() => null))?.data?.shop?.billingAddress;
+    creationShippingAddress = {
+      firstName: "Retirada",
+      lastName: "na loja",
+      address1: shopAddress?.address1 || "Retirada na loja",
+      city: shopAddress?.city || "Presidente Prudente",
+      zip: shopAddress?.zip || "19010000",
+      provinceCode: shopAddress?.provinceCode || "SP",
+      countryCode: "BR",
+    };
+  }
+
+  const shippingLineInput = {
+    title: input.shippingLine.title,
+    price: Number(input.shippingLine.price),
+  };
+
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
@@ -528,10 +559,9 @@ export async function createFiscalDraftOrder(
           lineItems: input.lineItems,
           customerId: input.customerId,
           email: input.email,
-          marketRegionCountryCode: "BR",
           localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
-          shippingLine: { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
-          shippingAddress: graphqlAddress(input.shippingAddress),
+          shippingLine: shippingLineInput,
+          shippingAddress: creationShippingAddress,
           billingAddress: graphqlAddress(input.billingAddress),
           useCustomerDefaultAddress: false,
           tags: input.tags,
@@ -541,6 +571,7 @@ export async function createFiscalDraftOrder(
       },
     }),
   });
+
 
   const responseText = await response.text();
   let body: any = null;
