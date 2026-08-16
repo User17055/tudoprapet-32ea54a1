@@ -51,6 +51,23 @@ Deno.serve(async (req) => {
   let update: unknown = null;
   let after: unknown = null;
   if (cpfCnpj) {
+    const billing = (before as { body?: { data?: { draftOrder?: { billingAddress?: Record<string, unknown> } } } })
+      ?.body?.data?.draftOrder?.billingAddress || {};
+    const input: Record<string, unknown> = {
+      localizedFields: [{ key: "TAX_CREDENTIAL_BR", value: cpfCnpj }],
+    };
+    if (body?.withShipping) {
+      input.shippingAddress = {
+        firstName: body?.firstName || "Cliente",
+        lastName: body?.lastName || "TudoPraPet",
+        address1: body?.address1 || "Retirada na loja",
+        city: billing.city || "Presidente Prudente",
+        zip: billing.zip || "19060-000",
+        provinceCode: "SP",
+        countryCode: "BR",
+      };
+    }
+    if (body?.withMarket) input.marketRegionCountryCode = "BR";
     update = await gql(
       `mutation U($id: ID!, $input: DraftOrderInput!) {
         draftOrderUpdate(id: $id, input: $input) {
@@ -58,13 +75,14 @@ Deno.serve(async (req) => {
           userErrors { field message }
         }
       }`,
-      { id: gid, input: { localizedFields: [{ key: "TAX_CREDENTIAL_BR", value: cpfCnpj }] } },
+      { id: gid, input },
     );
     after = await gql(
       `query D($id: ID!) { draftOrder(id: $id) { localizedFields(first: 10) { nodes { key value } } } }`,
       { id: gid },
     );
   }
+
 
   return jsonResponse({ before, update, after });
 });
