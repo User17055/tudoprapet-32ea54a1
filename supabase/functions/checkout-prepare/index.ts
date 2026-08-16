@@ -6,8 +6,9 @@ import {
   buildDraftLineItems,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
+  toGraphqlDraftLineItems,
 } from "../_shared/pricing.ts";
-import { createDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer, setDraftOrderTaxCredential } from "../_shared/shopify.ts";
+import { createFiscalDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 
 function readFirstEnv(keys: string[]): string {
@@ -232,38 +233,36 @@ Deno.serve(async (req) => {
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
     const lineItems = buildDraftLineItems(input.items, specialPriceMap, currentPriceMap, discountTitle);
 
-    const draft = await createDraftOrder({
-      line_items: lineItems,
-      customer: { id: shopifyCustomerId },
+    const draft = await createFiscalDraftOrder({
+      lineItems: toGraphqlDraftLineItems(lineItems),
+      customerId: `gid://shopify/Customer/${shopifyCustomerId}`,
       email: input.customer.email,
+      cpfCnpj: input.customer.cpfCnpj,
       // Nao copie o endereco de entrega padrao em pedidos de retirada. Quando o
       // draft de retirada recebe shipping_address, a Shopify cria o fulfillment
       // como envio mesmo que a linha esteja nomeada "Retirada na loja".
-      use_customer_default_address: false,
-      // A entrega fica separada dos produtos. Cada produto acima usa o
-      // variant_id real da Shopify, inclusive quando a modalidade é retirada.
-      shipping_line: buildShippingLine(shippingMethod, shippingAmount),
-      ...(input.delivery.address ? {
-        shipping_address: shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone),
-      } : {}),
-      ...((input.billingAddress || input.delivery.address) ? {
-        billing_address: shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone),
-      } : {}),
+      shippingLine: buildShippingLine(shippingMethod, shippingAmount),
+      shippingAddress: input.delivery.address
+        ? shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone)
+        : undefined,
+      billingAddress: (input.billingAddress || input.delivery.address)
+        ? shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone)
+        : undefined,
       tags: [
         "checkout-proprio",
         "asaas",
         customerType,
         ...(shippingCode === "pick_up" ? ["retirada", "pick_up"] : []),
-      ].join(","),
+      ],
       note: `Checkout TudoPraPet ${session.id}`,
-      note_attributes: [
-        { name: "checkout_session_id", value: session.id },
-        { name: "shipping_code", value: shippingCode },
-        { name: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
-        { name: "shipping_option_handle", value: input.delivery.optionHandle || "pick_up" },
+      customAttributes: [
+        { key: "checkout_session_id", value: session.id },
+        { key: "shipping_code", value: shippingCode },
+        { key: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
+        { key: "shipping_option_handle", value: input.delivery.optionHandle || "pick_up" },
       ],
     }, shopifyToken);
-    if (!draft.requestOk || !draft.draftOrderId) {
+    if (!draft.draftOrderId) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
       return errorResponse("Falha ao preparar pedido na Shopify", 502);
     }
@@ -274,17 +273,11 @@ Deno.serve(async (req) => {
       .eq("id", session.id);
     if (draftUpdateError) throw draftUpdateError;
 
-    // Mercado Brasil: valide a persistencia antes de liberar qualquer cobranca.
-    // Se a Shopify rejeitar o CPF/CNPJ, o cliente nao chega ao Asaas e nenhuma
-    // venda paga fica presa em Rascunhos.
-    const taxCredentialStored = await setDraftOrderTaxCredential(
-      draft.draftOrderId,
-      input.customer.cpfCnpj,
-      shopifyToken,
-    );
-    if (!taxCredentialStored.ok) {
+    // O CPF/CNPJ foi enviado na mesma mutação que criou o draft. Se a Shopify
+    // não o devolver, o cliente não chega ao Asaas e nenhuma cobrança é criada.
+    if (!draft.requestOk || !draft.taxCredentialStored) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
-      console.error(`CPF/CNPJ rejeitado no checkout ${session.id}:`, taxCredentialStored.error);
+      console.error(`CPF/CNPJ rejeitado no checkout ${session.id}:`, draft.error);
       return errorResponse("Não foi possível registrar o CPF/CNPJ no pedido. Confira os dados e tente novamente.", 422);
     }
     return jsonResponse({

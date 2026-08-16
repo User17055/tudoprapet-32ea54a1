@@ -64,6 +64,34 @@ export function buildDraftLineItems(
   });
 }
 
+/** Converte as linhas REST legadas para o formato GraphQL sem perder a variante. */
+export function toGraphqlDraftLineItems(
+  lines: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return lines.map((line) => {
+    const quantity = Number(line.quantity) || 1;
+    const numericVariantId = String(line.variant_id || "");
+    const discount = line.applied_discount as Record<string, unknown> | undefined;
+    const graphqlLine: Record<string, unknown> = {
+      variantId: numericVariantId.startsWith("gid://")
+        ? numericVariantId
+        : `gid://shopify/ProductVariant/${numericVariantId}`,
+      quantity,
+    };
+    if (discount) {
+      // No GraphQL o desconto fixo da linha é o total, não o valor por unidade.
+      const totalDiscount = Number(discount.amount) || Number(discount.value) * quantity;
+      graphqlLine.appliedDiscount = {
+        description: discount.description || undefined,
+        title: discount.title || undefined,
+        valueType: "FIXED_AMOUNT",
+        value: Number(totalDiscount.toFixed(2)),
+      };
+    }
+    return graphqlLine;
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Parcelamento no cartão — juros repassados ao cliente.

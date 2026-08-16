@@ -4,6 +4,7 @@ import {
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
   gidToNumericId,
+  toGraphqlDraftLineItems,
   type LineItem,
 } from "../../supabase/functions/_shared/pricing.ts";
 
@@ -151,5 +152,36 @@ describe("buildDraftLineItems", () => {
 
     expect(lines[0].applied_discount).toBeDefined();
     expect(lines[1].applied_discount).toBeUndefined();
+  });
+});
+
+describe("toGraphqlDraftLineItems", () => {
+  it("preserva a variante real em vez de criar um item personalizado", () => {
+    const [line] = toGraphqlDraftLineItems([
+      { variant_id: 111, quantity: 2 },
+    ]);
+    expect(line).toEqual({
+      variantId: VARIANT_A,
+      quantity: 2,
+    });
+  });
+
+  it("converte o desconto unitário REST para o total fixo da linha GraphQL", () => {
+    const [line] = toGraphqlDraftLineItems([{
+      variant_id: 111,
+      quantity: 3,
+      applied_discount: {
+        description: "Clube TudoPraPet",
+        title: "Clube TudoPraPet",
+        value: "10.00",
+        amount: "30.00",
+      },
+    }]);
+    expect(line.appliedDiscount).toEqual({
+      description: "Clube TudoPraPet",
+      title: "Clube TudoPraPet",
+      valueType: "FIXED_AMOUNT",
+      value: 30,
+    });
   });
 });

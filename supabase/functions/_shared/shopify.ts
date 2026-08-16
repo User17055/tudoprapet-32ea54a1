@@ -221,6 +221,11 @@ export interface DraftOrderResult {
   draftOrderId: string | null;
 }
 
+export interface FiscalDraftOrderResult extends DraftOrderResult {
+  taxCredentialStored: boolean;
+  error: string | null;
+}
+
 export interface ShopifyVariantCheckoutDetail {
   id: string;
   numericId: number;
@@ -454,6 +459,128 @@ export async function createDraftOrder(
     requestOk: true,
     invoiceUrl: draft?.invoice_url ?? null,
     draftOrderId: draft?.id ? String(draft.id) : null,
+  };
+}
+
+function graphqlAddress(address: Record<string, unknown> | null | undefined) {
+  if (!address) return undefined;
+  return {
+    firstName: address.first_name,
+    lastName: address.last_name,
+    address1: address.address1,
+    address2: address.address2 || undefined,
+    city: address.city,
+    zip: address.zip,
+    phone: address.phone,
+    provinceCode: address.province_code || undefined,
+    countryCode: "BR",
+  };
+}
+
+/**
+ * Cria o draft e a credencial fiscal brasileira na mesma mutação.
+ * A Shopify documenta localizedFields no draftOrderCreate; evitar a atualização
+ * posterior também impede que drafts de retirada percam o contexto fiscal.
+ */
+export async function createFiscalDraftOrder(
+  input: {
+    lineItems: Record<string, unknown>[];
+    customerId: string;
+    email: string;
+    cpfCnpj: string;
+    shippingLine: { title: string; price: string };
+    shippingAddress?: Record<string, unknown>;
+    billingAddress?: Record<string, unknown>;
+    tags: string[];
+    note: string;
+    customAttributes: Array<{ key: string; value: string }>;
+  },
+  token: string,
+): Promise<FiscalDraftOrderResult> {
+  const value = String(input.cpfCnpj || "").replace(/\D/g, "");
+  if (value.length !== 11 && value.length !== 14) {
+    return {
+      requestOk: false,
+      invoiceUrl: null,
+      draftOrderId: null,
+      taxCredentialStored: false,
+      error: "CPF/CNPJ ausente ou com quantidade de digitos invalida.",
+    };
+  }
+
+  const response = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({
+      query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder {
+            id
+            invoiceUrl
+            localizedFields(first: 5) { nodes { key value } }
+            lineItems(first: 100) { nodes { variant { id } quantity } }
+          }
+          userErrors { field message }
+        }
+      }`,
+      variables: {
+        input: {
+          lineItems: input.lineItems,
+          customerId: input.customerId,
+          email: input.email,
+          marketRegionCountryCode: "BR",
+          localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
+          shippingLine: { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
+          shippingAddress: graphqlAddress(input.shippingAddress),
+          billingAddress: graphqlAddress(input.billingAddress),
+          useCustomerDefaultAddress: false,
+          tags: input.tags,
+          note: input.note,
+          customAttributes: input.customAttributes,
+        },
+      },
+    }),
+  });
+
+  const responseText = await response.text();
+  let body: any = null;
+  try {
+    body = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    body = null;
+  }
+  const payload = body?.data?.draftOrderCreate;
+  const errors = body?.errors || payload?.userErrors || [];
+  const draft = payload?.draftOrder;
+  const draftOrderId = String(draft?.id || "").split("/").pop() || null;
+  const stored = draft?.localizedFields?.nodes ?? [];
+  const taxCredentialStored = stored.some(
+    (node: { key?: string; value?: string }) => node?.key === "TAX_CREDENTIAL_BR" && node?.value === value,
+  );
+
+  if (!response.ok || errors.length || !draftOrderId || !taxCredentialStored) {
+    const error = shopifyErrorMessage(
+      errors.length ? errors : responseText,
+      !taxCredentialStored
+        ? "A Shopify nao gravou o CPF/CNPJ ao criar o rascunho."
+        : `Shopify nao criou o rascunho (HTTP ${response.status}).`,
+    );
+    console.error("Falha ao criar draft com CPF/CNPJ:", error);
+    return {
+      requestOk: false,
+      invoiceUrl: draft?.invoiceUrl ?? null,
+      draftOrderId,
+      taxCredentialStored,
+      error,
+    };
+  }
+
+  return {
+    requestOk: true,
+    invoiceUrl: draft.invoiceUrl ?? null,
+    draftOrderId,
+    taxCredentialStored: true,
+    error: null,
   };
 }
 
