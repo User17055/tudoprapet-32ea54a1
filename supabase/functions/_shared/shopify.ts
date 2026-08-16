@@ -564,20 +564,44 @@ export async function createFiscalDraftOrder(
   const draft = payload?.draftOrder;
   const draftOrderId = String(draft?.id || "").split("/").pop() || null;
   const stored = draft?.localizedFields?.nodes ?? [];
-  const taxCredentialStored = stored.some(
-    (node: { key?: string; value?: string }) => node?.key === "TAX_CREDENTIAL_BR" && node?.value === value,
+  const hasCredential = (nodes: any[]) => nodes.some(
+    (node: { key?: string; value?: string }) => node?.key === "TAX_CREDENTIAL_BR" && String(node?.value || "").replace(/\D/g, "") === value,
   );
+  let taxCredentialStored = hasCredential(stored);
+  console.log(
+    `draftOrderCreate: draft=${draftOrderId} camposLocalizados=[${stored.map((n: any) => n?.key).join(",")}] credencial=${taxCredentialStored}`,
+  );
+  // A mutação às vezes devolve localizedFields vazio mesmo tendo gravado. Uma
+  // releitura confirma antes de liberar qualquer cobrança.
+  if (draftOrderId && !taxCredentialStored) {
+    const recheck = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query: `query CheckCredential($id: ID!) {
+          draftOrder(id: $id) { localizedFields(first: 5) { nodes { key value } } }
+        }`,
+        variables: { id: `gid://shopify/DraftOrder/${draftOrderId}` },
+      }),
+    });
+    const recheckBody = await recheck.json().catch(() => null);
+    const recheckNodes = recheckBody?.data?.draftOrder?.localizedFields?.nodes ?? [];
+    taxCredentialStored = hasCredential(recheckNodes);
+    console.log(
+      `draftOrderCreate releitura: draft=${draftOrderId} campos=[${recheckNodes.map((n: any) => n?.key).join(",")}] credencial=${taxCredentialStored}`,
+    );
+  }
   const returnedLines: any[] = draft?.lineItems?.nodes ?? [];
   const lineItemsHaveVariant = returnedLines.length === 0
     ? true
     : returnedLines.every((node) => Boolean(node?.variant?.id));
   if (returnedLines.length) {
-    console.log(`draftOrderCreate ok: draft=${draftOrderId} linhas=${returnedLines.length} comVariante=${lineItemsHaveVariant}`);
+    console.log(`draftOrderCreate linhas=${returnedLines.length} comVariante=${lineItemsHaveVariant}`);
   }
 
   if (!response.ok || errors.length || !draftOrderId || !taxCredentialStored) {
     const error = shopifyErrorMessage(
-      errors.length ? errors : responseText,
+      errors.length ? errors : null,
       !taxCredentialStored
         ? "A Shopify nao gravou o CPF/CNPJ ao criar o rascunho (draftOrderCreate)."
         : `Shopify nao criou o rascunho (HTTP ${response.status}).`,
@@ -591,6 +615,7 @@ export async function createFiscalDraftOrder(
       error,
     };
   }
+
 
 
   return {
