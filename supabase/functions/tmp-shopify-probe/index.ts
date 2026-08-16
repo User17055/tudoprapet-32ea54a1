@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
   if (body.draftId) {
     out.draft = await gql(
-      `query($id: ID!){ draftOrder(id:$id){ id localizedFields(first:5){ nodes{ key value title } } billingAddress{ countryCodeV2 } shippingAddress{ countryCodeV2 } } }`,
+      `query($id: ID!){ draftOrder(id:$id){ id localizedFields(first:5){ nodes{ key value } } billingAddress{ countryCodeV2 } shippingAddress{ countryCodeV2 city } shippingLine{ title price } tags customAttributes{ key value } lineItems(first:10){ nodes{ quantity title } } } }`,
       { id: `gid://shopify/DraftOrder/${body.draftId}` },
     );
   }
