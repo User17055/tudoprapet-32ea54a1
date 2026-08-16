@@ -11,6 +11,10 @@ verify_jwt = false
 [functions.asaas-process-events]
 verify_jwt = false
 
+# Diagnóstico protegido por x-payment-worker-token.
+[functions.shopify-draft-diag]
+verify_jwt = false
+
 # O agente de impressão remoto não tem JWT: autentica por x-print-agent-token.
 # A própria function valida admin (JWT + has_role) ou o token do agente.
 [functions.admin-orders]
