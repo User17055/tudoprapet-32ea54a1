@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   AlertCircle,
   Check,
@@ -237,7 +237,6 @@ const edgeFunctionErrorText = async (error: unknown, fallback: string) => {
 };
 
 export default function Checkout() {
-  const navigate = useNavigate();
   const previewMode =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("preview") === "1";
@@ -999,7 +998,7 @@ export default function Checkout() {
     }
   }
 
-  const cancelPix = async (destination: "payment" | "cart" = "payment") => {
+  const returnFromPix = async () => {
     if (!credentials || cancellingPix) return;
     setCancellingPix(true);
     setMessage("");
@@ -1017,12 +1016,8 @@ export default function Checkout() {
       sessionStorage.removeItem(ACTIVE_KEY);
       setCredentials(null);
       setPayment(null);
-      if (destination === "cart") {
-        navigate("/carrinho");
-      } else {
-        setStep(1);
-        setMessage("Pix cancelado. Escolha a forma de pagamento para continuar.");
-      }
+      setStep(1);
+      setMessage("");
     } catch (error) {
       setMessage(errorText(error, "Não foi possível cancelar o Pix."));
     } finally {
@@ -1367,8 +1362,7 @@ export default function Checkout() {
                           payment={payment}
                           pickup={deliveryMode === "pick_up"}
                           cancelling={cancellingPix}
-                          onCancel={() => void cancelPix("payment")}
-                          onBack={() => void cancelPix("cart")}
+                          onBack={() => void returnFromPix()}
                         />
                       )}
                       {validationAttempt?.step === step && message && (
@@ -2504,13 +2498,11 @@ function PaymentWaiting({
   payment,
   pickup,
   cancelling,
-  onCancel,
   onBack,
 }: {
   payment: PaymentResult | null;
   pickup: boolean;
   cancelling: boolean;
-  onCancel: () => void;
   onBack: () => void;
 }) {
   const [now, setNow] = useState(Date.now());
@@ -2568,7 +2560,7 @@ function PaymentWaiting({
         </p>
         <Button type="button" variant="outline" className="mt-6" disabled={cancelling} onClick={onBack}>
           {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {cancelling ? "Cancelando Pix..." : "Voltar à sacola"}
+          {cancelling ? "Voltando..." : "Voltar"}
         </Button>
       </div>
     );
@@ -2613,25 +2605,12 @@ function PaymentWaiting({
           </Button>
         </div>
         <Wait />
-        <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
+        <div className="mt-6 flex justify-center">
           <Button type="button" variant="ghost" disabled={cancelling} onClick={onBack}>
             {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Voltar à sacola
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={cancelling}
-            onClick={onCancel}
-            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-          >
-            {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {cancelling ? "Cancelando Pix..." : "Cancelar Pix e trocar pagamento"}
+            {cancelling ? "Voltando..." : "Voltar"}
           </Button>
         </div>
-        <p className="mt-3 text-xs text-slate-500">
-          Ao voltar à sacola, este Pix será cancelado antes de sair da página.
-        </p>
       </div>
     );
   }
