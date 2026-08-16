@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
-import { supabase } from "@/integrations/supabase/client";
+import { siteMaintenanceTable } from "@/lib/maintenanceTable";
 
 function remainingLabel(seconds: number) {
   const hours = Math.floor(seconds / 3_600);
@@ -35,14 +35,14 @@ export default function MaintenanceTab() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from("site_maintenance")
+    const { error } = await siteMaintenanceTable()
       .update({
         enabled: true,
         ends_at: new Date(Date.now() + duration * 60_000).toISOString(),
         updated_by: user?.id ?? null,
       })
       .eq("id", true);
+
     setSaving(false);
     if (error) return toast.error(`Não foi possível ativar: ${error.message}`);
     await maintenance.reload();
@@ -51,10 +51,10 @@ export default function MaintenanceTab() {
 
   const disable = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("site_maintenance")
+    const { error } = await siteMaintenanceTable()
       .update({ enabled: false, ends_at: null, updated_by: user?.id ?? null })
       .eq("id", true);
+
     setSaving(false);
     if (error) return toast.error(`Não foi possível liberar o site: ${error.message}`);
     await maintenance.reload();
