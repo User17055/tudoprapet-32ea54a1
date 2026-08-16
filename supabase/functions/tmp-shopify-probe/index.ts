@@ -44,6 +44,12 @@ Deno.serve(async (req) => {
       { input: body.tryCreate },
     );
   }
+  if (body.clearShipping) {
+    out.clear = await gql(
+      `mutation($id: ID!, $input: DraftOrderInput!){ draftOrderUpdate(id:$id, input:$input){ draftOrder{ id shippingAddress{ countryCodeV2 } shippingLine{ title price } localizedFields(first:5){ nodes{ key value } } } userErrors{ field message } } }`,
+      { id: `gid://shopify/DraftOrder/${body.clearShipping}`, input: { shippingAddress: null } },
+    );
+  }
   return new Response(JSON.stringify(out), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
