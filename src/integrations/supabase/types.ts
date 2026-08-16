@@ -956,6 +956,30 @@ export type Database = {
         }
         Relationships: []
       }
+      site_maintenance: {
+        Row: {
+          enabled: boolean
+          ends_at: string | null
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          ends_at?: string | null
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          ends_at?: string | null
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       subscriber_prices: {
         Row: {
           created_at: string
@@ -1176,6 +1200,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      invoke_payment_reconciliation: { Args: never; Returns: undefined }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
       save_customer_address: {
