@@ -550,22 +550,39 @@ export async function createFiscalDraftOrder(
     body = null;
   }
   const payload = body?.data?.draftOrderCreate;
-  const errors = body?.errors || payload?.userErrors || [];
+  const rawErrors: any[] = body?.errors?.length ? body.errors : (payload?.userErrors ?? []);
+  // O token Admin da loja pode nao ter read_products: nesse caso a Shopify
+  // devolve ACCESS_DENIED apenas no subcampo lineItems.variant, sem impedir a
+  // criacao do rascunho. Isso nao pode falhar o checkout.
+  const accessDenied = rawErrors.filter((entry) =>
+    entry?.extensions?.code === "ACCESS_DENIED" || /Access denied for/i.test(String(entry?.message || "")),
+  );
+  const errors = rawErrors.filter((entry) => !accessDenied.includes(entry));
+  if (accessDenied.length) {
+    console.warn("draftOrderCreate: leitura de campos bloqueada por escopo:", accessDenied.map((e) => e?.message).join("; "));
+  }
   const draft = payload?.draftOrder;
   const draftOrderId = String(draft?.id || "").split("/").pop() || null;
   const stored = draft?.localizedFields?.nodes ?? [];
   const taxCredentialStored = stored.some(
     (node: { key?: string; value?: string }) => node?.key === "TAX_CREDENTIAL_BR" && node?.value === value,
   );
+  const returnedLines: any[] = draft?.lineItems?.nodes ?? [];
+  const lineItemsHaveVariant = returnedLines.length === 0
+    ? true
+    : returnedLines.every((node) => Boolean(node?.variant?.id));
+  if (returnedLines.length) {
+    console.log(`draftOrderCreate ok: draft=${draftOrderId} linhas=${returnedLines.length} comVariante=${lineItemsHaveVariant}`);
+  }
 
   if (!response.ok || errors.length || !draftOrderId || !taxCredentialStored) {
     const error = shopifyErrorMessage(
       errors.length ? errors : responseText,
       !taxCredentialStored
-        ? "A Shopify nao gravou o CPF/CNPJ ao criar o rascunho."
+        ? "A Shopify nao gravou o CPF/CNPJ ao criar o rascunho (draftOrderCreate)."
         : `Shopify nao criou o rascunho (HTTP ${response.status}).`,
     );
-    console.error("Falha ao criar draft com CPF/CNPJ:", error);
+    console.error("draftOrderCreate falhou:", error);
     return {
       requestOk: false,
       invoiceUrl: draft?.invoiceUrl ?? null,
@@ -574,6 +591,7 @@ export async function createFiscalDraftOrder(
       error,
     };
   }
+
 
   return {
     requestOk: true,
