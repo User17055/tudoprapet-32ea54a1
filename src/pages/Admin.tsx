@@ -70,6 +70,8 @@ interface Member {
   created_at: string;
 }
 
+type SubscriberPriceAdjustment = "percentage" | "amount";
+
 type SectionId =
   | "users"
   | "members"
@@ -317,7 +319,8 @@ function PricesTab() {
   const [saving, setSaving] = useState(false);
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
-  const [price, setPrice] = useState("");
+  const [adjustmentType, setAdjustmentType] = useState<SubscriberPriceAdjustment>("percentage");
+  const [adjustment, setAdjustment] = useState("0");
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPrice, setEditingPrice] = useState("");
   const [updatingPrice, setUpdatingPrice] = useState(false);
@@ -377,12 +380,23 @@ function PricesTab() {
     if (productId && registeredProductIds.has(productId)) {
       setProductId("");
       setVariantId("");
-      setPrice("");
+      setAdjustment("0");
     }
   }, [productId, registeredProductIds]);
 
+  const selectedVariant = selectedProduct?.node.variants.edges.find(v => v.node.id === variantId)?.node
+    || selectedProduct?.node.variants.edges[0]?.node;
+  const shopifyPrice = selectedVariant ? Number(selectedVariant.price.amount) : null;
+  const estimatedCost = shopifyPrice === null ? null : shopifyPrice / 2;
+  const adjustmentValue = Number(adjustment.replace(",", "."));
+  const calculatedSubscriberPrice = estimatedCost === null || !Number.isFinite(adjustmentValue)
+    ? null
+    : Math.round((adjustmentType === "percentage"
+      ? estimatedCost * (1 + adjustmentValue / 100)
+      : estimatedCost + adjustmentValue) * 100) / 100;
+
   const handleSave = async () => {
-    if (!productId || !variantId || !price) {
+    if (!productId || !variantId || calculatedSubscriberPrice === null) {
       toast.error("Preencha todos os campos");
       return;
     }
@@ -390,10 +404,14 @@ function PricesTab() {
       toast.error("Este produto ja possui preco de assinante cadastrado.");
       setProductId("");
       setVariantId("");
-      setPrice("");
+      setAdjustment("0");
       return;
     }
-    const numeric = parseFloat(price.replace(",", "."));
+    if (!Number.isFinite(adjustmentValue) || adjustmentValue < 0) {
+      toast.error("Informe um reajuste igual ou maior que zero");
+      return;
+    }
+    const numeric = calculatedSubscriberPrice;
     if (isNaN(numeric) || numeric <= 0) {
       toast.error("Preço inválido");
       return;
@@ -414,7 +432,7 @@ function PricesTab() {
       return;
     }
     toast.success("Preço salvo!");
-    setProductId(""); setVariantId(""); setPrice("");
+    setProductId(""); setVariantId(""); setAdjustment("0");
     loadAll(true);
   };
 
@@ -480,22 +498,24 @@ function PricesTab() {
       productTitle: prod?.title || "Produto removido",
       productImage: prod?.images.edges[0]?.node,
       variantTitle: variant?.node.title || sp.shopify_variant_id,
+      shopifyPrice: variant ? Number(variant.node.price.amount) : null,
     };
   };
 
   const previewImage = selectedProduct?.node.images.edges[0]?.node;
-  const previewVariant = selectedProduct?.node.variants.edges.find(v => v.node.id === variantId)?.node
-    || selectedProduct?.node.variants.edges[0]?.node;
+  const previewVariant = selectedVariant;
   const previewPrice = previewVariant ? parseFloat(previewVariant.price.amount) : null;
   const previewCompare = previewVariant?.compareAtPrice ? parseFloat(previewVariant.compareAtPrice.amount) : null;
-  const previewSubscriber = price ? parseFloat(price.replace(",", ".")) : null;
+  const previewSubscriber = calculatedSubscriberPrice;
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Adicionar preço de assinante</CardTitle>
-          <CardDescription>Defina o preço exclusivo que membros do clube pagam.</CardDescription>
+          <CardDescription>
+            O custo estimado é metade do preço do Shopify. Aplique uma margem percentual ou um acréscimo em reais.
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           <div className="grid gap-4 md:grid-cols-[200px_1fr]">
@@ -541,10 +561,10 @@ function PricesTab() {
             </div>
 
             {/* Form */}
-            <div className="grid content-start gap-3 md:grid-cols-3">
-              <div className="md:col-span-3">
+            <div className="grid content-start gap-3 md:grid-cols-4">
+              <div className="md:col-span-4">
                 <label className="mb-1 block text-sm font-medium">Produto</label>
-                <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); }}>
+                <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); setAdjustment("0"); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                   <SelectContent>
                     {availableProducts.map(p => (
@@ -558,7 +578,7 @@ function PricesTab() {
                   </p>
                 )}
               </div>
-              <div className="md:col-span-2">
+              <div className="md:col-span-4">
                 <label className="mb-1 block text-sm font-medium">Variante</label>
                 <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -572,10 +592,43 @@ function PricesTab() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Preço assinante (R$)</label>
-                <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
+                <label className="mb-1 block text-sm font-medium">Preço Shopify</label>
+                <Input value={shopifyPrice === null ? "" : `R$ ${shopifyPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
               </div>
-              <div className="md:col-span-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Custo estimado (50%)</label>
+                <Input value={estimatedCost === null ? "" : `R$ ${estimatedCost.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Forma de reajuste</label>
+                <Select value={adjustmentType} onValueChange={(value) => setAdjustmentType(value as SubscriberPriceAdjustment)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Margem em %</SelectItem>
+                    <SelectItem value="amount">Acréscimo em R$</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">
+                  {adjustmentType === "percentage" ? "Margem (%)" : "Acréscimo (R$)"}
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step={adjustmentType === "percentage" ? "1" : "0.01"}
+                  value={adjustment}
+                  onChange={(event) => setAdjustment(event.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="rounded-lg bg-sky-50 p-3 md:col-span-4">
+                <p className="text-xs font-medium text-sky-700">Preço calculado para o assinante</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-sky-700">
+                  {calculatedSubscriberPrice === null ? "—" : `R$ ${calculatedSubscriberPrice.toFixed(2)}`}
+                </p>
+              </div>
+              <div className="md:col-span-4">
                 <Button onClick={handleSave} disabled={saving}>
                   {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
                 </Button>
@@ -600,6 +653,8 @@ function PricesTab() {
                 <TableRow>
                   <TableHead>Produto</TableHead>
                   <TableHead>Variante</TableHead>
+                  <TableHead className="text-right">Shopify</TableHead>
+                  <TableHead className="text-right">Custo estimado</TableHead>
                   <TableHead className="text-right">Preço assinante</TableHead>
                   <TableHead className="w-24"><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
@@ -627,6 +682,12 @@ function PricesTab() {
                         </div>
                       </TableCell>
                       <TableCell>{info.variantTitle}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {info.shopifyPrice === null ? "—" : `R$ ${info.shopifyPrice.toFixed(2)}`}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {info.shopifyPrice === null ? "—" : `R$ ${(info.shopifyPrice / 2).toFixed(2)}`}
+                      </TableCell>
                       <TableCell className="text-right">
                         {editingPriceId === sp.id ? (
                           <div className="ml-auto flex w-36 items-center gap-2">
