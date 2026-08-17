@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     if (audienceError) throw audienceError;
     const audienceByProduct = new Map((audienceRows ?? []).map((row) => [row.shopify_product_id, row.audience]));
     for (const detail of details.values()) {
-      const audience = audienceByProduct.get(detail.productId) ?? "cliente";
+      const audience = audienceByProduct.get(detail.productId) ?? null;
       const allowed = customerType === "franchise"
         ? audience === "franquia" || audience === "ambos"
         : audience === "cliente" || audience === "ambos";
