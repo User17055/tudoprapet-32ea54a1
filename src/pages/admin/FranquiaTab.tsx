@@ -128,14 +128,18 @@ function AudiencePanel() {
     });
   };
 
-  const applyFranchiseVisibility = async (visible: boolean) => {
+  const applyAudienceVisibility = async (target: "cliente" | "franquia", visible: boolean) => {
     if (selectedIds.size === 0 || bulkSaving) return;
 
     const changes = [...selectedIds].map((productId) => {
       const current = audienceMap.get(productId) ?? null;
-      const next: ProductAudience | null = visible
-        ? current === "cliente" ? "ambos" : current ?? "franquia"
-        : current === "ambos" ? "cliente" : current === "franquia" ? null : current;
+      const next: ProductAudience | null = target === "franquia"
+        ? visible
+          ? current === "cliente" ? "ambos" : current ?? "franquia"
+          : current === "ambos" ? "cliente" : current === "franquia" ? null : current
+        : visible
+          ? current === "franquia" ? "ambos" : current ?? "cliente"
+          : current === "ambos" ? "franquia" : current === "cliente" ? null : current;
       return { productId, current, next };
     }).filter((change) => change.next !== change.current);
 
@@ -227,13 +231,21 @@ function AudiencePanel() {
               Limpar
             </Button>
           )}
-          <Button size="sm" onClick={() => void applyFranchiseVisibility(true)} disabled={bulkSaving || selectedIds.size === 0}>
+          <Button size="sm" onClick={() => void applyAudienceVisibility("franquia", true)} disabled={bulkSaving || selectedIds.size === 0}>
             {bulkSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
             Exibir na franquia
           </Button>
-          <Button variant="outline" size="sm" onClick={() => void applyFranchiseVisibility(false)} disabled={bulkSaving || selectedIds.size === 0}>
+          <Button variant="outline" size="sm" onClick={() => void applyAudienceVisibility("franquia", false)} disabled={bulkSaving || selectedIds.size === 0}>
             <EyeOff className="mr-2 h-4 w-4" />
             Ocultar da franquia
+          </Button>
+          <Button size="sm" onClick={() => void applyAudienceVisibility("cliente", true)} disabled={bulkSaving || selectedIds.size === 0}>
+            <Eye className="mr-2 h-4 w-4" />
+            Exibir para cliente
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void applyAudienceVisibility("cliente", false)} disabled={bulkSaving || selectedIds.size === 0}>
+            <EyeOff className="mr-2 h-4 w-4" />
+            Ocultar do cliente
           </Button>
         </div>
         {loading ? (

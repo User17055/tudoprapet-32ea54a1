@@ -72,6 +72,7 @@ interface Member {
 }
 
 type SubscriberPriceAdjustment = "percentage" | "amount";
+type SubscriberPriceFilter = "all" | "registered" | "unregistered";
 
 type SectionId =
   | "users"
@@ -325,6 +326,7 @@ function PricesTab() {
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPrice, setEditingPrice] = useState("");
   const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [registrationFilter, setRegistrationFilter] = useState<SubscriberPriceFilter>("all");
 
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -376,6 +378,19 @@ function PricesTab() {
     () => products.filter(p => !registeredProductIds.has(p.node.id)),
     [products, registeredProductIds]
   );
+
+  const priceByProductId = useMemo(() => {
+    const map = new Map<string, SubPrice>();
+    prices.forEach(price => map.set(price.shopify_product_id, price));
+    return map;
+  }, [prices]);
+
+  const listedProducts = useMemo(() => products.filter(product => {
+    const registered = registeredProductIds.has(product.node.id);
+    if (registrationFilter === "registered") return registered;
+    if (registrationFilter === "unregistered") return !registered;
+    return true;
+  }), [products, registeredProductIds, registrationFilter]);
 
   useEffect(() => {
     if (productId && registeredProductIds.has(productId)) {
@@ -644,28 +659,50 @@ function PricesTab() {
 
       <Card>
         <CardHeader className="p-4 pb-3">
-          <CardTitle className="text-base">Ainda não cadastrados ({availableProducts.length})</CardTitle>
-          <CardDescription>Produtos do Shopify que ainda não possuem preço para assinantes.</CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Produtos ({listedProducts.length})</CardTitle>
+              <CardDescription>Todos os produtos do Shopify e seus preços para assinantes.</CardDescription>
+            </div>
+            <Select value={registrationFilter} onValueChange={(value) => setRegistrationFilter(value as SubscriberPriceFilter)}>
+              <SelectTrigger className="h-9 w-full sm:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="registered">Cadastrados</SelectItem>
+                <SelectItem value="unregistered">Não cadastrados</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-          ) : availableProducts.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">Todos os produtos já possuem preço de assinante.</p>
+          ) : listedProducts.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">Nenhum produto neste filtro.</p>
           ) : (
             <Table className="[&_th]:h-9 [&_td]:py-2.5">
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Variante</TableHead>
                   <TableHead className="text-right">Preço Shopify</TableHead>
                   <TableHead className="text-right">Custo estimado</TableHead>
-                  <TableHead className="w-28"><span className="sr-only">Ação</span></TableHead>
+                  <TableHead className="text-right">Preço assinante</TableHead>
+                  <TableHead className="w-28"><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {availableProducts.map(product => {
+                {listedProducts.map(product => {
+                  const registeredPrice = priceByProductId.get(product.node.id);
                   const firstVariant = product.node.variants.edges[0]?.node;
-                  const productPrice = firstVariant ? Number(firstVariant.price.amount) : null;
+                  const registeredVariant = registeredPrice
+                    ? product.node.variants.edges.find(variant => variant.node.id === registeredPrice.shopify_variant_id)?.node
+                    : null;
+                  const displayedVariant = registeredVariant || firstVariant;
+                  const productPrice = displayedVariant ? Number(displayedVariant.price.amount) : null;
                   const productImage = product.node.images.edges[0]?.node;
                   return (
                     <TableRow key={product.node.id}>
@@ -686,6 +723,15 @@ function PricesTab() {
                           <span className="font-medium line-clamp-2">{product.node.title}</span>
                         </div>
                       </TableCell>
+                      <TableCell>
+                        <span className={cn(
+                          "inline-flex rounded-full px-2 py-1 text-xs font-semibold",
+                          registeredPrice ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800",
+                        )}>
+                          {registeredPrice ? "Cadastrado" : "Não cadastrado"}
+                        </span>
+                      </TableCell>
+                      <TableCell>{displayedVariant?.title || "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {productPrice === null ? "—" : `R$ ${productPrice.toFixed(2)}`}
                       </TableCell>
@@ -693,19 +739,71 @@ function PricesTab() {
                         {productPrice === null ? "—" : `R$ ${(productPrice / 2).toFixed(2)}`}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={!firstVariant}
-                          onClick={() => {
-                            setProductId(product.node.id);
-                            setVariantId(firstVariant?.id || "");
-                            setAdjustment("0");
-                            window.scrollTo({ top: 0, behavior: "smooth" });
-                          }}
-                        >
-                          Cadastrar
-                        </Button>
+                        {registeredPrice ? (
+                          editingPriceId === registeredPrice.id ? (
+                            <div className="ml-auto flex w-36 items-center gap-2">
+                              <span className="text-sm text-muted-foreground">R$</span>
+                              <Input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={editingPrice}
+                                onChange={(event) => setEditingPrice(event.target.value)}
+                                disabled={updatingPrice}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") handleUpdatePrice(registeredPrice);
+                                  if (event.key === "Escape") cancelEditingPrice();
+                                }}
+                                className="h-8 text-right font-bold"
+                                autoFocus
+                                aria-label={`Novo preço de ${product.node.title}`}
+                              />
+                            </div>
+                          ) : (
+                            <span className="font-bold text-sky-600 tabular-nums">
+                              R$ {Number(registeredPrice.subscriber_price).toFixed(2)}
+                            </span>
+                          )
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {registeredPrice ? (
+                          <div className="flex justify-end">
+                            {editingPriceId === registeredPrice.id ? (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => handleUpdatePrice(registeredPrice)} disabled={updatingPrice} aria-label="Salvar novo preço">
+                                  {updatingPrice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelEditingPrice} disabled={updatingPrice} aria-label="Cancelar edição">
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditingPrice(registeredPrice)} aria-label={`Editar preço de ${product.node.title}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(registeredPrice.id)} aria-label={`Excluir preço de ${product.node.title}`}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!firstVariant}
+                            onClick={() => {
+                              setProductId(product.node.id);
+                              setVariantId(firstVariant?.id || "");
+                              setAdjustment("0");
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                          >
+                            Cadastrar
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -716,7 +814,7 @@ function PricesTab() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="hidden" aria-hidden="true">
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Já cadastrados ({prices.length})</CardTitle>
           <CardDescription>Produtos que já possuem preço exclusivo para assinantes.</CardDescription>
