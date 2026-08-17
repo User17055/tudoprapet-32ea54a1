@@ -11,7 +11,80 @@ import {
 } from "../_shared/payment-events.ts";
 import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
-import { deleteAsaasPayment, getAsaasPayment } from "../_shared/asaas.ts";
+import {
+  type AsaasBudget,
+  AsaasBudgetExhausted,
+  asaasCallsUsed,
+  createAsaasBudget,
+  deleteAsaasPayment,
+  getAsaasPayment,
+  isAsaasBudgetExhausted,
+} from "../_shared/asaas.ts";
+
+// Nome do lease em worker_leases. Cobre so o bloco agendado (expiracao,
+// conciliacao e recuperacao): fila de eventos e de acoes ja tem trava por linha
+// via claim_payment_events/claim_payment_actions e precisa continuar respondendo
+// a webhook sem esperar ninguem.
+const RECONCILIATION_LEASE = "asaas-reconciliation";
+// Acima do tempo que uma rodada leva, abaixo do intervalo do cron: se o worker
+// morrer no meio, o lease expira antes da proxima batida.
+const RECONCILIATION_LEASE_SECONDS = 300;
+// Intervalo minimo entre duas conciliacoes, qualquer que seja a origem. O cron
+// roda a cada 10 min, entao isto nunca recusa uma batida legitima -- serve para
+// uma rajada de `manual` nao virar rajada de chamadas ao Asaas.
+const RECONCILIATION_COOLDOWN_SECONDS = 60;
+
+// Teto de chamadas ao Asaas por execucao do worker.
+//
+// As tres varreduras juntas podem querer ate 75; o que passar do teto fica para
+// a proxima rodada, porque a fila e duravel e nada se perde -- so distribui.
+//
+// ATENCAO ao ler isto como teto da conta, porque nao e. So o caminho agendado
+// tem frequencia conhecida, e so nele o teto vira taxa:
+//
+//   conciliacao agendada  cron */10 -> 6 execucoes/h x 40 = 240 chamadas/h
+//
+//   fila de acoes         acordada por webhook, frequencia ditada pelo volume
+//                         de pagamentos. Cada execucao respeita o teto de 40,
+//                         mas o numero de execucoes por hora nao tem teto --
+//                         o que limita na pratica e existirem acoes pendentes.
+//
+//   checkout              createAsaasPayment, getAsaasPixQrCode e
+//                         findOrCreateAsaasCustomer nao recebem orcamento e
+//                         estao fora desta conta de proposito: sao cliente real
+//                         esperando na tela.
+//
+// Ou seja, 240/h e o piso garantido de consumo do agendado, nao o total da
+// conta. Para saber o total e preciso somar checkout e acoes, que dependem do
+// volume de vendas -- e o `asaas.calls` que a resposta devolve existe para isso.
+const ASAAS_CALL_BUDGET = 40;
+
+// Idade minima para conciliar uma cobranca em aberto. O webhook e o caminho
+// principal e chega em segundos; consultar uma cobranca criada agora e gastar
+// requisicao para confirmar o que ja esta a caminho. A conciliacao so existe
+// para o caso em que o webhook falhou, e isso so se sabe depois de esperar.
+const RECONCILE_MIN_AGE_MS = 3 * 60_000;
+
+function isBudgetError(error: unknown): boolean {
+  return error instanceof AsaasBudgetExhausted;
+}
+
+// So a funcao inexistente pode passar batido, e so durante o rollout. Erro de
+// permissao, timeout ou banco fora tem de cancelar a varredura: sao situacoes
+// desconhecidas, e varrer sem exclusao mutua e o cenario caro.
+//
+// PGRST202 e o PostgREST nao achando a funcao no cache de schema; 42883 e o
+// undefined_function do proprio Postgres. A checagem por mensagem existe porque
+// nem toda versao devolve codigo, e exige o nome da funcao para nao engolir um
+// "does not exist" de outra coisa.
+function isMissingRpc(error: { code?: string; message?: string }, fnName: string): boolean {
+  if (error.code === "PGRST202" || error.code === "42883") return true;
+  const message = (error.message ?? "").toLowerCase();
+  if (!message.includes(fnName.toLowerCase())) return false;
+  return message.includes("could not find") ||
+    message.includes("does not exist") ||
+    message.includes("nao existe");
+}
 
 interface PaymentRow {
   id: string;
@@ -119,7 +192,7 @@ async function finalizePaidCheckout(admin: SupabaseClient, payment: PaymentRow) 
   if (completedError) throw completedError;
 }
 
-async function recoverPaidCheckouts(admin: SupabaseClient) {
+async function recoverPaidCheckouts(admin: SupabaseClient, budget: AsaasBudget) {
   const { data, error } = await admin.from("checkout_sessions")
     .select("id")
     .eq("status", "paid_pending_shopify")
@@ -131,7 +204,12 @@ async function recoverPaidCheckouts(admin: SupabaseClient) {
   let recovered = 0;
   let skipped = 0;
   let failed = 0;
+  let budgetExhausted = false;
   for (const session of data ?? []) {
+    if (isAsaasBudgetExhausted(budget)) {
+      budgetExhausted = true;
+      break;
+    }
     try {
       const { data: payment, error: paymentError } = await admin.from("payments")
         .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
@@ -150,7 +228,7 @@ async function recoverPaidCheckouts(admin: SupabaseClient) {
       // Nunca confie apenas no estado local ao recuperar uma venda. O Asaas é a
       // autoridade financeira e pode ter recebido um estorno/chargeback enquanto
       // o worker estava indisponível.
-      const remote = await getAsaasPayment(payment.provider_payment_id);
+      const remote = await getAsaasPayment(payment.provider_payment_id, budget);
       const remoteStatus = String(remote.status || "").toUpperCase();
       if (!isPaidAsaasProviderStatus(remoteStatus)) {
         const remoteLocalStatus = mapAsaasPaymentStatus("", remoteStatus);
@@ -179,14 +257,18 @@ async function recoverPaidCheckouts(admin: SupabaseClient) {
       await finalizePaidCheckout(admin, payment as PaymentRow);
       recovered++;
     } catch (recoveryError) {
+      if (isBudgetError(recoveryError)) {
+        budgetExhausted = true;
+        break;
+      }
       failed++;
       console.error(`Falha ao recuperar checkout pago ${session.id}:`, recoveryError);
     }
   }
-  return { checked: (data ?? []).length, recovered, skipped, failed };
+  return { checked: (data ?? []).length, recovered, skipped, failed, budgetExhausted };
 }
 
-async function reconcileOpenPixPayments(admin: SupabaseClient) {
+async function reconcileOpenPixPayments(admin: SupabaseClient, budget: AsaasBudget) {
   const { data, error } = await admin.from("payments")
     .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
     .eq("is_active", true)
@@ -194,6 +276,9 @@ async function reconcileOpenPixPayments(admin: SupabaseClient) {
     // o disparo em background conseguisse concluir o draft na Shopify.
     .in("status", ["pending", "processing", "confirmed"])
     .not("provider_payment_id", "is", null)
+    // Cobranca recem-criada nao entra: o webhook chega antes e consultar aqui
+    // seria gastar requisicao para confirmar o que ja esta a caminho.
+    .lt("created_at", new Date(Date.now() - RECONCILE_MIN_AGE_MS).toISOString())
     .order("created_at", { ascending: true })
     .limit(25);
   if (error) throw error;
@@ -201,9 +286,14 @@ async function reconcileOpenPixPayments(admin: SupabaseClient) {
   let paid = 0;
   let pending = 0;
   let failed = 0;
+  let budgetExhausted = false;
   for (const row of (data ?? []) as PaymentRow[]) {
+    if (isAsaasBudgetExhausted(budget)) {
+      budgetExhausted = true;
+      break;
+    }
     try {
-      const remote = await getAsaasPayment(row.provider_payment_id!);
+      const remote = await getAsaasPayment(row.provider_payment_id!, budget);
       const remoteStatus = String(remote.status || "").toUpperCase();
       if (isPaidAsaasProviderStatus(remoteStatus)) {
         const localStatus = remoteStatus === "CONFIRMED" ? "confirmed" : "received";
@@ -213,11 +303,15 @@ async function reconcileOpenPixPayments(admin: SupabaseClient) {
         pending++;
       }
     } catch (reconciliationError) {
+      if (isBudgetError(reconciliationError)) {
+        budgetExhausted = true;
+        break;
+      }
       failed++;
       console.error(`Falha ao conciliar Pix ${row.id}:`, reconciliationError);
     }
   }
-  return { checked: (data ?? []).length, paid, pending, failed };
+  return { checked: (data ?? []).length, paid, pending, failed, budgetExhausted };
 }
 
 async function flagDuplicatePayment(admin: SupabaseClient, payment: PaymentRow) {
@@ -262,7 +356,7 @@ async function settlePaidPayment(
   if (!duplicate) await finalizePaidCheckout(admin, paid);
 }
 
-async function processCancellationAction(admin: SupabaseClient, action: ActionRow) {
+async function processCancellationAction(admin: SupabaseClient, action: ActionRow, budget: AsaasBudget) {
   const { data: payment, error } = await admin.from("payments")
     .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
     .eq("id", action.payment_id)
@@ -292,7 +386,7 @@ async function processCancellationAction(admin: SupabaseClient, action: ActionRo
     return;
   }
 
-  const remote = await getAsaasPayment(payment.provider_payment_id);
+  const remote = await getAsaasPayment(payment.provider_payment_id, budget);
   const remoteStatus = String(remote.status || "").toUpperCase();
   if (isPaidAsaasProviderStatus(remoteStatus)) {
     const localStatus = remoteStatus === "RECEIVED" || remoteStatus === "RECEIVED_IN_CASH"
@@ -302,7 +396,7 @@ async function processCancellationAction(admin: SupabaseClient, action: ActionRo
     return;
   }
 
-  const deleted = await deleteAsaasPayment(payment.provider_payment_id);
+  const deleted = await deleteAsaasPayment(payment.provider_payment_id, budget);
   if (!deleted.deleted) throw new Error("Asaas não confirmou exclusão da cobrança");
   const { error: cancelledError } = await admin.from("payments").update({
     status: "cancelled",
@@ -312,7 +406,7 @@ async function processCancellationAction(admin: SupabaseClient, action: ActionRo
   if (cancelledError) throw cancelledError;
 }
 
-async function expirePixPayments(admin: SupabaseClient) {
+async function expirePixPayments(admin: SupabaseClient, budget: AsaasBudget) {
   const now = new Date().toISOString();
   const { data, error } = await admin.from("payments")
     .select("id,checkout_session_id,status,is_active,provider_payment_id,method,pix_expires_at")
@@ -328,7 +422,12 @@ async function expirePixPayments(admin: SupabaseClient) {
   let paid = 0;
   let queued = 0;
   let failed = 0;
+  let budgetExhausted = false;
   for (const row of (data ?? []) as PaymentRow[]) {
+    if (isAsaasBudgetExhausted(budget)) {
+      budgetExhausted = true;
+      break;
+    }
     try {
       if (!row.provider_payment_id) {
         await admin.from("payments").update({ status: "cancelled", is_active: false })
@@ -339,7 +438,7 @@ async function expirePixPayments(admin: SupabaseClient) {
         continue;
       }
 
-      const remote = await getAsaasPayment(row.provider_payment_id);
+      const remote = await getAsaasPayment(row.provider_payment_id, budget);
       const remoteStatus = String(remote.status || "").toUpperCase();
       if (isPaidAsaasProviderStatus(remoteStatus)) {
         const localStatus = remoteStatus === "CONFIRMED" ? "confirmed" : "received";
@@ -388,23 +487,38 @@ async function expirePixPayments(admin: SupabaseClient) {
       if (actionError) throw actionError;
       queued++;
     } catch (expirationError) {
+      if (isBudgetError(expirationError)) {
+        budgetExhausted = true;
+        break;
+      }
       failed++;
       console.error(`Falha ao expirar Pix ${row.id}:`, expirationError);
     }
   }
-  return { claimed: (data ?? []).length, paid, queued, failed };
+  return { claimed: (data ?? []).length, paid, queued, failed, budgetExhausted };
 }
 
-async function processActions(admin: SupabaseClient) {
+async function processActions(admin: SupabaseClient, budget: AsaasBudget) {
   const { data, error } = await admin.rpc("claim_payment_actions", { p_limit: 25 });
   if (error) throw error;
   let processed = 0;
   let failed = 0;
+  let budgetExhausted = false;
 
   for (const action of (data ?? []) as ActionRow[]) {
+    if (isAsaasBudgetExhausted(budget)) {
+      // O que ja foi reivindicado e nao coube no orcamento volta para a fila
+      // agora, em vez de esperar a janela de reivindicacao de linha travada.
+      budgetExhausted = true;
+      await admin.from("payment_actions").update({
+        status: "PENDING",
+        locked_at: null,
+      }).eq("id", action.id).eq("status", "PROCESSING");
+      continue;
+    }
     try {
       if (action.action_type === "cancel_provider_charge") {
-        await processCancellationAction(admin, action);
+        await processCancellationAction(admin, action, budget);
       } else {
         throw new Error("Ação financeira exige revisão humana");
       }
@@ -418,6 +532,16 @@ async function processActions(admin: SupabaseClient) {
       if (doneError) throw doneError;
       processed++;
     } catch (actionError) {
+      if (isBudgetError(actionError)) {
+        // Nao conta como falha nem incrementa a espera: nao foi a acao que deu
+        // errado, foi a rodada que acabou.
+        budgetExhausted = true;
+        await admin.from("payment_actions").update({
+          status: "PENDING",
+          locked_at: null,
+        }).eq("id", action.id).eq("status", "PROCESSING");
+        continue;
+      }
       failed++;
       const message = actionError instanceof Error ? actionError.message : String(actionError);
       const delay = providerRetryDelay(actionError, action.attempts);
@@ -429,7 +553,7 @@ async function processActions(admin: SupabaseClient) {
       }).eq("id", action.id);
     }
   }
-  return { claimed: (data ?? []).length, processed, failed };
+  return { claimed: (data ?? []).length, processed, failed, budgetExhausted };
 }
 
 async function processEvent(admin: SupabaseClient, row: EventRow) {
@@ -490,31 +614,86 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  let expirations = { claimed: 0, paid: 0, queued: 0, failed: 0 };
+
+  // Um orcamento por requisicao, criado aqui e passado adiante. Nao pode ser
+  // estado de modulo: duas requisicoes no mesmo isolate zerariam o contador uma
+  // da outra.
+  const budget = createAsaasBudget(ASAAS_CALL_BUDGET);
+
+  // Exclusao mutua so para o bloco agendado, que e o unico que varre tabelas
+  // inteiras. Fila de eventos e de acoes tem trava por linha e segue livre, para
+  // que um webhook nao fique esperando uma conciliacao terminar.
+  let leaseRunId: string | null = null;
+  let leaseBusy = false;
+  let leaseFailed = false;
   if (runScheduledReconciliation) {
-    try {
-      expirations = await expirePixPayments(admin);
-    } catch (expirationError) {
-      console.error("Falha ao expirar cobranças Pix:", expirationError);
-      return jsonResponse({ error: "Falha ao expirar cobranças Pix" }, 500);
+    const { data: claimed, error: leaseError } = await admin.rpc("claim_worker_lease", {
+      p_name: RECONCILIATION_LEASE,
+      p_lease_seconds: RECONCILIATION_LEASE_SECONDS,
+      p_cooldown_seconds: RECONCILIATION_COOLDOWN_SECONDS,
+    });
+    if (leaseError && isMissingRpc(leaseError, "claim_worker_lease")) {
+      // Unica falha que passa: a janela do rollout, entre o deploy da funcao e o
+      // da migration. Aqui seguir sem lease e seguro porque e o comportamento
+      // que ja estava em producao, e a janela e curta e conhecida.
+      console.warn(
+        "claim_worker_lease ainda nao existe (rollout em andamento); conciliacao segue sem exclusao mutua",
+      );
+    } else if (leaseError) {
+      // Qualquer outro erro -- permissao, timeout, banco indisponivel -- e
+      // desconhecido, e varrer sem exclusao mutua e o cenario que multiplica
+      // chamadas ao Asaas. Cancela a varredura e alerta. As filas de eventos e
+      // de acoes seguem, porque nao dependem do lease.
+      leaseFailed = true;
+      console.error(
+        `ALERTA lease do worker falhou (${leaseError.code ?? "sem codigo"}): varredura agendada cancelada nesta rodada -`,
+        leaseError,
+      );
+    } else {
+      leaseRunId = typeof claimed === "string" ? claimed : null;
+      leaseBusy = leaseRunId === null;
     }
   }
+  const runScheduled = runScheduledReconciliation && !leaseBusy && !leaseFailed;
+
+  let expirations = { claimed: 0, paid: 0, queued: 0, failed: 0, budgetExhausted: false };
+  let reconciliation = { checked: 0, paid: 0, pending: 0, failed: 0, budgetExhausted: false };
+  let recovery = { checked: 0, recovered: 0, skipped: 0, failed: 0, budgetExhausted: false };
   let actions;
   try {
-    actions = await processActions(admin);
-  } catch (actionError) {
-    console.error("Falha ao reivindicar ações financeiras:", actionError);
-      return jsonResponse({ error: "Falha ao processar ações financeiras" }, 500);
-  }
-  let reconciliation = { checked: 0, paid: 0, pending: 0, failed: 0 };
-  let recovery = { checked: 0, recovered: 0, skipped: 0, failed: 0 };
-  if (runScheduledReconciliation) {
+    if (runScheduled) {
+      try {
+        expirations = await expirePixPayments(admin, budget);
+      } catch (expirationError) {
+        console.error("Falha ao expirar cobranças Pix:", expirationError);
+        return jsonResponse({ error: "Falha ao expirar cobranças Pix" }, 500);
+      }
+    }
     try {
-      reconciliation = await reconcileOpenPixPayments(admin);
-      recovery = await recoverPaidCheckouts(admin);
-    } catch (reconciliationError) {
-      console.error("Falha na conciliação financeira:", reconciliationError);
-      return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
+      actions = await processActions(admin, budget);
+    } catch (actionError) {
+      console.error("Falha ao reivindicar ações financeiras:", actionError);
+      return jsonResponse({ error: "Falha ao processar ações financeiras" }, 500);
+    }
+    if (runScheduled) {
+      try {
+        reconciliation = await reconcileOpenPixPayments(admin, budget);
+        recovery = await recoverPaidCheckouts(admin, budget);
+      } catch (reconciliationError) {
+        console.error("Falha na conciliação financeira:", reconciliationError);
+        return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
+      }
+    }
+  } finally {
+    // Devolve antes da hora para o proximo gatilho nao esperar o lease inteiro.
+    // Se esta linha nao rodar -- worker morto, timeout da funcao -- o lease
+    // expira sozinho, que e a razao de ser lease e nao lock.
+    if (leaseRunId) {
+      const { error: releaseError } = await admin.rpc("release_worker_lease", {
+        p_name: RECONCILIATION_LEASE,
+        p_run_id: leaseRunId,
+      });
+      if (releaseError) console.error("Falha ao liberar lease:", releaseError);
     }
   }
   const { data, error } = await admin.rpc("claim_payment_events", { p_limit: 25 });
@@ -548,9 +727,28 @@ Deno.serve(async (req) => {
     }
   }
 
+  const asaasCalls = asaasCallsUsed(budget);
+  const budgetExhausted = asaasCalls >= ASAAS_CALL_BUDGET;
+  if (budgetExhausted) {
+    // Uma rodada que estoura e normal e nao perde nada -- a fila e duravel e o
+    // resto sai na proxima. Varias seguidas significam acumulo, e e esse o
+    // alarme que faltava: em 17/08/2026 o primeiro aviso de volume veio por
+    // e-mail do Asaas, quando o consumo ja estava alto havia horas.
+    console.error(
+      `ALERTA orcamento Asaas esgotado: ${asaasCalls}/${ASAAS_CALL_BUDGET} chamadas em uma execucao (source=${source})`,
+    );
+  }
+
   return jsonResponse({
     source,
-    scheduledReconciliation: runScheduledReconciliation,
+    scheduledReconciliation: runScheduled,
+    // `true` quando outra execucao ja estava conciliando e esta so cuidou das
+    // filas. Nao e erro; e a exclusao mutua funcionando.
+    reconciliationSkippedByLease: leaseBusy,
+    // `true` quando o lease falhou por motivo desconhecido e a varredura foi
+    // cancelada. Diferente de leaseBusy: aqui algo esta errado e ha alerta no log.
+    reconciliationCancelledByLeaseError: leaseFailed,
+    asaas: { calls: asaasCalls, budget: ASAAS_CALL_BUDGET, exhausted: budgetExhausted },
     events: { claimed: (data ?? []).length, processed, failed },
     actions,
     expirations,
