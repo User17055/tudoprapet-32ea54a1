@@ -31,7 +31,14 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   }
 
   // O login precisa continuar acessivel para um administrador entrar durante o bloqueio.
-  if (!maintenance.active || isAdmin || location.pathname === "/login") return children;
+  // O consentimento OAuth tambem: e o fluxo de conexao dos clientes MCP.
+  if (
+    !maintenance.active ||
+    isAdmin ||
+    location.pathname === "/login" ||
+    location.pathname === "/.lovable/oauth/consent"
+  ) return children;
+
 
   const leaveAccount = async () => {
     await logout();
