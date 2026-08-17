@@ -2,13 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/supabase/vite";
 
-// A versão atual do gerador (0.26.2) transforma caminhos absolutos do Windows
-// em imports `npm:C:\\...`, que não compilam no Deno/Supabase. O bundle portátil
-// versionado foi assumido pelo projeto (sem o banner AUTO-GENERATED); no Linux
-// o plugin reconhece que não deve sobrescrever esse arquivo.
-const canGeneratePortableMcp = process.platform !== "win32";
+// A função MCP é mantida como bundle portátil em supabase/functions/mcp/index.ts.
+// O gerador foi removido para impedir que builds locais ou do Lovable a sobrescrevam.
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -19,7 +15,7 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), canGeneratePortableMcp && mcpPlugin(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
