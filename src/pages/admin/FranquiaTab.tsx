@@ -4,8 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Loader2, Store, Tag, Package } from "lucide-react";
+import { Trash2, Loader2, Store, Tag, Package, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
@@ -40,6 +41,8 @@ function AudiencePanel() {
   const [audienceRows, setAudienceRows] = useState<AudienceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [audienceFilter, setAudienceFilter] = useState<AudienceFilter>("todos");
 
@@ -104,6 +107,78 @@ function AudiencePanel() {
     });
   }, [products, filter, audienceFilter, audienceMap]);
 
+  const filteredIds = useMemo(() => filtered.map((product) => product.node.id), [filtered]);
+  const selectedFilteredCount = filteredIds.filter((id) => selectedIds.has(id)).length;
+  const allFilteredSelected = filteredIds.length > 0 && selectedFilteredCount === filteredIds.length;
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      filteredIds.forEach((id) => checked ? next.add(id) : next.delete(id));
+      return next;
+    });
+  };
+
+  const toggleSelected = (productId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(productId);
+      else next.delete(productId);
+      return next;
+    });
+  };
+
+  const applyFranchiseVisibility = async (visible: boolean) => {
+    if (selectedIds.size === 0 || bulkSaving) return;
+
+    const changes = [...selectedIds].map((productId) => {
+      const current = audienceMap.get(productId) ?? null;
+      const next: ProductAudience | null = visible
+        ? current === "cliente" ? "ambos" : current ?? "franquia"
+        : current === "ambos" ? "cliente" : current === "franquia" ? null : current;
+      return { productId, current, next };
+    }).filter((change) => change.next !== change.current);
+
+    if (changes.length === 0) {
+      toast.info("Os produtos selecionados já estão com essa configuração.");
+      return;
+    }
+
+    setBulkSaving(true);
+    const upserts = changes
+      .filter((change): change is typeof change & { next: ProductAudience } => change.next !== null)
+      .map((change) => ({ shopify_product_id: change.productId, audience: change.next }));
+    const deletions = changes.filter((change) => change.next === null).map((change) => change.productId);
+
+    const results: Array<{ error: { message: string } | null }> = [];
+    if (upserts.length > 0) {
+      results.push(await supabase.from("product_audience").upsert(upserts, { onConflict: "shopify_product_id" }));
+    }
+    for (let index = 0; index < deletions.length; index += 75) {
+      results.push(await supabase.from("product_audience").delete().in("shopify_product_id", deletions.slice(index, index + 75)));
+    }
+    const failure = results.find((result) => result.error)?.error;
+    setBulkSaving(false);
+
+    if (failure) {
+      toast.error("Erro ao alterar em massa: " + failure.message);
+      await load();
+      return;
+    }
+
+    invalidateAudienceCache();
+    setAudienceRows((currentRows) => {
+      const nextRows = new Map(currentRows.map((row) => [row.shopify_product_id, row.audience]));
+      changes.forEach((change) => {
+        if (change.next === null) nextRows.delete(change.productId);
+        else nextRows.set(change.productId, change.next);
+      });
+      return [...nextRows].map(([shopify_product_id, audience]) => ({ shopify_product_id, audience }));
+    });
+    setSelectedIds(new Set());
+    toast.success(`${changes.length} produto${changes.length === 1 ? "" : "s"} atualizado${changes.length === 1 ? "" : "s"}.`);
+  };
+
   return (
     <Card>
       <CardHeader className="p-4 pb-3">
@@ -137,6 +212,30 @@ function AudiencePanel() {
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2.5">
+          <Checkbox
+            checked={allFilteredSelected ? true : selectedFilteredCount > 0 ? "indeterminate" : false}
+            onCheckedChange={(checked) => toggleAllFiltered(checked === true)}
+            aria-label="Selecionar todos os produtos filtrados"
+            disabled={bulkSaving || filtered.length === 0}
+          />
+          <span className="mr-auto text-sm font-medium">
+            {selectedIds.size === 0 ? "Selecionar produtos" : `${selectedIds.size} selecionado${selectedIds.size === 1 ? "" : "s"}`}
+          </span>
+          {selectedIds.size > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} disabled={bulkSaving}>
+              Limpar
+            </Button>
+          )}
+          <Button size="sm" onClick={() => void applyFranchiseVisibility(true)} disabled={bulkSaving || selectedIds.size === 0}>
+            {bulkSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+            Exibir na franquia
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void applyFranchiseVisibility(false)} disabled={bulkSaving || selectedIds.size === 0}>
+            <EyeOff className="mr-2 h-4 w-4" />
+            Ocultar da franquia
+          </Button>
+        </div>
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
         ) : filtered.length === 0 ? (
@@ -145,6 +244,14 @@ function AudiencePanel() {
           <Table className="[&_th]:h-9 [&_td]:py-2.5">
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allFilteredSelected ? true : selectedFilteredCount > 0 ? "indeterminate" : false}
+                    onCheckedChange={(checked) => toggleAllFiltered(checked === true)}
+                    aria-label="Selecionar todos os produtos filtrados"
+                    disabled={bulkSaving}
+                  />
+                </TableHead>
                 <TableHead>Produto</TableHead>
                 <TableHead className="w-56">Visível para</TableHead>
               </TableRow>
@@ -155,6 +262,14 @@ function AudiencePanel() {
                 const img = p.node.images.edges[0]?.node;
                 return (
                   <TableRow key={p.node.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(p.node.id)}
+                        onCheckedChange={(checked) => toggleSelected(p.node.id, checked === true)}
+                        aria-label={`Selecionar ${p.node.title}`}
+                        disabled={bulkSaving}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
@@ -182,7 +297,7 @@ function AudiencePanel() {
                             p.node.id,
                             value as ProductAudience | typeof HIDDEN_AUDIENCE_VALUE,
                           )}
-                          disabled={savingId === p.node.id}
+                          disabled={bulkSaving || savingId === p.node.id}
                         >
                           <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                           <SelectContent>
