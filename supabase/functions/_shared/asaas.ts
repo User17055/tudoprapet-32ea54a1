@@ -57,24 +57,26 @@ function config() {
   return { apiKey, baseUrl };
 }
 
-// Teto de chamadas por execucao.
+// Teto de chamadas ao Asaas por execucao.
 //
-// Toda requisicao ao Asaas passa por `asaasRequest`, entao contar aqui e contar
-// tudo. Sem isto o consumo e emergente: depende de quantos gatilhos dispararam e
+// Toda requisicao passa por `asaasRequest`, entao e aqui que da para contar
+// tudo. Sem teto o consumo e emergente: depende de quantos gatilhos dispararam e
 // de quantas linhas cada varredura encontrou, que foi como se chegou aos 30.000
-// do bloqueio de 17/08/2026. Com o teto ele vira uma conta:
+// do bloqueio de 17/08/2026.
 //
-//     chamadas/hora = (60 / intervalo_do_cron_em_min) x orcamento
+// O orcamento e um objeto criado por requisicao e passado explicitamente, e nao
+// estado de modulo. Um isolate do Deno atende varias requisicoes e pode atender
+// duas ao mesmo tempo: com contador global, a segunda execucao zeraria o
+// contador da primeira no meio da varredura dela, e as duas juntas gastariam
+// muito mais que o teto -- exatamente o que este mecanismo existe para impedir.
 //
-// Quem nao chama `startAsaasBudget` fica sem teto -- de proposito. O caminho do
-// checkout cria a cobranca de um cliente real e nao pode ser recusado por causa
-// de uma varredura de fundo; quem se limita e o worker.
-//
-// O estado e do isolate, nao da requisicao. Se o Deno reaproveitar o isolate
-// para duas execucoes sobrepostas, elas dividem o mesmo orcamento -- o erro cai
-// para o lado seguro.
-let callBudget = Number.POSITIVE_INFINITY;
-let callsUsed = 0;
+// Quem nao passa orcamento nao tem teto, de proposito. O checkout cria a
+// cobranca de um cliente real e nao pode ser recusado por causa de uma varredura
+// de fundo; quem se limita e o worker.
+export interface AsaasBudget {
+  readonly limit: number;
+  used: number;
+}
 
 export class AsaasBudgetExhausted extends Error {
   constructor(limit: number) {
@@ -83,24 +85,30 @@ export class AsaasBudgetExhausted extends Error {
   }
 }
 
-export function startAsaasBudget(limit: number): void {
-  callBudget = Number.isFinite(limit) && limit > 0 ? limit : Number.POSITIVE_INFINITY;
-  callsUsed = 0;
+export function createAsaasBudget(limit: number): AsaasBudget {
+  return { limit: Number.isFinite(limit) && limit > 0 ? limit : Number.POSITIVE_INFINITY, used: 0 };
 }
 
-export function asaasCallsUsed(): number {
-  return callsUsed;
+export function asaasCallsUsed(budget: AsaasBudget): number {
+  return budget.used;
 }
 
-export function isAsaasBudgetExhausted(): boolean {
-  return callsUsed >= callBudget;
+export function isAsaasBudgetExhausted(budget: AsaasBudget): boolean {
+  return budget.used >= budget.limit;
 }
 
-async function asaasRequest<T>(path: string, init: RequestInit = {}, timeoutMs = 12_000): Promise<T> {
-  if (callsUsed >= callBudget) throw new AsaasBudgetExhausted(callBudget);
-  // Conta antes de sair: uma requisicao que falha ou estoura o timeout ja gastou
-  // a cota do lado do Asaas.
-  callsUsed++;
+async function asaasRequest<T>(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = 12_000,
+  budget?: AsaasBudget,
+): Promise<T> {
+  if (budget) {
+    if (budget.used >= budget.limit) throw new AsaasBudgetExhausted(budget.limit);
+    // Conta antes de sair: uma requisicao que falha ou estoura o timeout ja
+    // gastou a cota do lado do Asaas.
+    budget.used++;
+  }
 
   const { apiKey, baseUrl } = config();
   const controller = new AbortController();
@@ -182,16 +190,19 @@ export async function findAsaasPaymentByExternalReference(reference: string): Pr
   return result.data?.[0] ?? null;
 }
 
-export function getAsaasPayment(id: string): Promise<AsaasPayment> {
-  return asaasRequest<AsaasPayment>(`/payments/${encodeURIComponent(id)}`);
+export function getAsaasPayment(id: string, budget?: AsaasBudget): Promise<AsaasPayment> {
+  return asaasRequest<AsaasPayment>(`/payments/${encodeURIComponent(id)}`, {}, 12_000, budget);
 }
 
 export function getAsaasPixQrCode(id: string): Promise<AsaasPixQrCode> {
   return asaasRequest<AsaasPixQrCode>(`/payments/${encodeURIComponent(id)}/pixQrCode`);
 }
 
-export function deleteAsaasPayment(id: string): Promise<{ deleted: boolean; id: string }> {
+export function deleteAsaasPayment(
+  id: string,
+  budget?: AsaasBudget,
+): Promise<{ deleted: boolean; id: string }> {
   return asaasRequest<{ deleted: boolean; id: string }>(`/payments/${encodeURIComponent(id)}`, {
     method: "DELETE",
-  });
+  }, 12_000, budget);
 }
