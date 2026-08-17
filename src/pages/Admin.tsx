@@ -686,7 +686,7 @@ function PricesTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="w-40">Status</TableHead>
                   <TableHead>Variante</TableHead>
                   <TableHead className="text-right">Preço Shopify</TableHead>
                   <TableHead className="text-right">Custo estimado</TableHead>
@@ -725,9 +725,13 @@ function PricesTab() {
                       </TableCell>
                       <TableCell>
                         <span className={cn(
-                          "inline-flex rounded-full px-2 py-1 text-xs font-semibold",
-                          registeredPrice ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800",
+                          "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold",
+                          registeredPrice ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700",
                         )}>
+                          <span className={cn(
+                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                            registeredPrice ? "bg-emerald-500" : "bg-amber-500",
+                          )} />
                           {registeredPrice ? "Cadastrado" : "Não cadastrado"}
                         </span>
                       </TableCell>
