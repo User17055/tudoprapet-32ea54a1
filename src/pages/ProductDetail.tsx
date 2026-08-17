@@ -31,6 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { goToCheckout } from "@/lib/checkout";
 import { ProductImage } from "@/components/ProductImage";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
+import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
 
 const ProductDetail = () => {
   const navigate = useNavigate();
@@ -50,8 +51,6 @@ const ProductDetail = () => {
     attributes: { key: string; value: string }[];
   }>({ categories: [], brand: null, attributes: [] });
   const addItem = useCartStore((s) => s.addItem);
-  const openCartOnFirstAdd = useCartStore((s) => s.openCartOnFirstAdd);
-  // (carrinho NÃO é tocado pelo botão Comprar Agora)
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
@@ -281,7 +280,7 @@ const ProductDetail = () => {
 
   const handleAdd = async () => {
     if (!variant) return;
-    const addPromise = addItem({
+    const added = await addItem({
       product,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -289,9 +288,8 @@ const ProductDetail = () => {
       quantity,
       selectedOptions: variant.selectedOptions || [],
     });
-    openCartOnFirstAdd();
-    await addPromise;
-    toast.success("Adicionado à sacola!", { description: node.title, position: "top-center" });
+    if (added) notifyCartItemAdded();
+    else notifyCartItemAddFailed();
   };
 
   const handleBuyNow = async () => {
@@ -299,7 +297,26 @@ const ProductDetail = () => {
     setBuyingNow(true);
 
     if (customCheckoutEnabled) {
-      startCustomCheckout(navigate, [{ variantId: variant.id, quantity }], "buy_now");
+      const added = await addItem({
+        product,
+        variantId: variant.id,
+        variantTitle: variant.title,
+        price: variant.price,
+        quantity,
+        selectedOptions: variant.selectedOptions || [],
+      });
+      const currentItems = useCartStore.getState().items;
+      const addedItem = currentItems.find((item) => item.variantId === variant.id);
+      if (!added || !addedItem) {
+        notifyCartItemAddFailed();
+        setBuyingNow(false);
+        return;
+      }
+      startCustomCheckout(
+        navigate,
+        currentItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+        "cart",
+      );
       setBuyingNow(false);
       return;
     }

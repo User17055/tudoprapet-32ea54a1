@@ -6,9 +6,9 @@ import { useProductAudience } from "@/hooks/useProductAudience";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { Loader2, Plus, ShoppingCart, Store } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { ProductImage } from "@/components/ProductImage";
+import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
 
 interface Props {
   product: ShopifyProduct;
@@ -110,14 +110,12 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
   const originalPrice = compareAtPrice;
   const twoInstallmentPrice = price > 0 ? (price * (1 + TWO_INSTALLMENTS_RATE)) / 2 : null;
 
-  const openCartOnFirstAdd = useCartStore((s) => s.openCartOnFirstAdd);
-
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!variant) return;
 
-    const addPromise = addItem({
+    const added = await addItem({
       product: selectedProduct,
       variantId: variant.id,
       variantTitle: variant.title,
@@ -125,13 +123,8 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
       quantity: 1,
       selectedOptions: variant.selectedOptions || [],
     });
-    openCartOnFirstAdd();
-    await addPromise;
-
-    toast.success("Adicionado ao carrinho!", {
-      description: node.title,
-      position: "top-center",
-    });
+    if (added) notifyCartItemAdded();
+    else notifyCartItemAddFailed();
   };
 
   return (

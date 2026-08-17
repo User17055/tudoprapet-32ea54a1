@@ -23,7 +23,7 @@ interface CartStore {
   isSyncing: boolean;
   isCartOpen: boolean;
   hasAutoOpenedCart: boolean;
-  addItem: (item: Omit<CartItem, 'lineId'>) => Promise<void>;
+  addItem: (item: Omit<CartItem, 'lineId'>) => Promise<boolean>;
   updateQuantity: (variantId: string, quantity: number) => Promise<void>;
   removeItem: (variantId: string) => Promise<void>;
   clearCart: () => void;
@@ -73,7 +73,7 @@ export const useCartStore = create<CartStore>()(
       addItem: async (item) => {
         const { items, cartId, clearCart } = get();
         const existingItem = items.find(i => i.variantId === item.variantId);
-        if (existingItem && !existingItem.lineId) return;
+        if (existingItem && !existingItem.lineId) return false;
 
         const optimisticItems: CartItem[] = existingItem
           ? items.map(i => i.variantId === item.variantId
@@ -93,24 +93,38 @@ export const useCartStore = create<CartStore>()(
                   ? { ...i, lineId: result.lineId }
                   : i),
               });
-            } else set({ items });
+              return true;
+            }
+            set({ items });
+            return false;
           } else if (existingItem) {
             const newQuantity = existingItem.quantity + item.quantity;
             const result = await updateShopifyCartLine(cartId, existingItem.lineId, newQuantity);
-            if (result.cartNotFound) clearCart();
-            else if (!result.success) set({ items });
+            if (result.cartNotFound) {
+              clearCart();
+              return false;
+            }
+            if (!result.success) {
+              set({ items });
+              return false;
+            }
+            return true;
           } else {
             const result = await addLineToShopifyCart(cartId, { ...item, lineId: null });
             if (result.success) {
               set({ items: get().items.map(i => i.variantId === item.variantId
                 ? { ...i, lineId: result.lineId ?? null }
                 : i) });
-            } else if (result.cartNotFound) clearCart();
+              return true;
+            }
+            if (result.cartNotFound) clearCart();
             else set({ items });
+            return false;
           }
         } catch (error) {
           console.error('Failed to add item:', error);
           set({ items });
+          return false;
         } finally {
           set({ isLoading: false });
         }

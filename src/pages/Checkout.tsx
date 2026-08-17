@@ -60,6 +60,7 @@ import {
   readCheckoutLaunch,
 } from "@/lib/customCheckout";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
 import { useCartStore, type CartItem } from "@/stores/cartStore";
 import { toast } from "sonner";
 
@@ -1115,6 +1116,7 @@ export default function Checkout() {
       ({ node }) => node.availableForSale,
     )?.node;
     if (!variant) return;
+    let added = true;
     if (previewMode) {
       setSummary((current) => {
         if (!current) return current;
@@ -1159,7 +1161,7 @@ export default function Checkout() {
         };
       });
     } else {
-      await addItem({
+      added = await addItem({
         product,
         variantId: variant.id,
         variantTitle: variant.title,
@@ -1168,10 +1170,8 @@ export default function Checkout() {
         selectedOptions: variant.selectedOptions || [],
       });
     }
-    toast.success("Produto adicionado à sacola", {
-      description: product.node.title,
-      position: "top-center",
-    });
+    if (added) notifyCartItemAdded();
+    else notifyCartItemAddFailed();
   };
 
   if (!customCheckoutEnabled && !previewMode)
