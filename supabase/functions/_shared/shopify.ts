@@ -738,6 +738,7 @@ export async function setDraftOrderTaxCredential(
     body: JSON.stringify({
       query: `query DraftLines($id: ID!) {
         draftOrder(id: $id) {
+          localizedFields(first: 5) { nodes { key value } }
           shippingLine { title originalPriceSet { shopMoney { amount } } }
           lineItems(first: 100) {
             nodes {
@@ -756,6 +757,16 @@ export async function setDraftOrderTaxCredential(
     }),
   });
   const currentBody = currentRes.ok ? await currentRes.json() : null;
+  const currentLocalizedFields = currentBody?.data?.draftOrder?.localizedFields?.nodes ?? [];
+  const credentialAlreadyStored = currentLocalizedFields.some(
+    (node: { key?: string; value?: string }) =>
+      node?.key === "TAX_CREDENTIAL_BR" && String(node?.value || "").replace(/\D/g, "") === value,
+  );
+  // A criação do rascunho já grava a credencial. Não repita um
+  // draftOrderUpdate depois do pagamento: além de desnecessário, uma segunda
+  // atualização pode ser rejeitada e deixar uma venda paga presa em Rascunhos.
+  if (credentialAlreadyStored) return { ok: true, error: null };
+
   const currentNodes = currentBody?.data?.draftOrder?.lineItems?.nodes as
     | Record<string, unknown>[]
     | undefined;
