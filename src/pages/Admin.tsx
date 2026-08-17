@@ -640,7 +640,82 @@ function PricesTab() {
 
       <Card>
         <CardHeader className="p-4 pb-3">
-          <CardTitle className="text-base">Preços cadastrados ({prices.length})</CardTitle>
+          <CardTitle className="text-base">Ainda não cadastrados ({availableProducts.length})</CardTitle>
+          <CardDescription>Produtos do Shopify que ainda não possuem preço para assinantes.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : availableProducts.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">Todos os produtos já possuem preço de assinante.</p>
+          ) : (
+            <Table className="[&_th]:h-9 [&_td]:py-2.5">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="text-right">Preço Shopify</TableHead>
+                  <TableHead className="text-right">Custo estimado</TableHead>
+                  <TableHead className="w-28"><span className="sr-only">Ação</span></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {availableProducts.map(product => {
+                  const firstVariant = product.node.variants.edges[0]?.node;
+                  const productPrice = firstVariant ? Number(firstVariant.price.amount) : null;
+                  const productImage = product.node.images.edges[0]?.node;
+                  return (
+                    <TableRow key={product.node.id}>
+                      <TableCell>
+                        <div className="flex min-w-[220px] items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                            {productImage ? (
+                              <img
+                                src={productImage.url}
+                                alt={productImage.altText || product.node.title}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Package className="h-5 w-5 text-muted-foreground" />
+                            )}
+                          </div>
+                          <span className="font-medium line-clamp-2">{product.node.title}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {productPrice === null ? "—" : `R$ ${productPrice.toFixed(2)}`}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {productPrice === null ? "—" : `R$ ${(productPrice / 2).toFixed(2)}`}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!firstVariant}
+                          onClick={() => {
+                            setProductId(product.node.id);
+                            setVariantId(firstVariant?.id || "");
+                            setAdjustment("0");
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                        >
+                          Cadastrar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Já cadastrados ({prices.length})</CardTitle>
+          <CardDescription>Produtos que já possuem preço exclusivo para assinantes.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           {loading ? (
