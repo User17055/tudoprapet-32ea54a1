@@ -531,7 +531,10 @@ export async function createFiscalDraftOrder(
         useCustomerDefaultAddress: false,
         tags: input.tags,
         note: input.note,
-        customAttributes: input.customAttributes,
+        customAttributes: [
+          ...input.customAttributes.filter((attribute) => attribute.key !== "checkout_draft_format"),
+          { key: "checkout_draft_format", value: "graphql_v2" },
+        ],
       } },
     }),
   });
@@ -618,6 +621,88 @@ export async function createFiscalDraftOrder(
     error: null,
   };
 
+}
+
+/**
+ * Recria um draft legado no formato GraphQL. Usado somente depois de confirmar
+ * o pagamento, quando a Shopify nao aceita persistir o CPF/CNPJ no draft REST.
+ */
+export async function cloneLegacyFiscalDraftOrder(
+  draftOrderId: string,
+  cpfCnpj: string,
+  token: string,
+): Promise<FiscalDraftOrderResult> {
+  const response = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
+    headers: { "X-Shopify-Access-Token": token },
+  });
+  const draft = response.ok ? (await response.json())?.draft_order : null;
+  if (!draft) {
+    return {
+      requestOk: false,
+      invoiceUrl: null,
+      draftOrderId: null,
+      taxCredentialStored: false,
+      error: `Shopify nao permitiu ler o rascunho legado (HTTP ${response.status}).`,
+    };
+  }
+
+  const attributes = (draft.note_attributes ?? []).map((attribute: Record<string, unknown>) => ({
+    key: String(attribute.name || ""),
+    value: String(attribute.value || ""),
+  })).filter((attribute: { key: string }) => attribute.key);
+  if (attributes.some((attribute: { key: string; value: string }) =>
+    attribute.key === "checkout_draft_format" && attribute.value === "graphql_v2"
+  )) {
+    return {
+      requestOk: false,
+      invoiceUrl: draft.invoice_url ?? null,
+      draftOrderId: String(draft.id),
+      taxCredentialStored: false,
+      error: "O rascunho ja usa o formato fiscal novo e nao sera duplicado.",
+    };
+  }
+
+  const lineItems = (draft.line_items ?? []).map((line: Record<string, unknown>) => ({
+    variant_id: line.variant_id,
+    quantity: Number(line.quantity) || 1,
+    ...(line.applied_discount ? { applied_discount: line.applied_discount } : {}),
+  }));
+  if (!lineItems.length || lineItems.some((line: Record<string, unknown>) => !line.variant_id)) {
+    return {
+      requestOk: false,
+      invoiceUrl: draft.invoice_url ?? null,
+      draftOrderId: String(draft.id),
+      taxCredentialStored: false,
+      error: "O rascunho antigo possui item sem variante Shopify e nao pode ser recriado automaticamente.",
+    };
+  }
+
+  const shippingLine = draft.shipping_line as Record<string, unknown> | null;
+  return createFiscalDraftOrder({
+    lineItems,
+    email: String(draft.email || draft.customer?.email || ""),
+    cpfCnpj,
+    shippingLine: {
+      title: String(shippingLine?.title || "Retirada na loja"),
+      price: Number(shippingLine?.price || 0).toFixed(2),
+    },
+    shippingAddress: draft.shipping_address || undefined,
+    billingAddress: draft.billing_address || undefined,
+    tags: String(draft.tags || "").split(",").map((tag) => tag.trim()).filter(Boolean),
+    note: String(draft.note || ""),
+    customAttributes: attributes,
+  }, token);
+}
+
+export async function deleteDraftOrder(draftOrderId: string, token: string): Promise<boolean> {
+  const response = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
+    method: "DELETE",
+    headers: { "X-Shopify-Access-Token": token },
+  });
+  if (!response.ok && response.status !== 404) {
+    console.error(`Nao foi possivel remover o rascunho legado ${draftOrderId}: HTTP ${response.status}`);
+  }
+  return response.ok || response.status === 404;
 }
 
 export interface CompleteDraftOrderResult {

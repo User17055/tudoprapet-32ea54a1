@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
-import { completeDraftOrder } from "../_shared/shopify.ts";
+import { cloneLegacyFiscalDraftOrder, completeDraftOrder, deleteDraftOrder } from "../_shared/shopify.ts";
 import { getAsaasPayment } from "../_shared/asaas.ts";
 import { isPaidAsaasProviderStatus, mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 
@@ -168,12 +168,39 @@ async function recoverPaidOrders(
       continue;
     }
     const cpfCnpj = session.customer_snapshot?.cpfCnpj || profileCpfByUser.get(String(session.user_id || "")) || null;
-    const completed = await completeDraftOrder(
+    const legacyDraftOrderId = String(session.shopify_draft_order_id);
+    let activeDraftOrderId = legacyDraftOrderId;
+    let completed = await completeDraftOrder(
       session.shopify_draft_order_id,
       shopifyToken,
       false,
       cpfCnpj,
     );
+    const fiscalFailure = /CPF|CNPJ|credencial fiscal|imposto duplicado/i.test(completed.error || "");
+    if ((!completed.requestOk || !completed.orderId) && fiscalFailure && cpfCnpj) {
+      const replacement = await cloneLegacyFiscalDraftOrder(legacyDraftOrderId, cpfCnpj, shopifyToken);
+      if (replacement.requestOk && replacement.draftOrderId && replacement.taxCredentialStored) {
+        const { data: relinked, error: relinkError } = await adminDb.from("checkout_sessions")
+          .update({ shopify_draft_order_id: replacement.draftOrderId })
+          .eq("id", session.id)
+          .eq("shopify_draft_order_id", legacyDraftOrderId)
+          .is("shopify_order_id", null)
+          .select("id")
+          .maybeSingle();
+        if (relinkError || !relinked) {
+          console.error(`Nao foi possivel vincular o draft substituto da venda ${session.id}:`, relinkError);
+          await deleteDraftOrder(replacement.draftOrderId, shopifyToken);
+        } else {
+          activeDraftOrderId = replacement.draftOrderId;
+          completed = await completeDraftOrder(activeDraftOrderId, shopifyToken, false, cpfCnpj);
+          if (completed.requestOk && completed.orderId) {
+            await deleteDraftOrder(legacyDraftOrderId, shopifyToken);
+          }
+        }
+      } else if (replacement.error) {
+        completed = { ...completed, error: replacement.error };
+      }
+    }
     if (!completed.requestOk || !completed.orderId) {
       await adminDb.from("checkout_sessions").update({ status: "paid_pending_shopify" })
         .eq("id", session.id).is("shopify_order_id", null);
