@@ -6,7 +6,6 @@ import {
   buildDraftLineItems,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
-  toGraphqlDraftLineItems,
 } from "../_shared/pricing.ts";
 import { createFiscalDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
@@ -234,7 +233,7 @@ Deno.serve(async (req) => {
     const lineItems = buildDraftLineItems(input.items, specialPriceMap, currentPriceMap, discountTitle);
 
     const draft = await createFiscalDraftOrder({
-      lineItems: toGraphqlDraftLineItems(lineItems),
+      lineItems,
       customerId: `gid://shopify/Customer/${shopifyCustomerId}`,
       email: input.customer.email,
       cpfCnpj: input.customer.cpfCnpj,
