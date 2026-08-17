@@ -227,6 +227,18 @@ export interface FiscalDraftOrderResult extends DraftOrderResult {
   error: string | null;
 }
 
+export interface FiscalDraftOrderInput {
+  lineItems: Record<string, unknown>[];
+  email: string;
+  cpfCnpj: string;
+  shippingLine: { title: string; price: string };
+  shippingAddress?: Record<string, unknown>;
+  billingAddress?: Record<string, unknown>;
+  tags: string[];
+  note: string;
+  customAttributes: Array<{ key: string; value: string }>;
+}
+
 export interface ShopifyVariantCheckoutDetail {
   id: string;
   numericId: number;
@@ -465,17 +477,7 @@ export async function createDraftOrder(
 
 /** Cria o draft por GraphQL com variantes reais e CPF/CNPJ na mesma mutacao. */
 export async function createFiscalDraftOrder(
-  input: {
-    lineItems: Record<string, unknown>[];
-    email: string;
-    cpfCnpj: string;
-    shippingLine: { title: string; price: string };
-    shippingAddress?: Record<string, unknown>;
-    billingAddress?: Record<string, unknown>;
-    tags: string[];
-    note: string;
-    customAttributes: Array<{ key: string; value: string }>;
-  },
+  input: FiscalDraftOrderInput,
   token: string,
 ): Promise<FiscalDraftOrderResult> {
   const value = String(input.cpfCnpj || "").replace(/\D/g, "");
@@ -505,6 +507,66 @@ export async function createFiscalDraftOrder(
   const expectedVariantIds = input.lineItems
     .map((line) => String(line.variant_id || "").split("/").pop())
     .sort();
+  const fallbackToRest = async (reason: string): Promise<FiscalDraftOrderResult> => {
+    console.warn(`Criacao GraphQL indisponivel; usando REST compativel: ${reason}`);
+    const response = await fetch(`${ADMIN_API}/draft_orders.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        draft_order: {
+          line_items: input.lineItems,
+          email: input.email,
+          tax_exempt: true,
+          shipping_line: { title: input.shippingLine.title, price: input.shippingLine.price },
+          shipping_address: input.shippingAddress,
+          billing_address: input.billingAddress,
+          use_customer_default_address: false,
+          tags: input.tags.join(","),
+          note: input.note,
+          note_attributes: [
+            ...input.customAttributes.filter((attribute) => attribute.key !== "checkout_draft_format"),
+            { key: "checkout_draft_format", value: "rest_fallback" },
+          ].map((attribute) => ({ name: attribute.key, value: attribute.value })),
+        },
+      }),
+    });
+    const body = await response.json().catch(() => null);
+    const draft = body?.draft_order;
+    const fallbackDraftId = draft?.id ? String(draft.id) : null;
+    if (!response.ok || !fallbackDraftId) {
+      return {
+        requestOk: false,
+        invoiceUrl: draft?.invoice_url ?? null,
+        draftOrderId: fallbackDraftId,
+        taxCredentialStored: false,
+        error: shopifyErrorMessage(body?.errors, `Shopify nao criou o rascunho (HTTP ${response.status}).`),
+      };
+    }
+    const actualVariantIds = (draft.line_items ?? [])
+      .map((line: { variant_id?: string | number | null }) => String(line.variant_id || ""))
+      .filter(Boolean)
+      .sort();
+    const linked = expectedVariantIds.length === actualVariantIds.length &&
+      expectedVariantIds.every((variantId, index) => variantId === actualVariantIds[index]);
+    if (!linked) {
+      await deleteDraftOrder(fallbackDraftId, token);
+      return {
+        requestOk: false,
+        invoiceUrl: null,
+        draftOrderId: null,
+        taxCredentialStored: false,
+        error: "A Shopify nao vinculou o produto cadastrado ao rascunho.",
+      };
+    }
+    const credential = await setDraftOrderTaxCredential(fallbackDraftId, value, token);
+    return {
+      requestOk: credential.ok,
+      invoiceUrl: draft.invoice_url ?? null,
+      draftOrderId: fallbackDraftId,
+      taxCredentialStored: credential.ok,
+      error: credential.error,
+    };
+  };
 
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
@@ -561,13 +623,8 @@ export async function createFiscalDraftOrder(
   if (!response.ok || !draftOrderId || creationErrors.length) {
     const error = shopifyErrorMessage(creationErrors, `Shopify nao criou o rascunho (HTTP ${response.status}).`);
     console.error("Criacao GraphQL do rascunho falhou:", error);
-    return {
-      requestOk: false,
-      invoiceUrl,
-      draftOrderId,
-      taxCredentialStored: false,
-      error,
-    };
+    if (draftOrderId) await deleteDraftOrder(draftOrderId, token);
+    return fallbackToRest(error);
   }
 
   const actualVariantIds = (draft?.lineItems?.nodes || [])
@@ -584,33 +641,17 @@ export async function createFiscalDraftOrder(
       method: "DELETE",
       headers: { "X-Shopify-Access-Token": token },
     }).catch(() => null);
-    return {
-      requestOk: false,
-      invoiceUrl: null,
-      draftOrderId: null,
-      taxCredentialStored: false,
-      error: "A Shopify nao vinculou o produto cadastrado ao rascunho.",
-    };
+    return fallbackToRest("A criacao GraphQL nao vinculou as variantes.");
   }
 
   const credentialStored = hasCredential(draft?.localizedFields?.nodes ?? []);
   if (!credentialStored) {
-    return {
-      requestOk: false,
-      invoiceUrl,
-      draftOrderId,
-      taxCredentialStored: false,
-      error: "A Shopify criou o rascunho, mas nao gravou o CPF/CNPJ.",
-    };
+    await deleteDraftOrder(draftOrderId, token);
+    return fallbackToRest("A criacao GraphQL nao persistiu o CPF/CNPJ.");
   }
   if (draft?.taxExempt !== true) {
-    return {
-      requestOk: false,
-      invoiceUrl,
-      draftOrderId,
-      taxCredentialStored: true,
-      error: "A Shopify nao removeu o imposto duplicado do rascunho.",
-    };
+    await deleteDraftOrder(draftOrderId, token);
+    return fallbackToRest("A criacao GraphQL manteve imposto duplicado.");
   }
 
   return {

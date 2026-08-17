@@ -2013,22 +2013,21 @@ function PaymentCheckoutScreen({
         © 2026 TudoPraPet. Todos os direitos reservados.
       </footer>
       {processingCard && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white px-6">
           <div
-            role="dialog"
+            role="status"
             aria-modal="true"
             aria-labelledby="card-processing-title"
             aria-describedby="card-processing-description"
-            className="w-full max-w-sm rounded-2xl bg-white p-7 text-center shadow-2xl"
+            className="w-full max-w-md text-center"
           >
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-800" aria-hidden="true" />
-            </div>
+            <img src={logo} alt="TudoPraPet" className="mx-auto mb-10 w-48 sm:w-56" />
+            <Loader2 className="mx-auto mb-5 h-9 w-9 animate-spin text-blue-800" aria-hidden="true" />
             <h2 id="card-processing-title" className="text-xl font-bold text-slate-950">
               Processando seu pagamento
             </h2>
-            <p id="card-processing-description" className="mt-2 text-sm leading-relaxed text-slate-600">
-              Estamos validando os dados com segurança junto ao emissor do cartão. Isso pode levar alguns segundos.
+            <p id="card-processing-description" className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-600">
+              Aguarde enquanto confirmamos os dados com segurança. Isso pode levar alguns segundos.
             </p>
             <p className="mt-4 text-xs font-medium text-slate-500">
               Não feche nem atualize esta página.
