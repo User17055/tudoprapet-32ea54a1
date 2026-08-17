@@ -44,8 +44,11 @@ export function useMaintenanceMode() {
     load();
     const clock = window.setInterval(() => setNow(Date.now()), 1_000);
     const refresh = window.setInterval(load, 30_000);
+    // O hook é usado simultaneamente pelo bloqueio global e pela aba do admin.
+    // Cada instância precisa do próprio canal; reutilizar o mesmo nome faz o
+    // Supabase rejeitar novos callbacks depois que o primeiro já foi assinado.
     const channel = supabase
-      .channel("site-maintenance-status")
+      .channel(`site-maintenance-status:${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "site_maintenance" },
