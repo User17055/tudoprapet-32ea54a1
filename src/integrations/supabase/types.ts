@@ -121,6 +121,59 @@ export type Database = {
           },
         ]
       }
+      checkout_attempt_logs: {
+        Row: {
+          checkout_session_id: string | null
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          error_message: string | null
+          id: string
+          metadata: Json
+          payment_method: string
+          provider_payment_id: string | null
+          stage: string
+          success: boolean
+          user_id: string | null
+        }
+        Insert: {
+          checkout_session_id?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json
+          payment_method?: string
+          provider_payment_id?: string | null
+          stage: string
+          success: boolean
+          user_id?: string | null
+        }
+        Update: {
+          checkout_session_id?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          error_message?: string | null
+          id?: string
+          metadata?: Json
+          payment_method?: string
+          provider_payment_id?: string | null
+          stage?: string
+          success?: boolean
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkout_attempt_logs_checkout_session_id_fkey"
+            columns: ["checkout_session_id"]
+            isOneToOne: false
+            referencedRelation: "checkout_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checkout_customer_profiles: {
         Row: {
           asaas_customer_id: string | null
