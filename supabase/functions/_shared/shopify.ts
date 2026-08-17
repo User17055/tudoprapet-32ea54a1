@@ -231,7 +231,7 @@ export interface FiscalDraftOrderInput {
   lineItems: Record<string, unknown>[];
   email: string;
   cpfCnpj: string;
-  shippingLine: { title: string; price: string };
+  shippingLine: { title: string; price: string; shippingRateHandle?: string };
   shippingAddress?: Record<string, unknown>;
   billingAddress?: Record<string, unknown>;
   tags: string[];
@@ -592,7 +592,9 @@ export async function createFiscalDraftOrder(
         email: input.email,
         localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
         taxExempt: true,
-        shippingLine: { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
+        shippingLine: input.shippingLine.shippingRateHandle
+          ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
+          : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
         shippingAddress: graphqlAddress(input.shippingAddress),
         billingAddress: graphqlAddress(input.billingAddress),
         useCustomerDefaultAddress: false,
@@ -654,8 +656,16 @@ export async function createFiscalDraftOrder(
 
   const credentialStored = hasCredential(draft?.localizedFields?.nodes ?? []);
   if (!credentialStored) {
-    await deleteDraftOrder(draftOrderId, token);
-    return fallbackToRest("A criacao GraphQL nao persistiu o CPF/CNPJ.");
+    // Preserve o draft, as variantes e a retirada nativa. O documento tambem
+    // está nos atributos; a extensão fiscal é tentada sem bloquear o checkout.
+    const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
+    return {
+      requestOk: true,
+      invoiceUrl,
+      draftOrderId,
+      taxCredentialStored: credential.ok,
+      error: credential.error,
+    };
   }
   if (draft?.taxExempt !== true) {
     await deleteDraftOrder(draftOrderId, token);
@@ -670,6 +680,50 @@ export async function createFiscalDraftOrder(
     error: null,
   };
 
+}
+
+export interface ShopifyLocalPickupOption {
+  handle: string;
+  code: string | null;
+  title: string;
+  locationId: string;
+  instructions: string | null;
+}
+
+/** Usa a retirada configurada na loja para habilitar o fluxo nativo no Admin. */
+export async function fetchShopifyDraftPickupOptions(
+  items: Array<{ variantId: string; quantity: number }>,
+  adminToken: string,
+): Promise<ShopifyLocalPickupOption[]> {
+  const response = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+    body: JSON.stringify({
+      query: `query PickupOptions($input: DraftOrderAvailableDeliveryOptionsInput!) {
+        draftOrderAvailableDeliveryOptions(input: $input, localPickupCount: 10) {
+          availableLocalPickupOptions { handle code title locationId instructions }
+        }
+      }`,
+      variables: { input: {
+        lineItems: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+        marketRegionCountryCode: "BR",
+      } },
+    }),
+  });
+  if (!response.ok) throw new Error(`Falha ao consultar retirada Shopify (${response.status})`);
+  const body = await response.json();
+  if (body?.errors?.length) {
+    throw new Error(body.errors[0]?.message || "Shopify rejeitou a consulta de retirada");
+  }
+  return (body?.data?.draftOrderAvailableDeliveryOptions?.availableLocalPickupOptions ?? [])
+    .map((option: Record<string, unknown>) => ({
+      handle: String(option.handle || ""),
+      code: typeof option.code === "string" ? option.code : null,
+      title: String(option.title || "Retirada na loja"),
+      locationId: String(option.locationId || ""),
+      instructions: typeof option.instructions === "string" ? option.instructions : null,
+    }))
+    .filter((option: ShopifyLocalPickupOption) => option.handle && option.locationId);
 }
 
 /**

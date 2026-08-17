@@ -8,7 +8,12 @@ import {
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
-import { createFiscalDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails } from "../_shared/shopify.ts";
+import {
+  createFiscalDraftOrder,
+  fetchShopifyDraftDeliveryOptions,
+  fetchShopifyDraftPickupOptions,
+  fetchVariantCheckoutDetails,
+} from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 
@@ -181,7 +186,18 @@ Deno.serve(async (req) => {
     let shippingAmount = 0;
     let shippingMethod = shippingLabel(input.delivery.code);
     let shippingCode: "pick_up" | "pac" | "sedex" | "local_delivery" | "shipping" = input.delivery.code;
-    if (input.delivery.code !== "pick_up" && input.delivery.address) {
+    let shippingRateHandle: string | undefined;
+    if (input.delivery.code === "pick_up") {
+      const pickupOptions = await fetchShopifyDraftPickupOptions(input.items, shopifyToken);
+      const selectedPickup = input.delivery.optionHandle
+        ? pickupOptions.find((option) => option.handle === input.delivery.optionHandle)
+        : pickupOptions[0];
+      if (!selectedPickup) {
+        return errorResponse("A retirada na loja está indisponível na Shopify. Verifique o local e o estoque.", 409);
+      }
+      shippingMethod = selectedPickup.title;
+      shippingRateHandle = selectedPickup.handle;
+    } else if (input.delivery.address) {
       const providerOptions = await fetchShopifyDraftDeliveryOptions({
         items: input.items,
         customerName: input.customer.name,
@@ -238,7 +254,10 @@ Deno.serve(async (req) => {
       // Nao copie o endereco de entrega padrao em pedidos de retirada. Quando o
       // draft de retirada recebe shipping_address, a Shopify cria o fulfillment
       // como envio mesmo que a linha esteja nomeada "Retirada na loja".
-      shippingLine: buildShippingLine(shippingMethod, shippingAmount),
+      shippingLine: {
+        ...buildShippingLine(shippingMethod, shippingAmount),
+        shippingRateHandle,
+      },
       shippingAddress: input.delivery.address
         ? shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone)
         : undefined,
@@ -256,7 +275,7 @@ Deno.serve(async (req) => {
         { key: "checkout_session_id", value: session.id },
         { key: "shipping_code", value: shippingCode },
         { key: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
-        { key: "shipping_option_handle", value: input.delivery.optionHandle || "pick_up" },
+        { key: "shipping_option_handle", value: shippingRateHandle || input.delivery.optionHandle || shippingCode },
       ],
     }, shopifyToken);
     if (!draft.draftOrderId) {

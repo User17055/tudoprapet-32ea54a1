@@ -8,6 +8,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseKey =
       Deno.env.get("SUPABASE_ANON_KEY") ||
       Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
@@ -39,29 +40,59 @@ Deno.serve(async (req) => {
 
     const shopDomain = "petjoy-deals-hb8r9.myshopify.com";
 
-    // Fetch orders for this email from Shopify Admin API
-    const ordersUrl = `https://${shopDomain}/admin/api/2025-07/orders.json?email=${encodeURIComponent(
+    // O checkout próprio vincula o pedido ao usuário pela sessão. Esse
+    // vínculo é mais confiável do que depender do Customer/e-mail da Shopify.
+    const admin = createClient(supabaseUrl, serviceRoleKey);
+    const { data: linkedSessions, error: linkedError } = await admin
+      .from("checkout_sessions")
+      .select("shopify_order_id")
+      .eq("user_id", user.id)
+      .not("shopify_order_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(250);
+    if (linkedError) throw linkedError;
+    const linkedOrderIds = [...new Set((linkedSessions ?? [])
+      .map((row) => String(row.shopify_order_id || "").split("/").pop()?.replace(/\D/g, "") || "")
+      .filter(Boolean))];
+
+    const emailOrdersUrl = `https://${shopDomain}/admin/api/2025-07/orders.json?email=${encodeURIComponent(
       user.email
     )}&status=any&limit=50`;
-
-    const ordersResp = await fetch(ordersUrl, {
+    const linkedOrdersUrl = linkedOrderIds.length
+      ? `https://${shopDomain}/admin/api/2025-07/orders.json?ids=${encodeURIComponent(linkedOrderIds.join(","))}&status=any&limit=250`
+      : null;
+    const fetchOrders = (url: string) => fetch(url, {
       headers: {
         "X-Shopify-Access-Token": shopifyToken,
         "Content-Type": "application/json",
       },
     });
+    const [emailOrdersResp, linkedOrdersResp] = await Promise.all([
+      fetchOrders(emailOrdersUrl),
+      linkedOrdersUrl ? fetchOrders(linkedOrdersUrl) : Promise.resolve(null),
+    ]);
 
-    if (!ordersResp.ok) {
-      const errText = await ordersResp.text();
-      console.error("Shopify orders error:", errText);
+    if (!emailOrdersResp.ok) {
+      console.error("Shopify email orders error:", await emailOrdersResp.text());
+    }
+    if (linkedOrdersResp && !linkedOrdersResp.ok) {
+      console.error("Shopify linked orders error:", await linkedOrdersResp.text());
+    }
+    if (!emailOrdersResp.ok && (!linkedOrdersResp || !linkedOrdersResp.ok)) {
       return new Response(JSON.stringify({ error: "Falha ao buscar pedidos" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const ordersData = await ordersResp.json();
-    const rawOrders = ordersData.orders || [];
+    const emailOrdersData = emailOrdersResp.ok ? await emailOrdersResp.json() : { orders: [] };
+    const linkedOrdersData = linkedOrdersResp?.ok ? await linkedOrdersResp.json() : { orders: [] };
+    const ordersById = new Map<string, any>();
+    for (const order of [...(emailOrdersData.orders || []), ...(linkedOrdersData.orders || [])]) {
+      ordersById.set(String(order.id), order);
+    }
+    const rawOrders = [...ordersById.values()]
+      .sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || ""));
 
     // Only show orders that were actually completed (paid/partially paid).
     // Exclude cancelled, refunded, pending and unpaid orders entirely.
