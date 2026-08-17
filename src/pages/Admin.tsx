@@ -53,6 +53,7 @@ import VariationsTab from "./admin/VariationsTab";
 import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
 import MaintenanceTab from "./admin/MaintenanceTab";
+import ConferenceTab from "./admin/ConferenceTab";
 
 interface SubPrice {
   id: string;
@@ -84,6 +85,7 @@ type SectionId =
   | "orders"
   | "sync"
   | "maintenance"
+  | "conference"
   | "franquia";
 
 interface SectionDef {
@@ -112,6 +114,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "variations", label: "Variações", description: "Agrupe tamanhos e pesos do mesmo produto", icon: Boxes, component: VariationsTab },
       { id: "categories", label: "Ordem do Menu", description: "Ordem das categorias no menu do site", icon: ListTree, component: CategoriesTab },
       { id: "franquia", label: "Franquia", description: "Visibilidade e preços exclusivos para franqueados", icon: Store, component: FranquiaTab },
+      { id: "conference", label: "Relatório", description: "Todos os produtos, preços, visibilidade e impressão", icon: FileText, component: ConferenceTab },
     ],
   },
   {

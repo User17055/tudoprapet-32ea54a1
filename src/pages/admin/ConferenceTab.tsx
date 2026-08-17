@@ -76,7 +76,7 @@ export default function ConferenceTab() {
         })),
       );
     } catch (error) {
-      toast.error("Não foi possível carregar a conferência", {
+      toast.error("Não foi possível carregar o relatório", {
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
@@ -161,7 +161,7 @@ export default function ConferenceTab() {
       <html lang="pt-BR">
         <head>
           <meta charset="utf-8">
-          <title>Conferência do catálogo</title>
+          <title>Relatório de produtos</title>
           <style>
             @page { size: A4 landscape; margin: 10mm; }
             * { box-sizing: border-box; }
@@ -184,13 +184,13 @@ export default function ConferenceTab() {
           </style>
         </head>
         <body>
-          <h1>Conferência do catálogo</h1>
+          <h1>Relatório de produtos</h1>
           <div class="meta"><span>${filteredRows.length} variações</span><span>Impresso em ${escapeHtml(printedAt)}</span></div>
           <table>
             <thead><tr><th>Produto</th><th>Variação</th><th>Venda</th><th>Assinante</th><th>Visibilidade</th><th>Disponibilidade</th><th>Conferido</th></tr></thead>
             <tbody>${tableRows}</tbody>
           </table>
-          <script>window.addEventListener('load', () => { window.print(); });<\/script>
+          <script>window.addEventListener('load', () => { window.print(); });</script>
         </body>
       </html>`);
     popup.document.close();
@@ -209,7 +209,7 @@ export default function ConferenceTab() {
         <CardHeader className="p-4 pb-3">
           <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-end">
             <div>
-              <CardTitle className="text-base">Conferência do catálogo</CardTitle>
+              <CardTitle className="text-base">Relatório de produtos</CardTitle>
               <CardDescription className="mt-1">
                 Preços são exibidos por variação. Produto sem audiência configurada está oculto na loja.
               </CardDescription>
@@ -248,7 +248,7 @@ export default function ConferenceTab() {
               </Button>
               <Button size="sm" className="h-9" onClick={printConference} disabled={loading || filteredRows.length === 0}>
                 <Printer className="mr-2 h-4 w-4" />
-                Imprimir conferência
+                Imprimir relatório
               </Button>
             </div>
           </div>
