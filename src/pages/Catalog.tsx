@@ -187,6 +187,30 @@ const Catalog = () => {
     return ids;
   }, [categories]);
 
+  const petCategories = useMemo(
+    () => categories.filter((category) =>
+      category.parent_id === null && ["cachorro", "gato"].includes(normalizeSlug(category.slug)),
+    ),
+    [categories],
+  );
+
+  const selectPetCategory = (category: Category) => {
+    const isSelected = categoryId === category.id;
+    setCategorySlug(isSelected ? "all" : category.slug);
+    setCategoryId(isSelected ? null : category.id);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("pet");
+      next.delete("categoria");
+      next.delete("categoria_id");
+      if (!isSelected) {
+        next.set("categoria", category.slug);
+        next.set("categoria_id", category.id);
+      }
+      return next;
+    });
+  };
+
   // Counts per filter — based on products that pass all OTHER filters
   // For simplicity & performance, counts are based on the unfiltered product set.
   const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
@@ -262,6 +286,23 @@ const Catalog = () => {
       return price >= r.min && price <= r.max;
     }).length);
   }, [discoverableProducts]);
+
+  const petCategoryCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const category of petCategories) {
+      const allowed = expandCategoryIds(category.id);
+      const productIds = new Set(
+        productCats
+          .filter((item) => allowed.has(item.category_id))
+          .map((item) => item.shopify_product_id),
+      );
+      counts.set(
+        category.id,
+        discoverableProducts.filter((product) => productIds.has(product.node.id)).length,
+      );
+    }
+    return counts;
+  }, [discoverableProducts, expandCategoryIds, petCategories, productCats]);
 
   const attrCount = (key: string, value: string) =>
     productAttrs.filter(
@@ -505,10 +546,27 @@ const Catalog = () => {
         key={loading ? "loading" : "loaded"}
         type="multiple"
         defaultValue={
-          compact ? [] : ["preco", "marca", ...STANDARD_ATTR_KEYS.filter((key) => key !== "Pet"), ...customKeys]
+          compact ? [] : ["pet", "preco", "marca", ...STANDARD_ATTR_KEYS.filter((key) => key !== "Pet"), ...customKeys]
         }
         className="border-0"
       >
+        <AccordionItem value="pet" className="border-b border-border last:border-0">
+          <AccordionTrigger className="font-display font-bold text-sm">Pet</AccordionTrigger>
+          <AccordionContent>
+            <div className="space-y-0.5">
+              {petCategories.map((category) => (
+                <CheckRow
+                  key={category.id}
+                  checked={categoryId === category.id}
+                  onChange={() => selectPetCategory(category)}
+                  label={category.name}
+                  count={petCategoryCount.get(category.id)}
+                />
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
         <AccordionItem value="preco" className="border-b border-border last:border-0">
           <AccordionTrigger className="font-display font-bold text-sm">Faixa de Preço</AccordionTrigger>
           <AccordionContent>
