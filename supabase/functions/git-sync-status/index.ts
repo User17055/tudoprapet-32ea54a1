@@ -91,10 +91,34 @@ Deno.serve(async (req) => {
       }));
 
     // 1) Estado real da branch principal: últimos commits publicados nela.
-    const mainBranch = await gh(
-      `/repos/${repo}/branches/${encodeURIComponent(mainName)}`,
-      token,
-    );
+    let mainBranch: any;
+    try {
+      mainBranch = await gh(
+        `/repos/${repo}/branches/${encodeURIComponent(mainName)}`,
+        token,
+      );
+    } catch (_e) {
+      // Repositório vazio ou branch principal com outro nome: devolve as branches reais.
+      let branches: string[] = [];
+      try {
+        const list = await gh(`/repos/${repo}/branches?per_page=100`, token);
+        branches = (list as any[]).map((b) => b.name);
+      } catch (_e2) {
+        branches = [];
+      }
+      return json({
+        configured: true,
+        repo,
+        main_branch: mainName,
+        main_branch_found: false,
+        branches,
+        message: branches.length
+          ? `A branch principal "${mainName}" não foi encontrada. Branches existentes: ${branches.join(", ")}.`
+          : "O repositório não possui branches (está vazio).",
+        functions_version: FUNCTIONS_VERSION,
+      });
+    }
+
     const mainCommits = mapCommits(
       await gh(
         `/repos/${repo}/commits?sha=${encodeURIComponent(mainName)}&per_page=15`,
