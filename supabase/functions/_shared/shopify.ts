@@ -530,6 +530,9 @@ export async function createFiscalDraftOrder(
         line_items: input.lineItems,
         customer: { id: Number(String(input.customerId).split("/").pop()) },
         email: input.email,
+        // O pagamento e os descontos já são calculados pelo checkout.
+        // Impede a Shopify de somar imposto novamente ao valor pago no Asaas.
+        tax_exempt: true,
         shipping_line: { title: input.shippingLine.title, price: input.shippingLine.price },
         shipping_address: creationShippingAddress,
         billing_address: input.billingAddress,
@@ -738,6 +741,7 @@ export async function setDraftOrderTaxCredential(
     body: JSON.stringify({
       query: `query DraftLines($id: ID!) {
         draftOrder(id: $id) {
+          taxExempt
           localizedFields(first: 5) { nodes { key value } }
           shippingLine { title originalPriceSet { shopMoney { amount } } }
           lineItems(first: 100) {
@@ -765,7 +769,9 @@ export async function setDraftOrderTaxCredential(
   // A criação do rascunho já grava a credencial. Não repita um
   // draftOrderUpdate depois do pagamento: além de desnecessário, uma segunda
   // atualização pode ser rejeitada e deixar uma venda paga presa em Rascunhos.
-  if (credentialAlreadyStored) return { ok: true, error: null };
+  if (credentialAlreadyStored && currentBody?.data?.draftOrder?.taxExempt === true) {
+    return { ok: true, error: null };
+  }
 
   const currentNodes = currentBody?.data?.draftOrder?.lineItems?.nodes as
     | Record<string, unknown>[]
@@ -821,13 +827,14 @@ export async function setDraftOrderTaxCredential(
     body: JSON.stringify({
       query: `mutation SetTaxCredential($id: ID!, $input: DraftOrderInput!) {
         draftOrderUpdate(id: $id, input: $input) {
-          draftOrder { id localizedFields(first: 5) { nodes { key value } } lineItems(first: 50) { nodes { quantity title } } }
+          draftOrder { id taxExempt localizedFields(first: 5) { nodes { key value } } lineItems(first: 50) { nodes { quantity title } } }
           userErrors { field message }
         }
       }`,
       variables: {
         id: `gid://shopify/DraftOrder/${draftOrderId}`,
         input: {
+          taxExempt: true,
           marketRegionCountryCode: "BR",
           shippingAddress: brAddress(draft?.shipping_address),
           // Retirada não possui shipping_address. Ainda assim a credencial fiscal
@@ -863,6 +870,9 @@ export async function setDraftOrderTaxCredential(
   if (!persisted) {
     console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
     return { ok: false, error: "A Shopify aceitou a atualizacao, mas nao gravou o CPF/CNPJ no rascunho." };
+  }
+  if (body?.data?.draftOrderUpdate?.draftOrder?.taxExempt !== true) {
+    return { ok: false, error: "A Shopify nao removeu o imposto duplicado do rascunho." };
   }
   return { ok: true, error: null };
 
