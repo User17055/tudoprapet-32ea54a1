@@ -4,6 +4,11 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/supabase/vite";
 
+// A versão atual do gerador (0.26.2) transforma caminhos absolutos do Windows
+// em imports `npm:C:\\...`, que não compilam no Deno/Supabase. O bundle portátil
+// versionado foi assumido pelo projeto (sem o banner AUTO-GENERATED); no Linux
+// o plugin reconhece que não deve sobrescrever esse arquivo.
+const canGeneratePortableMcp = process.platform !== "win32";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -14,7 +19,7 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mcpPlugin(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [react(), canGeneratePortableMcp && mcpPlugin(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
