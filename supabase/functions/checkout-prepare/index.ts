@@ -1,3 +1,4 @@
+// force redeploy 2026-08-17
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken } from "../_shared/checkout-access.ts";
