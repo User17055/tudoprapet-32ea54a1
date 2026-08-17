@@ -62,28 +62,33 @@ Deno.serve(async (req) => {
     const data = await response.json().catch(() => null);
     if (!response.ok || !data) {
       lastError = `Shopify respondeu ${response.status}`;
+      console.error("[admin-variant-price] HTTP", response.status);
       continue;
     }
 
     const graphqlErrors = data.errors as Array<{ message?: string }> | undefined;
     if (graphqlErrors?.length) {
       lastError = graphqlErrors.map((error) => error.message || "Erro na Shopify").join("; ");
+      console.error("[admin-variant-price] graphql", lastError);
       continue;
     }
 
     const mutationResult = data.data?.productVariantsBulkUpdate;
     if (mutationResult?.userErrors?.length) {
-      return errorResponse(
-        mutationResult.userErrors.map((error: { message: string }) => error.message).join("; "),
-        400,
-      );
+      lastError = mutationResult.userErrors
+        .map((error: { message: string }) => error.message)
+        .join("; ");
+      console.error("[admin-variant-price] userErrors", lastError);
+      continue;
     }
 
     result = mutationResult;
     break;
   }
 
-  if (!result) return errorResponse(lastError, 502);
+  // 200 com ok:false de propósito: o supabase-js esconde o corpo em respostas
+  // não-2xx, e sem o corpo o admin só vê "non-2xx status code".
+  if (!result) return jsonResponse({ ok: false, version: FUNCTIONS_VERSION, error: lastError });
 
   return jsonResponse({
     ok: true,
