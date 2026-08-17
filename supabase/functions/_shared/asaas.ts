@@ -57,7 +57,51 @@ function config() {
   return { apiKey, baseUrl };
 }
 
+// Teto de chamadas por execucao.
+//
+// Toda requisicao ao Asaas passa por `asaasRequest`, entao contar aqui e contar
+// tudo. Sem isto o consumo e emergente: depende de quantos gatilhos dispararam e
+// de quantas linhas cada varredura encontrou, que foi como se chegou aos 30.000
+// do bloqueio de 17/08/2026. Com o teto ele vira uma conta:
+//
+//     chamadas/hora = (60 / intervalo_do_cron_em_min) x orcamento
+//
+// Quem nao chama `startAsaasBudget` fica sem teto -- de proposito. O caminho do
+// checkout cria a cobranca de um cliente real e nao pode ser recusado por causa
+// de uma varredura de fundo; quem se limita e o worker.
+//
+// O estado e do isolate, nao da requisicao. Se o Deno reaproveitar o isolate
+// para duas execucoes sobrepostas, elas dividem o mesmo orcamento -- o erro cai
+// para o lado seguro.
+let callBudget = Number.POSITIVE_INFINITY;
+let callsUsed = 0;
+
+export class AsaasBudgetExhausted extends Error {
+  constructor(limit: number) {
+    super(`Orcamento de ${limit} chamadas ao Asaas esgotado nesta execucao`);
+    this.name = "AsaasBudgetExhausted";
+  }
+}
+
+export function startAsaasBudget(limit: number): void {
+  callBudget = Number.isFinite(limit) && limit > 0 ? limit : Number.POSITIVE_INFINITY;
+  callsUsed = 0;
+}
+
+export function asaasCallsUsed(): number {
+  return callsUsed;
+}
+
+export function isAsaasBudgetExhausted(): boolean {
+  return callsUsed >= callBudget;
+}
+
 async function asaasRequest<T>(path: string, init: RequestInit = {}, timeoutMs = 12_000): Promise<T> {
+  if (callsUsed >= callBudget) throw new AsaasBudgetExhausted(callBudget);
+  // Conta antes de sair: uma requisicao que falha ou estoura o timeout ja gastou
+  // a cota do lado do Asaas.
+  callsUsed++;
+
   const { apiKey, baseUrl } = config();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
