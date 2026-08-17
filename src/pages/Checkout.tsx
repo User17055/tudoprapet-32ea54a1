@@ -616,49 +616,80 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!credentials || confirmed || previewMode) return;
+
+    const INITIAL_INTERVAL_MS = 3_000;
+    const MAX_INTERVAL_MS = 15_000;
+    const STOP_AFTER_MS = 10 * 60_000;
+
     let stopped = false;
     let checking = false;
+    let interval = INITIAL_INTERVAL_MS;
+    let timer: number | undefined;
+    const startedAt = Date.now();
+
+    const stop = () => {
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+
+    const schedule = () => {
+      if (stopped) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (Date.now() - startedAt >= STOP_AFTER_MS) {
+        stop();
+        setMessage(
+          "A confirmação continua sendo processada automaticamente. Você pode fechar esta página.",
+        );
+        return;
+      }
+      timer = window.setTimeout(check, interval);
+      interval = Math.min(Math.round(interval * 1.5), MAX_INTERVAL_MS);
+    };
+
     const check = async () => {
       if (stopped || checking) return;
       checking = true;
-      const { data } = await supabase.functions.invoke("checkout-status", {
-        body: credentials,
-      });
-      checking = false;
-      if (stopped || !data) return;
-      if (data.summary) {
-        setSummary(data.summary);
+      try {
+        const { data } = await supabase.functions.invoke("checkout-status", {
+          body: credentials,
+        });
+        if (!stopped && data) {
+          if (data.summary) setSummary(data.summary);
+          if (data.payment) {
+            setPayment((current) =>
+              current
+                ? {
+                    ...current,
+                    status: data.payment.status || current.status,
+                    expiresAt: data.payment.expiresAt || current.expiresAt,
+                  }
+                : current,
+            );
+          }
+          if (["shopify_created", "credit_approved"].includes(data.status)) {
+            stop();
+            finishSuccess();
+          } else if (["failed", "cancelled", "expired"].includes(data.status)) {
+            stop();
+            setMessage(
+              "Este checkout não pode mais ser concluído. Recomece pelo carrinho.",
+            );
+          }
+        }
+      } finally {
+        checking = false;
       }
-      if (data.payment) {
-        setPayment((current) =>
-          current
-            ? {
-                ...current,
-                status: data.payment.status || current.status,
-                expiresAt: data.payment.expiresAt || current.expiresAt,
-              }
-            : current,
-        );
-      }
-      if (["shopify_created", "credit_approved"].includes(data.status))
-        finishSuccess();
-      else if (["failed", "cancelled", "expired"].includes(data.status)) {
-        stopped = true;
-        setMessage(
-          "Este checkout não pode mais ser concluído. Recomece pelo carrinho.",
-        );
-      }
+      schedule();
     };
+
     void check();
     const checkWhenVisible = () => {
       if (document.visibilityState === "visible") void check();
     };
-    const timer = window.setInterval(check, 5_000);
     window.addEventListener("focus", checkWhenVisible);
     document.addEventListener("visibilitychange", checkWhenVisible);
     return () => {
-      stopped = true;
-      window.clearInterval(timer);
+      stop();
       window.removeEventListener("focus", checkWhenVisible);
       document.removeEventListener("visibilitychange", checkWhenVisible);
     };
