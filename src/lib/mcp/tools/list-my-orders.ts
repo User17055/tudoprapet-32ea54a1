@@ -18,7 +18,7 @@ export default defineTool({
     const supabase = supabaseForUser(ctx);
     const { data, error } = await supabase
       .from("checkout_sessions")
-      .select("id,status,total,shipping_total,shopify_order_id,delivery_method,created_at")
+      .select("id,status,subtotal,discount,shipping_amount,total,currency,shipping_method,shopify_order_id,created_at")
       .eq("user_id", ctx.getUserId())
       .order("created_at", { ascending: false })
       .limit(take);

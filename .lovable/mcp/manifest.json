@@ -19,7 +19,7 @@
       {
         "name": "get_my_profile",
         "title": "Meu perfil",
-        "description": "Retorna o perfil da conta TudoPraPet do usuário conectado (nome, telefone, franqueado).",
+        "description": "Retorna o perfil da conta TudoPraPet do usuário conectado (nome, e-mail, franqueado).",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,

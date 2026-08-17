@@ -4,7 +4,7 @@ import { supabaseForUser } from "../supabase";
 export default defineTool({
   name: "get_my_profile",
   title: "Meu perfil",
-  description: "Retorna o perfil da conta TudoPraPet do usuário conectado (nome, telefone, franqueado).",
+  description: "Retorna o perfil da conta TudoPraPet do usuário conectado (nome, e-mail, franqueado).",
   inputSchema: {},
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (_input, ctx) => {
@@ -14,8 +14,8 @@ export default defineTool({
     const supabase = supabaseForUser(ctx);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id,full_name,phone,cpf,is_franchisee,created_at")
-      .eq("id", ctx.getUserId())
+      .select("id,name,email,cpf,is_franchisee,referral_code,created_at")
+      .eq("user_id", ctx.getUserId())
       .maybeSingle();
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     if (!data) {

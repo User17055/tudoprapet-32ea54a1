@@ -17,8 +17,8 @@ export default defineTool({
     const supabase = supabaseForUser(ctx);
     let query = supabase
       .from("categories")
-      .select("id,name,slug,parent_id,position")
-      .order("position", { ascending: true })
+      .select("id,name,slug,parent_id,sort_order")
+      .order("sort_order", { ascending: true })
       .limit(200);
     const term = search?.trim();
     if (term) query = query.ilike("name", `%${term}%`);
