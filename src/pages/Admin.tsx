@@ -31,6 +31,7 @@ import {
   Receipt,
   GitBranch,
   Wrench,
+  LifeBuoy,
 
   type LucideIcon,
 } from "lucide-react";
