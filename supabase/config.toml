@@ -7,7 +7,7 @@ verify_jwt = false
 [functions.asaas-webhook]
 verify_jwt = false
 
-# Chamado apenas por agendamento/operador com x-payment-worker-token.
+# Chamado por webhook, agendamento ou operador com autenticação própria.
 [functions.asaas-process-events]
 verify_jwt = false
 

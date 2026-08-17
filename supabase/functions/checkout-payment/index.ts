@@ -512,6 +512,9 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("checkout-payment:", error);
     const message = error instanceof Error ? error.message : "";
+    if ((error as Error & { status?: number }).status === 429) {
+      return errorResponse("Pagamentos temporariamente indisponíveis por limite do Asaas. Aguarde a liberação automática.", 503);
+    }
     if (requestedAction === "cancel_pix") {
       return errorResponse("Não foi possível confirmar o cancelamento do Pix. Tente novamente.", 502);
     }

@@ -619,7 +619,7 @@ export default function Checkout() {
     let stopped = false;
     let checking = false;
     const check = async () => {
-      if (checking) return;
+      if (stopped || checking) return;
       checking = true;
       const { data } = await supabase.functions.invoke("checkout-status", {
         body: credentials,
@@ -642,16 +642,18 @@ export default function Checkout() {
       }
       if (["shopify_created", "credit_approved"].includes(data.status))
         finishSuccess();
-      else if (["failed", "cancelled", "expired"].includes(data.status))
+      else if (["failed", "cancelled", "expired"].includes(data.status)) {
+        stopped = true;
         setMessage(
           "Este checkout não pode mais ser concluído. Recomece pelo carrinho.",
         );
+      }
     };
     void check();
     const checkWhenVisible = () => {
       if (document.visibilityState === "visible") void check();
     };
-    const timer = window.setInterval(check, 2_000);
+    const timer = window.setInterval(check, 5_000);
     window.addEventListener("focus", checkWhenVisible);
     document.addEventListener("visibilitychange", checkWhenVisible);
     return () => {

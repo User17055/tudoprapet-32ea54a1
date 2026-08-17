@@ -2,19 +2,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { canAccessCheckout, optionalCheckoutUser } from "../_shared/checkout-access.ts";
 
-function wakeWorker(): void {
-  const url = Deno.env.get("SUPABASE_URL");
-  const token = Deno.env.get("PAYMENT_WORKER_TOKEN");
-  if (!url || !token) return;
-  const task = fetch(`${url}/functions/v1/asaas-process-events`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-payment-worker-token": token },
-    body: JSON.stringify({ source: "checkout-status" }),
-  }).catch((error) => console.error("Falha ao solicitar conciliacao:", error));
-  const runtime = (globalThis as unknown as { EdgeRuntime?: { waitUntil(value: Promise<unknown>): void } }).EdgeRuntime;
-  runtime?.waitUntil(task);
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
@@ -44,15 +31,6 @@ Deno.serve(async (req) => {
       .eq("checkout_session_id", sessionId)
       .order("attempt_number", { ascending: false })
       .limit(1).maybeSingle();
-
-    // A consulta da tela de confirmacao e uma segunda chance para vendas pagas
-    // que ainda nao receberam o ID do pedido Shopify.
-    if (!session.shopify_order_id && (
-      ["paid", "paid_pending_shopify", "payment_processing"].includes(session.status) ||
-      ["confirmed", "received"].includes(payment?.status || "")
-    )) {
-      wakeWorker();
-    }
 
     return jsonResponse({
       id: session.id,

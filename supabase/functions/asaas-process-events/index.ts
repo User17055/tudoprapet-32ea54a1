@@ -36,6 +36,13 @@ interface ActionRow {
   attempts: number;
 }
 
+function providerRetryDelay(error: unknown, attempt: number): number {
+  const retryAfter = (error as { retryAfterSeconds?: number } | null)?.retryAfterSeconds;
+  return typeof retryAfter === "number" && Number.isFinite(retryAfter) && retryAfter > 0
+    ? Math.ceil(retryAfter)
+    : retryDelaySeconds(attempt);
+}
+
 async function findPayment(admin: SupabaseClient, parsed: ReturnType<typeof parseAsaasEvent>) {
   if (!parsed) return null;
   if (parsed.providerPaymentId) {
@@ -413,7 +420,7 @@ async function processActions(admin: SupabaseClient) {
     } catch (actionError) {
       failed++;
       const message = actionError instanceof Error ? actionError.message : String(actionError);
-      const delay = retryDelaySeconds(action.attempts);
+      const delay = providerRetryDelay(actionError, action.attempts);
       await admin.from("payment_actions").update({
         status: "ERROR",
         locked_at: null,
@@ -475,16 +482,22 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Não autorizado" }, 401);
   }
 
+  const requestBody = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const source = typeof requestBody.source === "string" ? requestBody.source : "unknown";
+  const runScheduledReconciliation = source === "pg_cron" || source === "manual";
+
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
-  let expirations;
-  try {
-    expirations = await expirePixPayments(admin);
-  } catch (expirationError) {
-    console.error("Falha ao expirar cobranças Pix:", expirationError);
-    return jsonResponse({ error: "Falha ao expirar cobranças Pix" }, 500);
+  let expirations = { claimed: 0, paid: 0, queued: 0, failed: 0 };
+  if (runScheduledReconciliation) {
+    try {
+      expirations = await expirePixPayments(admin);
+    } catch (expirationError) {
+      console.error("Falha ao expirar cobranças Pix:", expirationError);
+      return jsonResponse({ error: "Falha ao expirar cobranças Pix" }, 500);
+    }
   }
   let actions;
   try {
@@ -493,14 +506,16 @@ Deno.serve(async (req) => {
     console.error("Falha ao reivindicar ações financeiras:", actionError);
       return jsonResponse({ error: "Falha ao processar ações financeiras" }, 500);
   }
-  let reconciliation;
-  let recovery;
-  try {
-    reconciliation = await reconcileOpenPixPayments(admin);
-    recovery = await recoverPaidCheckouts(admin);
-  } catch (reconciliationError) {
-    console.error("Falha na conciliação financeira:", reconciliationError);
-    return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
+  let reconciliation = { checked: 0, paid: 0, pending: 0, failed: 0 };
+  let recovery = { checked: 0, recovered: 0, skipped: 0, failed: 0 };
+  if (runScheduledReconciliation) {
+    try {
+      reconciliation = await reconcileOpenPixPayments(admin);
+      recovery = await recoverPaidCheckouts(admin);
+    } catch (reconciliationError) {
+      console.error("Falha na conciliação financeira:", reconciliationError);
+      return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
+    }
   }
   const { data, error } = await admin.rpc("claim_payment_events", { p_limit: 25 });
   if (error) return jsonResponse({ error: "Falha ao reivindicar eventos" }, 500);
@@ -534,6 +549,8 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({
+    source,
+    scheduledReconciliation: runScheduledReconciliation,
     events: { claimed: (data ?? []).length, processed, failed },
     actions,
     expirations,

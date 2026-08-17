@@ -87,7 +87,13 @@ async function asaasRequest<T>(path: string, init: RequestInit = {}, timeoutMs =
         ? JSON.stringify((body as { errors: unknown }).errors).slice(0, 1000)
         : "requisição rejeitada";
       const error = new Error(`Asaas ${response.status}: ${providerMessage}`);
-      (error as Error & { status?: number }).status = response.status;
+      const resetHeader = response.headers.get("ratelimit-reset") || response.headers.get("retry-after");
+      const resetSeconds = resetHeader ? Number(resetHeader) : NaN;
+      const providerError = error as Error & { status?: number; retryAfterSeconds?: number };
+      providerError.status = response.status;
+      if (Number.isFinite(resetSeconds) && resetSeconds > 0) {
+        providerError.retryAfterSeconds = Math.ceil(resetSeconds);
+      }
       throw error;
     }
     return body as T;
