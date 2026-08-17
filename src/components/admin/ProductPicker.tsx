@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Package, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -28,14 +28,25 @@ export function ProductPicker({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
 
   const selected = products.find((p) => p.node.id === value)?.node;
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const normalize = (value: string) => value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    const q = normalize(query.trim());
     return products
       .filter((p) => (excludeIds ? !excludeIds.has(p.node.id) : true))
-      .filter((p) => (q ? p.node.title.toLowerCase().includes(q) : true))
+      .filter((p) => (q ? normalize(p.node.title).includes(q) : true))
       .slice(0, 100);
   }, [products, query, excludeIds]);
 
@@ -68,15 +79,21 @@ export function ProductPicker({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent
+        className="w-[calc(100vw-2rem)] max-w-[36rem] p-0"
+        align="start"
+        sideOffset={4}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <div className="flex items-center gap-2 border-b p-2">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input
-            autoFocus
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(event) => event.stopPropagation()}
             placeholder="Buscar produto..."
-            className="h-8 border-0 p-0 focus-visible:ring-0"
+            className="h-9 min-w-0 flex-1 border-0 p-0 focus-visible:ring-0"
           />
         </div>
         <div className="max-h-72 overflow-y-auto p-1">
