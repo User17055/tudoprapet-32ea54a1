@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Loader2, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuthLayout } from "@/components/auth/AuthLayout";
@@ -13,6 +13,10 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Fluxos externos (consentimento OAuth do MCP) precisam voltar para a URL de origem.
+  const rawNext = params.get("next") ?? "";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +26,8 @@ const Login = () => {
       const result = await login(email.trim(), password);
       if (result.success) {
         toast.success("Login realizado com sucesso.");
-        navigate("/perfil");
+        if (next) window.location.assign(next);
+        else navigate("/perfil");
       } else {
         // Ja vem traduzido do AuthContext — inclusive o caso de e-mail nao
         // confirmado, que nao pode virar "senha incorreta".
