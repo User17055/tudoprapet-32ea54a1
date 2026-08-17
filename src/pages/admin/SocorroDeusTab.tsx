@@ -107,7 +107,7 @@ export default function SocorroDeusTab() {
     });
     setSavingKey(null);
     if (error || !data?.ok) {
-      toast.error("Erro ao salvar na Shopify: " + (error?.message || "tente novamente"));
+      toast.error("Erro ao salvar na Shopify: " + (data?.error || error?.message || "tente novamente"));
       return;
     }
     setProducts((prev) =>
