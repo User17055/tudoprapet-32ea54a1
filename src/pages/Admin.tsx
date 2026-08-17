@@ -49,6 +49,7 @@ import CategoriesTab from "./admin/CategoriesTab";
 import FeaturedTab from "./admin/FeaturedTab";
 import RetiradaTab from "./admin/RetiradaTab";
 import FranquiaTab from "./admin/FranquiaTab";
+import SocorroDeusTab from "./admin/SocorroDeusTab";
 import VariationsTab from "./admin/VariationsTab";
 import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
@@ -84,7 +85,8 @@ type SectionId =
   | "orders"
   | "sync"
   | "maintenance"
-  | "franquia";
+  | "franquia"
+  | "socorro";
 
 interface SectionDef {
   id: SectionId;
@@ -111,6 +113,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
       { id: "variations", label: "Variações", description: "Agrupe tamanhos e pesos do mesmo produto", icon: Boxes, component: VariationsTab },
       { id: "categories", label: "Ordem do Menu", description: "Ordem das categorias no menu do site", icon: ListTree, component: CategoriesTab },
+      { id: "socorro", label: "Socorro Deus", description: "Todos os preços (normal, assinante, franquia) e visibilidade", icon: LifeBuoy, component: SocorroDeusTab },
       { id: "franquia", label: "Franquia", description: "Visibilidade e preços exclusivos para franqueados", icon: Store, component: FranquiaTab },
     ],
   },
