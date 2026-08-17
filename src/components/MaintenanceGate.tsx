@@ -8,12 +8,8 @@ import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
 import logo from "@/assets/tpp-logo.svg";
 
 function formatRemaining(totalSeconds: number) {
-  const hours = Math.floor(totalSeconds / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-  return hours > 0
-    ? `${hours}h ${String(minutes).padStart(2, "0")}min`
-    : `${minutes}min ${String(seconds).padStart(2, "0")}s`;
+  const minutes = Math.ceil(totalSeconds / 60);
+  return `${minutes}min`;
 }
 
 export function MaintenanceGate({ children }: { children: ReactNode }) {
@@ -46,34 +42,35 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0b2854] px-4 py-10 text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(241,197,72,0.2),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.1),transparent_35%)]" />
-      <section className="relative w-full max-w-xl rounded-3xl border border-white/15 bg-white/10 p-7 text-center shadow-2xl backdrop-blur-sm sm:p-10">
-        <div className="mx-auto mb-7 flex w-fit rounded-2xl bg-white px-5 py-3 shadow-lg">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-4 py-10 text-slate-900">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(201,148,61,0.12),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(30,58,110,0.06),transparent_35%)]" />
+      <section className="relative w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-7 text-center shadow-2xl sm:p-10">
+        <div className="mx-auto mb-7 flex w-fit rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-lg">
           <img src={logo} alt="TudoPraPet" className="h-auto w-52 sm:w-60" />
         </div>
         <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f1c548] text-[#0a1931] shadow-lg">
           <Wrench className="h-8 w-8" />
         </span>
-        <h1 className="mt-6 text-3xl font-extrabold tracking-tight sm:text-4xl">Site em manutenção</h1>
-        <p className="mx-auto mt-3 max-w-md text-base leading-relaxed text-white/75">
+        <p className="mt-6 text-sm font-semibold uppercase tracking-wider text-[#c9943d]">Aviso importante</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Site em manutenção</h1>
+        <p className="mx-auto mt-3 max-w-md text-base leading-relaxed text-slate-600">
           Estamos fazendo alguns ajustes para deixar sua experiência ainda melhor. Voltaremos em breve.
         </p>
-        <div className="mx-auto mt-7 flex w-fit items-center gap-3 rounded-2xl border border-white/15 bg-black/15 px-5 py-3">
-          <Clock3 className="h-5 w-5 text-[#f1c548]" />
+        <div className="mx-auto mt-7 flex w-fit items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3">
+          <Clock3 className="h-5 w-5 text-[#c9943d]" />
           <div className="text-left">
-            <p className="text-xs font-semibold uppercase tracking-wider text-white/55">Tempo restante</p>
-            <p className="font-mono text-lg font-bold">{formatRemaining(maintenance.remainingSeconds)}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tempo restante</p>
+            <p className="font-mono text-lg font-bold text-slate-900">{formatRemaining(maintenance.remainingSeconds)}</p>
           </div>
         </div>
         <div className="mt-8">
           {user ? (
-            <Button onClick={leaveAccount} variant="secondary" className="gap-2 bg-white text-[#112f5f] hover:bg-white/90">
+            <Button onClick={leaveAccount} variant="secondary" className="gap-2 bg-[#1e3a6e] text-white hover:bg-[#1e3a6e]/90">
               <LogIn className="h-4 w-4" />
               Entrar com outra conta
             </Button>
           ) : (
-            <Button asChild variant="secondary" className="gap-2 bg-white text-[#112f5f] hover:bg-white/90">
+            <Button asChild variant="secondary" className="gap-2 bg-[#1e3a6e] text-white hover:bg-[#1e3a6e]/90">
               <Link to="/login"><ShieldCheck className="h-4 w-4" /> Acesso do administrador</Link>
             </Button>
           )}
