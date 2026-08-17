@@ -54,6 +54,7 @@ import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
 import MaintenanceTab from "./admin/MaintenanceTab";
 import ConferenceTab from "./admin/ConferenceTab";
+import { ProductPicker } from "@/components/admin/ProductPicker";
 
 interface SubPrice {
   id: string;
@@ -564,14 +565,17 @@ function PricesTab() {
             <div className="grid content-start gap-3 md:grid-cols-4">
               <div className="md:col-span-4">
                 <label className="mb-1 block text-sm font-medium">Produto</label>
-                <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId(""); setAdjustment("0"); }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    {availableProducts.map(p => (
-                      <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ProductPicker
+                  products={products}
+                  value={productId}
+                  excludeIds={registeredProductIds}
+                  placeholder="Pesquisar ou selecionar um produto..."
+                  onChange={(value) => {
+                    setProductId(value);
+                    setVariantId("");
+                    setAdjustment("0");
+                  }}
+                />
                 {!loading && availableProducts.length === 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Todos os produtos carregados ja possuem preco de assinante cadastrado.
