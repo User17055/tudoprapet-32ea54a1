@@ -9,6 +9,7 @@ import {
 } from "../_shared/pricing.ts";
 import { createFiscalDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
+import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -53,7 +54,10 @@ Deno.serve(async (req) => {
     const auth = await optionalCheckoutUser(req);
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
 
-    const parsed = parseCheckoutPrepareInput(await req.json());
+    const rawBody = await req.json() as Record<string, unknown>;
+    const intendedMethod = rawBody.paymentMethod === "credit_card" ? "credit_card"
+      : rawBody.paymentMethod === "pix" ? "pix" : "unknown";
+    const parsed = parseCheckoutPrepareInput(rawBody);
     if (!parsed.ok) return errorResponse(parsed.message, 400);
     const input = parsed.value;
 
@@ -265,13 +269,43 @@ Deno.serve(async (req) => {
       .eq("id", session.id);
     if (draftUpdateError) throw draftUpdateError;
 
-    // O CPF/CNPJ foi enviado na mesma mutação que criou o draft. Se a Shopify
-    // não o devolver, o cliente não chega ao Asaas e nenhuma cobrança é criada.
-    if (!draft.requestOk || !draft.taxCredentialStored) {
+    // O CPF/CNPJ tambem fica nos atributos do draft. A extensao fiscal oficial
+    // e tentada, mas uma rejeicao inconsistente da Shopify nao bloqueia o Asaas.
+    if (!draft.requestOk) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
-      console.error(`CPF/CNPJ rejeitado no checkout ${session.id}:`, draft.error);
-      return errorResponse("Não foi possível registrar o CPF/CNPJ no pedido. Confira os dados e tente novamente.", 422);
+      console.error(`Rascunho rejeitado no checkout ${session.id}:`, draft.error);
+      await writeCheckoutAttemptLog(admin, {
+        checkoutSessionId: session.id,
+        userId: auth.user?.id,
+        customerName: input.customer.name,
+        customerEmail: input.customer.email,
+        paymentMethod: intendedMethod,
+        stage: "prepare",
+        success: false,
+        errorMessage: draft.error || "Shopify nao criou o rascunho.",
+        metadata: { customerType, delivery: shippingCode },
+      });
+      return errorResponse("Não foi possível preparar o pedido na Shopify. Tente novamente.", 502);
     }
+    if (!draft.taxCredentialStored) {
+      console.warn(`Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`, draft.error);
+    }
+    await writeCheckoutAttemptLog(admin, {
+      checkoutSessionId: session.id,
+      userId: auth.user?.id,
+      customerName: input.customer.name,
+      customerEmail: input.customer.email,
+      paymentMethod: intendedMethod,
+      stage: "prepare",
+      success: true,
+      errorMessage: draft.taxCredentialStored ? null : draft.error,
+      metadata: {
+        customerType,
+        delivery: shippingCode,
+        taxCredentialStored: draft.taxCredentialStored,
+        total,
+      },
+    });
     return jsonResponse({
       sessionId: session.id,
       accessToken,

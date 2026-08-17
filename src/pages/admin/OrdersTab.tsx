@@ -18,6 +18,18 @@ interface PendingSyncSale {
   createdAt: string;
   error?: string;
 }
+interface CheckoutAttemptLog {
+  id: string;
+  created_at: string;
+  checkout_session_id: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  payment_method: "pix" | "credit_card" | "terms" | "unknown";
+  stage: "prepare" | "payment" | "shopify_completion";
+  success: boolean;
+  error_message: string | null;
+  provider_payment_id: string | null;
+}
 interface OrdersResponse {
   orders: PrintableOrder[];
   count: number;
@@ -27,6 +39,7 @@ interface OrdersResponse {
     pending: number;
     pendingSales?: PendingSyncSale[];
   };
+  checkoutLogs?: CheckoutAttemptLog[];
 }
 interface PrintQueueResponse { job_id: string; already_queued?: boolean; functions_version?: string }
 interface PrintStatusResponse {
@@ -62,6 +75,9 @@ export default function OrdersTab() {
   const [printingId, setPrintingId] = useState<string | number | null>(null);
   const [syncPending, setSyncPending] = useState(0);
   const [pendingSales, setPendingSales] = useState<PendingSyncSale[]>([]);
+  const [checkoutLogs, setCheckoutLogs] = useState<CheckoutAttemptLog[]>([]);
+  const [logQuery, setLogQuery] = useState("");
+  const [logStatus, setLogStatus] = useState("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +88,7 @@ export default function OrdersTab() {
       setOrders(response?.orders || []);
       setSyncPending(response?.recovery?.pending || 0);
       setPendingSales(response?.recovery?.pendingSales || []);
+      setCheckoutLogs(response?.checkoutLogs || []);
       if (!response?.functions_version || response.functions_version < MINIMUM_RECOVERY_FUNCTION_VERSION) {
         toast.warning("A recuperação de vendas ainda não foi publicada no servidor", {
           description: "O site foi atualizado, mas a Edge Function admin-orders continua antiga. Publique essa função para concluir os rascunhos pagos.",
@@ -95,6 +112,12 @@ export default function OrdersTab() {
     const matchesStatus = status === "all" || (status === "active" ? !["cancelado", "reembolsado", "encerrado"].includes(label) : label === status);
     return matchesQuery && matchesStatus;
   }), [orders, query, status]);
+  const filteredLogs = useMemo(() => checkoutLogs.filter((entry) => {
+    const haystack = `${entry.customer_name || ""} ${entry.customer_email || ""} ${entry.checkout_session_id || ""} ${entry.provider_payment_id || ""} ${entry.error_message || ""}`.toLowerCase();
+    const matchesQuery = haystack.includes(logQuery.trim().toLowerCase());
+    const matchesStatus = logStatus === "all" || (logStatus === "success" ? entry.success : !entry.success);
+    return matchesQuery && matchesStatus;
+  }), [checkoutLogs, logQuery, logStatus]);
 
   const printA4 = (order: PrintableOrder) => {
     const popup = window.open("", "_blank");
@@ -209,6 +232,35 @@ export default function OrdersTab() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold">Tentativas de compra</p>
+              <p className="text-xs text-muted-foreground">Últimos registros de preparação e pagamento, sem dados sensíveis do cartão.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative sm:w-72"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={logQuery} onChange={(event) => setLogQuery(event.target.value)} placeholder="Buscar cliente, e-mail ou erro" className="pl-9" /></div>
+              <Select value={logStatus} onValueChange={setLogStatus}><SelectTrigger className="sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="success">Sucesso</SelectItem><SelectItem value="error">Falhas</SelectItem></SelectContent></Select>
+            </div>
+          </div>
+          {filteredLogs.length === 0 ? <p className="rounded-lg bg-slate-50 py-8 text-center text-sm text-muted-foreground">Nenhuma tentativa registrada.</p> : (
+            <div className="max-h-80 overflow-auto rounded-lg border">
+              <Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Cliente</TableHead><TableHead>Método</TableHead><TableHead>Etapa</TableHead><TableHead>Status</TableHead><TableHead>Detalhe</TableHead></TableRow></TableHeader><TableBody>
+                {filteredLogs.slice(0, 50).map((entry) => <TableRow key={entry.id}>
+                  <TableCell className="whitespace-nowrap text-xs">{new Date(entry.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell>
+                  <TableCell><div className="font-medium">{entry.customer_name || "Cliente não identificado"}</div><div className="text-xs text-muted-foreground">{entry.customer_email || "—"}</div></TableCell>
+                  <TableCell className="whitespace-nowrap">{{ pix: "Pix", credit_card: "Cartão", terms: "Prazo", unknown: "Não informado" }[entry.payment_method]}</TableCell>
+                  <TableCell>{{ prepare: "Preparação", payment: "Pagamento", shopify_completion: "Shopify" }[entry.stage]}</TableCell>
+                  <TableCell><Badge variant="outline" className={entry.success ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}>{entry.success ? "Sucesso" : "Falhou"}</Badge></TableCell>
+                  <TableCell className="max-w-md text-xs text-muted-foreground">{entry.error_message || (entry.provider_payment_id ? `Asaas: ${entry.provider_payment_id}` : "Concluído sem erro")}</TableCell>
+                </TableRow>)}
+              </TableBody></Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card><CardContent className="p-0">
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div> : filtered.length === 0 ? <p className="py-16 text-center text-muted-foreground">Nenhum pedido encontrado.</p> :

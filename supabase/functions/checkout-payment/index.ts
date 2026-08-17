@@ -20,6 +20,7 @@ import {
   MIN_INSTALLMENT_VALUE,
   type InstallmentPlan,
 } from "../_shared/pricing.ts";
+import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 
 function dateInSaoPaulo(addDays = 0): string {
   const date = new Date(Date.now() + addDays * 86_400_000);
@@ -94,11 +95,21 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
   let requestedAction = "";
+  let logAdmin: any = null;
+  let logContext: {
+    sessionId?: string;
+    userId?: string | null;
+    customerName?: string;
+    customerEmail?: string;
+    method: "pix" | "credit_card" | "terms" | "unknown";
+  } = { method: "unknown" };
   try {
     const auth = await optionalCheckoutUser(req);
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
     const body = await req.json() as Record<string, unknown>;
     requestedAction = typeof body.action === "string" ? body.action : "";
+    logContext.method = body.method === "credit_card" ? "credit_card"
+      : body.method === "pix" ? "pix" : "unknown";
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
     const accessToken = typeof body.accessToken === "string" ? body.accessToken : null;
     if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return errorResponse("Checkout inválido", 400);
@@ -107,6 +118,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+    logAdmin = admin;
     const { data: session, error: sessionError } = await admin.from("checkout_sessions")
       .select("*").eq("id", sessionId).single();
     if (sessionError || !session) return errorResponse("Checkout não encontrado", 404);
@@ -123,6 +135,14 @@ Deno.serve(async (req) => {
     if (body.action !== "cancel_pix" && Number(session.total) !== expectedTotal) {
       return errorResponse("O total deste checkout está desatualizado. Volte à sacola e tente novamente.", 409);
     }
+    const logCustomer = session.customer_snapshot as { name?: string; email?: string } | null;
+    logContext = {
+      sessionId,
+      userId: auth.user?.id ?? session.user_id ?? null,
+      customerName: logCustomer?.name,
+      customerEmail: logCustomer?.email,
+      method: session.customer_type === "franchise" ? "terms" : logContext.method,
+    };
     if (body.action === "cancel_pix" && session.status === "cancelled") {
       return jsonResponse({ sessionId, cancelled: true });
     }
@@ -393,6 +413,21 @@ Deno.serve(async (req) => {
       ...(directStatus === "received" ? { received_at: new Date().toISOString(), is_active: false } : {}),
     }).eq("id", paymentAttempt.id);
     if (paymentUpdateError) throw paymentUpdateError;
+    await writeCheckoutAttemptLog(admin, {
+      checkoutSessionId: sessionId,
+      userId: logContext.userId,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      paymentMethod: method,
+      stage: "payment",
+      success: true,
+      providerPaymentId: providerPayment.id,
+      metadata: {
+        status: directStatus,
+        amount: cardPlan?.chargedTotal ?? Number(session.total),
+        installments: cardPlan?.installments ?? 1,
+      },
+    });
 
     if (session.customer_type === "franchise") {
       const shopifyToken = shopifyAdminToken();
@@ -401,8 +436,21 @@ Deno.serve(async (req) => {
       }
       const completed = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken, true, customer.cpfCnpj);
       if (!completed.requestOk || !completed.orderId) {
+        await writeCheckoutAttemptLog(admin, {
+          checkoutSessionId: sessionId, userId: logContext.userId,
+          customerName: customer.name, customerEmail: customer.email,
+          paymentMethod: "terms", stage: "shopify_completion", success: false,
+          errorMessage: completed.error || "Shopify nao concluiu o pedido com prazo.",
+          providerPaymentId: providerPayment.id,
+        });
         throw new Error("Falha ao concluir pedido com prazo na Shopify");
       }
+      await writeCheckoutAttemptLog(admin, {
+        checkoutSessionId: sessionId, userId: logContext.userId,
+        customerName: customer.name, customerEmail: customer.email,
+        paymentMethod: "terms", stage: "shopify_completion", success: true,
+        providerPaymentId: providerPayment.id, metadata: { shopifyOrderId: completed.orderId },
+      });
       await admin.from("checkout_sessions").update({
         status: "credit_approved",
         shopify_order_id: completed.orderId,
@@ -475,6 +523,15 @@ Deno.serve(async (req) => {
             false,
             customer.cpfCnpj,
           );
+          await writeCheckoutAttemptLog(admin, {
+            checkoutSessionId: sessionId, userId: logContext.userId,
+            customerName: customer.name, customerEmail: customer.email,
+            paymentMethod: "credit_card", stage: "shopify_completion",
+            success: completed.requestOk && Boolean(completed.orderId),
+            errorMessage: completed.requestOk ? null : completed.error,
+            providerPaymentId: providerPayment.id,
+            metadata: completed.orderId ? { shopifyOrderId: completed.orderId } : {},
+          });
           if (completed.requestOk && completed.orderId) {
             await admin.from("checkout_sessions").update({
               status: "shopify_created",
@@ -512,6 +569,18 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("checkout-payment:", error);
     const message = error instanceof Error ? error.message : "";
+    if (logAdmin && requestedAction !== "cancel_pix") {
+      await writeCheckoutAttemptLog(logAdmin, {
+        checkoutSessionId: logContext.sessionId,
+        userId: logContext.userId,
+        customerName: logContext.customerName,
+        customerEmail: logContext.customerEmail,
+        paymentMethod: logContext.method,
+        stage: "payment",
+        success: false,
+        errorMessage: message || "Falha desconhecida ao iniciar pagamento.",
+      });
+    }
     if ((error as Error & { status?: number }).status === 429) {
       return errorResponse("Pagamentos temporariamente indisponíveis por limite do Asaas. Aguarde a liberação automática.", 503);
     }

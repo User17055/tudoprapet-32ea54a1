@@ -179,7 +179,7 @@ async function recoverPaidOrders(
     const fiscalFailure = /CPF|CNPJ|credencial fiscal|imposto duplicado/i.test(completed.error || "");
     if ((!completed.requestOk || !completed.orderId) && fiscalFailure && cpfCnpj) {
       const replacement = await cloneLegacyFiscalDraftOrder(legacyDraftOrderId, cpfCnpj, shopifyToken);
-      if (replacement.requestOk && replacement.draftOrderId && replacement.taxCredentialStored) {
+      if (replacement.requestOk && replacement.draftOrderId) {
         const { data: relinked, error: relinkError } = await adminDb.from("checkout_sessions")
           .update({ shopify_draft_order_id: replacement.draftOrderId })
           .eq("id", session.id)
@@ -371,10 +371,20 @@ Deno.serve(async (req) => {
       const batch = selected.slice(start, start + 5);
       orders.push(...await Promise.all(batch.map(async (order: any) => normalize(order, await resolvedDeliveryLabel(order, shopifyToken)))));
     }
+    const { data: checkoutLogs, error: checkoutLogsError } = await adminDb
+      .from("checkout_attempt_logs")
+      .select("id,created_at,checkout_session_id,customer_name,customer_email,payment_method,stage,success,error_message,provider_payment_id,metadata")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (checkoutLogsError) {
+      // Mantem Pedidos funcionando durante a janela entre deploy e migration.
+      console.error("Falha ao carregar logs de checkout:", checkoutLogsError.message);
+    }
     return jsonResponse({
       orders,
       count: orders.length,
       recovery,
+      checkoutLogs: checkoutLogs || [],
       functions_version: FUNCTIONS_VERSION,
       server_time: new Date().toISOString(),
     });

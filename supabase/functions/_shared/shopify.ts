@@ -524,7 +524,10 @@ export async function createFiscalDraftOrder(
           tags: input.tags.join(","),
           note: input.note,
           note_attributes: [
-            ...input.customAttributes.filter((attribute) => attribute.key !== "checkout_draft_format"),
+            ...input.customAttributes.filter((attribute) =>
+              attribute.key !== "checkout_draft_format" && attribute.key !== "CPF/CNPJ"
+            ),
+            { key: "CPF/CNPJ", value },
             { key: "checkout_draft_format", value: "rest_fallback" },
           ].map((attribute) => ({ name: attribute.key, value: attribute.value })),
         },
@@ -560,7 +563,9 @@ export async function createFiscalDraftOrder(
     }
     const credential = await setDraftOrderTaxCredential(fallbackDraftId, value, token);
     return {
-      requestOk: credential.ok,
+      // A Shopify pode rejeitar a extensao fiscal mesmo com CPF valido. O
+      // documento permanece nos atributos e nao deve bloquear Pix/cartao.
+      requestOk: true,
       invoiceUrl: draft.invoice_url ?? null,
       draftOrderId: fallbackDraftId,
       taxCredentialStored: credential.ok,
@@ -594,7 +599,10 @@ export async function createFiscalDraftOrder(
         tags: input.tags,
         note: input.note,
         customAttributes: [
-          ...input.customAttributes.filter((attribute) => attribute.key !== "checkout_draft_format"),
+          ...input.customAttributes.filter((attribute) =>
+            attribute.key !== "checkout_draft_format" && attribute.key !== "CPF/CNPJ"
+          ),
+          { key: "CPF/CNPJ", value },
           { key: "checkout_draft_format", value: "graphql_v2" },
         ],
       } },
@@ -962,13 +970,13 @@ export async function completeDraftOrder(
     }
   }
 
-  // Nunca conclua um pedido brasileiro sem confirmar que a credencial fiscal
-  // persistiu. Continuar apesar da falha deixava a venda paga presa em Rascunhos.
+  // A extensao fiscal da Shopify e inconsistente para alguns CPFs validos. O
+  // documento tambem fica nos atributos do pedido; nao prenda uma venda ja paga
+  // como rascunho apenas porque a extensao localizada foi rejeitada.
   if (cpfCnpj) {
     const taxCredential = await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token);
     if (!taxCredential.ok) {
-      console.error(`Draft ${draftOrderId} nao concluido:`, taxCredential.error);
-      return { requestOk: false, orderId: null, alreadyCompleted: false, error: taxCredential.error };
+      console.warn(`Draft ${draftOrderId}: credencial fiscal nao persistiu; concluindo com CPF/CNPJ nos atributos.`, taxCredential.error);
     }
   }
 

@@ -986,7 +986,7 @@ export default function Checkout() {
             };
       const { data: prepared, error: prepareError } =
         await supabase.functions.invoke("checkout-prepare", {
-          body: { items, customer, delivery, billingAddress: effectiveBilling },
+          body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod },
         });
       if (prepareError || prepared?.error) {
         const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
