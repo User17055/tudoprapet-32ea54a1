@@ -35,12 +35,13 @@ Deno.serve(async (req) => {
   if (!variantId.startsWith("gid://shopify/ProductVariant/")) return errorResponse("variantId inválido", 400);
   if (!Number.isFinite(price) || price <= 0) return errorResponse("Preço inválido", 400);
 
-  // O token offline da integração nem sempre recebe write_products. O token online
-  // do administrador pode ter o escopo, então tentamos ambos sem expor nenhum deles.
-  const tokens = [
-    Deno.env.get("SHOPIFY_ACCESS_TOKEN"),
-    Deno.env.get("SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2"),
-  ].filter((token, index, all): token is string => Boolean(token) && all.indexOf(token) === index);
+  // O token offline da integração nem sempre recebe write_products. Tokens online
+  // são salvos por usuário, então buscamos todos sem depender de um ID fixo.
+  const onlineTokens = Object.entries(Deno.env.toObject())
+    .filter(([name]) => name.startsWith("SHOPIFY_ONLINE_ACCESS_TOKEN:"))
+    .map(([, token]) => token);
+  const tokens = [Deno.env.get("SHOPIFY_ACCESS_TOKEN"), ...onlineTokens]
+    .filter((token, index, all): token is string => Boolean(token) && all.indexOf(token) === index);
   if (!tokens.length) return errorResponse("Token Shopify ausente", 500);
 
   let result: { productVariants?: Array<{ id: string; price: string }>; userErrors?: Array<{ message: string }> } | null = null;
