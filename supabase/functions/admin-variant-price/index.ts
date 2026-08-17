@@ -3,7 +3,7 @@
 
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
-import { ADMIN_API, shopifyAdminToken } from "../_shared/shopify.ts";
+import { ADMIN_API } from "../_shared/shopify.ts";
 
 const MUTATION = `
   mutation SetVariantPrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -35,33 +35,55 @@ Deno.serve(async (req) => {
   if (!variantId.startsWith("gid://shopify/ProductVariant/")) return errorResponse("variantId inválido", 400);
   if (!Number.isFinite(price) || price <= 0) return errorResponse("Preço inválido", 400);
 
-  const token = shopifyAdminToken();
-  if (!token) return errorResponse("Token Shopify ausente", 500);
+  // O token offline da integração nem sempre recebe write_products. O token online
+  // do administrador pode ter o escopo, então tentamos ambos sem expor nenhum deles.
+  const tokens = [
+    Deno.env.get("SHOPIFY_ACCESS_TOKEN"),
+    Deno.env.get("SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2"),
+  ].filter((token, index, all): token is string => Boolean(token) && all.indexOf(token) === index);
+  if (!tokens.length) return errorResponse("Token Shopify ausente", 500);
 
-  const response = await fetch(`${ADMIN_API}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-    body: JSON.stringify({
-      query: MUTATION,
-      variables: {
-        productId,
-        variants: [{ id: variantId, price: price.toFixed(2) }],
-      },
-    }),
-  });
+  let result: { productVariants?: Array<{ id: string; price: string }>; userErrors?: Array<{ message: string }> } | null = null;
+  let lastError = "A Shopify recusou a atualização do preço";
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || !data) {
-    return errorResponse(`Shopify respondeu ${response.status}`, 502);
+  for (const token of tokens) {
+    const response = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query: MUTATION,
+        variables: {
+          productId,
+          variants: [{ id: variantId, price: price.toFixed(2) }],
+        },
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) {
+      lastError = `Shopify respondeu ${response.status}`;
+      continue;
+    }
+
+    const graphqlErrors = data.errors as Array<{ message?: string }> | undefined;
+    if (graphqlErrors?.length) {
+      lastError = graphqlErrors.map((error) => error.message || "Erro na Shopify").join("; ");
+      continue;
+    }
+
+    const mutationResult = data.data?.productVariantsBulkUpdate;
+    if (mutationResult?.userErrors?.length) {
+      return errorResponse(
+        mutationResult.userErrors.map((error: { message: string }) => error.message).join("; "),
+        400,
+      );
+    }
+
+    result = mutationResult;
+    break;
   }
-  const graphqlErrors = data.errors;
-  if (graphqlErrors?.length) {
-    return errorResponse(graphqlErrors.map((e: { message: string }) => e.message).join("; "), 502);
-  }
-  const result = data.data?.productVariantsBulkUpdate;
-  if (result?.userErrors?.length) {
-    return errorResponse(result.userErrors.map((e: { message: string }) => e.message).join("; "), 400);
-  }
+
+  if (!result) return errorResponse(lastError, 502);
 
   return jsonResponse({
     ok: true,
