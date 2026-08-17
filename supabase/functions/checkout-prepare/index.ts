@@ -7,7 +7,7 @@ import {
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
-import { createFiscalDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails, findOrCreateCustomer } from "../_shared/shopify.ts";
+import { createFiscalDraftOrder, fetchShopifyDraftDeliveryOptions, fetchVariantCheckoutDetails } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 
 function readFirstEnv(keys: string[]): string {
@@ -221,12 +221,6 @@ Deno.serve(async (req) => {
     }).select("id").single();
     if (sessionError) throw sessionError;
 
-    const shopifyCustomerId = await findOrCreateCustomer(input.customer.email, shopifyToken);
-    if (!shopifyCustomerId) {
-      await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
-      return errorResponse("Falha ao identificar cliente na Shopify", 502);
-    }
-
     const discountTitle = customerType === "franchise"
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
@@ -234,7 +228,6 @@ Deno.serve(async (req) => {
 
     const draft = await createFiscalDraftOrder({
       lineItems,
-      customerId: `gid://shopify/Customer/${shopifyCustomerId}`,
       email: input.customer.email,
       cpfCnpj: input.customer.cpfCnpj,
       // Nao copie o endereco de entrega padrao em pedidos de retirada. Quando o

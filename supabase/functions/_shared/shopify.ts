@@ -7,6 +7,7 @@ import {
   PICKUP_CODE_ATTRIBUTE,
   PICKUP_DONE_ATTRIBUTE,
 } from "./pickup.ts";
+import { toGraphqlDraftLineItems } from "./pricing.ts";
 
 export const SHOP_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
 
@@ -462,14 +463,10 @@ export async function createDraftOrder(
   };
 }
 
-/**
- * Cria o draft com variantes reais pela API REST e depois grava a credencial
- * fiscal brasileira sem reenviar as linhas do pedido.
- */
+/** Cria o draft por GraphQL com variantes reais e CPF/CNPJ na mesma mutacao. */
 export async function createFiscalDraftOrder(
   input: {
     lineItems: Record<string, unknown>[];
-    customerId: string;
     email: string;
     cpfCnpj: string;
     shippingLine: { title: string; price: string };
@@ -492,58 +489,50 @@ export async function createFiscalDraftOrder(
     };
   }
 
-  // A criação REST usa variant_id, que mantém cada linha vinculada ao produto
-  // real da Shopify. Depois gravamos a credencial fiscal por GraphQL sem reenviar
-  // as linhas, evitando que elas sejam convertidas em itens personalizados.
-  const isPickup = !input.shippingAddress;
-  let creationShippingAddress = input.shippingAddress ?? input.billingAddress;
-  if (!creationShippingAddress) {
-    const shopRes = await fetch(`${ADMIN_API}/graphql.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({
-        query: `{ shop { billingAddress { address1 city zip provinceCode countryCodeV2 } } }`,
-      }),
-    });
-    const shopAddress = (await shopRes.json().catch(() => null))?.data?.shop?.billingAddress;
-    creationShippingAddress = {
-      first_name: "Retirada",
-      last_name: "na loja",
-      address1: shopAddress?.address1 || "Retirada na loja",
-      city: shopAddress?.city || "Presidente Prudente",
-      zip: shopAddress?.zip || "19010000",
-      province_code: shopAddress?.provinceCode || "SP",
-      country_code: "BR",
-    };
-  }
+  const graphqlAddress = (address?: Record<string, unknown>) => address
+    ? {
+      firstName: address.first_name,
+      lastName: address.last_name,
+      address1: address.address1,
+      address2: address.address2 || undefined,
+      city: address.city,
+      zip: address.zip,
+      phone: address.phone,
+      provinceCode: address.province_code || undefined,
+      countryCode: "BR",
+    }
+    : undefined;
+  const expectedVariantIds = input.lineItems
+    .map((line) => String(line.variant_id || "").split("/").pop())
+    .sort();
 
-  const shippingLineInput = {
-    title: input.shippingLine.title,
-    price: Number(input.shippingLine.price),
-  };
-
-  const response = await fetch(`${ADMIN_API}/draft_orders.json`, {
+  const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
     body: JSON.stringify({
-      draft_order: {
-        line_items: input.lineItems,
-        customer: { id: Number(String(input.customerId).split("/").pop()) },
+      query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder {
+            id legacyResourceId invoiceUrl taxExempt
+            localizedFields(first: 5) { nodes { key value } }
+            lineItems(first: 100) { nodes { variant { id } quantity } }
+          }
+          userErrors { field message }
+        }
+      }`,
+      variables: { input: {
+        lineItems: toGraphqlDraftLineItems(input.lineItems),
         email: input.email,
-        // O pagamento e os descontos já são calculados pelo checkout.
-        // Impede a Shopify de somar imposto novamente ao valor pago no Asaas.
-        tax_exempt: true,
-        shipping_line: { title: input.shippingLine.title, price: input.shippingLine.price },
-        shipping_address: creationShippingAddress,
-        billing_address: input.billingAddress,
-        use_customer_default_address: false,
-        tags: input.tags.join(","),
+        localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
+        taxExempt: true,
+        shippingLine: { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
+        shippingAddress: graphqlAddress(input.shippingAddress),
+        billingAddress: graphqlAddress(input.billingAddress),
+        useCustomerDefaultAddress: false,
+        tags: input.tags,
         note: input.note,
-        note_attributes: input.customAttributes.map((attribute) => ({
-          name: attribute.key,
-          value: attribute.value,
-        })),
-      },
+        customAttributes: input.customAttributes,
+      } },
     }),
   });
 
@@ -555,16 +544,20 @@ export async function createFiscalDraftOrder(
   } catch {
     body = null;
   }
-  const draft = body?.draft_order;
-  const draftOrderId = draft?.id ? String(draft.id) : null;
-  const invoiceUrl = draft?.invoice_url ?? null;
+  const payload = body?.data?.draftOrderCreate;
+  const draft = payload?.draftOrder;
+  const draftOrderId: string | null = draft?.legacyResourceId
+    ? String(draft.legacyResourceId)
+    : (draft?.id ? (String(draft.id).split("/").pop() ?? null) : null);
+  const invoiceUrl = draft?.invoiceUrl ?? null;
   const hasCredential = (nodes: any[]) => nodes.some(
     (node: { key?: string; value?: string }) => node?.key === "TAX_CREDENTIAL_BR" && String(node?.value || "").replace(/\D/g, "") === value,
   );
 
-  if (!response.ok || !draftOrderId) {
-    const error = shopifyErrorMessage(body?.errors, `Shopify nao criou o rascunho (HTTP ${response.status}).`);
-    console.error("Criacao REST do rascunho falhou:", error);
+  const creationErrors = body?.errors?.length ? body.errors : (payload?.userErrors ?? []);
+  if (!response.ok || !draftOrderId || creationErrors.length) {
+    const error = shopifyErrorMessage(creationErrors, `Shopify nao criou o rascunho (HTTP ${response.status}).`);
+    console.error("Criacao GraphQL do rascunho falhou:", error);
     return {
       requestOk: false,
       invoiceUrl,
@@ -574,11 +567,8 @@ export async function createFiscalDraftOrder(
     };
   }
 
-  const expectedVariantIds = input.lineItems
-    .map((line) => String(line.variant_id || "").split("/").pop())
-    .sort();
-  const actualVariantIds = (draft.line_items || [])
-    .map((line: { variant_id?: string | number | null }) => String(line.variant_id || ""))
+  const actualVariantIds = (draft?.lineItems?.nodes || [])
+    .map((line: { variant?: { id?: string } | null }) => String(line.variant?.id || "").split("/").pop())
     .filter(Boolean)
     .sort();
   const variantsLinked = expectedVariantIds.length === actualVariantIds.length &&
@@ -600,66 +590,29 @@ export async function createFiscalDraftOrder(
     };
   }
 
-  const taxCredential = await setDraftOrderTaxCredential(draftOrderId, value, token);
-  if (!taxCredential.ok) {
+  const credentialStored = hasCredential(draft?.localizedFields?.nodes ?? []);
+  if (!credentialStored) {
     return {
       requestOk: false,
       invoiceUrl,
       draftOrderId,
       taxCredentialStored: false,
-      error: taxCredential.error,
+      error: "A Shopify criou o rascunho, mas nao gravou o CPF/CNPJ.",
     };
   }
-
-  // Retirada: remove o endereço de entrega (evita fulfillment de envio) e
-  // restaura a shippingLine "Retirada na loja", que a Shopify limpa junto.
-  let finalInvoiceUrl = invoiceUrl;
-  if (isPickup) {
-    const clear = await fetch(`${ADMIN_API}/graphql.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({
-        query: `mutation ClearShipping($id: ID!, $input: DraftOrderInput!) {
-          draftOrderUpdate(id: $id, input: $input) {
-            draftOrder {
-              invoiceUrl
-              shippingAddress { countryCodeV2 }
-              shippingLine { title }
-              localizedFields(first: 5) { nodes { key value } }
-            }
-            userErrors { field message }
-          }
-        }`,
-        variables: {
-          id: `gid://shopify/DraftOrder/${draftOrderId}`,
-          input: { shippingAddress: null, shippingLine: shippingLineInput },
-        },
-      }),
-    });
-    const clearBody = await clear.json().catch(() => null);
-    const updated = clearBody?.data?.draftOrderUpdate?.draftOrder;
-    const clearErrors = clearBody?.errors?.length
-      ? clearBody.errors
-      : (clearBody?.data?.draftOrderUpdate?.userErrors ?? []);
-    const stillStored = hasCredential(updated?.localizedFields?.nodes ?? []);
-    console.log(
-      `retirada: endereco=${updated?.shippingAddress?.countryCodeV2 ?? "null"} frete=${updated?.shippingLine?.title ?? "null"} credencial=${stillStored} erros=${clearErrors.length}`,
-    );
-    if (!stillStored) {
-      return {
-        requestOk: false,
-        invoiceUrl: finalInvoiceUrl,
-        draftOrderId,
-        taxCredentialStored: false,
-        error: "A credencial fiscal foi perdida ao ajustar o rascunho de retirada.",
-      };
-    }
-    finalInvoiceUrl = updated?.invoiceUrl ?? finalInvoiceUrl;
+  if (draft?.taxExempt !== true) {
+    return {
+      requestOk: false,
+      invoiceUrl,
+      draftOrderId,
+      taxCredentialStored: true,
+      error: "A Shopify nao removeu o imposto duplicado do rascunho.",
+    };
   }
 
   return {
     requestOk: true,
-    invoiceUrl: finalInvoiceUrl,
+    invoiceUrl,
     draftOrderId,
     taxCredentialStored: true,
     error: null,
@@ -719,20 +672,6 @@ export async function setDraftOrderTaxCredential(
   if (!draft) {
     return { ok: false, error: `Shopify nao permitiu ler o rascunho (HTTP ${read.status}).` };
   }
-  const brAddress = (address: Record<string, unknown> | null | undefined) => address
-    ? {
-      firstName: address.first_name,
-      lastName: address.last_name,
-      address1: address.address1,
-      address2: address.address2 || undefined,
-      city: address.city,
-      zip: address.zip,
-      phone: address.phone,
-      provinceCode: address.province_code || undefined,
-      countryCode: "BR",
-    }
-    : undefined;
-
   // Leitura apenas diagnostica o conteúdo existente. A atualização abaixo não
   // reenvia os itens: alterar só os campos informados preserva produtos e descontos.
   const currentRes = await fetch(`${ADMIN_API}/graphql.json`, {
@@ -834,13 +773,11 @@ export async function setDraftOrderTaxCredential(
       variables: {
         id: `gid://shopify/DraftOrder/${draftOrderId}`,
         input: {
+          // Rascunhos REST antigos tinham um cliente associado. A Shopify usa
+          // a configuracao fiscal do cliente e ignora taxExempt do rascunho;
+          // remova apenas o vinculo fiscal, preservando e-mail e enderecos.
+          purchasingEntity: null,
           taxExempt: true,
-          marketRegionCountryCode: "BR",
-          shippingAddress: brAddress(draft?.shipping_address),
-          // Retirada não possui shipping_address. Ainda assim a credencial fiscal
-          // brasileira precisa de um contexto BR; o país de cobrança é suficiente
-          // e não transforma a retirada em envio.
-          billingAddress: brAddress(draft?.billing_address) || { countryCode: "BR" },
           localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
       },
