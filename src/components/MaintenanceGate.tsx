@@ -84,10 +84,7 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
         <img src={logo} alt="TudoPraPet" className="mx-auto h-auto w-52 sm:w-64" />
 
         <div className="mt-10 bg-white sm:px-8">
-          <p className="mx-auto w-fit rounded-full bg-[#f1c548] px-4 py-2 text-xs font-extrabold uppercase tracking-[0.18em] text-[#0a1931]">
-            Aviso importante
-          </p>
-          <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-[#0a1931] sm:text-5xl">
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#0a1931] sm:text-5xl">
             Site em manutenção
           </h1>
           <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600">
