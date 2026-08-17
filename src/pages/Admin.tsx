@@ -30,8 +30,8 @@ import {
   Boxes,
   Receipt,
   GitBranch,
-  ClipboardCheck,
   Wrench,
+
   type LucideIcon,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,7 +52,6 @@ import FranquiaTab from "./admin/FranquiaTab";
 import VariationsTab from "./admin/VariationsTab";
 import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
-import ConferenceTab from "./admin/ConferenceTab";
 import MaintenanceTab from "./admin/MaintenanceTab";
 
 interface SubPrice {
@@ -84,7 +83,6 @@ type SectionId =
   | "retirada"
   | "orders"
   | "sync"
-  | "conference"
   | "maintenance"
   | "franquia";
 
@@ -109,7 +107,6 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
   {
     label: "Catálogo",
     items: [
-      { id: "conference", label: "Conferência", description: "Confira preços, assinatura, visibilidade e disponibilidade dos produtos", icon: ClipboardCheck, component: ConferenceTab },
       { id: "content", label: "Conteúdo", description: "Descrições personalizadas dos produtos", icon: FileText, component: ContentTab },
       { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
       { id: "variations", label: "Variações", description: "Agrupe tamanhos e pesos do mesmo produto", icon: Boxes, component: VariationsTab },
