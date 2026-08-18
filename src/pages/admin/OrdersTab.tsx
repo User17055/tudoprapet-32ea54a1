@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, Clipboard, Cloud, Code2, FileText, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck } from "lucide-react";
+import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 interface PendingSyncSale {
@@ -205,27 +205,6 @@ export default function OrdersTab() {
     } finally { setPrintingId(null); }
   };
 
-  const readyForPickup = async (order: PrintableOrder) => {
-    if (!window.confirm(`Marcar ${order.name} como pronto para retirada e avisar o cliente?`)) return;
-    setFulfillmentBusyId(order.id);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-orders", {
-        body: { action: "ready_for_pickup", orderId: String(order.id) },
-      });
-      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao atualizar a retirada");
-      toast.success(`${order.name} está pronto para retirada`, {
-        description: "A Shopify foi atualizada e enviou a notificação ao cliente.",
-      });
-      await load();
-    } catch (error) {
-      toast.error("Não foi possível marcar como pronto para retirada", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setFulfillmentBusyId(null);
-    }
-  };
-
   const openTracking = (order: PrintableOrder) => {
     setTrackingOrder(order);
     setTrackingNumber("");
@@ -331,10 +310,10 @@ export default function OrdersTab() {
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div> : filtered.length === 0 ? <p className="py-16 text-center text-muted-foreground">Nenhum pedido encontrado.</p> :
         <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
           {filtered.map((order) => {
-            const canFulfill = !order.cancelled_at && order.financial_status !== "refunded" && order.fulfillment_status !== "fulfilled" && !order.pickup_ready;
+            const canTrack = !isPickup && !order.cancelled_at && order.financial_status !== "refunded" && order.fulfillment_status !== "fulfilled";
             const isPickup = order.delivery_label === "RETIRADA";
             const fulfillmentBusy = fulfillmentBusyId === order.id;
-            return <TableRow key={order.id}><TableCell className="font-bold">{order.name}</TableCell><TableCell><div className="font-medium">{order.customer_name}</div><div className="text-xs text-muted-foreground">{order.phone || order.email || "Sem contato"}</div></TableCell><TableCell className="whitespace-nowrap">{new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell><TableCell><Badge variant="outline" className={order.cancelled_at || order.financial_status === "refunded" ? "border-red-200 bg-red-50 text-red-700" : order.fulfillment_status === "fulfilled" ? "border-slate-200 bg-slate-100" : "border-blue-200 bg-blue-50 text-blue-700"}>{statusLabel(order)}</Badge></TableCell><TableCell className="text-right font-semibold">{money(order.total_price, order.currency)}</TableCell><TableCell><div className="flex min-w-max justify-end gap-1">{canFulfill && (isPickup ? <Button size="sm" variant="outline" onClick={() => void readyForPickup(order)} disabled={fulfillmentBusy}><PackageCheck className="mr-1.5 h-4 w-4" />{fulfillmentBusy ? "Atualizando..." : "Pronto para retirada"}</Button> : <Button size="sm" variant="outline" onClick={() => openTracking(order)} disabled={fulfillmentBusy}><Truck className="mr-1.5 h-4 w-4" />Inserir rastreio</Button>)}<Button size="sm" variant="outline" onClick={() => printA4(order)} title="Imprimir em A4"><FileText className="h-4 w-4" /><span className="sr-only">A4</span></Button><Button size="sm" variant="outline" onClick={() => setZplOrder(order)} title="Ver código ZPL"><Code2 className="h-4 w-4" /><span className="sr-only">ZPL</span></Button><Button size="sm" onClick={() => printZpl(order)} disabled={printingId === order.id} title="Enviar à impressora ZPL remota">{printingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="sr-only">Imprimir ZPL</span></Button></div></TableCell></TableRow>;
+            return <TableRow key={order.id}><TableCell className="font-bold">{order.name}</TableCell><TableCell><div className="font-medium">{order.customer_name}</div><div className="text-xs text-muted-foreground">{order.phone || order.email || "Sem contato"}</div></TableCell><TableCell className="whitespace-nowrap">{new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell><TableCell><Badge variant="outline" className={order.cancelled_at || order.financial_status === "refunded" ? "border-red-200 bg-red-50 text-red-700" : order.fulfillment_status === "fulfilled" ? "border-slate-200 bg-slate-100" : "border-blue-200 bg-blue-50 text-blue-700"}>{statusLabel(order)}</Badge></TableCell><TableCell className="text-right font-semibold">{money(order.total_price, order.currency)}</TableCell><TableCell><div className="flex min-w-max justify-end gap-1">{canTrack && <Button size="sm" variant="outline" onClick={() => openTracking(order)} disabled={fulfillmentBusy}><Truck className="mr-1.5 h-4 w-4" />Inserir rastreio</Button>}<Button size="sm" variant="outline" onClick={() => printA4(order)} title="Imprimir em A4"><FileText className="h-4 w-4" /><span className="sr-only">A4</span></Button><Button size="sm" variant="outline" onClick={() => setZplOrder(order)} title="Ver código ZPL"><Code2 className="h-4 w-4" /><span className="sr-only">ZPL</span></Button><Button size="sm" onClick={() => printZpl(order)} disabled={printingId === order.id} title="Enviar à impressora ZPL remota">{printingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="sr-only">Imprimir ZPL</span></Button></div></TableCell></TableRow>;
           })}
         </TableBody></Table></div>}
       </CardContent></Card>
