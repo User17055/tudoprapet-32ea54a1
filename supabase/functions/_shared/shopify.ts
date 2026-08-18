@@ -693,8 +693,15 @@ export async function createFiscalDraftOrder(
     };
   }
 
-  const actualVariantIds = (draft?.lineItems?.nodes || [])
-    .map((line: { variant?: { id?: string } | null }) => String(line.variant?.id || "").split("/").pop())
+  // A mutacao nao pode selecionar `variant` (exige read_products no token
+  // atual). O vinculo das variantes e conferido pelo REST do proprio rascunho,
+  // que responde com variant_id usando so read_draft_orders.
+  const draftCheck = await fetch(
+    `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`,
+    { headers: { "X-Shopify-Access-Token": token } },
+  ).then((res) => res.ok ? res.json() : null).catch(() => null);
+  const actualVariantIds = ((draftCheck?.draft_order?.line_items ?? []) as Array<{ variant_id?: number | string | null }>)
+    .map((line) => String(line.variant_id || "").split("/").pop())
     .filter(Boolean)
     .sort();
   const variantsLinked = expectedVariantIds.length === actualVariantIds.length &&
