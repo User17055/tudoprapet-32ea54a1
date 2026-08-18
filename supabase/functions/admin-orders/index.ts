@@ -178,14 +178,18 @@ async function markTaggedPickupReady(orderId: string, shopifyToken: string): Pro
   if (!notification.ok) throw new Error(`Falha ao avisar o cliente (${notification.status})`);
 
   const pickupCode = extractPickupCode(notificationText);
-  if (pickupCode) {
-    await savePickupCodeOnOrder({
-      shopDomain: SHOP,
-      adminToken: shopifyToken,
-      numericOrderId,
-      pickupCode,
-      existingNoteAttributes: order.note_attributes || [],
-    });
+  if (!pickupCode) {
+    throw new Error("O serviço de retirada não devolveu o código da cliente");
+  }
+  const codeSaved = await savePickupCodeOnOrder({
+    shopDomain: SHOP,
+    adminToken: shopifyToken,
+    numericOrderId,
+    pickupCode,
+    existingNoteAttributes: order.note_attributes || [],
+  });
+  if (!codeSaved) {
+    throw new Error("O código foi gerado, mas não pôde ser salvo no pedido da Shopify");
   }
 
   const tags = [...new Set(
@@ -219,7 +223,10 @@ async function markReadyForPickup(orderId: string, shopifyToken: string): Promis
   });
   const errors = data?.fulfillmentOrderLineItemsPreparedForPickup?.userErrors || [];
   if (errors.length) throw new Error(errors.map((item: { message?: string }) => item.message).filter(Boolean).join("; "));
-  return fulfillmentOrders.length;
+  // O webhook nativo continua registrado, mas esta chamada síncrona garante
+  // que o clique só termine com código devolvido e gravado. A chave idempotente
+  // impede mensagem duplicada quando o webhook chegar em seguida.
+  return await markTaggedPickupReady(orderId, shopifyToken);
 }
 
 async function fulfillShipment(
