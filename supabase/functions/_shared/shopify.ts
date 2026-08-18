@@ -635,7 +635,7 @@ export async function createFiscalDraftOrder(
             shippingAddress { address1 zip }
             billingAddress { address1 zip }
             shippingLine { title shippingRateHandle custom }
-            lineItems(first: 100) { nodes { variant { id } quantity } }
+            lineItems(first: 100) { nodes { quantity } }
           }
           userErrors { field message }
         }
