@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
   }
   let pngValid = false;
   try {
-    const bytes = Uint8Array.from(atob(qr.encodedImage), (c) => c.charCodeAt(0));
+    const bytes = Uint8Array.from(atob(qr.encodedImage ?? ""), (c) => c.charCodeAt(0));
     pngValid = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
   } catch {
     pngValid = false;
