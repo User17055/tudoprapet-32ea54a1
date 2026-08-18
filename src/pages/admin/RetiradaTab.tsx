@@ -198,17 +198,29 @@ export default function RetiradaTab() {
             <CardTitle>Código de retirada</CardTitle>
             <CardDescription>O cliente recebeu o código por WhatsApp.</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleResendLast}
-            disabled={resending}
-            title="Reenviar código do último pedido"
-          >
-            {resending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
-            Reenviar último
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResendLast}
+              disabled={resending}
+              title="Reenviar código do último pedido"
+            >
+              {resending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+              Reenviar último
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSendToday}
+              disabled={sendingToday}
+              title="Enviar o código de retirada para todos os pedidos de hoje"
+            >
+              {sendingToday ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+              Enviar todos de hoje
+            </Button>
+          </div>
         </CardHeader>
+
         <CardContent className="space-y-4">
           <form onSubmit={handleValidate} className="flex gap-2">
             <Input
