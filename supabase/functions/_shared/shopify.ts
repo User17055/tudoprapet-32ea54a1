@@ -756,6 +756,8 @@ export interface ShopifyLocalPickupOption {
   code: string | null;
   title: string;
   locationId: string;
+  locationName: string | null;
+  address: string | null;
   instructions: string | null;
 }
 
@@ -821,15 +823,60 @@ export async function fetchShopifyDraftPickupOptions(
   if (body?.errors?.length) {
     throw new Error(body.errors[0]?.message || "Shopify rejeitou a consulta de retirada");
   }
-  return (body?.data?.draftOrderAvailableDeliveryOptions?.availableLocalPickupOptions ?? [])
+  const options = (body?.data?.draftOrderAvailableDeliveryOptions?.availableLocalPickupOptions ?? [])
     .map((option: Record<string, unknown>) => ({
       handle: String(option.handle || ""),
       code: typeof option.code === "string" ? option.code : null,
       title: String(option.title || "Retirada na loja"),
       locationId: String(option.locationId || ""),
+      locationName: null,
+      address: null,
       instructions: typeof option.instructions === "string" ? option.instructions : null,
     }))
     .filter((option: ShopifyLocalPickupOption) => option.handle && option.locationId);
+
+  const locationIds = [...new Set(options.map((option: ShopifyLocalPickupOption) => option.locationId))];
+  if (!locationIds.length) return options;
+
+  const locationsResponse = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+    body: JSON.stringify({
+      query: `query PickupLocations($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on Location { id name address { formatted } }
+        }
+      }`,
+      variables: { ids: locationIds },
+    }),
+  });
+  if (!locationsResponse.ok) {
+    throw new Error(`Falha ao consultar endereco da retirada Shopify (${locationsResponse.status})`);
+  }
+  const locationsBody = await locationsResponse.json();
+  if (locationsBody?.errors?.length) {
+    throw new Error(locationsBody.errors[0]?.message || "Shopify rejeitou a consulta do endereco de retirada");
+  }
+  const locations = new Map<string, { name: string | null; address: string | null }>(
+    (locationsBody?.data?.nodes ?? [])
+      .filter((location: Record<string, unknown> | null) => location && location.id)
+      .map((location: Record<string, unknown>) => {
+        const rawAddress = location.address as { formatted?: unknown } | null;
+        const formatted = Array.isArray(rawAddress?.formatted)
+          ? rawAddress.formatted.map(String).map((line) => line.trim()).filter(Boolean).join(", ")
+          : "";
+        return [String(location.id), {
+          name: typeof location.name === "string" ? location.name : null,
+          address: formatted || null,
+        }];
+      }),
+  );
+
+  return options.map((option: ShopifyLocalPickupOption) => ({
+    ...option,
+    locationName: locations.get(option.locationId)?.name ?? null,
+    address: locations.get(option.locationId)?.address ?? null,
+  }));
 }
 
 /**

@@ -122,6 +122,12 @@ type CheckoutSummary = {
   shippingAmount?: number;
   shippingMethod?: string;
   shippingCode?: string;
+  pickupLocation?: {
+    name: string;
+    address: string;
+    hours: string;
+    instructions?: string | null;
+  } | null;
   total: number;
   items: SummaryItem[];
 };
@@ -1394,6 +1400,7 @@ export default function Checkout() {
                         <PaymentWaiting
                           payment={payment}
                           pickup={deliveryMode === "pick_up"}
+                          pickupLocation={summary?.pickupLocation}
                           cancelling={cancellingPix}
                           onBack={() => void returnFromPix()}
                         />
@@ -2529,14 +2536,18 @@ function CheckLine({
 function PaymentWaiting({
   payment,
   pickup,
+  pickupLocation,
   cancelling,
   onBack,
 }: {
   payment: PaymentResult | null;
   pickup: boolean;
+  pickupLocation?: CheckoutSummary["pickupLocation"];
   cancelling: boolean;
   onBack: () => void;
 }) {
+  const pickupAddress = pickupLocation?.address || PICKUP_STORE_ADDRESS;
+  const pickupHours = pickupLocation?.hours || PICKUP_STORE_HOURS;
   const [now, setNow] = useState(Date.now());
   const expiresAt = payment?.expiresAt ? Date.parse(payment.expiresAt) : NaN;
   const hasExpiration = Number.isFinite(expiresAt);
@@ -2566,10 +2577,11 @@ function PaymentWaiting({
               Aguarde nosso aviso informando que o pedido está pronto. A retirada
               somente será liberada depois dessa confirmação.
             </p>
-            {PICKUP_STORE_ADDRESS && PICKUP_STORE_HOURS && (
+            {pickupAddress && pickupHours && (
               <div className="mt-3 border-t border-amber-200 pt-3 text-sm text-amber-950">
-                <p><strong>Local:</strong> {PICKUP_STORE_ADDRESS}</p>
-                <p className="mt-1"><strong>Funcionamento:</strong> {PICKUP_STORE_HOURS}</p>
+                {pickupLocation?.name && <p><strong>Loja:</strong> {pickupLocation.name}</p>}
+                <p className="mt-1"><strong>Local:</strong> {pickupAddress}</p>
+                <p className="mt-1"><strong>Funcionamento:</strong> {pickupHours}</p>
               </div>
             )}
           </div>
@@ -3148,6 +3160,8 @@ function Success({
   summary: CheckoutSummary | null;
 }) {
   const pickup = summary?.shippingCode === "pick_up";
+  const pickupAddress = summary?.pickupLocation?.address || PICKUP_STORE_ADDRESS;
+  const pickupHours = summary?.pickupLocation?.hours || PICKUP_STORE_HOURS;
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
       <div className="mx-auto max-w-lg text-center">
@@ -3170,7 +3184,7 @@ function Success({
               confirmação quando os produtos estiverem separados e prontos para
               retirada.
             </p>
-            {PICKUP_STORE_ADDRESS && PICKUP_STORE_HOURS ? (
+            {pickupAddress && pickupHours ? (
               <div className="mt-4 space-y-3 rounded-xl bg-white/75 p-4 text-slate-800">
                 <div className="flex items-start gap-3">
                   <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-blue-900" />
@@ -3178,7 +3192,10 @@ function Success({
                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                       Local de retirada
                     </p>
-                    <p className="mt-1 text-sm font-semibold">{PICKUP_STORE_ADDRESS}</p>
+                    {summary?.pickupLocation?.name && (
+                      <p className="mt-1 text-sm font-bold">{summary.pickupLocation.name}</p>
+                    )}
+                    <p className="mt-1 text-sm font-semibold">{pickupAddress}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -3187,7 +3204,7 @@ function Success({
                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                       Horário de funcionamento
                     </p>
-                    <p className="mt-1 text-sm font-semibold">{PICKUP_STORE_HOURS}</p>
+                    <p className="mt-1 text-sm font-semibold">{pickupHours}</p>
                   </div>
                 </div>
               </div>

@@ -16,6 +16,7 @@ import {
 } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
+import { PICKUP_HOURS } from "../_shared/pickup.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -187,6 +188,12 @@ Deno.serve(async (req) => {
     let shippingMethod = shippingLabel(input.delivery.code);
     let shippingCode: "pick_up" | "pac" | "sedex" | "local_delivery" | "shipping" = input.delivery.code;
     let shippingRateHandle: string | undefined;
+    let pickupLocation: {
+      name: string;
+      address: string;
+      hours: string;
+      instructions: string | null;
+    } | undefined;
     if (input.delivery.code === "pick_up") {
       const pickupOptions = await fetchShopifyDraftPickupOptions({
         items: input.items,
@@ -201,8 +208,17 @@ Deno.serve(async (req) => {
       if (!selectedPickup) {
         return errorResponse("A retirada na loja está indisponível na Shopify. Verifique o local e o estoque.", 409);
       }
+      if (!selectedPickup.address) {
+        return errorResponse("O local de retirada está sem endereço cadastrado na Shopify.", 409);
+      }
       shippingMethod = selectedPickup.title;
       shippingRateHandle = selectedPickup.handle;
+      pickupLocation = {
+        name: selectedPickup.locationName || selectedPickup.title,
+        address: selectedPickup.address,
+        hours: PICKUP_HOURS,
+        instructions: selectedPickup.instructions,
+      };
     } else if (input.delivery.address) {
       const providerOptions = await fetchShopifyDraftDeliveryOptions({
         items: input.items,
@@ -241,7 +257,12 @@ Deno.serve(async (req) => {
       address_snapshot: input.delivery.address ?? {},
       billing_address_snapshot: input.billingAddress ?? input.delivery.address ?? {},
       items_snapshot: itemsSnapshot,
-      pricing_snapshot: { customerType, serviceFee: CHECKOUT_SERVICE_FEE, calculatedAt: new Date().toISOString() },
+      pricing_snapshot: {
+        customerType,
+        serviceFee: CHECKOUT_SERVICE_FEE,
+        calculatedAt: new Date().toISOString(),
+        ...(pickupLocation ? { pickupLocation } : {}),
+      },
       anonymous_access_token_hash: accessTokenHash,
       anonymous_access_token_expires_at: tokenExpiresAt,
       session_expires_at: sessionExpiresAt,
@@ -339,7 +360,17 @@ Deno.serve(async (req) => {
       accessToken,
       customerType,
       status: "awaiting_payment",
-      summary: { subtotal, discount, serviceFee: CHECKOUT_SERVICE_FEE, shippingAmount, total, shippingMethod, shippingCode, items: itemsSnapshot },
+      summary: {
+        subtotal,
+        discount,
+        serviceFee: CHECKOUT_SERVICE_FEE,
+        shippingAmount,
+        total,
+        shippingMethod,
+        shippingCode,
+        items: itemsSnapshot,
+        pickupLocation,
+      },
     });
   } catch (error) {
     console.error("checkout-prepare:", error);

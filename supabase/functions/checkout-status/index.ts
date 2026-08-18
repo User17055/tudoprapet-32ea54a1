@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
     const { data: session, error } = await admin.from("checkout_sessions")
-      .select("id,user_id,status,customer_type,currency,subtotal,discount,service_fee,shipping_amount,total,shipping_method,shipping_code,items_snapshot,shopify_order_id,anonymous_access_token_hash,anonymous_access_token_expires_at,created_at,updated_at")
+      .select("id,user_id,status,customer_type,currency,subtotal,discount,service_fee,shipping_amount,total,shipping_method,shipping_code,items_snapshot,pricing_snapshot,shopify_order_id,anonymous_access_token_hash,anonymous_access_token_expires_at,created_at,updated_at")
       .eq("id", sessionId).single();
     if (error || !session) return errorResponse("Checkout não encontrado", 404);
     if (!(await canAccessCheckout(session, auth.user?.id ?? null, accessToken))) {
@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
         shippingMethod: session.shipping_method,
         shippingCode: session.shipping_code,
         items: session.items_snapshot,
+        pickupLocation: session.pricing_snapshot?.pickupLocation ?? null,
       },
       payment: payment ? {
         id: payment.id,
