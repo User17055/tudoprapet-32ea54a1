@@ -623,73 +623,6 @@ export async function createFiscalDraftOrder(
     };
   }
   const normalizedPhone = brazilPhone(input.phone);
-  const fallbackToRest = async (reason: string): Promise<FiscalDraftOrderResult> => {
-    console.warn(`Criacao GraphQL indisponivel; usando REST compativel: ${reason}`);
-    const response = await fetch(`${ADMIN_API}/draft_orders.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-      body: JSON.stringify({
-        draft_order: {
-          line_items: input.lineItems,
-          email: input.email,
-          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
-          customer: { id: customerId },
-          shipping_line: { title: input.shippingLine.title, price: input.shippingLine.price },
-          shipping_address: input.shippingAddress,
-          billing_address: input.billingAddress,
-          use_customer_default_address: false,
-          tags: input.tags.join(","),
-          note: input.note,
-          note_attributes: [
-            ...input.customAttributes.filter((attribute) =>
-              attribute.key !== "checkout_draft_format" && attribute.key !== "CPF/CNPJ"
-            ),
-            { key: "CPF/CNPJ", value },
-            { key: "checkout_draft_format", value: "rest_fallback" },
-          ].map((attribute) => ({ name: attribute.key, value: attribute.value })),
-        },
-      }),
-    });
-    const body = await response.json().catch(() => null);
-    const draft = body?.draft_order;
-    const fallbackDraftId = draft?.id ? String(draft.id) : null;
-    if (!response.ok || !fallbackDraftId) {
-      return {
-        requestOk: false,
-        invoiceUrl: draft?.invoice_url ?? null,
-        draftOrderId: fallbackDraftId,
-        taxCredentialStored: false,
-        error: shopifyErrorMessage(body?.errors, `Shopify nao criou o rascunho (HTTP ${response.status}).`),
-      };
-    }
-    const actualVariantIds = (draft.line_items ?? [])
-      .map((line: { variant_id?: string | number | null }) => String(line.variant_id || ""))
-      .filter(Boolean)
-      .sort();
-    const linked = expectedVariantIds.length === actualVariantIds.length &&
-      expectedVariantIds.every((variantId, index) => variantId === actualVariantIds[index]);
-    if (!linked) {
-      await deleteDraftOrder(fallbackDraftId, token);
-      return {
-        requestOk: false,
-        invoiceUrl: null,
-        draftOrderId: null,
-        taxCredentialStored: false,
-        error: "A Shopify nao vinculou o produto cadastrado ao rascunho.",
-      };
-    }
-    const credential = await setDraftOrderTaxCredential(fallbackDraftId, value, token);
-    return {
-      // A Shopify pode rejeitar a extensao fiscal mesmo com CPF valido. O
-      // documento permanece nos atributos e nao deve bloquear Pix/cartao.
-      requestOk: true,
-      invoiceUrl: draft.invoice_url ?? null,
-      draftOrderId: fallbackDraftId,
-      taxCredentialStored: credential.ok,
-      error: credential.error,
-    };
-  };
-
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
@@ -698,7 +631,10 @@ export async function createFiscalDraftOrder(
         draftOrderCreate(input: $input) {
           draftOrder {
             id legacyResourceId invoiceUrl
-            localizedFields(first: 5) { nodes { key value } }
+            customer { id }
+            shippingAddress { address1 zip }
+            billingAddress { address1 zip }
+            shippingLine { title shippingRateHandle custom }
             lineItems(first: 100) { nodes { variant { id } quantity } }
           }
           userErrors { field message }
@@ -709,7 +645,6 @@ export async function createFiscalDraftOrder(
         email: input.email,
         phone: normalizedPhone,
         purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
-        localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
         shippingLine: input.shippingLine.shippingRateHandle
           ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
           : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
@@ -743,16 +678,19 @@ export async function createFiscalDraftOrder(
     ? String(draft.legacyResourceId)
     : (draft?.id ? (String(draft.id).split("/").pop() ?? null) : null);
   const invoiceUrl = draft?.invoiceUrl ?? null;
-  const hasCredential = (nodes: any[]) => nodes.some(
-    (node: { key?: string; value?: string }) => node?.key === "TAX_CREDENTIAL_BR" && String(node?.value || "").replace(/\D/g, "") === value,
-  );
 
   const creationErrors = body?.errors?.length ? body.errors : (payload?.userErrors ?? []);
   if (!response.ok || !draftOrderId || creationErrors.length) {
     const error = shopifyErrorMessage(creationErrors, `Shopify nao criou o rascunho (HTTP ${response.status}).`);
     console.error("Criacao GraphQL do rascunho falhou:", error);
     if (draftOrderId) await deleteDraftOrder(draftOrderId, token);
-    return fallbackToRest(error);
+    return {
+      requestOk: false,
+      invoiceUrl,
+      draftOrderId: null,
+      taxCredentialStored: false,
+      error,
+    };
   }
 
   const actualVariantIds = (draft?.lineItems?.nodes || [])
@@ -769,28 +707,46 @@ export async function createFiscalDraftOrder(
       method: "DELETE",
       headers: { "X-Shopify-Access-Token": token },
     }).catch(() => null);
-    return fallbackToRest("A criacao GraphQL nao vinculou as variantes.");
-  }
-
-  const credentialStored = hasCredential(draft?.localizedFields?.nodes ?? []);
-  if (!credentialStored) {
-    // Preserve o draft, as variantes e a retirada nativa. O documento tambem
-    // está nos atributos; a extensão fiscal é tentada sem bloquear o checkout.
-    const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
     return {
-      requestOk: true,
-      invoiceUrl,
-      draftOrderId,
-      taxCredentialStored: credential.ok,
-      error: credential.error,
+      requestOk: false,
+      invoiceUrl: null,
+      draftOrderId: null,
+      taxCredentialStored: false,
+      error: "A criacao GraphQL nao vinculou as variantes.",
     };
   }
+
+  const linkedCustomerId = String(draft?.customer?.id || "").split("/").pop();
+  const selectedHandle = input.shippingLine.shippingRateHandle;
+  const persistedHandle = String(draft?.shippingLine?.shippingRateHandle || "");
+  const customerLinked = linkedCustomerId === String(customerId);
+  const shippingAddressStored = !input.shippingAddress || Boolean(draft?.shippingAddress?.address1 && draft?.shippingAddress?.zip);
+  const billingAddressStored = !input.billingAddress || Boolean(draft?.billingAddress?.address1 && draft?.billingAddress?.zip);
+  const deliveryStored = !selectedHandle || persistedHandle === selectedHandle;
+  if (!customerLinked || !shippingAddressStored || !billingAddressStored || !deliveryStored) {
+    console.error(`Rascunho ${draftOrderId} perdeu dados obrigatorios`, {
+      customerLinked, shippingAddressStored, billingAddressStored, deliveryStored,
+    });
+    await deleteDraftOrder(draftOrderId, token);
+    return {
+      requestOk: false,
+      invoiceUrl: null,
+      draftOrderId: null,
+      taxCredentialStored: false,
+      error: "A Shopify nao preservou cliente, enderecos ou modalidade de entrega no rascunho.",
+    };
+  }
+
+  // O rascunho nativo ja existe com cliente, enderecos e modalidade corretos.
+  // A credencial fiscal e acrescentada separadamente para uma rejeicao fiscal
+  // nunca trocar a retirada GraphQL por um rascunho REST incompleto.
+  const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
   return {
     requestOk: true,
     invoiceUrl,
     draftOrderId,
-    taxCredentialStored: true,
-    error: null,
+    taxCredentialStored: credential.ok,
+    error: credential.error,
   };
 
 }
@@ -805,9 +761,34 @@ export interface ShopifyLocalPickupOption {
 
 /** Usa a retirada configurada na loja para habilitar o fluxo nativo no Admin. */
 export async function fetchShopifyDraftPickupOptions(
-  items: Array<{ variantId: string; quantity: number }>,
+  input: {
+    items: Array<{ variantId: string; quantity: number }>;
+    customerName: string;
+    email: string;
+    phone: string;
+    address: {
+      address1: string; number: string; address2?: string; neighborhood: string;
+      city: string; provinceCode: string; postalCode: string;
+    };
+  },
   adminToken: string,
 ): Promise<ShopifyLocalPickupOption[]> {
+  const customerAddress = {
+    first_name: input.customerName.trim().split(/\s+/)[0] || "Cliente",
+    last_name: input.customerName.trim().split(/\s+/).slice(1).join(" ") || undefined,
+    address1: `${input.address.address1}, ${input.address.number}`,
+    address2: [input.address.address2, input.address.neighborhood].filter(Boolean).join(" - ") || undefined,
+    city: input.address.city,
+    province_code: input.address.provinceCode,
+    zip: input.address.postalCode,
+    phone: brazilPhone(input.phone),
+  };
+  const customerId = await findOrCreateCustomer(input.email, adminToken, {
+    name: input.customerName,
+    phone: input.phone,
+    address: customerAddress,
+  });
+  if (!customerId) throw new Error("Shopify nao criou ou localizou o cliente da retirada");
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
@@ -818,8 +799,20 @@ export async function fetchShopifyDraftPickupOptions(
         }
       }`,
       variables: { input: {
-        lineItems: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+        lineItems: input.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
         marketRegionCountryCode: "BR",
+        purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
+        shippingAddress: {
+          firstName: customerAddress.first_name,
+          lastName: customerAddress.last_name,
+          address1: customerAddress.address1,
+          address2: customerAddress.address2,
+          city: customerAddress.city,
+          provinceCode: customerAddress.province_code,
+          zip: customerAddress.zip,
+          countryCode: "BR",
+          phone: customerAddress.phone,
+        },
       } },
     }),
   });

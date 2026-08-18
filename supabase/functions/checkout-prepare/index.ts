@@ -188,7 +188,13 @@ Deno.serve(async (req) => {
     let shippingCode: "pick_up" | "pac" | "sedex" | "local_delivery" | "shipping" = input.delivery.code;
     let shippingRateHandle: string | undefined;
     if (input.delivery.code === "pick_up") {
-      const pickupOptions = await fetchShopifyDraftPickupOptions(input.items, shopifyToken);
+      const pickupOptions = await fetchShopifyDraftPickupOptions({
+        items: input.items,
+        customerName: input.customer.name,
+        email: input.customer.email,
+        phone: input.customer.mobilePhone,
+        address: input.billingAddress!,
+      }, shopifyToken);
       const selectedPickup = input.delivery.optionHandle
         ? pickupOptions.find((option) => option.handle === input.delivery.optionHandle)
         : pickupOptions[0];
@@ -253,15 +259,15 @@ Deno.serve(async (req) => {
       customerName: input.customer.name,
       phone: input.customer.mobilePhone,
       cpfCnpj: input.customer.cpfCnpj,
-      // Nao copie o endereco de entrega padrao em pedidos de retirada. Quando o
-      // draft de retirada recebe shipping_address, a Shopify cria o fulfillment
-      // como envio mesmo que a linha esteja nomeada "Retirada na loja".
       shippingLine: {
         ...buildShippingLine(shippingMethod, shippingAmount),
         shippingRateHandle,
       },
-      shippingAddress: input.delivery.address
-        ? shopifyAddress(input.delivery.address, input.customer.name, input.customer.mobilePhone)
+      // A Shopify precisa dos dois snapshots no pedido. Em retirada, o endereco
+      // cadastrado de cobranca tambem identifica o cliente/destinatario; quem
+      // define PICK_UP e o handle nativo da shippingLine, nao a ausencia de CEP.
+      shippingAddress: (input.delivery.address || input.billingAddress)
+        ? shopifyAddress(input.delivery.address || input.billingAddress!, input.customer.name, input.customer.mobilePhone)
         : undefined,
       billingAddress: (input.billingAddress || input.delivery.address)
         ? shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone)

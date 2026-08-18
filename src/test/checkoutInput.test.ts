@@ -10,6 +10,14 @@ const valid = {
     mobilePhone: "(11) 99999-9999",
   },
   delivery: { code: "pick_up" },
+  billingAddress: {
+    address1: "Rua das Flores",
+    number: "10",
+    neighborhood: "Centro",
+    city: "São Paulo",
+    provinceCode: "SP",
+    postalCode: "01001-000",
+  },
 };
 
 describe("entrada do checkout próprio", () => {
@@ -20,6 +28,11 @@ describe("entrada do checkout próprio", () => {
       cpfCnpj: "52998224725",
       mobilePhone: "11999999999",
     });
+  });
+
+  it("exige endereço de faturamento inclusive na retirada", () => {
+    const result = parseCheckoutPrepareInput({ ...valid, billingAddress: undefined });
+    expect(result).toEqual({ ok: false, message: "Preencha o endereço de faturamento completo" });
   });
 
   it("rejeita documento com tamanho correto e dígitos verificadores inválidos", () => {

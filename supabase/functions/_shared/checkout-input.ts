@@ -147,6 +147,9 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
     if (!parsedBilling.ok) return { ok: false, message: "Preencha o endereço de cobrança completo" };
     billingAddress = parsedBilling.value;
   }
+  if (!billingAddress) {
+    return { ok: false, message: "Preencha o endereço de faturamento completo" };
+  }
 
   return {
     ok: true,
