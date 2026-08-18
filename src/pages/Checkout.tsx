@@ -124,7 +124,7 @@ type CheckoutSummary = {
   shippingCode?: string;
   pickupLocation?: {
     name: string;
-    address: string;
+    address: string | null;
     hours: string;
     instructions?: string | null;
   } | null;

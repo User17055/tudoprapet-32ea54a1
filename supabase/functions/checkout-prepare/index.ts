@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
     let shippingRateHandle: string | undefined;
     let pickupLocation: {
       name: string;
-      address: string;
+      address: string | null;
       hours: string;
       instructions: string | null;
     } | undefined;
@@ -207,9 +207,6 @@ Deno.serve(async (req) => {
         : pickupOptions[0];
       if (!selectedPickup) {
         return errorResponse("A retirada na loja está indisponível na Shopify. Verifique o local e o estoque.", 409);
-      }
-      if (!selectedPickup.address) {
-        return errorResponse("O local de retirada está sem endereço cadastrado na Shopify.", 409);
       }
       shippingMethod = selectedPickup.title;
       shippingRateHandle = selectedPickup.handle;

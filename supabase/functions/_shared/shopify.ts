@@ -838,39 +838,42 @@ export async function fetchShopifyDraftPickupOptions(
   const locationIds = [...new Set(options.map((option: ShopifyLocalPickupOption) => option.locationId))];
   if (!locationIds.length) return options;
 
-  const locationsResponse = await fetch(`${ADMIN_API}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
-    body: JSON.stringify({
-      query: `query PickupLocations($ids: [ID!]!) {
-        nodes(ids: $ids) {
-          ... on Location { id name address { formatted } }
-        }
-      }`,
-      variables: { ids: locationIds },
-    }),
-  });
-  if (!locationsResponse.ok) {
-    throw new Error(`Falha ao consultar endereco da retirada Shopify (${locationsResponse.status})`);
-  }
-  const locationsBody = await locationsResponse.json();
-  if (locationsBody?.errors?.length) {
-    throw new Error(locationsBody.errors[0]?.message || "Shopify rejeitou a consulta do endereco de retirada");
-  }
-  const locations = new Map<string, { name: string | null; address: string | null }>(
-    (locationsBody?.data?.nodes ?? [])
-      .filter((location: Record<string, unknown> | null) => location && location.id)
-      .map((location: Record<string, unknown>) => {
-        const rawAddress = location.address as { formatted?: unknown } | null;
-        const formatted = Array.isArray(rawAddress?.formatted)
-          ? rawAddress.formatted.map(String).map((line) => line.trim()).filter(Boolean).join(", ")
-          : "";
-        return [String(location.id), {
-          name: typeof location.name === "string" ? location.name : null,
-          address: formatted || null,
-        }];
+  const locations = new Map<string, { name: string | null; address: string | null }>();
+  try {
+    const locationsResponse = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+      body: JSON.stringify({
+        query: `query PickupLocations($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on Location { id name address { formatted } }
+          }
+        }`,
+        variables: { ids: locationIds },
       }),
-  );
+    });
+    if (!locationsResponse.ok) {
+      throw new Error(`HTTP ${locationsResponse.status}`);
+    }
+    const locationsBody = await locationsResponse.json();
+    if (locationsBody?.errors?.length) {
+      throw new Error(locationsBody.errors[0]?.message || "consulta rejeitada");
+    }
+    for (const location of locationsBody?.data?.nodes ?? []) {
+      if (!location?.id) continue;
+      const formatted = Array.isArray(location.address?.formatted)
+        ? location.address.formatted.map(String).map((line: string) => line.trim()).filter(Boolean).join(", ")
+        : "";
+      locations.set(String(location.id), {
+        name: typeof location.name === "string" ? location.name : null,
+        address: formatted || null,
+      });
+    }
+  } catch (error) {
+    // O token pode não ter read_locations. Endereço é informativo e jamais
+    // pode impedir a criação do pedido ou da cobrança no Asaas.
+    console.warn("Endereco da localizacao de retirada indisponivel:", error);
+  }
 
   return options.map((option: ShopifyLocalPickupOption) => ({
     ...option,
