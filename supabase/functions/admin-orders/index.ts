@@ -1,7 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
-import { cloneLegacyFiscalDraftOrder, completeDraftOrder, deleteDraftOrder } from "../_shared/shopify.ts";
+import {
+  cloneLegacyFiscalDraftOrder,
+  completeDraftOrder,
+  deleteDraftOrder,
+  savePickupCodeOnOrder,
+} from "../_shared/shopify.ts";
+import {
+  buildIdempotencyKey,
+  extractPickupCode,
+  normalizePhone,
+  PICKUP_HOURS,
+  STORE_NAME,
+} from "../_shared/pickup.ts";
 import { getAsaasPayment } from "../_shared/asaas.ts";
 import { isPaidAsaasProviderStatus, mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 
@@ -110,10 +122,91 @@ function isPickupFulfillmentOrder(order: FulfillmentOrderForAction): boolean {
   return /pick[_ -]?up/.test(String(order.deliveryMethod?.methodType || "").toLowerCase());
 }
 
+async function markTaggedPickupReady(orderId: string, shopifyToken: string): Promise<number> {
+  const numericOrderId = orderId.replace(/\D/g, "");
+  const orderResponse = await fetch(
+    `https://${SHOP}/admin/api/${API}/orders/${numericOrderId}.json?fields=id,name,order_number,tags,note_attributes,shipping_lines,customer,shipping_address,billing_address,phone`,
+    { headers: { "X-Shopify-Access-Token": shopifyToken } },
+  );
+  if (!orderResponse.ok) throw new Error(`Não foi possível consultar a retirada na Shopify (${orderResponse.status})`);
+  const order = (await orderResponse.json())?.order;
+  if (!order) throw new Error("Pedido não encontrado na Shopify");
+
+  const attributes = (order.note_attributes || [])
+    .map((item: { name?: string; value?: string }) => `${item?.name || ""} ${item?.value || ""}`)
+    .join(" ");
+  const shipping = (order.shipping_lines || [])
+    .map((item: { title?: string; code?: string; source?: string }) => `${item?.title || ""} ${item?.code || ""} ${item?.source || ""}`)
+    .join(" ");
+  const pickupEvidence = `${order.tags || ""} ${attributes} ${shipping}`.toLowerCase();
+  if (!/retirada|pickup|pick[_ -]?up|shop location/.test(pickupEvidence)) {
+    throw new Error("Este pedido não está identificado como retirada");
+  }
+
+  const customer = order.customer || {};
+  const shippingAddress = order.shipping_address || {};
+  const billingAddress = order.billing_address || {};
+  const phone = normalizePhone(
+    customer.phone || customer.default_address?.phone || shippingAddress.phone || billingAddress.phone || order.phone,
+  );
+  if (!phone) throw new Error("O pedido de retirada está sem telefone do cliente");
+
+  const baseUrl = Deno.env.get("EXTERNAL_API_BASE_URL");
+  const apiToken = Deno.env.get("EXTERNAL_API_TOKEN");
+  if (!baseUrl || !apiToken) throw new Error("Serviço de aviso de retirada não configurado");
+  const customerName = `${customer.first_name || shippingAddress.first_name || ""} ${customer.last_name || shippingAddress.last_name || ""}`.trim()
+    || customer.name || "Cliente";
+  const orderNumber = String(order.name || order.order_number || numericOrderId);
+  const orderGid = `gid://shopify/Order/${numericOrderId}`;
+  const notification = await fetch(`${baseUrl.replace(/\/$/, "")}/api/whatsapp/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiToken },
+    body: JSON.stringify({
+      event: "order_ready_for_pickup",
+      shopify_order_id: orderGid,
+      order_id: orderGid,
+      order_number: orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`,
+      customer_name: customerName,
+      phone,
+      store_name: STORE_NAME,
+      pickup_hours: PICKUP_HOURS,
+      idempotency_key: buildIdempotencyKey("order_ready_for_pickup", numericOrderId),
+      source_topic: "admin-orders/manual-ready",
+    }),
+  });
+  const notificationText = await notification.text();
+  if (!notification.ok) throw new Error(`Falha ao avisar o cliente (${notification.status})`);
+
+  const pickupCode = extractPickupCode(notificationText);
+  if (pickupCode) {
+    await savePickupCodeOnOrder({
+      shopDomain: SHOP,
+      adminToken: shopifyToken,
+      numericOrderId,
+      pickupCode,
+      existingNoteAttributes: order.note_attributes || [],
+    });
+  }
+
+  const tags = [...new Set(
+    String(order.tags || "").split(",").map((tag) => tag.trim()).filter(Boolean).concat("pronto-retirada"),
+  )].join(", ");
+  const tagResponse = await fetch(`https://${SHOP}/admin/api/${API}/orders/${numericOrderId}.json`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": shopifyToken },
+    body: JSON.stringify({ order: { id: Number(numericOrderId), tags } }),
+  });
+  if (!tagResponse.ok) console.error(`Pedido ${numericOrderId}: aviso enviado, mas tag de pronto falhou (${tagResponse.status})`);
+  return 1;
+}
+
 async function markReadyForPickup(orderId: string, shopifyToken: string): Promise<number> {
   const fulfillmentOrders = (await openFulfillmentOrders(orderId, shopifyToken)).filter(isPickupFulfillmentOrder);
   if (!fulfillmentOrders.length) {
-    throw new Error("Este pedido não possui uma retirada aberta na Shopify");
+    // Pedidos concluídos de Draft Order podem manter a tag/atributo de retirada,
+    // mas a Shopify criar um fulfillment genérico. Nesse caso o aviso manual
+    // não depende de methodType=PICK_UP.
+    return await markTaggedPickupReady(orderId, shopifyToken);
   }
   const data = await shopifyGraphql(shopifyToken, `mutation ReadyForPickup($input: FulfillmentOrderLineItemsPreparedForPickupInput!) {
     fulfillmentOrderLineItemsPreparedForPickup(input: $input) {
@@ -339,10 +432,11 @@ function normalize(order: any, delivery = deliveryLabel(order)) {
   ].filter(Boolean).join(", ") : null;
   const customerName = [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ")
     || address?.name || "Cliente não identificado";
-  const pickupReady = (order.note_attributes || []).some((item: { name?: string; value?: string }) =>
+  const pickupReadyByCode = (order.note_attributes || []).some((item: { name?: string; value?: string }) =>
     /codigo de retirada/i.test(String(item?.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")) &&
     String(item?.value || "").trim().length > 0
   );
+  const pickupReady = pickupReadyByCode || /pronto[- ]retirada|ready-for-pickup/i.test(String(order.tags || ""));
   return {
     id: order.id,
     name: order.name || `#${order.id}`,

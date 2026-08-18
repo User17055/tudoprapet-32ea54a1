@@ -68,6 +68,17 @@ describe("buildDraftLineItems", () => {
     expect(lines[0].applied_discount).toBeUndefined();
   });
 
+  it("never turns an invalid zero special price into a free product", () => {
+    const lines = buildDraftLineItems(
+      itemsOf({ variantId: VARIANT_A, quantity: 1 }),
+      new Map([[VARIANT_A, 0]]),
+      new Map([[VARIANT_A, 100]]),
+      "Clube TudoPraPet",
+    );
+
+    expect(lines[0].applied_discount).toBeUndefined();
+  });
+
   it("applies no discount when the current price is unknown", () => {
     const lines = buildDraftLineItems(
       itemsOf({ variantId: VARIANT_A, quantity: 1 }),

@@ -52,6 +52,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { supabase } from "@/integrations/supabase/client";
@@ -112,6 +113,7 @@ type SummaryItem = {
   variantTitle: string;
   imageUrl?: string | null;
   quantity: number;
+  catalogUnitPrice?: number;
   unitPrice: number;
   lineTotal: number;
 };
@@ -249,6 +251,7 @@ export default function Checkout() {
     new URLSearchParams(window.location.search).get("preview") === "1";
   const launch = useMemo(() => readCheckoutLaunch(), []);
   const { user, loading: authLoading } = useAuth();
+  const { isSubscribed } = useSubscription();
   const {
     items: cartItems,
     addItem,
@@ -320,14 +323,20 @@ export default function Checkout() {
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
   const { getSubscriberPrice: cardSubscriberPrice } = useSubscriberPrices();
-  const { getFranchisePrice: cardFranchisePrice } = useFranchisePrices();
+  const {
+    isFranchisee: pricingIsFranchisee,
+    getFranchisePrice: cardFranchisePrice,
+  } = useFranchisePrices();
   // Sem sessão de checkout ainda, o desconto de assinante/franquia é calculado
   // no cliente — sem isso o parcelamento usava o valor cheio dos produtos.
   const localCartDiscount = cartItems.reduce((acc, item) => {
     const catalogPrice = Number(item.price.amount);
-    const special =
-      cardFranchisePrice(item.variantId) ?? cardSubscriberPrice(item.variantId);
-    if (special === null || special >= catalogPrice) return acc;
+    const special = pricingIsFranchisee
+      ? cardFranchisePrice(item.variantId)
+      : isSubscribed
+        ? cardSubscriberPrice(item.variantId)
+        : null;
+    if (special === null || !Number.isFinite(special) || special <= 0 || special >= catalogPrice) return acc;
     return acc + (catalogPrice - special) * item.quantity;
   }, 0);
   const cardBaseTotal = Math.max(
@@ -2691,8 +2700,9 @@ function CheckoutBag({
   onQuantity: (variantId: string, quantity: number) => void;
   onRemove: (variantId: string) => void;
 }) {
+  const { isSubscribed } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
-  const { getFranchisePrice } = useFranchisePrices();
+  const { isFranchisee, getFranchisePrice } = useFranchisePrices();
   const catalogPrices = new Map(
     cartItems.map((item) => [item.variantId, Number(item.price.amount)]),
   );
@@ -2708,12 +2718,20 @@ function CheckoutBag({
       lineTotal: Number(item.price.amount) * item.quantity,
     }));
   // Preço especial (franquia/assinante) para exibir o valor original cortado.
-  const pricing = (variantId: string, unitPrice: number) => {
-    const catalog = catalogPrices.get(variantId) ?? unitPrice;
-    const special =
-      getFranchisePrice(variantId) ?? getSubscriberPrice(variantId) ?? null;
-    const effective =
-      special !== null && special < catalog ? special : Math.min(unitPrice, catalog);
+  const pricing = (item: SummaryItem) => {
+    const catalog = item.catalogUnitPrice ?? catalogPrices.get(item.variantId) ?? item.unitPrice;
+    // Depois do prepare, o resumo assinado pelo servidor é a única autoridade.
+    // Antes dele, desconto só aparece para o perfil que realmente tem direito.
+    const special = isFranchisee
+      ? getFranchisePrice(item.variantId)
+      : isSubscribed
+        ? getSubscriberPrice(item.variantId)
+        : null;
+    const effective = summary
+      ? item.unitPrice
+      : special !== null && Number.isFinite(special) && special > 0 && special < catalog
+        ? special
+        : item.unitPrice;
     return { catalog, effective, hasDiscount: effective < catalog };
   };
   if (!list.length) return null;
@@ -2792,10 +2810,7 @@ function CheckoutBag({
                   </p>
                 )}
                 {(() => {
-                  const { catalog, effective, hasDiscount } = pricing(
-                    item.variantId,
-                    item.unitPrice,
-                  );
+                  const { catalog, effective, hasDiscount } = pricing(item);
                   return (
                     <div className="text-right">
                       {hasDiscount && (

@@ -50,7 +50,13 @@ export function buildDraftLineItems(
       variant_id: Number(gidToNumericId(item.variantId)),
       quantity: item.quantity,
     };
-    if (special !== undefined && current !== undefined && current > special) {
+    if (
+      special !== undefined &&
+      current !== undefined &&
+      Number.isFinite(special) &&
+      special > 0 &&
+      current > special
+    ) {
       const perUnitDiscount = Number((current - special).toFixed(2));
       li.applied_discount = {
         description: discountTitle,

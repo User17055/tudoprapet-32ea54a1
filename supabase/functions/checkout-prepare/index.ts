@@ -151,11 +151,17 @@ Deno.serve(async (req) => {
     if (customerType === "subscriber") {
       const { data } = await admin.from("subscriber_prices")
         .select("shopify_variant_id,subscriber_price").in("shopify_variant_id", variantIds);
-      for (const row of data ?? []) specialPriceMap.set(row.shopify_variant_id, Number(row.subscriber_price));
+      for (const row of data ?? []) {
+        const price = Number(row.subscriber_price);
+        if (Number.isFinite(price) && price > 0) specialPriceMap.set(row.shopify_variant_id, price);
+      }
     } else if (customerType === "franchise") {
       const { data } = await admin.from("franchise_prices")
         .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
-      for (const row of data ?? []) specialPriceMap.set(row.shopify_variant_id, Number(row.price));
+      for (const row of data ?? []) {
+        const price = Number(row.price);
+        if (Number.isFinite(price) && price > 0) specialPriceMap.set(row.shopify_variant_id, price);
+      }
     }
 
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
@@ -164,7 +170,7 @@ Deno.serve(async (req) => {
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
       const special = specialPriceMap.get(item.variantId);
-      const unitPrice = special !== undefined && special >= 0 && special < detail.price ? special : detail.price;
+      const unitPrice = special !== undefined && special > 0 && special < detail.price ? special : detail.price;
       subtotal += detail.price * item.quantity;
       total += unitPrice * item.quantity;
       return {
