@@ -63,6 +63,7 @@ export default function RetiradaTab() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [customer, setCustomer] = useState("");
+  const [sendingToday, setSendingToday] = useState(false);
 
   const handleResend = async (payload: { customer?: string } = {}) => {
     setResending(true);
@@ -78,7 +79,29 @@ export default function RetiradaTab() {
     }
   };
 
+  const handleSendToday = async () => {
+    setSendingToday(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pickup-resend-today", { body: {} });
+      if (error) { toast.error(await extractError(error)); return; }
+      if (data?.error) { toast.error(String(data.error)); return; }
+      const sent = data?.sent ?? 0;
+      const skipped = data?.skipped ?? 0;
+      const failed = data?.failed ?? 0;
+      toast.success(`Hoje: ${sent} enviados, ${skipped} ignorados, ${failed} falhas (${data?.total ?? 0} pedidos)`);
+      if (failed > 0) {
+        const first = (data?.results || []).find((r: { status?: string }) => r.status === "failed");
+        if (first?.reason) toast.error(`Falha em ${first.order_number}: ${first.reason}`);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSendingToday(false);
+    }
+  };
+
   const handleResendLast = () => handleResend();
+
 
 
   const loadHistory = async () => {
