@@ -306,7 +306,11 @@ Deno.serve(async (req) => {
     }, shopifyToken);
     if (!draft.draftOrderId) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
-      return errorResponse("Falha ao preparar pedido na Shopify", 502);
+      console.error(`Shopify nao devolveu rascunho para o checkout ${session.id}:`, draft.error);
+      return errorResponse(
+        draft.error || "Falha ao preparar pedido na Shopify",
+        502,
+      );
     }
     // Grave o vinculo imediatamente. Mesmo que a credencial fiscal seja
     // rejeitada, o rascunho continua rastreavel para diagnostico/recuperacao.
