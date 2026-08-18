@@ -635,6 +635,7 @@ export async function createFiscalDraftOrder(
             shippingAddress { address1 zip }
             billingAddress { address1 zip }
             shippingLine { title shippingRateHandle custom }
+            lineItems(first: 100) { nodes { quantity } }
           }
           userErrors { field message }
         }
@@ -692,24 +693,8 @@ export async function createFiscalDraftOrder(
     };
   }
 
-  const verificationResponse = await fetch(
-    `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json?fields=id,line_items`,
-    { headers: { "X-Shopify-Access-Token": token } },
-  );
-  if (!verificationResponse.ok) {
-    console.error(`Shopify nao permitiu verificar o rascunho ${draftOrderId} via REST (HTTP ${verificationResponse.status})`);
-    await deleteDraftOrder(draftOrderId, token);
-    return {
-      requestOk: false,
-      invoiceUrl: null,
-      draftOrderId: null,
-      taxCredentialStored: false,
-      error: "A Shopify nao permitiu verificar as variantes do rascunho.",
-    };
-  }
-  const verificationDraft = (await verificationResponse.json())?.draft_order;
-  const actualVariantIds = (verificationDraft?.line_items || [])
-    .map((line: { variant_id?: string | number | null }) => String(line.variant_id || ""))
+  const actualVariantIds = (draft?.lineItems?.nodes || [])
+    .map((line: { variant?: { id?: string } | null }) => String(line.variant?.id || "").split("/").pop())
     .filter(Boolean)
     .sort();
   const variantsLinked = expectedVariantIds.length === actualVariantIds.length &&
