@@ -63,6 +63,7 @@ export default function RetiradaTab() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [customer, setCustomer] = useState("");
+  const [sendingToday, setSendingToday] = useState(false);
 
   const handleResend = async (payload: { customer?: string } = {}) => {
     setResending(true);
@@ -78,7 +79,29 @@ export default function RetiradaTab() {
     }
   };
 
+  const handleSendToday = async () => {
+    setSendingToday(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pickup-resend-today", { body: {} });
+      if (error) { toast.error(await extractError(error)); return; }
+      if (data?.error) { toast.error(String(data.error)); return; }
+      const sent = data?.sent ?? 0;
+      const skipped = data?.skipped ?? 0;
+      const failed = data?.failed ?? 0;
+      toast.success(`Hoje: ${sent} enviados, ${skipped} ignorados, ${failed} falhas (${data?.total ?? 0} pedidos)`);
+      if (failed > 0) {
+        const first = (data?.results || []).find((r: { status?: string }) => r.status === "failed");
+        if (first?.reason) toast.error(`Falha em ${first.order_number}: ${first.reason}`);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSendingToday(false);
+    }
+  };
+
   const handleResendLast = () => handleResend();
+
 
 
   const loadHistory = async () => {
@@ -175,17 +198,29 @@ export default function RetiradaTab() {
             <CardTitle>Código de retirada</CardTitle>
             <CardDescription>O cliente recebeu o código por WhatsApp.</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleResendLast}
-            disabled={resending}
-            title="Reenviar código do último pedido"
-          >
-            {resending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
-            Reenviar último
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResendLast}
+              disabled={resending}
+              title="Reenviar código do último pedido"
+            >
+              {resending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+              Reenviar último
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSendToday}
+              disabled={sendingToday}
+              title="Enviar o código de retirada para todos os pedidos de hoje"
+            >
+              {sendingToday ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+              Enviar todos de hoje
+            </Button>
+          </div>
         </CardHeader>
+
         <CardContent className="space-y-4">
           <form onSubmit={handleValidate} className="flex gap-2">
             <Input
