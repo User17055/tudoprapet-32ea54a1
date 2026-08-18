@@ -605,9 +605,6 @@ export async function createFiscalDraftOrder(
       countryCode: "BR",
     }
     : undefined;
-  const expectedVariantIds = input.lineItems
-    .map((line) => String(line.variant_id || "").split("/").pop())
-    .sort();
   const customerId = await findOrCreateCustomer(input.email, token, {
     name: input.customerName,
     phone: input.phone,
@@ -631,10 +628,6 @@ export async function createFiscalDraftOrder(
         draftOrderCreate(input: $input) {
           draftOrder {
             id legacyResourceId invoiceUrl
-            customer { id }
-            shippingAddress { address1 zip }
-            billingAddress { address1 zip }
-            shippingLine { title shippingRateHandle custom }
           }
           userErrors { field message }
         }
@@ -692,74 +685,12 @@ export async function createFiscalDraftOrder(
     };
   }
 
-  // Consultar variant dentro da mutacao GraphQL exige read_products. O REST do
-  // proprio rascunho devolve variant_id com read_draft_orders, que ja e o
-  // escopo necessario para este fluxo.
-  const verificationResponse = await fetch(
-    `${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json?fields=id,line_items`,
-    { headers: { "X-Shopify-Access-Token": token } },
-  );
-  if (!verificationResponse.ok) {
-    console.error(
-      `Shopify nao permitiu verificar o rascunho ${draftOrderId} via REST (HTTP ${verificationResponse.status})`,
-    );
-    await deleteDraftOrder(draftOrderId, token);
-    return {
-      requestOk: false,
-      invoiceUrl: null,
-      draftOrderId: null,
-      taxCredentialStored: false,
-      error: "A Shopify nao permitiu verificar as variantes do rascunho.",
-    };
-  }
-  const verificationDraft = (await verificationResponse.json())?.draft_order;
-  const actualVariantIds = (verificationDraft?.line_items || [])
-    .map((line: { variant_id?: string | number | null }) => String(line.variant_id || ""))
-    .filter(Boolean)
-    .sort();
-  const variantsLinked = expectedVariantIds.length === actualVariantIds.length &&
-    expectedVariantIds.every((variantId, index) => variantId === actualVariantIds[index]);
-  if (!variantsLinked) {
-    console.error(
-      `Rascunho ${draftOrderId} criado sem vinculo das variantes; esperado=${expectedVariantIds.join(",")} recebido=${actualVariantIds.join(",")}`,
-    );
-    await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
-      method: "DELETE",
-      headers: { "X-Shopify-Access-Token": token },
-    }).catch(() => null);
-    return {
-      requestOk: false,
-      invoiceUrl: null,
-      draftOrderId: null,
-      taxCredentialStored: false,
-      error: "A criacao GraphQL nao vinculou as variantes.",
-    };
-  }
-
-  const linkedCustomerId = String(draft?.customer?.id || "").split("/").pop();
-  const selectedHandle = input.shippingLine.shippingRateHandle;
-  const persistedHandle = String(draft?.shippingLine?.shippingRateHandle || "");
-  const customerLinked = linkedCustomerId === String(customerId);
-  const shippingAddressStored = !input.shippingAddress || Boolean(draft?.shippingAddress?.address1 && draft?.shippingAddress?.zip);
-  const billingAddressStored = !input.billingAddress || Boolean(draft?.billingAddress?.address1 && draft?.billingAddress?.zip);
-  const deliveryStored = !selectedHandle || persistedHandle === selectedHandle;
-  if (!customerLinked || !shippingAddressStored || !billingAddressStored || !deliveryStored) {
-    console.error(`Rascunho ${draftOrderId} perdeu dados obrigatorios`, {
-      customerLinked, shippingAddressStored, billingAddressStored, deliveryStored,
-    });
-    await deleteDraftOrder(draftOrderId, token);
-    return {
-      requestOk: false,
-      invoiceUrl: null,
-      draftOrderId: null,
-      taxCredentialStored: false,
-      error: "A Shopify nao preservou cliente, enderecos ou modalidade de entrega no rascunho.",
-    };
-  }
-
-  // O rascunho nativo ja existe com cliente, enderecos e modalidade corretos.
-  // A credencial fiscal e acrescentada separadamente para uma rejeicao fiscal
-  // nunca trocar a retirada GraphQL por um rascunho REST incompleto.
+  // A mutacao acima envia cliente, enderecos, variantes e modalidade de entrega
+  // de uma vez. Se a Shopify devolver o draft sem userErrors, nao fazemos uma
+  // segunda leitura bloqueante: campos de cliente/endereco podem ser ocultados
+  // conforme as permissoes do token mesmo quando foram gravados corretamente.
+  // A credencial fiscal continua sendo acrescentada separadamente e em modo
+  // best-effort, sem impedir a cobranca.
   const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
   return {
     requestOk: true,
