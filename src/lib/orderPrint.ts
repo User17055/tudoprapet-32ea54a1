@@ -21,6 +21,7 @@ export interface PrintableOrder {
   currency: string;
   financial_status: string;
   fulfillment_status: string | null;
+  pickup_ready?: boolean;
   cancelled_at?: string | null;
   cancel_reason?: string | null;
   customer_name: string;

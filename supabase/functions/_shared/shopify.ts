@@ -20,20 +20,119 @@ export function shopifyAdminToken(): string {
 export const ADMIN_API = `https://${SHOP_DOMAIN}/admin/api/2025-07`;
 export const STOREFRONT_API = `https://${SHOP_DOMAIN}/api/2025-07/graphql.json`;
 
-export async function findOrCreateCustomer(email: string, token: string): Promise<number | null> {
+export interface ShopifyCustomerDetails {
+  name?: string;
+  phone?: string;
+  address?: Record<string, unknown>;
+}
+
+function customerNames(name = ""): { first_name?: string; last_name?: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return {};
+  return {
+    first_name: parts.shift(),
+    last_name: parts.join(" ") || undefined,
+  };
+}
+
+function customerAddress(address?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!address) return undefined;
+  return {
+    first_name: address.first_name,
+    last_name: address.last_name,
+    address1: address.address1,
+    address2: address.address2 || undefined,
+    city: address.city,
+    province_code: address.province_code || undefined,
+    zip: address.zip,
+    country_code: "BR",
+    phone: address.phone || undefined,
+  };
+}
+
+function brazilPhone(value?: string): string | undefined {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length >= 12) digits = digits.slice(2);
+  return digits ? `+55${digits}` : undefined;
+}
+
+export async function findOrCreateCustomer(
+  email: string,
+  token: string,
+  details: ShopifyCustomerDetails = {},
+): Promise<number | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const names = customerNames(details.name);
+  const phone = brazilPhone(details.phone);
   const searchRes = await fetch(
-    `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${email}`)}`,
+    `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${normalizedEmail}`)}`,
     { headers: { "X-Shopify-Access-Token": token } },
   );
   if (searchRes.ok) {
     const data = await searchRes.json();
-    if (data?.customers?.[0]?.id) return data.customers[0].id;
+    const existing = data?.customers?.[0];
+    if (existing?.id) {
+      // O pedido precisa ficar ligado a um Customer real para nome e contato
+      // aparecerem no Admin. Uma falha ao enriquecer um cadastro antigo nao
+      // deve impedir o checkout: o draft ainda recebe os mesmos dados abaixo.
+      const missingDefaultAddress = !existing.default_address ? customerAddress(details.address) : undefined;
+      if (names.first_name || names.last_name || phone || missingDefaultAddress) {
+        let updateRes = await fetch(`${ADMIN_API}/customers/${existing.id}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+          body: JSON.stringify({ customer: {
+            id: existing.id,
+            ...names,
+            ...(phone ? { phone } : {}),
+            ...(missingDefaultAddress ? { addresses: [missingDefaultAddress] } : {}),
+          } }),
+        });
+        // Telefone e unico na Shopify. Se ele ja pertencer a outro cadastro,
+        // preserve pelo menos o nome em vez de rejeitar o enriquecimento todo.
+        if (!updateRes.ok && phone && (names.first_name || names.last_name)) {
+          console.warn("Customer update with phone failed:", await updateRes.text());
+          updateRes = await fetch(`${ADMIN_API}/customers/${existing.id}.json`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+            body: JSON.stringify({ customer: {
+              id: existing.id,
+              ...names,
+              ...(missingDefaultAddress ? { addresses: [missingDefaultAddress] } : {}),
+            } }),
+          });
+        }
+        if (!updateRes.ok) console.warn("Customer update failed:", await updateRes.text());
+      }
+      return existing.id;
+    }
   }
-  const createRes = await fetch(`${ADMIN_API}/customers.json`, {
+  const address = customerAddress(details.address);
+  let createRes = await fetch(`${ADMIN_API}/customers.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-    body: JSON.stringify({ customer: { email, accepts_marketing: false, send_email_invite: false } }),
+    body: JSON.stringify({ customer: {
+      email: normalizedEmail,
+      ...names,
+      ...(phone ? { phone } : {}),
+      ...(address ? { addresses: [address] } : {}),
+      accepts_marketing: false,
+      send_email_invite: false,
+    } }),
   });
+  if (!createRes.ok && phone) {
+    console.warn("Customer create with phone failed:", await createRes.text());
+    createRes = await fetch(`${ADMIN_API}/customers.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ customer: {
+        email: normalizedEmail,
+        ...names,
+        ...(address ? { addresses: [address] } : {}),
+        accepts_marketing: false,
+        send_email_invite: false,
+      } }),
+    });
+  }
   if (!createRes.ok) {
     console.error("Customer create failed:", await createRes.text());
     return null;
@@ -230,6 +329,8 @@ export interface FiscalDraftOrderResult extends DraftOrderResult {
 export interface FiscalDraftOrderInput {
   lineItems: Record<string, unknown>[];
   email: string;
+  customerName?: string;
+  phone?: string;
   cpfCnpj: string;
   shippingLine: { title: string; price: string; shippingRateHandle?: string };
   shippingAddress?: Record<string, unknown>;
@@ -507,6 +608,21 @@ export async function createFiscalDraftOrder(
   const expectedVariantIds = input.lineItems
     .map((line) => String(line.variant_id || "").split("/").pop())
     .sort();
+  const customerId = await findOrCreateCustomer(input.email, token, {
+    name: input.customerName,
+    phone: input.phone,
+    address: input.shippingAddress || input.billingAddress,
+  });
+  if (!customerId) {
+    return {
+      requestOk: false,
+      invoiceUrl: null,
+      draftOrderId: null,
+      taxCredentialStored: false,
+      error: "Shopify nao criou ou localizou o cliente do pedido.",
+    };
+  }
+  const normalizedPhone = brazilPhone(input.phone);
   const fallbackToRest = async (reason: string): Promise<FiscalDraftOrderResult> => {
     console.warn(`Criacao GraphQL indisponivel; usando REST compativel: ${reason}`);
     const response = await fetch(`${ADMIN_API}/draft_orders.json`, {
@@ -516,7 +632,8 @@ export async function createFiscalDraftOrder(
         draft_order: {
           line_items: input.lineItems,
           email: input.email,
-          tax_exempt: true,
+          ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+          customer: { id: customerId },
           shipping_line: { title: input.shippingLine.title, price: input.shippingLine.price },
           shipping_address: input.shippingAddress,
           billing_address: input.billingAddress,
@@ -580,7 +697,7 @@ export async function createFiscalDraftOrder(
       query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
         draftOrderCreate(input: $input) {
           draftOrder {
-            id legacyResourceId invoiceUrl taxExempt
+            id legacyResourceId invoiceUrl
             localizedFields(first: 5) { nodes { key value } }
             lineItems(first: 100) { nodes { variant { id } quantity } }
           }
@@ -590,8 +707,9 @@ export async function createFiscalDraftOrder(
       variables: { input: {
         lineItems: toGraphqlDraftLineItems(input.lineItems),
         email: input.email,
+        phone: normalizedPhone,
+        purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
         localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
-        taxExempt: true,
         shippingLine: input.shippingLine.shippingRateHandle
           ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
           : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
@@ -667,11 +785,6 @@ export async function createFiscalDraftOrder(
       error: credential.error,
     };
   }
-  if (draft?.taxExempt !== true) {
-    await deleteDraftOrder(draftOrderId, token);
-    return fallbackToRest("A criacao GraphQL manteve imposto duplicado.");
-  }
-
   return {
     requestOk: true,
     invoiceUrl,
@@ -784,6 +897,11 @@ export async function cloneLegacyFiscalDraftOrder(
   return createFiscalDraftOrder({
     lineItems,
     email: String(draft.email || draft.customer?.email || ""),
+    customerName: [
+      draft.shipping_address?.first_name || draft.billing_address?.first_name || draft.customer?.first_name,
+      draft.shipping_address?.last_name || draft.billing_address?.last_name || draft.customer?.last_name,
+    ].filter(Boolean).join(" "),
+    phone: String(draft.phone || draft.shipping_address?.phone || draft.billing_address?.phone || draft.customer?.phone || ""),
     cpfCnpj,
     shippingLine: {
       title: String(shippingLine?.title || "Retirada na loja"),
@@ -853,41 +971,30 @@ export async function setDraftOrderTaxCredential(
     return { ok: false, error: "CPF/CNPJ ausente ou com quantidade de digitos invalida." };
   }
 
-  const read = await fetch(`${ADMIN_API}/draft_orders/${encodeURIComponent(draftOrderId)}.json`, {
-    headers: { "X-Shopify-Access-Token": token },
-  });
-  const draft = read.ok ? (await read.json())?.draft_order : null;
-  if (!draft) {
-    return { ok: false, error: `Shopify nao permitiu ler o rascunho (HTTP ${read.status}).` };
-  }
   // Leitura apenas diagnostica o conteúdo existente. A atualização abaixo não
   // reenvia os itens: alterar só os campos informados preserva produtos e descontos.
   const currentRes = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
     body: JSON.stringify({
-      query: `query DraftLines($id: ID!) {
+      query: `query DraftTaxCredential($id: ID!) {
         draftOrder(id: $id) {
-          taxExempt
           localizedFields(first: 5) { nodes { key value } }
-          shippingLine { title originalPriceSet { shopMoney { amount } } }
-          lineItems(first: 100) {
-            nodes {
-              quantity
-              title
-              requiresShipping
-              taxable
-              variant { id }
-              originalUnitPriceSet { shopMoney { amount } }
-              appliedDiscount { title description valueType value }
-            }
-          }
         }
       }`,
       variables: { id: `gid://shopify/DraftOrder/${draftOrderId}` },
     }),
   });
-  const currentBody = currentRes.ok ? await currentRes.json() : null;
+  const currentBody = await currentRes.json().catch(() => null);
+  if (!currentRes.ok || currentBody?.errors?.length || !currentBody?.data?.draftOrder) {
+    return {
+      ok: false,
+      error: shopifyErrorMessage(
+        currentBody?.errors,
+        `Shopify nao permitiu ler o rascunho (HTTP ${currentRes.status}).`,
+      ),
+    };
+  }
   const currentLocalizedFields = currentBody?.data?.draftOrder?.localizedFields?.nodes ?? [];
   const credentialAlreadyStored = currentLocalizedFields.some(
     (node: { key?: string; value?: string }) =>
@@ -896,57 +1003,9 @@ export async function setDraftOrderTaxCredential(
   // A criação do rascunho já grava a credencial. Não repita um
   // draftOrderUpdate depois do pagamento: além de desnecessário, uma segunda
   // atualização pode ser rejeitada e deixar uma venda paga presa em Rascunhos.
-  if (credentialAlreadyStored && currentBody?.data?.draftOrder?.taxExempt === true) {
+  if (credentialAlreadyStored) {
     return { ok: true, error: null };
   }
-
-  const currentNodes = currentBody?.data?.draftOrder?.lineItems?.nodes as
-    | Record<string, unknown>[]
-    | undefined;
-  if (!Array.isArray(currentNodes) || currentNodes.length === 0) {
-    console.error(
-      `Não foi possível ler as linhas do draft ${draftOrderId} — CPF/CNPJ não gravado para não apagar itens.`,
-      currentRes.status,
-      JSON.stringify(currentBody?.errors ?? null),
-    );
-  }
-
-  const existingLineItems = (currentNodes || []).map((node) => {
-    const discount = node.appliedDiscount as Record<string, unknown> | null;
-    const appliedDiscount = discount
-      ? {
-        title: discount.title || undefined,
-        description: discount.description || undefined,
-        valueType: String(discount.valueType || "FIXED_AMOUNT").toUpperCase(),
-        value: Number(discount.value) || 0,
-      }
-      : undefined;
-    const quantity = Number(node.quantity) || 1;
-    const variantId = (node.variant as { id?: string } | null)?.id;
-    if (variantId) return { variantId, quantity, appliedDiscount };
-    const unitPrice = (node.originalUnitPriceSet as
-      | { shopMoney?: { amount?: string } }
-      | undefined)?.shopMoney?.amount ?? "0";
-    return {
-      title: node.title,
-      originalUnitPrice: String(unitPrice),
-      quantity,
-      requiresShipping: Boolean(node.requiresShipping),
-      taxable: Boolean(node.taxable),
-      appliedDiscount,
-    };
-  });
-
-  const currentShipping = currentBody?.data?.draftOrder?.shippingLine as
-    | { title?: string; originalPriceSet?: { shopMoney?: { amount?: string } } }
-    | null;
-  const shippingLine = currentShipping
-    ? {
-      title: currentShipping.title,
-      price: String(currentShipping.originalPriceSet?.shopMoney?.amount ?? "0"),
-    }
-    : undefined;
-
 
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
@@ -954,18 +1013,13 @@ export async function setDraftOrderTaxCredential(
     body: JSON.stringify({
       query: `mutation SetTaxCredential($id: ID!, $input: DraftOrderInput!) {
         draftOrderUpdate(id: $id, input: $input) {
-          draftOrder { id taxExempt localizedFields(first: 5) { nodes { key value } } lineItems(first: 50) { nodes { quantity title } } }
+          draftOrder { id localizedFields(first: 5) { nodes { key value } } }
           userErrors { field message }
         }
       }`,
       variables: {
         id: `gid://shopify/DraftOrder/${draftOrderId}`,
         input: {
-          // Rascunhos REST antigos tinham um cliente associado. A Shopify usa
-          // a configuracao fiscal do cliente e ignora taxExempt do rascunho;
-          // remova apenas o vinculo fiscal, preservando e-mail e enderecos.
-          purchasingEntity: null,
-          taxExempt: true,
           localizedFields: [{ key: "TAX_CREDENTIAL_BR", value }],
         },
       },
@@ -995,9 +1049,6 @@ export async function setDraftOrderTaxCredential(
   if (!persisted) {
     console.error(`CPF/CNPJ não persistiu no draft ${draftOrderId}`);
     return { ok: false, error: "A Shopify aceitou a atualizacao, mas nao gravou o CPF/CNPJ no rascunho." };
-  }
-  if (body?.data?.draftOrderUpdate?.draftOrder?.taxExempt !== true) {
-    return { ok: false, error: "A Shopify nao removeu o imposto duplicado do rascunho." };
   }
   return { ok: true, error: null };
 

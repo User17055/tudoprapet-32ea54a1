@@ -250,6 +250,8 @@ Deno.serve(async (req) => {
     const draft = await createFiscalDraftOrder({
       lineItems,
       email: input.customer.email,
+      customerName: input.customer.name,
+      phone: input.customer.mobilePhone,
       cpfCnpj: input.customer.cpfCnpj,
       // Nao copie o endereco de entrega padrao em pedidos de retirada. Quando o
       // draft de retirada recebe shipping_address, a Shopify cria o fulfillment

@@ -65,6 +65,105 @@ function nextLink(linkHeader: string | null): string | null {
   return null;
 }
 
+type FulfillmentOrderForAction = {
+  id: string;
+  status: string;
+  deliveryMethod?: { methodType?: string | null } | null;
+};
+
+async function shopifyGraphql(
+  shopifyToken: string,
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<any> {
+  const response = await fetch(`https://${SHOP}/admin/api/${API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": shopifyToken },
+    body: JSON.stringify({ query, variables }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || body?.errors?.length) {
+    const message = body?.errors?.map((item: { message?: string }) => item.message).filter(Boolean).join("; ")
+      || `Shopify respondeu HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  return body?.data;
+}
+
+async function openFulfillmentOrders(orderId: string, shopifyToken: string): Promise<FulfillmentOrderForAction[]> {
+  const numericOrderId = orderId.replace(/\D/g, "");
+  if (!numericOrderId) throw new Error("Pedido inválido");
+  const data = await shopifyGraphql(shopifyToken, `query OrderFulfillmentActions($id: ID!) {
+    order(id: $id) {
+      fulfillmentOrders(first: 20, query: "status:open OR status:in_progress") {
+        nodes { id status deliveryMethod { methodType } }
+      }
+    }
+  }`, { id: `gid://shopify/Order/${numericOrderId}` });
+  if (!data?.order) throw new Error("Pedido não encontrado na Shopify");
+  return (data.order.fulfillmentOrders?.nodes || []).filter((item: FulfillmentOrderForAction) =>
+    ["OPEN", "IN_PROGRESS"].includes(String(item.status || "").toUpperCase())
+  );
+}
+
+function isPickupFulfillmentOrder(order: FulfillmentOrderForAction): boolean {
+  return /pick[_ -]?up/.test(String(order.deliveryMethod?.methodType || "").toLowerCase());
+}
+
+async function markReadyForPickup(orderId: string, shopifyToken: string): Promise<number> {
+  const fulfillmentOrders = (await openFulfillmentOrders(orderId, shopifyToken)).filter(isPickupFulfillmentOrder);
+  if (!fulfillmentOrders.length) {
+    throw new Error("Este pedido não possui uma retirada aberta na Shopify");
+  }
+  const data = await shopifyGraphql(shopifyToken, `mutation ReadyForPickup($input: FulfillmentOrderLineItemsPreparedForPickupInput!) {
+    fulfillmentOrderLineItemsPreparedForPickup(input: $input) {
+      userErrors { field message }
+    }
+  }`, {
+    input: {
+      lineItemsByFulfillmentOrder: fulfillmentOrders.map((item) => ({ fulfillmentOrderId: item.id })),
+    },
+  });
+  const errors = data?.fulfillmentOrderLineItemsPreparedForPickup?.userErrors || [];
+  if (errors.length) throw new Error(errors.map((item: { message?: string }) => item.message).filter(Boolean).join("; "));
+  return fulfillmentOrders.length;
+}
+
+async function fulfillShipment(
+  orderId: string,
+  tracking: { number: string; company?: string; url?: string },
+  shopifyToken: string,
+): Promise<number> {
+  const fulfillmentOrders = (await openFulfillmentOrders(orderId, shopifyToken)).filter((item) => !isPickupFulfillmentOrder(item));
+  if (!fulfillmentOrders.length) throw new Error("Este pedido não possui um envio aberto na Shopify");
+  let created = 0;
+  // A Shopify exige um fulfillment por local de estoque. Processar cada ordem
+  // separadamente tambem torna uma nova tentativa segura apos falha parcial.
+  for (const fulfillmentOrder of fulfillmentOrders) {
+    const data = await shopifyGraphql(shopifyToken, `mutation FulfillShipment($fulfillment: FulfillmentInput!) {
+      fulfillmentCreate(fulfillment: $fulfillment) {
+        fulfillment { id status }
+        userErrors { field message }
+      }
+    }`, {
+      fulfillment: {
+        lineItemsByFulfillmentOrder: [{ fulfillmentOrderId: fulfillmentOrder.id }],
+        notifyCustomer: true,
+        trackingInfo: {
+          number: tracking.number,
+          ...(tracking.company ? { company: tracking.company } : {}),
+          ...(tracking.url ? { url: tracking.url } : {}),
+        },
+      },
+    });
+    const errors = data?.fulfillmentCreate?.userErrors || [];
+    if (errors.length) throw new Error(errors.map((item: { message?: string }) => item.message).filter(Boolean).join("; "));
+    if (!data?.fulfillmentCreate?.fulfillment?.id) throw new Error("A Shopify não confirmou o envio");
+    created++;
+  }
+  return created;
+}
+
 async function recoverPaidOrders(
   adminDb: any,
   shopifyToken: string,
@@ -240,6 +339,10 @@ function normalize(order: any, delivery = deliveryLabel(order)) {
   ].filter(Boolean).join(", ") : null;
   const customerName = [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ")
     || address?.name || "Cliente não identificado";
+  const pickupReady = (order.note_attributes || []).some((item: { name?: string; value?: string }) =>
+    /codigo de retirada/i.test(String(item?.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")) &&
+    String(item?.value || "").trim().length > 0
+  );
   return {
     id: order.id,
     name: order.name || `#${order.id}`,
@@ -255,6 +358,7 @@ function normalize(order: any, delivery = deliveryLabel(order)) {
     currency: order.currency || "BRL",
     financial_status: order.financial_status || "pending",
     fulfillment_status: order.fulfillment_status || null,
+    pickup_ready: pickupReady,
     customer_name: customerName,
     email: order.email || order.customer?.email || null,
     phone: order.phone || order.customer?.phone || address?.phone || null,
@@ -281,7 +385,11 @@ Deno.serve(async (req) => {
     if (!auth.ok) return auth.response;
   }
 
-  let body: { action?: string; since?: string; limit?: number; orderId?: string; orderName?: string; zpl?: string; jobId?: string; status?: string; error?: string } = {};
+  let body: {
+    action?: string; since?: string; limit?: number; orderId?: string; orderName?: string;
+    zpl?: string; jobId?: string; status?: string; error?: string;
+    trackingNumber?: string; trackingCompany?: string; trackingUrl?: string;
+  } = {};
   if (req.method !== "GET") body = await req.json().catch(() => ({}));
   const url = new URL(req.url);
   const action = body.action || url.searchParams.get("action") || "list";
@@ -341,6 +449,36 @@ Deno.serve(async (req) => {
   if (!shopifyToken) return errorResponse("SHOPIFY_ACCESS_TOKEN não configurado", 500);
 
   try {
+    if (action === "ready_for_pickup") {
+      if (isAgent) return errorResponse("Ação restrita ao administrador", 403);
+      if (!body.orderId) return errorResponse("Pedido inválido", 400);
+      const count = await markReadyForPickup(body.orderId, shopifyToken);
+      return jsonResponse({ ok: true, fulfillment_orders: count });
+    }
+
+    if (action === "fulfill_with_tracking") {
+      if (isAgent) return errorResponse("Ação restrita ao administrador", 403);
+      if (!body.orderId) return errorResponse("Pedido inválido", 400);
+      const trackingNumber = String(body.trackingNumber || "").trim().slice(0, 100);
+      const trackingCompany = String(body.trackingCompany || "").trim().slice(0, 100);
+      const trackingUrl = String(body.trackingUrl || "").trim().slice(0, 500);
+      if (trackingNumber.length < 3) return errorResponse("Informe um código de rastreio válido", 400);
+      if (trackingUrl) {
+        try {
+          const parsed = new URL(trackingUrl);
+          if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+        } catch {
+          return errorResponse("Informe uma URL de rastreio válida", 400);
+        }
+      }
+      const count = await fulfillShipment(body.orderId, {
+        number: trackingNumber,
+        ...(trackingCompany ? { company: trackingCompany } : {}),
+        ...(trackingUrl ? { url: trackingUrl } : {}),
+      }, shopifyToken);
+      return jsonResponse({ ok: true, fulfillments: count });
+    }
+
     // Ao abrir Pedidos, recupera tambem vendas antigas cujo pagamento foi
     // confirmado mas cuja conclusao do Draft Order falhou anteriormente.
     const recovery = await recoverPaidOrders(adminDb, shopifyToken);
@@ -390,6 +528,9 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("admin-orders:", error);
+    if (["ready_for_pickup", "fulfill_with_tracking"].includes(action)) {
+      return errorResponse(error instanceof Error ? error.message : "Falha ao atualizar o pedido", 502);
+    }
     return errorResponse("Erro interno ao carregar pedidos", 500);
   }
 });

@@ -4,11 +4,11 @@ import { type PrintableOrder, orderToA4Html, orderToZpl } from "@/lib/orderPrint
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search } from "lucide-react";
+import { Check, Clipboard, Cloud, Code2, FileText, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 interface PendingSyncSale {
@@ -63,6 +63,7 @@ function statusLabel(order: PrintableOrder) {
   if (order.cancelled_at) return "Cancelado";
   if (order.financial_status === "refunded") return "Reembolsado";
   if (order.fulfillment_status === "fulfilled") return "Encerrado";
+  if (order.pickup_ready) return "Pronto para retirada";
   return FINANCIAL[order.financial_status] || FULFILLMENT[order.fulfillment_status || ""] || "Em andamento";
 }
 
@@ -78,6 +79,11 @@ export default function OrdersTab() {
   const [checkoutLogs, setCheckoutLogs] = useState<CheckoutAttemptLog[]>([]);
   const [logQuery, setLogQuery] = useState("");
   const [logStatus, setLogStatus] = useState("all");
+  const [fulfillmentBusyId, setFulfillmentBusyId] = useState<string | number | null>(null);
+  const [trackingOrder, setTrackingOrder] = useState<PrintableOrder | null>(null);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [trackingCompany, setTrackingCompany] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -199,6 +205,65 @@ export default function OrdersTab() {
     } finally { setPrintingId(null); }
   };
 
+  const readyForPickup = async (order: PrintableOrder) => {
+    if (!window.confirm(`Marcar ${order.name} como pronto para retirada e avisar o cliente?`)) return;
+    setFulfillmentBusyId(order.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-orders", {
+        body: { action: "ready_for_pickup", orderId: String(order.id) },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao atualizar a retirada");
+      toast.success(`${order.name} está pronto para retirada`, {
+        description: "A Shopify foi atualizada e enviou a notificação ao cliente.",
+      });
+      await load();
+    } catch (error) {
+      toast.error("Não foi possível marcar como pronto para retirada", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setFulfillmentBusyId(null);
+    }
+  };
+
+  const openTracking = (order: PrintableOrder) => {
+    setTrackingOrder(order);
+    setTrackingNumber("");
+    setTrackingCompany("");
+    setTrackingUrl("");
+  };
+
+  const submitTracking = async () => {
+    if (!trackingOrder || trackingNumber.trim().length < 3) {
+      toast.error("Informe o código de rastreio");
+      return;
+    }
+    setFulfillmentBusyId(trackingOrder.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-orders", {
+        body: {
+          action: "fulfill_with_tracking",
+          orderId: String(trackingOrder.id),
+          trackingNumber: trackingNumber.trim(),
+          trackingCompany: trackingCompany.trim(),
+          trackingUrl: trackingUrl.trim(),
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao registrar o envio");
+      toast.success(`Rastreio registrado em ${trackingOrder.name}`, {
+        description: "O pedido foi marcado como enviado e o cliente foi notificado.",
+      });
+      setTrackingOrder(null);
+      await load();
+    } catch (error) {
+      toast.error("Não foi possível registrar o rastreio", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setFulfillmentBusyId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -264,12 +329,19 @@ export default function OrdersTab() {
 
       <Card><CardContent className="p-0">
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div> : filtered.length === 0 ? <p className="py-16 text-center text-muted-foreground">Nenhum pedido encontrado.</p> :
-        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Imprimir</TableHead></TableRow></TableHeader><TableBody>
-          {filtered.map((order) => <TableRow key={order.id}><TableCell className="font-bold">{order.name}</TableCell><TableCell><div className="font-medium">{order.customer_name}</div><div className="text-xs text-muted-foreground">{order.phone || order.email || "Sem contato"}</div></TableCell><TableCell className="whitespace-nowrap">{new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell><TableCell><Badge variant="outline" className={order.cancelled_at || order.financial_status === "refunded" ? "border-red-200 bg-red-50 text-red-700" : order.fulfillment_status === "fulfilled" ? "border-slate-200 bg-slate-100" : "border-blue-200 bg-blue-50 text-blue-700"}>{statusLabel(order)}</Badge></TableCell><TableCell className="text-right font-semibold">{money(order.total_price, order.currency)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button size="sm" variant="outline" onClick={() => printA4(order)} title="Imprimir em A4"><FileText className="h-4 w-4" /><span className="sr-only">A4</span></Button><Button size="sm" variant="outline" onClick={() => setZplOrder(order)} title="Ver código ZPL"><Code2 className="h-4 w-4" /><span className="sr-only">ZPL</span></Button><Button size="sm" onClick={() => printZpl(order)} disabled={printingId === order.id} title="Enviar à impressora ZPL remota">{printingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="sr-only">Imprimir ZPL</span></Button></div></TableCell></TableRow>)}
+        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Pedido</TableHead><TableHead>Cliente</TableHead><TableHead>Data</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
+          {filtered.map((order) => {
+            const canFulfill = !order.cancelled_at && order.financial_status !== "refunded" && order.fulfillment_status !== "fulfilled" && !order.pickup_ready;
+            const isPickup = order.delivery_label === "RETIRADA";
+            const fulfillmentBusy = fulfillmentBusyId === order.id;
+            return <TableRow key={order.id}><TableCell className="font-bold">{order.name}</TableCell><TableCell><div className="font-medium">{order.customer_name}</div><div className="text-xs text-muted-foreground">{order.phone || order.email || "Sem contato"}</div></TableCell><TableCell className="whitespace-nowrap">{new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell><TableCell><Badge variant="outline" className={order.cancelled_at || order.financial_status === "refunded" ? "border-red-200 bg-red-50 text-red-700" : order.fulfillment_status === "fulfilled" ? "border-slate-200 bg-slate-100" : "border-blue-200 bg-blue-50 text-blue-700"}>{statusLabel(order)}</Badge></TableCell><TableCell className="text-right font-semibold">{money(order.total_price, order.currency)}</TableCell><TableCell><div className="flex min-w-max justify-end gap-1">{canFulfill && (isPickup ? <Button size="sm" variant="outline" onClick={() => void readyForPickup(order)} disabled={fulfillmentBusy}><PackageCheck className="mr-1.5 h-4 w-4" />{fulfillmentBusy ? "Atualizando..." : "Pronto para retirada"}</Button> : <Button size="sm" variant="outline" onClick={() => openTracking(order)} disabled={fulfillmentBusy}><Truck className="mr-1.5 h-4 w-4" />Inserir rastreio</Button>)}<Button size="sm" variant="outline" onClick={() => printA4(order)} title="Imprimir em A4"><FileText className="h-4 w-4" /><span className="sr-only">A4</span></Button><Button size="sm" variant="outline" onClick={() => setZplOrder(order)} title="Ver código ZPL"><Code2 className="h-4 w-4" /><span className="sr-only">ZPL</span></Button><Button size="sm" onClick={() => printZpl(order)} disabled={printingId === order.id} title="Enviar à impressora ZPL remota">{printingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="sr-only">Imprimir ZPL</span></Button></div></TableCell></TableRow>;
+          })}
         </TableBody></Table></div>}
       </CardContent></Card>
 
       <Dialog open={!!zplOrder} onOpenChange={(open) => !open && setZplOrder(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Código ZPL — {zplOrder?.name}</DialogTitle><DialogDescription>Copie o código, baixe como arquivo ou envie à impressora remota.</DialogDescription></DialogHeader>{zplOrder && <><textarea readOnly value={orderToZpl(zplOrder)} className="h-80 w-full resize-none rounded-md border bg-slate-950 p-3 font-mono text-xs text-emerald-300" /><div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={async () => { await navigator.clipboard.writeText(orderToZpl(zplOrder)); toast.success("Código ZPL copiado"); }}><Clipboard className="mr-2 h-4 w-4" />Copiar</Button><Button variant="outline" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([orderToZpl(zplOrder)], { type: "text/plain" })); a.download = `pedido-${String(zplOrder.name).replace(/\D/g, "")}.zpl`; a.click(); URL.revokeObjectURL(a.href); }}><Check className="mr-2 h-4 w-4" />Baixar .zpl</Button><Button disabled={printingId === zplOrder.id} onClick={() => printZpl(zplOrder)}>{printingId === zplOrder.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}Imprimir ZPL</Button></div></>}</DialogContent></Dialog>
+
+      <Dialog open={!!trackingOrder} onOpenChange={(open) => { if (!open && !fulfillmentBusyId) setTrackingOrder(null); }}><DialogContent><DialogHeader><DialogTitle>Inserir rastreio — {trackingOrder?.name}</DialogTitle><DialogDescription>O pedido será marcado como enviado e a Shopify notificará o cliente com estes dados.</DialogDescription></DialogHeader><div className="space-y-4"><label className="block space-y-1.5"><span className="text-sm font-medium">Código de rastreio *</span><Input value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} placeholder="Ex.: AA123456789BR" autoFocus /></label><label className="block space-y-1.5"><span className="text-sm font-medium">Transportadora</span><Input value={trackingCompany} onChange={(event) => setTrackingCompany(event.target.value)} placeholder="Ex.: Correios" /></label><label className="block space-y-1.5"><span className="text-sm font-medium">Link de rastreio (opcional)</span><Input type="url" value={trackingUrl} onChange={(event) => setTrackingUrl(event.target.value)} placeholder="https://..." /></label></div><DialogFooter><Button variant="outline" onClick={() => setTrackingOrder(null)} disabled={!!fulfillmentBusyId}>Cancelar</Button><Button onClick={() => void submitTracking()} disabled={!!fulfillmentBusyId || trackingNumber.trim().length < 3}>{fulfillmentBusyId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}Confirmar envio</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }
