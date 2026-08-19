@@ -3,6 +3,7 @@ import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { canAccessCheckout, optionalCheckoutUser } from "../_shared/checkout-access.ts";
 import {
   createAsaasPayment,
+  CUSTOMER_FACING,
   deleteAsaasPayment,
   findAsaasPaymentByExternalReference,
   findOrCreateAsaasCustomer,
@@ -189,7 +190,7 @@ Deno.serve(async (req) => {
           return errorResponse("Este Pix acabou de ser confirmado e não pode mais ser cancelado", 409);
         };
 
-        const remote = await getAsaasPayment(providerPaymentId);
+        const remote = await getAsaasPayment(providerPaymentId, CUSTOMER_FACING);
         const remoteStatus = String(remote.status || "").toUpperCase();
         if (paidStatuses.includes(remoteStatus)) {
           return await registerPaidRace(remote, remoteStatus);
@@ -202,7 +203,7 @@ Deno.serve(async (req) => {
           let deletionConfirmed = false;
           let deletionError: unknown = null;
           try {
-            const deleted = await deleteAsaasPayment(providerPaymentId);
+            const deleted = await deleteAsaasPayment(providerPaymentId, CUSTOMER_FACING);
             deletionConfirmed = deleted.deleted === true;
           } catch (error) {
             deletionError = error;
@@ -216,7 +217,7 @@ Deno.serve(async (req) => {
 
           if (!deletionConfirmed) {
             try {
-              const verified = await getAsaasPayment(providerPaymentId);
+              const verified = await getAsaasPayment(providerPaymentId, CUSTOMER_FACING);
               const verifiedStatus = String(verified.status || "").toUpperCase();
               if (verified.deleted === true) {
                 deletionConfirmed = true;
@@ -270,7 +271,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Já existe uma cobrança ativa em outra forma de pagamento" }, 409);
       }
       if (active.provider_payment_id && method === "pix" && active.status !== "confirmed") {
-        const qr = await getAsaasPixQrCode(active.provider_payment_id);
+        const qr = await getAsaasPixQrCode(active.provider_payment_id, CUSTOMER_FACING);
         const pixExpiresAt = active.pix_expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
         if (!active.pix_expires_at) {
           await admin.from("payments").update({ pix_expires_at: pixExpiresAt }).eq("id", active.id);
@@ -299,7 +300,7 @@ Deno.serve(async (req) => {
         province: customerAddress.neighborhood,
         postalCode: customerAddress.postalCode,
       } : {}),
-    });
+    }, CUSTOMER_FACING);
 
     let termDays = 0;
     if (session.customer_type === "franchise" && session.user_id) {
@@ -385,12 +386,15 @@ Deno.serve(async (req) => {
 
     let providerPayment: AsaasPayment | null = null;
     try {
-      providerPayment = await createAsaasPayment(createInput);
+      providerPayment = await createAsaasPayment(createInput, CUSTOMER_FACING);
     } catch (createError) {
       // A resposta pode ter se perdido depois da criação. Consultar antes de
       // permitir outra tentativa evita duas cobranças para o mesmo clique.
       try {
-        providerPayment = await findAsaasPaymentByExternalReference(paymentAttempt.external_reference);
+        providerPayment = await findAsaasPaymentByExternalReference(
+          paymentAttempt.external_reference,
+          CUSTOMER_FACING,
+        );
       } catch {
         // Mantém o erro original, que possui o contexto mais útil.
       }
@@ -556,7 +560,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const qr = await getAsaasPixQrCode(providerPayment.id);
+    const qr = await getAsaasPixQrCode(providerPayment.id, CUSTOMER_FACING);
     const pixExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     await Promise.all([
       admin.from("payments").update({

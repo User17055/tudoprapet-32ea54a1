@@ -39,6 +39,10 @@ interface OrdersResponse {
     pending: number;
     pendingSales?: PendingSyncSale[];
   };
+  // `true` quando esta resposta nao chegou a conferir nada no Asaas, por causa
+  // do intervalo minimo entre varreduras. Nesse caso `recovery` vem zerado
+  // porque nao houve verificacao -- e nao porque nada esta pendente.
+  recoveryThrottled?: boolean;
   checkoutLogs?: CheckoutAttemptLog[];
 }
 interface PrintQueueResponse { job_id: string; already_queued?: boolean; functions_version?: string }
@@ -92,8 +96,13 @@ export default function OrdersTab() {
     else {
       const response = data as OrdersResponse;
       setOrders(response?.orders || []);
-      setSyncPending(response?.recovery?.pending || 0);
-      setPendingSales(response?.recovery?.pendingSales || []);
+      // Uma varredura recusada pelo intervalo minimo nao e a mesma coisa que uma
+      // varredura que nao achou nada. Zerar o aviso aqui faria a tela dizer que
+      // esta tudo sincronizado logo depois de um F5, sem ter conferido nada.
+      if (!response?.recoveryThrottled) {
+        setSyncPending(response?.recovery?.pending || 0);
+        setPendingSales(response?.recovery?.pendingSales || []);
+      }
       setCheckoutLogs(response?.checkoutLogs || []);
       if (!response?.functions_version || response.functions_version < MINIMUM_RECOVERY_FUNCTION_VERSION) {
         toast.warning("A recuperação de vendas ainda não foi publicada no servidor", {

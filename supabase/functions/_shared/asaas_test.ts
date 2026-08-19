@@ -13,6 +13,7 @@ import {
   AsaasBudgetExhausted,
   asaasCallsUsed,
   createAsaasBudget,
+  CUSTOMER_FACING,
   getAsaasPayment,
   isAsaasBudgetExhausted,
 } from "./asaas.ts";
@@ -71,11 +72,51 @@ Deno.test("orcamento para na cota e nao chama a API depois disso", async () => {
   }
 });
 
-Deno.test("sem orcamento nao ha teto (caminho do checkout)", async () => {
+Deno.test("CUSTOMER_FACING nao tem teto (caminho do checkout)", async () => {
   const rede = stubFetch();
   try {
-    for (let i = 0; i < 5; i++) await getAsaasPayment(`pay_${i}`);
+    for (let i = 0; i < 5; i++) await getAsaasPayment(`pay_${i}`, CUSTOMER_FACING);
     assertEquals(rede.calls, 5);
+  } finally {
+    rede.restore();
+  }
+});
+
+Deno.test("a isencao e declarada, nunca obtida por omissao", async () => {
+  // Este teste existe por causa de 19/08/2026. O teto de 17/08 tinha parametro
+  // opcional, e `admin-orders` ficou sem teto so por nao passar nada -- ninguem
+  // escreveu "sem limite", simplesmente esqueceram. O agente de impressao
+  // chamava aquele caminho a cada 20s e a cota da conta caiu de novo.
+  //
+  // A protecao real e o TypeScript recusando `getAsaasPayment(id)` com um
+  // argumento so, o que nenhum teste em runtime consegue observar. O que da para
+  // travar aqui e o outro lado: que um valor invalido no lugar do orcamento nao
+  // seja tratado como isencao silenciosa.
+  const rede = stubFetch();
+  try {
+    for (const invalido of [undefined, null, 0, "", "CUSTOMER_FACING", Symbol("outro")]) {
+      await assertRejects(
+        // deno-lint-ignore no-explicit-any
+        () => getAsaasPayment("pay_x", invalido as any),
+        Error,
+        undefined,
+        `${String(invalido)} nao pode passar como isencao`,
+      );
+    }
+    assertEquals(rede.calls, 0, "nenhum valor invalido pode chegar a rede");
+  } finally {
+    rede.restore();
+  }
+});
+
+Deno.test("orcamento zerado recusa antes de qualquer chamada", async () => {
+  // O caso da varredura que chega ja sem cota: tem de sair sem tocar na rede.
+  const rede = stubFetch();
+  try {
+    const budget = createAsaasBudget(2);
+    budget.used = 2;
+    await assertRejects(() => getAsaasPayment("pay_x", budget), AsaasBudgetExhausted);
+    assertEquals(rede.calls, 0);
   } finally {
     rede.restore();
   }

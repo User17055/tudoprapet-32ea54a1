@@ -2,12 +2,18 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeadersWith, jsonResponse } from "../_shared/cors.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
 import {
+  createAsaasBudget,
   createAsaasPayment,
   deleteAsaasPayment,
   findOrCreateAsaasCustomer,
   getAsaasPayment,
   getAsaasPixQrCode,
 } from "../_shared/asaas.ts";
+
+// Diagnostico e ferramenta de operador, nao cliente: pode ser recusado. O teto e
+// folgado para as sondas (cliente + cobranca + QR + exclusao = 4) e existe so
+// para que um laco acidental sobre este endpoint nao consuma a cota da conta.
+const DIAG_CALL_BUDGET = 10;
 
 
 // Diagnóstico temporário do Pix no ambiente Sandbox. Protegido pelo token do worker.
@@ -24,6 +30,7 @@ Deno.serve(async (req) => {
 
   const baseUrl = (Deno.env.get("ASAAS_API_URL") || "https://api-sandbox.asaas.com/v3").replace(/\/$/, "");
   const environment = baseUrl.includes("sandbox") ? "sandbox" : "production";
+  const budget = createAsaasBudget(DIAG_CALL_BUDGET);
 
   let requestedId: string | null = null;
   let probePix = false;
@@ -64,7 +71,7 @@ Deno.serve(async (req) => {
         name: "Diagnostico TudoPraPet",
         cpfCnpj: "24971563792",
         email: "diagnostico@tudoprapet.com.br",
-      });
+      }, budget);
       const payment = await createAsaasPayment({
         customer,
         billingType: "PIX",
@@ -72,12 +79,12 @@ Deno.serve(async (req) => {
         dueDate: new Date().toISOString().slice(0, 10),
         description: "Diagnostico Pix",
         externalReference: reference,
-      });
+      }, budget);
       let qrOk = false;
       let qrPrefix = "";
       let probeQrError: string | null = null;
       try {
-        const qr = await getAsaasPixQrCode(payment.id);
+        const qr = await getAsaasPixQrCode(payment.id, budget);
         qrOk = (qr.payload || "").startsWith("000201");
         qrPrefix = (qr.payload || "").slice(0, 40);
       } catch (error) {
@@ -85,7 +92,7 @@ Deno.serve(async (req) => {
       }
       let deleted = false;
       try {
-        deleted = (await deleteAsaasPayment(payment.id)).deleted;
+        deleted = (await deleteAsaasPayment(payment.id, budget)).deleted;
       } catch { deleted = false; }
       return jsonResponse({
         baseUrl,
@@ -136,7 +143,7 @@ Deno.serve(async (req) => {
   let remote: Record<string, unknown> = {};
   let remoteError: string | null = null;
   try {
-    remote = await getAsaasPayment(payment.provider_payment_id) as Record<string, unknown>;
+    remote = await getAsaasPayment(payment.provider_payment_id, budget) as Record<string, unknown>;
   } catch (error) {
     remoteError = error instanceof Error ? error.message : String(error);
   }
@@ -144,7 +151,7 @@ Deno.serve(async (req) => {
   let qr: { encodedImage?: string; payload?: string; expirationDate?: string } = {};
   let qrError: string | null = null;
   try {
-    qr = await getAsaasPixQrCode(payment.provider_payment_id);
+    qr = await getAsaasPixQrCode(payment.provider_payment_id, budget);
   } catch (error) {
     qrError = error instanceof Error ? error.message : String(error);
   }

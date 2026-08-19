@@ -2,8 +2,43 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 import { cloneLegacyFiscalDraftOrder, completeDraftOrder, deleteDraftOrder } from "../_shared/shopify.ts";
-import { getAsaasPayment } from "../_shared/asaas.ts";
+import {
+  type AsaasBudget,
+  AsaasBudgetExhausted,
+  createAsaasBudget,
+  getAsaasPayment,
+  isAsaasBudgetExhausted,
+} from "../_shared/asaas.ts";
 import { isPaidAsaasProviderStatus, mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
+
+// Teto de chamadas ao Asaas por requisicao desta funcao.
+//
+// A varredura le ate 100 sessoes sem pedido Shopify e, ate 19/08/2026,
+// consultava TODAS elas no Asaas sem teto nenhum. Como sessoes `expired`,
+// `cancelled` e `failed` nunca ganham `shopify_order_id`, elas ficavam na
+// consulta para sempre: o conjunto so crescia e era reconsultado inteiro a cada
+// chamada. Com o agente de impressao batendo aqui a cada 20s, deu ~216.000
+// requisicoes em 12h e derrubou a cota da conta pela segunda vez.
+//
+// 15 por requisicao nao conclui a fila de uma vez, e nao precisa: a varredura e
+// uma rede de seguranca e cada nova chamada avanca mais um pedaco.
+const ASAAS_CALL_BUDGET = 15;
+
+// Intervalo minimo entre duas varreduras, contando todos os chamadores juntos
+// (aba Pedidos, impressao de etiqueta, qualquer gatilho futuro). Reusa o mesmo
+// `claim_worker_lease` do worker: a tabela e generica, uma linha por nome.
+//
+// 3 minutos, e nao 10: com o agente de impressao ja fora, isto e backstop contra
+// repeticao patologica -- um F5 nervoso, ou um gatilho novo que alguem adicione
+// sem saber deste custo. Segurar o admin por 10 min para proteger de um caso que
+// o orcamento ja limita seria pagar fricção real por risco pequeno. No pior caso
+// sao 20 rodadas/h x 15 = 300 chamadas/h.
+//
+// `release_worker_lease` nao mexe em `last_run_at` de proposito, entao devolver o
+// lease no fim da rodada NAO encurta este intervalo -- so libera a exclusao mutua.
+const RECOVERY_LEASE = "admin-orders-recovery";
+const RECOVERY_LEASE_SECONDS = 120;
+const RECOVERY_COOLDOWN_SECONDS = 180;
 
 const SHOP = "petjoy-deals-hb8r9.myshopify.com";
 const API = "2025-07";
@@ -148,6 +183,7 @@ async function fulfillShipment(
 async function recoverPaidOrders(
   adminDb: any,
   shopifyToken: string,
+  budget: AsaasBudget,
 ): Promise<{
   recovered: number;
   pending: number;
@@ -210,10 +246,14 @@ async function recoverPaidOrders(
   const paidSessionIds = new Set<string>();
   const candidates = [...latestPaymentBySession.values()];
   for (let start = 0; start < candidates.length; start += 5) {
+    // O teto e conferido entre lotes, e nao so dentro de `asaasRequest`: assim a
+    // varredura para de vez em vez de disparar mais 5 chamadas que ja nascem
+    // condenadas a AsaasBudgetExhausted.
+    if (isAsaasBudgetExhausted(budget)) break;
     const batch = candidates.slice(start, start + 5);
     await Promise.all(batch.map(async (payment: any) => {
       try {
-        const remote = await getAsaasPayment(payment.provider_payment_id);
+        const remote = await getAsaasPayment(payment.provider_payment_id, budget);
         const remoteStatus = String(remote.status || "").toUpperCase();
         if (!isPaidAsaasProviderStatus(remoteStatus)) return;
         const localStatus = mapAsaasPaymentStatus("", remoteStatus);
@@ -228,6 +268,10 @@ async function recoverPaidOrders(
         if (paymentUpdateError) throw paymentUpdateError;
         paidSessionIds.add(payment.checkout_session_id);
       } catch (error) {
+        // Teto atingido nao e falha desta cobranca, e o fim da rodada: o resto
+        // sai na proxima chamada. Registrar como erro poluiria o log justamente
+        // quando ha fila, que e quando o log precisa estar legivel.
+        if (error instanceof AsaasBudgetExhausted) return;
         console.error(`Falha ao conferir pagamento Asaas ${payment.provider_payment_id}:`, error);
       }
     }));
@@ -456,7 +500,54 @@ Deno.serve(async (req) => {
 
     // Ao abrir Pedidos, recupera tambem vendas antigas cujo pagamento foi
     // confirmado mas cuja conclusao do Draft Order falhou anteriormente.
-    const recovery = await recoverPaidOrders(adminDb, shopifyToken);
+    //
+    // O agente de impressao NAO entra aqui. Ele chama esta funcao sem `action`,
+    // o que cai no default "list", e faz isso a cada 20s para sempre: era ele
+    // sozinho consumindo a cota do Asaas da conta inteira. O agente imprime
+    // etiqueta e le apenas `orders` e `server_time` da resposta -- conciliacao
+    // financeira nunca foi trabalho dele.
+    //
+    // Sobre a cobertura que isso reduz: a varredura passa a rodar quando um
+    // admin abre Pedidos, e nao a cada 20s. E a troca certa. O worker ja concilia
+    // `paid_pending_shopify` a cada 10 min pelo cron; o que so esta varredura
+    // pega e o caso raro de sessao terminal localmente mas paga no Asaas. Com a
+    // cota estourada, `createAsaasPayment` passa a falhar e o checkout para de
+    // vender -- muito pior que uma conciliacao atrasada.
+    let recovery = { recovered: 0, pending: 0, pendingSales: [] as Array<Record<string, unknown>> };
+    let recoveryThrottled = true;
+    if (!isAgent) {
+      // O lease so decide SE a rodada acontece. Quem garante o teto e o
+      // orcamento, entao qualquer falha aqui segue em frente: a tela do admin
+      // nao pode quebrar por causa de um controle de custo, e o gasto continua
+      // limitado a ASAAS_CALL_BUDGET de qualquer jeito.
+      let leaseRunId: string | null = null;
+      const { data: claimed, error: leaseError } = await adminDb.rpc("claim_worker_lease", {
+        p_name: RECOVERY_LEASE,
+        p_lease_seconds: RECOVERY_LEASE_SECONDS,
+        p_cooldown_seconds: RECOVERY_COOLDOWN_SECONDS,
+      });
+      if (leaseError) {
+        console.warn("Lease da recuperacao indisponivel; seguindo com o teto de orcamento:", leaseError);
+        recoveryThrottled = false;
+      } else {
+        leaseRunId = typeof claimed === "string" ? claimed : null;
+        recoveryThrottled = leaseRunId === null;
+      }
+      if (!recoveryThrottled) {
+        const budget = createAsaasBudget(ASAAS_CALL_BUDGET);
+        try {
+          recovery = await recoverPaidOrders(adminDb, shopifyToken, budget);
+        } finally {
+          if (leaseRunId) {
+            const { error: releaseError } = await adminDb.rpc("release_worker_lease", {
+              p_name: RECOVERY_LEASE,
+              p_run_id: leaseRunId,
+            });
+            if (releaseError) console.error("Falha ao liberar lease da recuperacao:", releaseError);
+          }
+        }
+      }
+    }
 
     const since = body.since || url.searchParams.get("since") || "";
     const requestedLimit = Math.min(Math.max(Number(body.limit || url.searchParams.get("limit") || (isAgent ? 50 : 100)), 1), 250);
@@ -497,6 +588,11 @@ Deno.serve(async (req) => {
       orders,
       count: orders.length,
       recovery,
+      // `true` quando esta resposta nao verificou nada no Asaas -- agente de
+      // impressao, ou outra chamada dentro do intervalo minimo. Sem isto a tela
+      // mostraria "0 vendas pendentes" achando que conferiu, quando na verdade
+      // nem olhou. O front usa este campo para preservar o aviso anterior.
+      recoveryThrottled,
       checkoutLogs: checkoutLogs || [],
       functions_version: FUNCTIONS_VERSION,
       server_time: new Date().toISOString(),

@@ -70,9 +70,21 @@ function config() {
 // contador da primeira no meio da varredura dela, e as duas juntas gastariam
 // muito mais que o teto -- exatamente o que este mecanismo existe para impedir.
 //
-// Quem nao passa orcamento nao tem teto, de proposito. O checkout cria a
-// cobranca de um cliente real e nao pode ser recusado por causa de uma varredura
-// de fundo; quem se limita e o worker.
+// A isencao existe -- o checkout cria a cobranca de um cliente real e nao pode
+// ser recusado por causa de uma varredura de fundo -- mas ela e DECLARADA, e nao
+// obtida por omissao. Ate 19/08/2026 o parametro era opcional, e `admin-orders`
+// ganhou passe livre so por nao passar nada: o agente de impressao chamava
+// `action=list` a cada 20s e cada chamada varria ate 100 cobrancas no Asaas.
+// Foram ~216.000 requisicoes/12h e a cota da conta caiu de novo, dois dias
+// depois do teto que so o worker tinha recebido.
+//
+// Por isso o parametro e obrigatorio: um call site novo nao compila sem dizer de
+// que lado esta. Esquecer deixou de ser possivel; escolher errado ainda e, mas
+// aparece na revisao como a palavra CUSTOMER_FACING escrita de proposito.
+export const CUSTOMER_FACING = Symbol("asaas:cliente real esperando na tela");
+
+export type AsaasCallBudget = AsaasBudget | typeof CUSTOMER_FACING;
+
 export interface AsaasBudget {
   readonly limit: number;
   used: number;
@@ -100,10 +112,10 @@ export function isAsaasBudgetExhausted(budget: AsaasBudget): boolean {
 async function asaasRequest<T>(
   path: string,
   init: RequestInit = {},
-  timeoutMs = 12_000,
-  budget?: AsaasBudget,
+  timeoutMs: number,
+  budget: AsaasCallBudget,
 ): Promise<T> {
-  if (budget) {
+  if (budget !== CUSTOMER_FACING) {
     if (budget.used >= budget.limit) throw new AsaasBudgetExhausted(budget.limit);
     // Conta antes de sair: uma requisicao que falha ou estoura o timeout ja
     // gastou a cota do lado do Asaas.
@@ -154,15 +166,23 @@ async function asaasRequest<T>(
   }
 }
 
-export async function findOrCreateAsaasCustomer(input: AsaasCustomerInput): Promise<string> {
+export async function findOrCreateAsaasCustomer(
+  input: AsaasCustomerInput,
+  budget: AsaasCallBudget,
+): Promise<string> {
   const query = new URLSearchParams({ externalReference: input.externalReference, limit: "1" });
-  const existing = await asaasRequest<{ data?: Array<{ id?: string }> }>(`/customers?${query}`);
+  const existing = await asaasRequest<{ data?: Array<{ id?: string }> }>(
+    `/customers?${query}`,
+    {},
+    12_000,
+    budget,
+  );
   const existingId = existing.data?.[0]?.id;
   if (existingId) {
     await asaasRequest(`/customers/${encodeURIComponent(existingId)}`, {
       method: "PUT",
       body: JSON.stringify({ ...input, notificationDisabled: true }),
-    });
+    }, 12_000, budget);
     return existingId;
   }
 
@@ -172,35 +192,51 @@ export async function findOrCreateAsaasCustomer(input: AsaasCustomerInput): Prom
       ...input,
       notificationDisabled: true,
     }),
-  });
+  }, 12_000, budget);
   if (!created.id) throw new Error("Asaas não retornou o ID do cliente");
   return created.id;
 }
 
-export function createAsaasPayment(input: AsaasPaymentInput): Promise<AsaasPayment> {
+export function createAsaasPayment(
+  input: AsaasPaymentInput,
+  budget: AsaasCallBudget,
+): Promise<AsaasPayment> {
   return asaasRequest<AsaasPayment>("/payments", {
     method: "POST",
     body: JSON.stringify(input),
-  }, input.billingType === "CREDIT_CARD" ? 65_000 : 12_000);
+  }, input.billingType === "CREDIT_CARD" ? 65_000 : 12_000, budget);
 }
 
-export async function findAsaasPaymentByExternalReference(reference: string): Promise<AsaasPayment | null> {
+export async function findAsaasPaymentByExternalReference(
+  reference: string,
+  budget: AsaasCallBudget,
+): Promise<AsaasPayment | null> {
   const query = new URLSearchParams({ externalReference: reference, limit: "1" });
-  const result = await asaasRequest<{ data?: AsaasPayment[] }>(`/payments?${query}`);
+  const result = await asaasRequest<{ data?: AsaasPayment[] }>(
+    `/payments?${query}`,
+    {},
+    12_000,
+    budget,
+  );
   return result.data?.[0] ?? null;
 }
 
-export function getAsaasPayment(id: string, budget?: AsaasBudget): Promise<AsaasPayment> {
+export function getAsaasPayment(id: string, budget: AsaasCallBudget): Promise<AsaasPayment> {
   return asaasRequest<AsaasPayment>(`/payments/${encodeURIComponent(id)}`, {}, 12_000, budget);
 }
 
-export function getAsaasPixQrCode(id: string): Promise<AsaasPixQrCode> {
-  return asaasRequest<AsaasPixQrCode>(`/payments/${encodeURIComponent(id)}/pixQrCode`);
+export function getAsaasPixQrCode(id: string, budget: AsaasCallBudget): Promise<AsaasPixQrCode> {
+  return asaasRequest<AsaasPixQrCode>(
+    `/payments/${encodeURIComponent(id)}/pixQrCode`,
+    {},
+    12_000,
+    budget,
+  );
 }
 
 export function deleteAsaasPayment(
   id: string,
-  budget?: AsaasBudget,
+  budget: AsaasCallBudget,
 ): Promise<{ deleted: boolean; id: string }> {
   return asaasRequest<{ deleted: boolean; id: string }>(`/payments/${encodeURIComponent(id)}`, {
     method: "DELETE",
