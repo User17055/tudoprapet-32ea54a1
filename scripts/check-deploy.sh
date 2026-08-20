@@ -13,7 +13,7 @@
 # Uso:
 #   bash scripts/check-deploy.sh                        # sonda o webhook de retirada
 #   bash scripts/check-deploy.sh pickup-validate        # sonda uma específica
-#   bash scripts/check-deploy.sh --all                  # sonda as 13
+#   bash scripts/check-deploy.sh --all                  # sonda todas as do repositorio
 #
 # Saídas — três, e a distinção importa:
 #   0  publicado e na versão do repositório
@@ -51,9 +51,17 @@ if [ -z "$expected" ]; then
   exit 2
 fi
 
-ALL_FUNCTIONS="check-subscription create-checkout customer-orders customer-portal
-franchise-checkout pickup-complete pickup-history pickup-resend-last pickup-test-send
-pickup-validate shopify-pickup-webhook shopify-webhooks-admin subscriber-checkout"
+# Derivada do repositório, e não fixa aqui. A lista fixa anterior tinha 13 nomes e
+# ficou para trás: não incluía admin-orders, checkout-prepare, checkout-payment nem
+# as funções do Asaas. Em 19/08/2026 o `--all` dizia "tudo publicado" enquanto o
+# admin-orders em produção estava três dias atrasado — exatamente o silêncio que
+# este script existe para quebrar.
+ALL_FUNCTIONS="$(find "$repo_root/supabase/functions" -mindepth 1 -maxdepth 1 -type d \
+  ! -name '_shared' -exec basename {} \; 2>/dev/null | sort | tr '\n' ' ')"
+if [ -z "$ALL_FUNCTIONS" ]; then
+  echo "check-deploy: não achei nenhuma function em supabase/functions." >&2
+  exit 2
+fi
 
 case "${1:-}" in
   --all) targets="$ALL_FUNCTIONS" ;;
