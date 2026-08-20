@@ -1,4 +1,4 @@
-// Cabeçalhos CORS únicos para todas as edge functions.
+// Cabeçalhos CORS únicos para todas as edge functions. (deploy 2026-08-20)
 //
 // A lista é a UNIÃO de tudo que já era permitido em cada function antes de
 // centralizar aqui, mais os headers canônicos do SDK
