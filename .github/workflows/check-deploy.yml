@@ -1,0 +1,68 @@
+# Avisa quando as edge functions em produção estão atrasadas em relação ao repositório.
+#
+# Por que existe: no Lovable Cloud, sincronizar código e publicar function são
+# mecanismos separados. Merge no GitHub NÃO publica. O código fica certo no
+# repositório, certo no GitHub, certo no editor do Lovable, e produção continua
+# rodando outra coisa -- sem erro, sem aviso, sem nada. Em 19/08/2026 as 27
+# functions estavam três dias atrasadas e ninguém sabia.
+#
+# A sonda é um OPTIONS: não processa corpo, não dispara WhatsApp, não cria pedido
+# e não usa credencial nenhuma. Por isso este workflow não precisa de secrets.
+#
+# NÃO roda em push de propósito. O deploy é manual e acontece depois do merge,
+# então uma checagem no push falharia em toda entrega e viraria ruído -- e alarme
+# que sempre toca é alarme que ninguém lê. A pergunta que importa não é "já subiu
+# neste minuto?", é "continua sem subir?".
+
+name: Deploy das edge functions
+
+on:
+  schedule:
+    # 11:00 UTC = 08:00 em America/Sao_Paulo, começo do expediente.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Conferir versão publicada
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comparar produção com o repositório
+        run: |
+          set -o pipefail
+          # O script tem três saídas e a distinção é o ponto: 1 é "não subiu",
+          # 2 é "não deu para saber". Tratar 2 como falha mandaria alguém caçar
+          # um deploy que talvez já tenha acontecido.
+          set +e
+          bash scripts/check-deploy.sh --all 2>&1 | tee saida.txt
+          codigo=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo '### Versão publicada das edge functions'
+            echo
+            echo '```'
+            cat saida.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$codigo" in
+            0)
+              echo "::notice::Todas as edge functions estão na versão do repositório."
+              ;;
+            1)
+              echo "::error::O deploy não rodou: há edge function em produção atrasada em relação ao repositório. Peça ao Lovable que publique as edge functions."
+              exit 1
+              ;;
+            *)
+              # Supabase fora do ar, rede do runner com problema, resposta do
+              # gateway em vez da function. Não é "desatualizado" -- é "não sei".
+              echo "::warning::Não foi possível determinar a versão publicada. Nada a concluir; a checagem de amanhã tenta de novo."
+              exit 0
+              ;;
+          esac

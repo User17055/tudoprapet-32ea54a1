@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { ProductPicker } from "@/components/admin/ProductPicker";
-import { invalidateAudienceCache, type ProductAudience } from "@/hooks/useProductAudience";
+import { fetchAllProductAudience, invalidateAudienceCache, type ProductAudience } from "@/hooks/useProductAudience";
 import { invalidateFranchisePricesCache } from "@/hooks/useFranchisePrices";
 
 export default function FranquiaTab() {
@@ -48,18 +48,31 @@ function AudiencePanel() {
 
   const load = async () => {
     setLoading(true);
+    // Paginado: a leitura sem paginacao trazia so as primeiras 1000 linhas, e os
+    // produtos alem disso apareciam como "oculto" mesmo estando configurados --
+    // e uma acao em massa sobre eles sobrescreveria a configuracao real, porque
+    // o valor atual seria lido como nulo.
     const [shop, aud] = await Promise.all([
       fetchAllShopifyProducts(),
-      supabase.from("product_audience").select("shopify_product_id, audience"),
+      fetchAllProductAudience(),
     ]);
     setProducts(shop);
-    setAudienceRows((aud.data || []) as AudienceRow[]);
+    setAudienceRows(aud as AudienceRow[]);
     setLoading(false);
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  // A selecao pertence ao filtro em que foi feita. Sem isto ela sobrevivia a
+  // troca de busca/filtro: o cabecalho voltava a parecer desmarcado, porque so
+  // conta os itens da lista NOVA, enquanto dezenas de produtos fora da tela
+  // continuavam selecionados -- e a acao em massa seguinte os atingia. Era assim
+  // que produto ganhava visibilidade que ninguem pediu.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filter, audienceFilter]);
 
   const audienceMap = useMemo(() => {
     const m = new Map<string, ProductAudience>();
@@ -106,6 +119,16 @@ function AudiencePanel() {
       return matchesName && matchesAudience;
     });
   }, [products, filter, audienceFilter, audienceMap]);
+
+  // Produto sem linha em product_audience nao aparece em lugar nenhum da loja --
+  // nem catalogo, nem busca, nem home, nem pagina do produto. E fail-closed de
+  // proposito, para nao vazar item de franquia para o consumidor, mas ate agora
+  // acontecia em silencio: ninguem sabia que o item tinha sumido ate um cliente
+  // reclamar de nao achar o produto.
+  const semConfiguracao = useMemo(
+    () => products.filter((product) => !audienceMap.get(product.node.id)).length,
+    [products, audienceMap],
+  );
 
   const filteredIds = useMemo(() => filtered.map((product) => product.node.id), [filtered]);
   const selectedFilteredCount = filteredIds.filter((id) => selectedIds.has(id)).length;
@@ -216,6 +239,24 @@ function AudiencePanel() {
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0">
+        {!loading && semConfiguracao > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-amber-900">
+            <EyeOff className="h-4 w-4 shrink-0" />
+            <span className="mr-auto text-sm font-medium">
+              {semConfiguracao} produto{semConfiguracao === 1 ? "" : "s"} sem visibilidade configurada
+              {semConfiguracao === 1 ? " está invisível" : " estão invisíveis"} na loja e na franquia.
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+              onClick={() => setAudienceFilter(HIDDEN_AUDIENCE_VALUE)}
+              disabled={audienceFilter === HIDDEN_AUDIENCE_VALUE}
+            >
+              Ver quais
+            </Button>
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2.5">
           <Checkbox
             checked={allFilteredSelected ? true : selectedFilteredCount > 0 ? "indeterminate" : false}
