@@ -9,7 +9,7 @@ import { EyeOff, Loader2, Package, Printer, RefreshCw, Search, Tag, Users, type 
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
-import type { ProductAudience } from "@/hooks/useProductAudience";
+import { fetchAllProductAudience, type ProductAudience } from "@/hooks/useProductAudience";
 
 interface AudienceRow {
   shopify_product_id: string;
@@ -60,15 +60,16 @@ export default function ConferenceTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [shopifyProducts, audienceResult, subscriberResult] = await Promise.all([
+      // Paginado pelo mesmo motivo do catalogo: sem paginar, a leitura parava na
+      // primeira pagina e os produtos alem dela apareciam como sem configuracao.
+      const [shopifyProducts, audienceRows, subscriberResult] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("product_audience").select("shopify_product_id,audience"),
+        fetchAllProductAudience(),
         supabase.from("subscriber_prices").select("shopify_variant_id,subscriber_price"),
       ]);
-      if (audienceResult.error) throw audienceResult.error;
       if (subscriberResult.error) throw subscriberResult.error;
       setProducts(shopifyProducts);
-      setAudiences((audienceResult.data || []) as AudienceRow[]);
+      setAudiences(audienceRows as AudienceRow[]);
       setSubscriberPrices(
         ((subscriberResult.data || []) as SubscriberPriceRow[]).map((row) => ({
           ...row,

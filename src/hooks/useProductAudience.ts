@@ -27,16 +27,48 @@ let syncStarted = false;
 const CACHE_TTL_MS = 30_000;
 const listeners = new Set<(rows: AudienceRow[]) => void>();
 
+// O PostgREST limita o numero de linhas por resposta (1000 por padrao no
+// Supabase). Ler sem paginar devolvia so a primeira pagina, e TODO produto alem
+// dela era lido como audiencia nula -- que `isAudienceVisibleTo` trata como
+// oculto, de proposito. O efeito era o catalogo, a busca, a home, o "comprar por
+// pet" e a pagina de produto perderem itens em silencio: sem erro, sem aviso,
+// sem nada no console. O fail-closed esta certo; quem estava errado era a leitura.
+const AUDIENCE_PAGE_SIZE = 1000;
+// 100 mil linhas. Guarda contra laco infinito se a paginacao vier quebrada.
+const AUDIENCE_MAX_PAGES = 100;
+
+/** Le a tabela inteira, pagina a pagina. Usada tambem pelas telas do admin. */
+export async function fetchAllProductAudience(): Promise<AudienceRow[]> {
+  const rows: AudienceRow[] = [];
+  for (let page = 0; page < AUDIENCE_MAX_PAGES; page++) {
+    const from = page * AUDIENCE_PAGE_SIZE;
+    const { data, error } = await supabase
+      .from("product_audience")
+      .select("shopify_product_id, audience")
+      // Ordem estavel e obrigatoria: sem ela o `range` pode repetir ou pular
+      // linhas entre paginas, e o produto pulado some da loja.
+      .order("shopify_product_id", { ascending: true })
+      .range(from, from + AUDIENCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const lote = (data || []) as AudienceRow[];
+    rows.push(...lote);
+    if (lote.length < AUDIENCE_PAGE_SIZE) return rows;
+  }
+  // Truncar de novo aqui repetiria o bug original, entao pelo menos nao e em
+  // silencio.
+  console.error(
+    `product_audience: leitura parou em ${rows.length} linhas (limite de seguranca de ${AUDIENCE_MAX_PAGES} paginas). Produtos podem sumir da loja.`,
+  );
+  return rows;
+}
+
 async function fetchAudience(): Promise<AudienceRow[]> {
   if (cached && Date.now() - cachedAt < CACHE_TTL_MS) return cached;
   if (pending) return pending;
   pending = (async () => {
     try {
-      const { data, error } = await supabase
-        .from("product_audience")
-        .select("shopify_product_id, audience");
-      if (error) throw error;
-      cached = (data || []) as AudienceRow[];
+      const rows = await fetchAllProductAudience();
+      cached = rows;
       cachedAt = Date.now();
       return cached;
     } finally {
@@ -50,9 +82,14 @@ function refreshAudience(): Promise<AudienceRow[]> {
   if (refreshing) return refreshing;
   refreshing = (async () => {
     if (pending) await pending.catch(() => undefined);
-    cached = null;
-    cachedAt = 0;
-    const rows = await fetchAudience();
+    // Nao zere o cache antes de ter o substituto na mao. Zerando primeiro, uma
+    // falha transitoria -- troca de aba, rede oscilando, realtime disparando no
+    // momento errado -- deixava `cached` nulo, e como audiencia ausente e
+    // fail-closed, a loja inteira ficava sem produto ate alguem recarregar.
+    // Buscar direto tambem evita o TTL, que e o ponto de um refresh.
+    const rows = await fetchAllProductAudience();
+    cached = rows;
+    cachedAt = Date.now();
     listeners.forEach((listener) => listener(rows));
     return rows;
   })().finally(() => {
@@ -108,7 +145,7 @@ export function useProductAudience() {
 }
 
 export function invalidateAudienceCache() {
-  cached = null;
-  cachedAt = 0;
+  // `refreshAudience` ja ignora o TTL e busca do servidor, entao zerar o cache
+  // aqui so criaria a janela em que a loja fica sem audiencia nenhuma.
   void refreshAudience().catch(console.error);
 }
