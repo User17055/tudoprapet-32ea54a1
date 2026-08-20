@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
+import { isOriginAllowed } from "./origin.mjs";
 
 const here=dirname(fileURLToPath(import.meta.url)), configPath=join(here,"config.json"), statePath=join(here,"state.json");
 try{await access(configPath,constants.R_OK)}catch{await copyFile(join(here,"config.example.json"),configPath)}
@@ -186,7 +187,7 @@ async function pollPrintJobs(){
   finally{pollingJobs=false}
 }
 async function pollCycle(){await pollPrintJobs();await pollOrders()}
-function allowed(req){const origin=req.headers.origin;return !origin||(config.allowedOrigins||[]).includes(origin)}
+function allowed(req){return isOriginAllowed(req.headers.origin,config)}
 function reply(res,status,body,origin){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":origin||"null","Access-Control-Allow-Headers":"content-type","Access-Control-Allow-Methods":"GET, POST, OPTIONS","Access-Control-Allow-Private-Network":"true","Vary":"Origin"});res.end(JSON.stringify(body))}
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char]));
 function dashboardHtml(){
@@ -203,7 +204,7 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.1",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.2",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}
