@@ -9,6 +9,7 @@ import {
   findOrCreateAsaasCustomer,
   getAsaasPayment,
   getAsaasPixQrCode,
+  tokenizeAsaasCreditCard,
   type AsaasPayment, type AsaasPaymentInput,
 } from "../_shared/asaas.ts";
 import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
@@ -70,9 +71,24 @@ function parseCard(raw: unknown) {
   const expiryDate = Number(`${expiryYear}${expiryMonth}`);
   const now = new Date();
   const currentMonth = Number(`${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`);
-  if (number.length < 13 || number.length > 19 || holderName.length < 2 ||
+  const validName = holderName.length >= 3 && (holderName.match(/\p{L}/gu)?.length ?? 0) >= 2 && /^[\p{L}\s.'-]+$/u.test(holderName);
+  let luhnSum = 0;
+  let doubleDigit = false;
+  for (let index = number.length - 1; index >= 0; index--) {
+    let digit = Number(number[index]);
+    if (doubleDigit) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    luhnSum += digit;
+    doubleDigit = !doubleDigit;
+  }
+  const validNumber = number.length >= 13 && number.length <= 19 &&
+    !/^(\d)\1+$/.test(number) && luhnSum % 10 === 0;
+  const validCcv = /^3[47]/.test(number) ? /^\d{4}$/.test(ccv) : /^\d{3}$/.test(ccv);
+  if (!validNumber || !validName ||
     !/^(0[1-9]|1[0-2])$/.test(expiryMonth) || !/^20\d{2}$/.test(expiryYear) ||
-    expiryDate < currentMonth || !/^\d{3,4}$/.test(ccv)) {
+    expiryDate < currentMonth || !validCcv) {
     throw new Error("Dados do cartão inválidos");
   }
   return { number, holderName, expiryMonth, expiryYear, ccv };
@@ -470,11 +486,29 @@ Deno.serve(async (req) => {
 
     if (method === "credit_card") {
       let cardSaved = false;
-      const providerToken = typeof providerPayment.creditCardToken === "string" ? providerPayment.creditCardToken : "";
+      let providerToken = typeof providerPayment.creditCardToken === "string" ? providerPayment.creditCardToken : "";
+      let tokenCardNumber = typeof providerPayment.creditCardNumber === "string" ? providerPayment.creditCardNumber : "";
+      let tokenCardBrand = typeof providerPayment.creditCardBrand === "string" ? providerPayment.creditCardBrand : "";
+      if (body.saveCard === true && auth.user && !providerToken && submittedCard &&
+        createInput.creditCardHolderInfo && createInput.remoteIp) {
+        try {
+          const tokenized = await tokenizeAsaasCreditCard({
+            customer: providerCustomerId,
+            creditCard: submittedCard,
+            creditCardHolderInfo: createInput.creditCardHolderInfo,
+            remoteIp: createInput.remoteIp,
+          }, CUSTOMER_FACING);
+          providerToken = typeof tokenized.creditCardToken === "string" ? tokenized.creditCardToken : "";
+          tokenCardNumber = tokenized.creditCardNumber || tokenCardNumber;
+          tokenCardBrand = tokenized.creditCardBrand || tokenCardBrand;
+        } catch (tokenError) {
+          console.error("Pagamento aprovado, mas a tokenização do cartão falhou:", tokenError);
+        }
+      }
       if (body.saveCard === true && auth.user && providerToken) {
         try {
           const encrypted = await encryptPaymentToken(providerToken);
-          const returnedDigits = String(providerPayment.creditCardNumber || submittedCard?.number || "").replace(/\D/g, "");
+          const returnedDigits = String(tokenCardNumber || submittedCard?.number || "").replace(/\D/g, "");
           const lastFour = returnedDigits.slice(-4);
           if (/^\d{4}$/.test(lastFour)) {
             await admin.from("customer_payment_methods").update({ is_default: false })
@@ -484,7 +518,7 @@ Deno.serve(async (req) => {
               provider_customer_id: providerCustomerId,
               token_ciphertext: encrypted.ciphertext,
               token_iv: encrypted.iv,
-              brand: providerPayment.creditCardBrand || null,
+              brand: tokenCardBrand || null,
               last_four: lastFour,
               holder_name: submittedCard?.holderName || customer.name,
               is_default: true,
@@ -555,6 +589,7 @@ Deno.serve(async (req) => {
       return jsonResponse({
         ...safePaymentResponse(sessionId, paymentAttempt.id, directStatus, null),
         cardSaved,
+        cardSaveRequested: body.saveCard === true && Boolean(auth.user) && Boolean(submittedCard),
         cardBrand: providerPayment.creditCardBrand || null,
         cardLastFour: String(providerPayment.creditCardNumber || submittedCard?.number || "").replace(/\D/g, "").slice(-4) || null,
       });

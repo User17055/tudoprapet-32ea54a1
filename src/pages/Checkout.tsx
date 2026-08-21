@@ -62,6 +62,11 @@ import {
 } from "@/lib/customCheckout";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
+import {
+  formatCardNumber,
+  validateCard,
+  type CardErrors,
+} from "@/lib/cardValidation";
 import { useCartStore, type CartItem } from "@/stores/cartStore";
 import { toast } from "sonner";
 
@@ -139,6 +144,8 @@ type PaymentResult = {
   pixCopyPaste?: string | null;
   expiresAt?: string | null;
   invoiceUrl?: string | null;
+  cardSaved?: boolean;
+  cardSaveRequested?: boolean;
 };
 
 const ACTIVE_KEY = "tpp_checkout_active";
@@ -337,6 +344,7 @@ export default function Checkout() {
     expiryYear: "",
     ccv: "",
   });
+  const [cardErrors, setCardErrors] = useState<CardErrors>({});
   const [isFranchisee, setIsFranchisee] = useState(false);
   const [credentials, setCredentials] = useState<{
     sessionId: string;
@@ -1028,17 +1036,14 @@ export default function Checkout() {
           "Cadastre um endereço de cobrança válido em Minha conta.",
         );
       }
-      if (
-        digits(card.number).length < 13 ||
-        !card.holderName ||
-        !card.expiryMonth ||
-        !card.expiryYear ||
-        digits(card.ccv).length < 3
-      ) {
+      const errors = validateCard(card);
+      setCardErrors(errors);
+      if (Object.keys(errors).length > 0) {
         markInvalid(1);
-        return setMessage("Confira os dados do cartão destacados em vermelho.");
+        return setMessage("Corrija os dados do cartão destacados para continuar.");
       }
     }
+    setCardErrors({});
     setValidationAttempt(null);
     setMessage("");
     void confirmOrder();
@@ -1098,6 +1103,17 @@ export default function Checkout() {
       if (paymentError || paymentData?.error) {
         const detail = paymentData?.error || await edgeFunctionErrorText(paymentError, "Falha ao criar cobrança.");
         throw new Error(detail);
+      }
+      if (paymentData.cardSaveRequested) {
+        if (paymentData.cardSaved) {
+          toast.success("Cartão salvo com segurança", {
+            description: "Ele estará disponível na sua próxima compra.",
+          });
+        } else {
+          toast.warning("Pagamento realizado, mas o cartão não foi salvo", {
+            description: "A tokenização precisa estar habilitada na conta Asaas.",
+          });
+        }
       }
       setPayment(paymentData);
       storeActive(active, prepared.summary, paymentData);
@@ -1335,6 +1351,8 @@ export default function Checkout() {
           setInstallments={setInstallments}
           card={card}
           setCard={setCard}
+          errors={cardErrors}
+          setErrors={setCardErrors}
           saveCard={saveCard}
           setSaveCard={setSaveCard}
           loggedIn={Boolean(user)}
@@ -1463,6 +1481,8 @@ export default function Checkout() {
                           setInstallments={setInstallments}
                           card={card}
                           setCard={setCard}
+                          errors={cardErrors}
+                          setErrors={setCardErrors}
                           saveCard={saveCard}
                           setSaveCard={setSaveCard}
                           loggedIn={Boolean(user)}
@@ -2426,6 +2446,8 @@ function PaymentStep(props: {
     expiryYear: string;
     ccv: string;
   }) => void;
+  errors: CardErrors;
+  setErrors: (value: CardErrors) => void;
   saveCard: boolean;
   setSaveCard: (v: boolean) => void;
   loggedIn: boolean;
@@ -2552,64 +2574,79 @@ function PaymentStep(props: {
                   <Input
                     value={props.card.holderName}
                     onChange={(e) =>
-                      props.setCard({
-                        ...props.card,
-                        holderName: e.target.value,
-                      })
+                      {
+                        props.setCard({ ...props.card, holderName: e.target.value });
+                        props.setErrors({ ...props.errors, holderName: undefined });
+                      }
                     }
                     autoComplete="cc-name"
+                    aria-invalid={Boolean(props.errors.holderName)}
                   />
+                  <CardFieldError message={props.errors.holderName} />
                 </Field>
                 <Field label="Número do cartão">
                   <Input
                     value={props.card.number}
-                    onChange={(e) =>
-                      props.setCard({ ...props.card, number: e.target.value })
-                    }
+                    maxLength={23}
+                    onChange={(e) => {
+                      props.setCard({ ...props.card, number: formatCardNumber(e.target.value) });
+                      props.setErrors({ ...props.errors, number: undefined });
+                    }}
                     inputMode="numeric"
                     autoComplete="cc-number"
+                    placeholder="0000 0000 0000 0000"
+                    aria-invalid={Boolean(props.errors.number)}
                   />
+                  <CardFieldError message={props.errors.number} />
                 </Field>
                 <Field label="Mês">
                   <Input
                     maxLength={2}
                     value={props.card.expiryMonth}
-                    onChange={(e) =>
-                      props.setCard({
-                        ...props.card,
-                        expiryMonth: e.target.value,
-                      })
-                    }
+                    onChange={(e) => {
+                      props.setCard({ ...props.card, expiryMonth: e.target.value.replace(/\D/g, "").slice(0, 2) });
+                      props.setErrors({ ...props.errors, expiryMonth: undefined });
+                    }}
                     inputMode="numeric"
                     autoComplete="cc-exp-month"
+                    placeholder="MM"
+                    aria-invalid={Boolean(props.errors.expiryMonth)}
                   />
+                  <CardFieldError message={props.errors.expiryMonth} />
                 </Field>
                 <Field label="Ano">
                   <Input
                     maxLength={4}
                     value={props.card.expiryYear}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       props.setCard({
                         ...props.card,
                         expiryYear: e.target.value.replace(/\D/g, "").slice(0, 4),
-                      })
-                    }
+                      });
+                      props.setErrors({ ...props.errors, expiryYear: undefined });
+                    }}
                     inputMode="numeric"
                     autoComplete="cc-exp-year"
                     placeholder="AAAA ou AA"
+                    aria-invalid={Boolean(props.errors.expiryYear)}
                   />
+                  <CardFieldError message={props.errors.expiryYear} />
                 </Field>
                 <Field label="CVV">
                   <Input
                     type="password"
                     maxLength={4}
                     value={props.card.ccv}
-                    onChange={(e) =>
-                      props.setCard({ ...props.card, ccv: e.target.value })
-                    }
+                    onChange={(e) => {
+                      props.setCard({ ...props.card, ccv: e.target.value.replace(/\D/g, "").slice(0, 4) });
+                      props.setErrors({ ...props.errors, ccv: undefined });
+                    }}
                     inputMode="numeric"
                     autoComplete="cc-csc"
+                    placeholder="123"
+                    aria-invalid={Boolean(props.errors.ccv)}
                   />
+                  <CardFieldError message={props.errors.ccv} />
                 </Field>
               </div>
               {props.loggedIn && (
@@ -2635,6 +2672,10 @@ function PaymentStep(props: {
       />
     </div>
   );
+}
+function CardFieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-xs font-medium text-red-700">{message}</p>;
 }
 function Nav({
   busy,

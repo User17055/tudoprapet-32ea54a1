@@ -44,6 +44,12 @@ export interface AsaasPayment {
   [key: string]: unknown;
 }
 
+export interface AsaasCardToken {
+  creditCardToken: string;
+  creditCardNumber?: string;
+  creditCardBrand?: string;
+}
+
 export interface AsaasPixQrCode {
   encodedImage: string;
   payload: string;
@@ -205,6 +211,16 @@ export function createAsaasPayment(
     method: "POST",
     body: JSON.stringify(input),
   }, input.billingType === "CREDIT_CARD" ? 65_000 : 12_000, budget);
+}
+
+export function tokenizeAsaasCreditCard(
+  input: Pick<AsaasPaymentInput, "customer" | "creditCard" | "creditCardHolderInfo" | "remoteIp">,
+  budget: AsaasCallBudget,
+): Promise<AsaasCardToken> {
+  return asaasRequest<AsaasCardToken>("/creditCard/tokenizeCreditCard", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }, 65_000, budget);
 }
 
 export async function findAsaasPaymentByExternalReference(
