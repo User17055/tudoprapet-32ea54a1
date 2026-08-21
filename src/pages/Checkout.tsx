@@ -215,6 +215,26 @@ const formatCep = (value: string) =>
   digits(value)
     .slice(0, 8)
     .replace(/^(\d{5})(\d)/, "$1-$2");
+const formatCpfCnpj = (value: string) => {
+  const raw = digits(value).slice(0, 14);
+  if (raw.length <= 11)
+    return raw
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/\.(\d{3})(\d)/, ".$1-$2");
+  return raw
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\/\d{4})(\d)/, "$1-$2");
+};
+const formatPhone = (value: string) => {
+  const raw = digits(value).slice(0, 11);
+  if (raw.length < 3) return raw ? `(${raw}` : "";
+  return raw.length <= 10
+    ? raw.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2")
+    : raw.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+};
 const validAddressValue = (value: Address) =>
   Boolean(
     value.address1 &&
@@ -286,6 +306,10 @@ export default function Checkout() {
   );
   const [addressLabel, setAddressLabel] = useState("Casa");
   const [customerDataLoading, setCustomerDataLoading] = useState(!previewMode);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [contactError, setContactError] = useState("");
+  const [resumeAfterContactSave, setResumeAfterContactSave] = useState(false);
   const [addressSheetOpen, setAddressSheetOpen] = useState(false);
   const [addressDraft, setAddressDraft] = useState<Address>(emptyAddress);
   const [addressDraftLabel, setAddressDraftLabel] = useState("");
@@ -473,8 +497,8 @@ export default function Checkout() {
           setCustomer({
             name: data.customer.name || "",
             email: data.customer.email || user.email || "",
-            cpfCnpj: data.customer.cpfCnpj || "",
-            mobilePhone: data.customer.mobilePhone || "",
+            cpfCnpj: formatCpfCnpj(data.customer.cpfCnpj || ""),
+            mobilePhone: formatPhone(data.customer.mobilePhone || ""),
           });
         const addresses: SavedAddress[] = (data.addresses || []).map(
           (item: Record<string, unknown>) => ({
@@ -881,14 +905,48 @@ export default function Checkout() {
         : "Endereço adicionado a esta compra.",
     });
   };
+  const saveCheckoutContact = async () => {
+    if (!validContact()) {
+      setContactError(
+        "Preencha nome, e-mail, CPF ou CNPJ e celular corretamente.",
+      );
+      return;
+    }
+    setContactBusy(true);
+    setContactError("");
+    const { data, error } = await supabase.functions.invoke(
+      "checkout-customer-data",
+      {
+        body: {
+          action: "save_contact",
+          customer,
+          billingSameAsShipping: true,
+        },
+      },
+    );
+    setContactBusy(false);
+    if (error || data?.error) {
+      const detail = data?.error || await edgeFunctionErrorText(
+        error,
+        "Não foi possível salvar seus dados. Confira o CPF ou CNPJ.",
+      );
+      setContactError(detail);
+      return;
+    }
+    setContactDialogOpen(false);
+    setMessage("");
+    setResumeAfterContactSave(true);
+    toast.success("Dados pessoais salvos", {
+      description: "Agora você pode continuar a compra.",
+    });
+  };
   const nextDelivery = async () => {
     setMessage("");
-    if (!validContact())
-      return setMessage(
-        user
-          ? "Não foi possível carregar todos os dados da sua conta."
-          : "Preencha seus dados para continuar.",
-      );
+    if (!validContact()) {
+      setContactError("");
+      setContactDialogOpen(true);
+      return;
+    }
     if (digits(searchedCep).length !== 8) {
       markInvalid(0);
       return setMessage("Digite um CEP válido para continuar.");
@@ -929,6 +987,13 @@ export default function Checkout() {
     setValidationAttempt(null);
     setStep(1);
   };
+  useEffect(() => {
+    if (!resumeAfterContactSave || !validContact()) return;
+    setResumeAfterContactSave(false);
+    void nextDelivery();
+    // Retoma uma única vez o clique em "Ir para pagamento" após salvar os dados.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer, resumeAfterContactSave]);
   useEffect(() => {
     if (!resumeAfterAddressSave || !validAddress(address)) return;
     if (
@@ -1485,6 +1550,18 @@ export default function Checkout() {
           openAddressRegistration();
         }}
       />
+      <ContactRegistrationDialog
+        open={contactDialogOpen}
+        setOpen={(open) => {
+          setContactDialogOpen(open);
+          if (!open) setContactError("");
+        }}
+        value={customer}
+        setValue={setCustomer}
+        error={contactError}
+        busy={contactBusy}
+        onSave={() => void saveCheckoutContact()}
+      />
       <AddressRegistrationSheet
         open={addressSheetOpen}
         setOpen={setAddressSheetOpen}
@@ -1497,6 +1574,103 @@ export default function Checkout() {
         onSave={saveCheckoutAddress}
       />
     </main>
+  );
+}
+
+function ContactRegistrationDialog({
+  open,
+  setOpen,
+  value,
+  setValue,
+  error,
+  busy,
+  onSave,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  value: Customer;
+  setValue: (value: Customer) => void;
+  error: string;
+  busy: boolean;
+  onSave: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[92vh] w-[calc(100%_-_2rem)] overflow-y-auto p-0 sm:max-w-xl">
+        <DialogHeader className="border-b border-slate-200 px-5 pb-5 pt-6 pr-14 text-left sm:px-6">
+          <DialogTitle className="text-xl text-slate-950">
+            Complete seus dados
+          </DialogTitle>
+          <DialogDescription className="pt-1 text-sm leading-relaxed text-slate-600">
+            Precisamos destas informações para emitir o pedido. Preencha agora
+            sem sair da compra.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 px-5 py-1 sm:grid-cols-2 sm:px-6">
+          <div className="sm:col-span-2">
+            <Field label="Nome completo">
+              <Input
+                autoFocus
+                autoComplete="name"
+                value={value.name}
+                onChange={(event) => setValue({ ...value, name: event.target.value })}
+                placeholder="Seu nome completo"
+                aria-invalid={Boolean(error) && value.name.trim().length < 2}
+              />
+            </Field>
+          </div>
+          <Field label="E-mail">
+            <Input
+              type="email"
+              autoComplete="email"
+              value={value.email}
+              onChange={(event) => setValue({ ...value, email: event.target.value })}
+              placeholder="voce@exemplo.com"
+            />
+          </Field>
+          <Field label="Celular">
+            <Input
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={15}
+              value={value.mobilePhone}
+              onChange={(event) => setValue({ ...value, mobilePhone: formatPhone(event.target.value) })}
+              placeholder="(00) 00000-0000"
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="CPF ou CNPJ">
+              <Input
+                inputMode="numeric"
+                maxLength={18}
+                value={value.cpfCnpj}
+                onChange={(event) => setValue({ ...value, cpfCnpj: formatCpfCnpj(event.target.value) })}
+                placeholder="000.000.000-00"
+              />
+            </Field>
+          </div>
+          {error && (
+            <div
+              role="alert"
+              className="sm:col-span-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            >
+              {error}
+            </div>
+          )}
+        </div>
+        <DialogFooter className="px-5 pb-5 sm:px-6 sm:pb-6">
+          <Button
+            type="button"
+            className="h-11 w-full bg-blue-700 hover:bg-blue-800 sm:w-auto sm:min-w-44"
+            disabled={busy}
+            onClick={onSave}
+          >
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {busy ? "Salvando..." : "Salvar e continuar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
