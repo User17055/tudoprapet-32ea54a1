@@ -31,6 +31,8 @@ import {
   Receipt,
   GitBranch,
   Wrench,
+  LayoutDashboard,
+  ShieldCheck,
 
   type LucideIcon,
 } from "lucide-react";
@@ -54,6 +56,8 @@ import OrdersTab from "./admin/OrdersTab";
 import SyncTab from "./admin/SyncTab";
 import MaintenanceTab from "./admin/MaintenanceTab";
 import ConferenceTab from "./admin/ConferenceTab";
+import OverviewTab from "./admin/OverviewTab";
+import AdministratorsTab from "./admin/AdministratorsTab";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 
 interface SubPrice {
@@ -75,6 +79,8 @@ type SubscriberPriceAdjustment = "percentage" | "amount";
 type SubscriberPriceFilter = "all" | "registered" | "unregistered";
 
 type SectionId =
+  | "overview"
+  | "administrators"
   | "users"
   | "members"
   | "prices"
@@ -101,6 +107,13 @@ interface SectionDef {
 }
 
 const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
+  {
+    label: "Geral",
+    items: [
+      { id: "overview", label: "Visão geral", description: "Indicadores e atalhos da operação", icon: LayoutDashboard, component: OverviewTab },
+      { id: "administrators", label: "Administradores", description: "Cadastre e gerencie os acessos ao painel", icon: ShieldCheck, component: AdministratorsTab },
+    ],
+  },
   {
     label: "Clube",
     items: [
