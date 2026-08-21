@@ -123,29 +123,67 @@ Deno.serve(async (req) => {
       }
     }
 
-    const variantIds = input.items.map((item) => item.variantId);
-    const details = await fetchVariantCheckoutDetails(variantIds, storefrontToken);
-    if (details.size !== new Set(variantIds).size) return errorResponse("Um produto não foi encontrado", 409);
-
-    for (const item of input.items) {
-      const detail = details.get(item.variantId)!;
-      if (!detail.availableForSale || (detail.quantityAvailable !== null && detail.quantityAvailable < item.quantity)) {
-        return jsonResponse({ error: `${detail.productTitle} não possui estoque suficiente` }, 409);
-      }
-    }
+    const requestedItems = input.items;
+    const requestedVariantIds = requestedItems.map((item) => item.variantId);
+    const details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken);
+    const unavailableItems: Array<{
+      variantId: string;
+      productTitle: string;
+      reason: "hidden" | "out_of_stock" | "not_found";
+    }> = [];
 
     const productIds = [...new Set(Array.from(details.values()).map((detail) => detail.productId))];
-    const { data: audienceRows, error: audienceError } = await admin.from("product_audience")
-      .select("shopify_product_id,audience").in("shopify_product_id", productIds);
-    if (audienceError) throw audienceError;
-    const audienceByProduct = new Map((audienceRows ?? []).map((row) => [row.shopify_product_id, row.audience]));
-    for (const detail of details.values()) {
+    let audienceRows: Array<{ shopify_product_id: string; audience: string }> = [];
+    if (productIds.length) {
+      const audienceResult = await admin.from("product_audience")
+        .select("shopify_product_id,audience").in("shopify_product_id", productIds);
+      if (audienceResult.error) throw audienceResult.error;
+      audienceRows = audienceResult.data ?? [];
+    }
+    const audienceByProduct = new Map(audienceRows.map((row) => [row.shopify_product_id, row.audience]));
+    const availableItems = requestedItems.filter((item) => {
+      const detail = details.get(item.variantId);
+      if (!detail) {
+        unavailableItems.push({
+          variantId: item.variantId,
+          productTitle: "Produto removido",
+          reason: "not_found",
+        });
+        return false;
+      }
+      if (!detail.availableForSale || (detail.quantityAvailable !== null && detail.quantityAvailable < item.quantity)) {
+        unavailableItems.push({
+          variantId: item.variantId,
+          productTitle: detail.productTitle,
+          reason: "out_of_stock",
+        });
+        return false;
+      }
       const audience = audienceByProduct.get(detail.productId) ?? null;
       const allowed = customerType === "franchise"
         ? audience === "franquia" || audience === "ambos"
         : audience === "cliente" || audience === "ambos";
-      if (!allowed) return errorResponse(`${detail.productTitle} não está disponível para este perfil`, 403);
+      if (!allowed) {
+        unavailableItems.push({
+          variantId: item.variantId,
+          productTitle: detail.productTitle,
+          reason: "hidden",
+        });
+        return false;
+      }
+      return true;
+    });
+    if (!availableItems.length) {
+      return jsonResponse({
+        error: "Todos os produtos desta compra estão indisponíveis.",
+        code: "no_available_items",
+        unavailableItems,
+      }, 409);
     }
+    // Daqui em diante, preço, frete, snapshots e pedido usam somente os itens
+    // que continuam visíveis para o perfil e possuem estoque suficiente.
+    input.items = availableItems;
+    const variantIds = availableItems.map((item) => item.variantId);
 
     const specialPriceMap = new Map<string, number>();
     if (customerType === "subscriber") {
@@ -367,6 +405,7 @@ Deno.serve(async (req) => {
       accessToken,
       customerType,
       status: "awaiting_payment",
+      unavailableItems,
       summary: {
         subtotal,
         discount,

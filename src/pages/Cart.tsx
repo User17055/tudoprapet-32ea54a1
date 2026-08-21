@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   Store,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CouponInput } from "@/components/CouponInput";
@@ -24,6 +25,7 @@ import { goToCheckout } from "@/lib/checkout";
 import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
+import { useCartAvailability } from "@/hooks/useCartAvailability";
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -43,13 +45,19 @@ const Cart = () => {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { isFranchisee, getFranchisePrice, loading: franchiseLoading } = useFranchisePrices();
   const customerIsSubscribed = isSubscribed && !isFranchisee;
+  const {
+    loading: availabilityLoading,
+    unavailableReasons,
+    availableItems,
+    unavailableItems,
+  } = useCartAvailability(items, isFranchisee);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = items.reduce(
+  const totalPrice = availableItems.reduce(
     (sum, item) => sum + parseFloat(item.price.amount) * item.quantity,
     0,
   );
-  const clubTotalPrice = items.reduce((sum, item) => {
+  const clubTotalPrice = availableItems.reduce((sum, item) => {
     const regularPrice = parseFloat(item.price.amount);
     const subscriberPrice = getSubscriberPrice(item.variantId);
     const price = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
@@ -58,7 +66,7 @@ const Cart = () => {
 
     return sum + price * item.quantity;
   }, 0);
-  const franchiseTotalPrice = items.reduce((sum, item) => {
+  const franchiseTotalPrice = availableItems.reduce((sum, item) => {
     const regularPrice = parseFloat(item.price.amount);
     const franchisePrice = getFranchisePrice(item.variantId);
     const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
@@ -106,19 +114,32 @@ const Cart = () => {
   }, [displayTotalPrice]);
 
   const handleCheckout = async () => {
+    if (availabilityLoading) return;
+    if (!availableItems.length) {
+      toast.error("Nenhum produto disponível para finalizar", {
+        description: "Remova os itens indisponíveis ou escolha outros produtos.",
+      });
+      return;
+    }
     setCheckingOut(true);
     try {
+      if (unavailableItems.length) {
+        toast.warning(`${unavailableItems.length} produto(s) indisponível(is) foram ignorados no checkout.`);
+        if (!customCheckoutEnabled) {
+          for (const item of unavailableItems) await removeItem(item.variantId);
+        }
+      }
       if (customCheckoutEnabled) {
         startCustomCheckout(
           navigate,
-          items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+          availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
           "cart",
         );
         return;
       }
       if (isFranchisee) {
         try {
-          const lineItems = items.map((item) => ({
+          const lineItems = availableItems.map((item) => ({
             variantId: item.variantId,
             quantity: item.quantity,
           }));
@@ -138,7 +159,7 @@ const Cart = () => {
         }
       } else if (customerIsSubscribed) {
         try {
-          const lineItems = items.map((item) => ({
+          const lineItems = availableItems.map((item) => ({
             variantId: item.variantId,
             quantity: item.quantity,
           }));
@@ -228,6 +249,7 @@ const Cart = () => {
           <main className="flex-1 px-3 py-3 md:mx-auto md:grid md:w-full md:max-w-6xl md:grid-cols-[minmax(0,1fr)_360px] md:gap-6 md:px-6 md:py-6">
             <section ref={itemsListRef} aria-label="Produtos no carrinho" className="space-y-2.5">
               {items.map((item) => {
+                const unavailableReason = unavailableReasons.get(item.variantId);
                 const regularPrice = parseFloat(item.price.amount);
                 const subscriberPrice = getSubscriberPrice(item.variantId);
                 const franchisePrice = getFranchisePrice(item.variantId);
@@ -246,7 +268,7 @@ const Cart = () => {
                   <article
                     key={item.variantId}
                     data-cart-row
-                    className="grid grid-cols-[76px_minmax(0,1fr)_32px] gap-3 rounded-xl border border-border bg-background p-2.5 shadow-sm"
+                    className={`grid grid-cols-[76px_minmax(0,1fr)_32px] gap-3 rounded-xl border p-2.5 shadow-sm ${unavailableReason ? "border-amber-300 bg-amber-50/60" : "border-border bg-background"}`}
                   >
                     <div className="h-[76px] w-[76px] overflow-hidden rounded-lg bg-muted">
                       {image && (
@@ -262,6 +284,12 @@ const Cart = () => {
                       <h2 className="line-clamp-2 text-[13px] font-bold leading-tight text-foreground">
                         {item.product.node.title}
                       </h2>
+                      {unavailableReason && (
+                        <p className="mt-1 flex items-center gap-1 text-xs font-bold text-amber-800">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {unavailableReason === "hidden" ? "Indisponível para seu perfil" : "Produto sem estoque"}
+                        </p>
+                      )}
                       {getDisplayOptions(item.selectedOptions).length > 0 && (
                         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                           {getDisplayOptions(item.selectedOptions).map((option) => option.value).join(" / ")}
@@ -277,7 +305,7 @@ const Cart = () => {
                             onClick={() =>
                               updateQuantity(item.variantId, item.quantity - 1)
                             }
-                            disabled={isLoading}
+                            disabled={isLoading || Boolean(unavailableReason)}
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
@@ -287,7 +315,7 @@ const Cart = () => {
                             min={1}
                             key={`qty-${item.variantId}-${item.quantity}`}
                             defaultValue={item.quantity}
-                            disabled={isLoading}
+                            disabled={isLoading || Boolean(unavailableReason)}
                             aria-label={`Quantidade de ${item.product.node.title}`}
                             onBlur={(e) => {
                               const next = parseInt(e.target.value, 10);
@@ -305,7 +333,7 @@ const Cart = () => {
                             onClick={() =>
                               updateQuantity(item.variantId, item.quantity + 1)
                             }
-                            disabled={isLoading}
+                            disabled={isLoading || Boolean(unavailableReason)}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
@@ -381,7 +409,7 @@ const Cart = () => {
                   onClick={handleCheckout}
                   className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
                   size="lg"
-                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
+                  disabled={availableItems.length === 0 || availabilityLoading || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
                 >
                   {checkingOut || isLoading || isSyncing ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -430,7 +458,7 @@ const Cart = () => {
                 onClick={handleCheckout}
                 className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
                 size="lg"
-                disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
+                disabled={availableItems.length === 0 || availabilityLoading || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
               >
                 {checkingOut || isLoading || isSyncing ? (
                   <Loader2 className="h-5 w-5 animate-spin" />

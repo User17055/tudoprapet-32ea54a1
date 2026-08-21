@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight, Store } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2, Crown, ShieldCheck, Truck, ArrowRight, Store, AlertTriangle } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { CouponInput } from "@/components/CouponInput";
 import { getDisplayOptions } from "@/lib/shopify";
@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
+import { useCartAvailability } from "@/hooks/useCartAvailability";
 
 export const CartDrawer = () => {
   const navigate = useNavigate();
@@ -26,10 +27,11 @@ export const CartDrawer = () => {
   const { isFranchisee, getFranchisePrice, loading: franchiseLoading } = useFranchisePrices();
   const isMobile = useIsMobile();
   const customerIsSubscribed = isSubscribed && !isFranchisee;
+  const { loading: availabilityLoading, unavailableReasons, availableItems, unavailableItems } = useCartAvailability(items, isFranchisee);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
-  const clubTotalPrice = items.reduce((sum, item) => {
+  const totalPrice = availableItems.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
+  const clubTotalPrice = availableItems.reduce((sum, item) => {
     const regularPrice = parseFloat(item.price.amount);
     const subscriberPrice = getSubscriberPrice(item.variantId);
     const price = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
@@ -38,7 +40,7 @@ export const CartDrawer = () => {
 
     return sum + price * item.quantity;
   }, 0);
-  const franchiseTotalPrice = items.reduce((sum, item) => {
+  const franchiseTotalPrice = availableItems.reduce((sum, item) => {
     const regularPrice = parseFloat(item.price.amount);
     const franchisePrice = getFranchisePrice(item.variantId);
     const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
@@ -87,20 +89,33 @@ export const CartDrawer = () => {
   }, [displayTotalPrice]);
 
   const handleCheckout = async () => {
+    if (availabilityLoading) return;
+    if (!availableItems.length) {
+      toast.error("Nenhum produto disponível para finalizar", {
+        description: "Remova os itens indisponíveis ou escolha outros produtos.",
+      });
+      return;
+    }
     setCheckingOut(true);
     try {
+      if (unavailableItems.length) {
+        toast.warning(`${unavailableItems.length} produto(s) indisponível(is) foram ignorados no checkout.`);
+        if (!customCheckoutEnabled) {
+          for (const item of unavailableItems) await removeItem(item.variantId);
+        }
+      }
       if (customCheckoutEnabled) {
         setCartOpen(false);
         startCustomCheckout(
           navigate,
-          items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+          availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
           "cart",
         );
         return;
       }
       if (isFranchisee) {
         try {
-          const lineItems = items.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
+          const lineItems = availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
           const { data, error } = await supabase.functions.invoke("franchise-checkout", { body: { items: lineItems } });
           if (error) throw error;
           if (data?.checkoutUrl) {
@@ -115,7 +130,7 @@ export const CartDrawer = () => {
         }
       } else if (customerIsSubscribed) {
         try {
-          const lineItems = items.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
+          const lineItems = availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity }));
           const { data, error } = await supabase.functions.invoke("subscriber-checkout", { body: { items: lineItems } });
           if (error) throw error;
           if (data?.checkoutUrl) {
@@ -229,6 +244,7 @@ export const CartDrawer = () => {
                 </div>
                 <div ref={itemsListRef} className="space-y-2.5 sm:space-y-3">
                   {items.map((item) => {
+                    const unavailableReason = unavailableReasons.get(item.variantId);
                     const regularPrice = parseFloat(item.price.amount);
                     const subscriberPrice = getSubscriberPrice(item.variantId);
                     const franchisePrice = getFranchisePrice(item.variantId);
@@ -245,7 +261,7 @@ export const CartDrawer = () => {
                       <div
                         key={item.variantId}
                         data-cart-row
-                        className="grid grid-cols-[72px_minmax(0,1fr)_32px] gap-2.5 sm:flex sm:gap-3 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-border bg-background sm:bg-card hover:border-primary/30 hover:shadow-sm transition"
+                        className={`grid grid-cols-[72px_minmax(0,1fr)_32px] gap-2.5 rounded-xl border p-2.5 transition sm:flex sm:gap-3 sm:rounded-2xl sm:p-3 ${unavailableReason ? "border-amber-300 bg-amber-50/70" : "border-border bg-background hover:border-primary/30 hover:shadow-sm sm:bg-card"}`}
                       >
                         <div className="w-[72px] h-[72px] sm:w-20 sm:h-20 bg-muted rounded-lg sm:rounded-xl overflow-hidden flex-shrink-0">
                           {item.product.node.images?.edges?.[0]?.node && (
@@ -260,6 +276,12 @@ export const CartDrawer = () => {
                           <h4 className="font-bold text-[13px] sm:text-sm leading-tight line-clamp-2 text-foreground">
                             {item.product.node.title}
                           </h4>
+                          {unavailableReason && (
+                            <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-800">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              {unavailableReason === "hidden" ? "Indisponível para seu perfil" : "Produto sem estoque"}
+                            </p>
+                          )}
                           {getDisplayOptions(item.selectedOptions).length > 0 && (
                             <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                               {getDisplayOptions(item.selectedOptions).map(o => o.value).join(' • ')}
@@ -272,7 +294,7 @@ export const CartDrawer = () => {
                                 size="icon"
                                 className="h-7 w-7 rounded-full btn-bounce hover:bg-primary hover:text-primary-foreground"
                                 onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
-                                disabled={isLoading}
+                                disabled={isLoading || Boolean(unavailableReason)}
                               >
                                 <Minus className="h-3 w-3" />
                               </Button>
@@ -282,7 +304,7 @@ export const CartDrawer = () => {
                                 min={1}
                                 key={`qty-${item.variantId}-${item.quantity}`}
                                 defaultValue={item.quantity}
-                                disabled={isLoading}
+                                disabled={isLoading || Boolean(unavailableReason)}
                                 aria-label={`Quantidade de ${item.product.node.title}`}
                                 onBlur={(e) => {
                                   const next = parseInt(e.target.value, 10);
@@ -298,7 +320,7 @@ export const CartDrawer = () => {
                                 size="icon"
                                 className="h-7 w-7 rounded-full btn-bounce hover:bg-primary hover:text-primary-foreground"
                                 onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
-                                disabled={isLoading}
+                                disabled={isLoading || Boolean(unavailableReason)}
                               >
                                 <Plus className="h-3 w-3" />
                               </Button>
@@ -375,7 +397,7 @@ export const CartDrawer = () => {
                   onClick={handleCheckout}
                   className="w-full btn-bounce rounded-full font-display font-bold text-base py-6 shadow-md"
                   size="lg"
-                  disabled={items.length === 0 || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
+                  disabled={availableItems.length === 0 || availabilityLoading || isLoading || isSyncing || subscriptionLoading || franchiseLoading || checkingOut}
                 >
                   {checkingOut || isLoading || isSyncing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

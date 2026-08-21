@@ -1077,6 +1077,22 @@ export default function Checkout() {
         const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
         throw new Error(detail);
       }
+      const ignoredItems = Array.isArray(prepared.unavailableItems)
+        ? prepared.unavailableItems as Array<{ variantId?: string; productTitle?: string }>
+        : [];
+      if (ignoredItems.length) {
+        if (launch?.source === "cart") {
+          for (const ignored of ignoredItems) {
+            if (ignored.variantId) await removeItem(ignored.variantId);
+          }
+        }
+        const titles = ignoredItems
+          .map((item) => item.productTitle)
+          .filter((title): title is string => Boolean(title));
+        toast.warning(`${ignoredItems.length} produto(s) indisponível(is) foram retirados da compra.`, {
+          description: titles.slice(0, 3).join(", ") || undefined,
+        });
+      }
       const active = {
         sessionId: prepared.sessionId,
         accessToken: prepared.accessToken,
