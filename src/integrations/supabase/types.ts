@@ -447,6 +447,36 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_prices: {
+        Row: {
+          created_at: string
+          previous_price: number | null
+          price: number
+          price_changed_at: string | null
+          shopify_product_id: string
+          shopify_variant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          previous_price?: number | null
+          price: number
+          price_changed_at?: string | null
+          shopify_product_id: string
+          shopify_variant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          previous_price?: number | null
+          price?: number
+          price_changed_at?: string | null
+          shopify_product_id?: string
+          shopify_variant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       employee_referral_codes: {
         Row: {
           active: boolean
@@ -531,36 +561,6 @@ export type Database = {
           payment_term_days?: number
           updated_at?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      customer_prices: {
-        Row: {
-          created_at: string
-          previous_price: number | null
-          price: number
-          price_changed_at: string | null
-          shopify_product_id: string
-          shopify_variant_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          previous_price?: number | null
-          price: number
-          price_changed_at?: string | null
-          shopify_product_id: string
-          shopify_variant_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          previous_price?: number | null
-          price?: number
-          price_changed_at?: string | null
-          shopify_product_id?: string
-          shopify_variant_id?: string
-          updated_at?: string
         }
         Relationships: []
       }
