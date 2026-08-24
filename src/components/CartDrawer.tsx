@@ -12,6 +12,7 @@ import { goToCheckout } from "@/lib/checkout";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -24,15 +25,16 @@ export const CartDrawer = () => {
   const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, clearCart, isCartOpen, setCartOpen } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const { isFranchisee, getFranchisePrice, loading: franchiseLoading } = useFranchisePrices();
   const isMobile = useIsMobile();
   const customerIsSubscribed = isSubscribed && !isFranchisee;
   const { loading: availabilityLoading, unavailableReasons, availableItems, unavailableItems } = useCartAvailability(items, isFranchisee);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = availableItems.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0);
+  const totalPrice = availableItems.reduce((sum, item) => sum + ((getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount)) * item.quantity), 0);
   const clubTotalPrice = availableItems.reduce((sum, item) => {
-    const regularPrice = parseFloat(item.price.amount);
+    const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
     const subscriberPrice = getSubscriberPrice(item.variantId);
     const price = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
       ? subscriberPrice
@@ -41,7 +43,7 @@ export const CartDrawer = () => {
     return sum + price * item.quantity;
   }, 0);
   const franchiseTotalPrice = availableItems.reduce((sum, item) => {
-    const regularPrice = parseFloat(item.price.amount);
+    const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
     const franchisePrice = getFranchisePrice(item.variantId);
     const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
       ? franchisePrice
@@ -245,7 +247,7 @@ export const CartDrawer = () => {
                 <div ref={itemsListRef} className="space-y-2.5 sm:space-y-3">
                   {items.map((item) => {
                     const unavailableReason = unavailableReasons.get(item.variantId);
-                    const regularPrice = parseFloat(item.price.amount);
+                    const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
                     const subscriberPrice = getSubscriberPrice(item.variantId);
                     const franchisePrice = getFranchisePrice(item.variantId);
                     const hasFranchisePrice = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice;

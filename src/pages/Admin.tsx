@@ -33,6 +33,7 @@ import {
   Wrench,
   LayoutDashboard,
   ShieldCheck,
+  CircleDollarSign,
 
   type LucideIcon,
 } from "lucide-react";
@@ -58,6 +59,7 @@ import MaintenanceTab from "./admin/MaintenanceTab";
 import ConferenceTab from "./admin/ConferenceTab";
 import OverviewTab from "./admin/OverviewTab";
 import AdministratorsTab from "./admin/AdministratorsTab";
+import ValuesTab from "./admin/ValuesTab";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 
 interface SubPrice {
@@ -84,6 +86,7 @@ type SectionId =
   | "users"
   | "members"
   | "prices"
+  | "values"
   | "content"
   | "details"
   | "variations"
@@ -126,6 +129,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
   {
     label: "Catálogo",
     items: [
+      { id: "values", label: "Valores", description: "Preços da Shopify, clientes, assinantes e franquias", icon: CircleDollarSign, component: ValuesTab },
       { id: "content", label: "Conteúdo", description: "Descrições personalizadas dos produtos", icon: FileText, component: ContentTab },
       { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
       { id: "variations", label: "Variações", description: "Agrupe tamanhos e pesos do mesmo produto", icon: Boxes, component: VariationsTab },
@@ -330,6 +334,7 @@ export default function Admin() {
 function PricesTab() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [prices, setPrices] = useState<SubPrice[]>([]);
+  const [customerPrices, setCustomerPrices] = useState<{ shopify_variant_id: string; price: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [productId, setProductId] = useState("");
@@ -344,13 +349,16 @@ function PricesTab() {
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [shop, sub] = await Promise.all([
+      const [shop, sub, customer] = await Promise.all([
         fetchAllShopifyProducts(),
         supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
+        supabase.from("customer_prices").select("shopify_variant_id,price"),
       ]);
       setProducts(shop);
       if (sub.error) throw sub.error;
+      if (customer.error) throw customer.error;
       setPrices((sub.data || []) as SubPrice[]);
+      setCustomerPrices((customer.data || []).map((row) => ({ ...row, price: Number(row.price) })));
     } catch (e) {
       if (!silent) toast.error("Erro ao carregar dados");
       console.error(e);
@@ -368,6 +376,11 @@ function PricesTab() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "subscriber_prices" },
+        () => loadAll(true),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "customer_prices" },
         () => loadAll(true),
       )
       .subscribe();
@@ -416,7 +429,10 @@ function PricesTab() {
   const selectedVariant = selectedProduct?.node.variants.edges.find(v => v.node.id === variantId)?.node
     || selectedProduct?.node.variants.edges[0]?.node;
   const shopifyPrice = selectedVariant ? Number(selectedVariant.price.amount) : null;
-  const estimatedCost = shopifyPrice === null ? null : shopifyPrice / 2;
+  const selectedCustomerPrice = selectedVariant
+    ? customerPrices.find((row) => row.shopify_variant_id === selectedVariant.id)?.price ?? shopifyPrice
+    : null;
+  const estimatedCost = selectedCustomerPrice === null ? null : selectedCustomerPrice / 2;
   const adjustmentValue = Number(adjustment.replace(",", "."));
   const calculatedSubscriberPrice = estimatedCost === null || !Number.isFinite(adjustmentValue)
     ? null
@@ -543,7 +559,7 @@ function PricesTab() {
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Adicionar preço de assinante</CardTitle>
           <CardDescription>
-            O custo estimado é metade do preço do Shopify. Aplique uma margem percentual ou um acréscimo em reais.
+            O custo estimado é metade do Valor do Cliente definido no sistema. Sem valor personalizado, usamos o preço da Shopify.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
@@ -624,8 +640,8 @@ function PricesTab() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Preço Shopify</label>
-                <Input value={shopifyPrice === null ? "" : `R$ ${shopifyPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+                <label className="mb-1 block text-sm font-medium">Valor base do cliente</label>
+                <Input value={selectedCustomerPrice === null ? "" : `R$ ${selectedCustomerPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium">Custo estimado (50%)</label>
@@ -701,7 +717,7 @@ function PricesTab() {
                   <TableHead>Produto</TableHead>
                   <TableHead className="w-40">Status</TableHead>
                   <TableHead>Variante</TableHead>
-                  <TableHead className="text-right">Preço Shopify</TableHead>
+                  <TableHead className="text-right">Valor base</TableHead>
                   <TableHead className="text-right">Custo estimado</TableHead>
                   <TableHead className="text-right">Preço assinante</TableHead>
                   <TableHead className="w-28"><span className="sr-only">Ações</span></TableHead>
@@ -716,6 +732,9 @@ function PricesTab() {
                     : null;
                   const displayedVariant = registeredVariant || firstVariant;
                   const productPrice = displayedVariant ? Number(displayedVariant.price.amount) : null;
+                  const customerPrice = displayedVariant
+                    ? customerPrices.find((row) => row.shopify_variant_id === displayedVariant.id)?.price ?? productPrice
+                    : null;
                   const productImage = product.node.images.edges[0]?.node;
                   return (
                     <TableRow key={product.node.id}>
@@ -750,10 +769,10 @@ function PricesTab() {
                       </TableCell>
                       <TableCell>{displayedVariant?.title || "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {productPrice === null ? "—" : `R$ ${productPrice.toFixed(2)}`}
+                        {customerPrice === null ? "—" : `R$ ${customerPrice.toFixed(2)}`}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {productPrice === null ? "—" : `R$ ${(productPrice / 2).toFixed(2)}`}
+                        {customerPrice === null ? "—" : `R$ ${(customerPrice / 2).toFixed(2)}`}
                       </TableCell>
                       <TableCell className="text-right">
                         {registeredPrice ? (

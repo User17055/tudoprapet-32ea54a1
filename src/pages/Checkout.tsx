@@ -55,6 +55,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { supabase } from "@/integrations/supabase/client";
 import {
   customCheckoutEnabled,
@@ -355,6 +356,7 @@ export default function Checkout() {
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
   const { getSubscriberPrice: cardSubscriberPrice } = useSubscriberPrices();
+  const { getCustomerPrice: cardCustomerPrice } = useCustomerPrices();
   const {
     isFranchisee: pricingIsFranchisee,
     getFranchisePrice: cardFranchisePrice,
@@ -362,7 +364,7 @@ export default function Checkout() {
   // Sem sessão de checkout ainda, o desconto de assinante/franquia é calculado
   // no cliente — sem isso o parcelamento usava o valor cheio dos produtos.
   const localCartDiscount = cartItems.reduce((acc, item) => {
-    const catalogPrice = Number(item.price.amount);
+    const catalogPrice = cardCustomerPrice(item.variantId) ?? Number(item.price.amount);
     const special = pricingIsFranchisee
       ? cardFranchisePrice(item.variantId)
       : isSubscribed
@@ -375,7 +377,7 @@ export default function Checkout() {
     0,
     (summary?.subtotal ??
       cartItems.reduce(
-        (acc, item) => acc + Number(item.price.amount) * item.quantity,
+        (acc, item) => acc + (cardCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
         0,
       )) -
       (summary?.discount ?? localCartDiscount) +
@@ -2934,8 +2936,9 @@ function CheckoutBag({
   const { isSubscribed } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const { isFranchisee, getFranchisePrice } = useFranchisePrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const catalogPrices = new Map(
-    cartItems.map((item) => [item.variantId, Number(item.price.amount)]),
+    cartItems.map((item) => [item.variantId, getCustomerPrice(item.variantId) ?? Number(item.price.amount)]),
   );
   const list =
     summary?.items ??
@@ -2945,8 +2948,8 @@ function CheckoutBag({
       variantTitle: item.variantTitle,
       imageUrl: item.product.node.images?.edges?.[0]?.node?.url,
       quantity: item.quantity,
-      unitPrice: Number(item.price.amount),
-      lineTotal: Number(item.price.amount) * item.quantity,
+      unitPrice: getCustomerPrice(item.variantId) ?? Number(item.price.amount),
+      lineTotal: (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
     }));
   // Preço especial (franquia/assinante) para exibir o valor original cortado.
   const pricing = (item: SummaryItem) => {
@@ -3139,14 +3142,16 @@ function RecommendedCard({
   onAdd: (product: ShopifyProduct) => Promise<void>;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const { node } = product;
   const variant =
     node.variants.edges.find(({ node: item }) => item.availableForSale)?.node ||
     node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
-  const price = Number(
+  const shopifyPrice = Number(
     variant?.price.amount || node.priceRange.minVariantPrice.amount,
   );
+  const price = variant ? getCustomerPrice(variant.id) ?? shopifyPrice : shopifyPrice;
   const compareAt = Number(variant?.compareAtPrice?.amount || 0);
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
   const discountBase = compareAt > price ? compareAt : price;
@@ -3221,14 +3226,15 @@ function SummaryTotals({
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice } = useFranchisePrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const cartSubtotal = cartItems.reduce(
-    (total, item) => total + Number(item.price.amount) * item.quantity,
+    (total, item) => total + (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
     0,
   );
   // Antes da sessão de checkout existir, o desconto de assinante/franquia
   // é calculado no cliente para já aparecer no resumo.
   const cartDiscount = cartItems.reduce((acc, item) => {
-    const catalogPrice = Number(item.price.amount);
+    const catalogPrice = getCustomerPrice(item.variantId) ?? Number(item.price.amount);
     const special =
       getFranchisePrice(item.variantId) ?? getSubscriberPrice(item.variantId);
     if (special === null || special >= catalogPrice) return acc;
@@ -3352,12 +3358,13 @@ function MobileOrderSummary({
   showServiceFee?: boolean;
   cardPlan?: InstallmentPlan | null;
 }) {
+  const { getCustomerPrice } = useCustomerPrices();
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
     cartItems.reduce((total, item) => total + item.quantity, 0);
   const fee = showServiceFee ? SERVICE_FEE : 0;
   const cartTotal = cartItems.reduce(
-    (total, item) => total + Number(item.price.amount) * item.quantity,
+    (total, item) => total + (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
     0,
   ) + fee;
   const headerTotal = shippingOverride

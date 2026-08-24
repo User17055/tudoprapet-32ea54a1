@@ -2,6 +2,7 @@ import { ShopifyProduct } from "@/lib/shopify";
 import { useCartStore } from "@/stores/cartStore";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { Loader2, Plus, ShoppingCart, Store } from "lucide-react";
@@ -42,6 +43,7 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
   const isLoading = useCartStore((s) => s.isLoading);
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice, isFranchisee } = useFranchisePrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const { isVisibleTo } = useProductAudience();
   const { getVariations, getVariationGroupName } = useProductVariations();
   const initialVariationItems = getVariations(product.node.id).filter((item) =>
@@ -74,7 +76,8 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
   const displayTitle = getVariationGroupName(node.id) || node.title;
   const variant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
-  const price = parseFloat(variant?.price?.amount || "0");
+  const shopifyPrice = parseFloat(variant?.price?.amount || "0");
+  const price = variant ? getCustomerPrice(variant.id) ?? shopifyPrice : shopifyPrice;
   const compareAtPrice = variant?.compareAtPrice
     ? parseFloat(variant.compareAtPrice.amount)
     : null;

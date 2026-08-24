@@ -185,20 +185,34 @@ Deno.serve(async (req) => {
     input.items = availableItems;
     const variantIds = availableItems.map((item) => item.variantId);
 
-    const specialPriceMap = new Map<string, number>();
+    // O valor regular definido no sistema tem prioridade sobre a Shopify para
+    // todos os perfis. Na ausência dele, o preço atual da Shopify é o fallback.
+    const { data: customerRows } = await admin.from("customer_prices")
+      .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
+    const customerPriceMap = new Map<string, number>();
+    for (const row of customerRows ?? []) {
+      const price = Number(row.price);
+      if (Number.isFinite(price) && price > 0) customerPriceMap.set(row.shopify_variant_id, price);
+    }
+
+    // Este mapa é enviado à Shopify como desconto sobre o preço nativo. Começa
+    // com o valor do cliente e recebe o preço de perfil somente quando menor.
+    const specialPriceMap = new Map(customerPriceMap);
     if (customerType === "subscriber") {
       const { data } = await admin.from("subscriber_prices")
         .select("shopify_variant_id,subscriber_price").in("shopify_variant_id", variantIds);
       for (const row of data ?? []) {
         const price = Number(row.subscriber_price);
-        if (Number.isFinite(price) && price > 0) specialPriceMap.set(row.shopify_variant_id, price);
+        const base = customerPriceMap.get(row.shopify_variant_id) ?? details.get(row.shopify_variant_id)?.price;
+        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) specialPriceMap.set(row.shopify_variant_id, price);
       }
     } else if (customerType === "franchise") {
       const { data } = await admin.from("franchise_prices")
         .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
       for (const row of data ?? []) {
         const price = Number(row.price);
-        if (Number.isFinite(price) && price > 0) specialPriceMap.set(row.shopify_variant_id, price);
+        const base = customerPriceMap.get(row.shopify_variant_id) ?? details.get(row.shopify_variant_id)?.price;
+        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) specialPriceMap.set(row.shopify_variant_id, price);
       }
     }
 
@@ -207,9 +221,10 @@ Deno.serve(async (req) => {
     let total = 0;
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
+      const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
       const special = specialPriceMap.get(item.variantId);
-      const unitPrice = special !== undefined && special > 0 && special < detail.price ? special : detail.price;
-      subtotal += detail.price * item.quantity;
+      const unitPrice = special !== undefined && special > 0 && special < catalogPrice ? special : catalogPrice;
+      subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
       return {
         variantId: item.variantId,
@@ -219,7 +234,7 @@ Deno.serve(async (req) => {
         variantTitle: detail.title,
         imageUrl: detail.imageUrl,
         quantity: item.quantity,
-        catalogUnitPrice: money(detail.price),
+        catalogUnitPrice: money(catalogPrice),
         unitPrice: money(unitPrice),
         lineTotal: money(unitPrice * item.quantity),
       };

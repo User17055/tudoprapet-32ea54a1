@@ -14,6 +14,7 @@ import { fuzzySearch } from "@/lib/fuzzySearch";
 import { isAudienceVisibleTo, useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
+import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import logo from "@/assets/tpp-logo.svg";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
@@ -60,6 +61,7 @@ export const Header = () => {
   const { rows: audienceRows, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const { getSubscriberPrice, loading: subscriberPricesLoading } = useSubscriberPrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const navigate = useNavigate();
   const location = useLocation();
   const { rootCats, childrenOf, loading: categoriesLoading } = useCategoryTree();
@@ -199,7 +201,8 @@ export const Header = () => {
                 const variant =
                   product.node.variants.edges.find((item) => item.node.availableForSale)?.node ||
                   product.node.variants.edges[0]?.node;
-                const price = variant?.price.amount || product.node.priceRange.minVariantPrice.amount;
+                const shopifyPrice = variant?.price.amount || product.node.priceRange.minVariantPrice.amount;
+                const price = variant ? String(getCustomerPrice(variant.id) ?? Number(shopifyPrice)) : shopifyPrice;
                 const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
                 const hasSubscriberPrice =
                   subscriberPrice !== null && subscriberPrice < Number(price);

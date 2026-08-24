@@ -19,6 +19,7 @@ import { CouponInput } from "@/components/CouponInput";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { supabase } from "@/integrations/supabase/client";
 import { getDisplayOptions } from "@/lib/shopify";
 import { goToCheckout } from "@/lib/checkout";
@@ -43,6 +44,7 @@ const Cart = () => {
   } = useCartStore();
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const { isFranchisee, getFranchisePrice, loading: franchiseLoading } = useFranchisePrices();
   const customerIsSubscribed = isSubscribed && !isFranchisee;
   const {
@@ -54,11 +56,11 @@ const Cart = () => {
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = availableItems.reduce(
-    (sum, item) => sum + parseFloat(item.price.amount) * item.quantity,
+    (sum, item) => sum + (getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount)) * item.quantity,
     0,
   );
   const clubTotalPrice = availableItems.reduce((sum, item) => {
-    const regularPrice = parseFloat(item.price.amount);
+    const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
     const subscriberPrice = getSubscriberPrice(item.variantId);
     const price = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice
       ? subscriberPrice
@@ -67,7 +69,7 @@ const Cart = () => {
     return sum + price * item.quantity;
   }, 0);
   const franchiseTotalPrice = availableItems.reduce((sum, item) => {
-    const regularPrice = parseFloat(item.price.amount);
+    const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
     const franchisePrice = getFranchisePrice(item.variantId);
     const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
       ? franchisePrice
@@ -250,7 +252,7 @@ const Cart = () => {
             <section ref={itemsListRef} aria-label="Produtos no carrinho" className="space-y-2.5">
               {items.map((item) => {
                 const unavailableReason = unavailableReasons.get(item.variantId);
-                const regularPrice = parseFloat(item.price.amount);
+                const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
                 const subscriberPrice = getSubscriberPrice(item.variantId);
                 const franchisePrice = getFranchisePrice(item.variantId);
                 const hasFranchisePrice = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice;

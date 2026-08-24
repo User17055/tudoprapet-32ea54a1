@@ -88,6 +88,19 @@ export async function handleSpecialPriceCheckout(
       specialPriceMap.set(String(row.shopify_variant_id), Number(row[config.priceColumn]));
     }
 
+    const { data: customerRows } = await adminClient
+      .from("customer_prices")
+      .select("shopify_variant_id,price")
+      .in("shopify_variant_id", variantIds);
+    for (const row of customerRows ?? []) {
+      const customerPrice = Number(row.price);
+      const profilePrice = specialPriceMap.get(row.shopify_variant_id);
+      if (Number.isFinite(customerPrice) && customerPrice > 0 &&
+          (profilePrice === undefined || customerPrice < profilePrice)) {
+        specialPriceMap.set(row.shopify_variant_id, customerPrice);
+      }
+    }
+
     if (!storefrontToken) return errorResponse("Token Storefront ausente", 500);
 
     const currentPriceMap = await fetchCurrentVariantPrices(variantIds, storefrontToken);

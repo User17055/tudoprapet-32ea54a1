@@ -7,6 +7,7 @@ import { useCartStore } from "@/stores/cartStore";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
+import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { Header } from "@/components/Header";
@@ -54,6 +55,7 @@ const ProductDetail = () => {
   const isLoading = useCartStore((s) => s.isLoading);
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
+  const { getCustomerPrice } = useCustomerPrices();
   const {
     getFranchisePrice,
     isFranchisee,
@@ -261,7 +263,8 @@ const ProductDetail = () => {
     (item) => isProductAvailable(item) && isVisibleTo(item.node.id, isFranchisee),
   );
   const mainImage = images[selectedImageIdx]?.node || images[0]?.node;
-  const price = parseFloat(variant?.price?.amount || "0");
+  const shopifyPrice = parseFloat(variant?.price?.amount || "0");
+  const price = variant ? getCustomerPrice(variant.id) ?? shopifyPrice : shopifyPrice;
   const compareAtPrice = variant?.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null;
   const hasDiscount = compareAtPrice && compareAtPrice > price;
   const discountPercent = hasDiscount
