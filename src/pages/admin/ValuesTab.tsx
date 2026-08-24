@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Loader2, Package, RotateCcw, Search } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Package, Search } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -170,7 +169,7 @@ export default function ValuesTab() {
         <CardHeader className="gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Valores por produto</CardTitle>
-            <CardDescription>O valor da Shopify é o fallback automático. Limpe o valor personalizado para voltar a usá-lo.</CardDescription>
+            <CardDescription>Cadastre os valores específicos de cliente e franquia para cada variante.</CardDescription>
           </div>
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -208,22 +207,16 @@ export default function ValuesTab() {
                         </div>
                         <div><p className="font-medium">{row.productTitle}</p><p className="text-xs text-muted-foreground">{row.variant.title}</p></div>
                       </div></TableCell>
-                      <TableCell><Input readOnly value={money(shopifyPrice)} className="bg-muted/50 tabular-nums" /></TableCell>
+                      <TableCell><Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" /></TableCell>
                       <TableCell>
-                        <div className="space-y-1.5">
-                          <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className={customer ? "pl-10 font-medium tabular-nums" : "border-dashed bg-amber-50/40 pl-10 font-medium tabular-nums"} value={draft?.customer ?? decimal(customer?.price ?? shopifyPrice)} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} /></div>
-                          <div className="flex min-h-6 flex-wrap items-center gap-1.5">
-                            {customer ? <Badge variant="secondary">Valor personalizado</Badge> : <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800"><RotateCcw className="mr-1 h-3 w-3" />Usando Shopify</Badge>}
-                            {customer && <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setDraft(row.variant.id, "customer", "")}>Restaurar Shopify</button>}
-                            {changed && <span title={`Preço anterior: ${customer?.previous_price ? money(customer.previous_price) : "não informado"}`} className="inline-flex items-center gap-1 text-xs font-medium text-amber-700"><AlertTriangle className="h-3.5 w-3.5" />Alterado recentemente</span>}
-                          </div>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span>
+                          <Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.customer ?? (customer ? decimal(customer.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} />
+                          {changed && <span title={`Alterado recentemente. Preço anterior: ${customer?.previous_price ? money(customer.previous_price) : "não informado"}`} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}
                         </div>
                       </TableCell>
-                      <TableCell>{subscriber === undefined ? <span className="text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="bg-muted/50 font-medium tabular-nums" />}</TableCell>
-                      <TableCell><div className="space-y-1.5">
-                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className={franchise ? "pl-10 font-medium tabular-nums" : "border-dashed bg-emerald-50/30 pl-10 font-medium tabular-nums"} value={draft?.franchise ?? decimal(franchise?.price ?? customer?.price ?? shopifyPrice)} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>
-                        <div className="min-h-6">{franchise ? <Badge variant="secondary" className="bg-emerald-50 text-emerald-700">Preço de franquia ativo</Badge> : <Badge variant="outline" className="border-emerald-200 bg-emerald-50/50 text-emerald-700"><RotateCcw className="mr-1 h-3 w-3" />Usando Valor do Cliente</Badge>}</div>
-                      </div></TableCell>
+                      <TableCell>{subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}</TableCell>
+                      <TableCell><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div></TableCell>
                       <TableCell><Button size="icon" onClick={() => saveRow(row)} disabled={!draft || savingId === row.variant.id} aria-label={`Salvar valores de ${row.productTitle}`}>{savingId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button></TableCell>
                     </TableRow>
                   );
