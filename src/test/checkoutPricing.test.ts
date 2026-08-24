@@ -177,7 +177,7 @@ describe("toGraphqlDraftLineItems", () => {
     });
   });
 
-  it("converte o desconto unitário REST para o total fixo da linha GraphQL", () => {
+  it("mantém o desconto GraphQL por unidade mesmo quando a quantidade é maior", () => {
     const [line] = toGraphqlDraftLineItems([{
       variant_id: 111,
       quantity: 3,
@@ -192,7 +192,24 @@ describe("toGraphqlDraftLineItems", () => {
       description: "Clube TudoPraPet",
       title: "Clube TudoPraPet",
       valueType: "FIXED_AMOUNT",
-      value: 30,
+      value: 10,
+    });
+  });
+
+  it("não transforma o desconto total da linha em desconto por unidade", () => {
+    const [line] = toGraphqlDraftLineItems([{
+      variant_id: 111,
+      quantity: 2,
+      applied_discount: {
+        description: "Clube TudoPraPet",
+        title: "Clube TudoPraPet",
+        value: "2.26",
+        amount: "4.52",
+      },
+    }]);
+    expect(line.appliedDiscount).toMatchObject({
+      valueType: "FIXED_AMOUNT",
+      value: 2.26,
     });
   });
 });

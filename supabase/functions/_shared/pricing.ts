@@ -85,14 +85,22 @@ export function toGraphqlDraftLineItems(
       quantity,
     };
     if (discount) {
-      // No GraphQL o desconto fixo da linha é o total, não o valor por unidade.
-      const totalDiscount = Number(discount.amount) || Number(discount.value) * quantity;
-      graphqlLine.appliedDiscount = {
-        description: discount.description || undefined,
-        title: discount.title || undefined,
-        valueType: "FIXED_AMOUNT",
-        value: Number(totalDiscount.toFixed(2)),
-      };
+      // DraftOrderLineItemInput aplica o desconto fixo a cada unidade da linha.
+      // Enviar `amount` (valor unitário x quantidade) faria a Shopify descontar
+      // o total novamente em cada item. Ex.: 2 x R$ 2,26 virariam R$ 4,52 de
+      // desconto por unidade.
+      const storedUnitDiscount = Number(discount.value);
+      const perUnitDiscount = Number.isFinite(storedUnitDiscount)
+        ? storedUnitDiscount
+        : Number(discount.amount) / quantity;
+      if (Number.isFinite(perUnitDiscount) && perUnitDiscount > 0) {
+        graphqlLine.appliedDiscount = {
+          description: discount.description || undefined,
+          title: discount.title || undefined,
+          valueType: "FIXED_AMOUNT",
+          value: Number(perUnitDiscount.toFixed(2)),
+        };
+      }
     }
     return graphqlLine;
   });
