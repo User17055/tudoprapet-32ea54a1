@@ -29,6 +29,9 @@ interface CheckoutAttemptLog {
   success: boolean;
   error_message: string | null;
   provider_payment_id: string | null;
+  generated_payment_method?: "pix" | "credit_card" | "terms" | "unknown";
+  generated_amount?: number | null;
+  generated_payment_status?: string | null;
 }
 interface OrdersResponse {
   orders: PrintableOrder[];
@@ -62,6 +65,12 @@ const FULFILLMENT: Record<string, string> = {
   fulfilled: "Encerrado", partial: "Parcial", restocked: "Devolvido", unfulfilled: "Não separado",
 };
 const money = (value: number, currency = "BRL") => new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value || 0);
+const PAYMENT_METHOD: Record<string, string> = {
+  pix: "Pix",
+  credit_card: "Cartão",
+  terms: "Prazo",
+  unknown: "Não informado",
+};
 
 function statusLabel(order: PrintableOrder) {
   if (order.cancelled_at) return "Cancelado";
@@ -128,7 +137,7 @@ export default function OrdersTab() {
     return matchesQuery && matchesStatus;
   }), [orders, query, status]);
   const filteredLogs = useMemo(() => checkoutLogs.filter((entry) => {
-    const haystack = `${entry.customer_name || ""} ${entry.customer_email || ""} ${entry.checkout_session_id || ""} ${entry.provider_payment_id || ""} ${entry.error_message || ""}`.toLowerCase();
+    const haystack = `${entry.customer_name || ""} ${entry.customer_email || ""} ${entry.checkout_session_id || ""} ${entry.provider_payment_id || ""} ${entry.generated_payment_method || ""} ${entry.generated_amount ?? ""} ${entry.error_message || ""}`.toLowerCase();
     const matchesQuery = haystack.includes(logQuery.trim().toLowerCase());
     const matchesStatus = logStatus === "all" || (logStatus === "success" ? entry.success : !entry.success);
     return matchesQuery && matchesStatus;
@@ -300,11 +309,12 @@ export default function OrdersTab() {
           </div>
           {filteredLogs.length === 0 ? <p className="rounded-lg bg-slate-50 py-8 text-center text-sm text-muted-foreground">Nenhuma tentativa registrada.</p> : (
             <div className="max-h-80 overflow-auto rounded-lg border">
-              <Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Cliente</TableHead><TableHead>Método</TableHead><TableHead>Etapa</TableHead><TableHead>Status</TableHead><TableHead>Detalhe</TableHead></TableRow></TableHeader><TableBody>
+              <Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Cliente</TableHead><TableHead>Forma gerada</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Etapa</TableHead><TableHead>Status</TableHead><TableHead>Detalhe</TableHead></TableRow></TableHeader><TableBody>
                 {filteredLogs.slice(0, 50).map((entry) => <TableRow key={entry.id}>
                   <TableCell className="whitespace-nowrap text-xs">{new Date(entry.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell>
                   <TableCell><div className="font-medium">{entry.customer_name || "Cliente não identificado"}</div><div className="text-xs text-muted-foreground">{entry.customer_email || "—"}</div></TableCell>
-                  <TableCell className="whitespace-nowrap">{{ pix: "Pix", credit_card: "Cartão", terms: "Prazo", unknown: "Não informado" }[entry.payment_method]}</TableCell>
+                  <TableCell className="whitespace-nowrap font-medium">{PAYMENT_METHOD[entry.generated_payment_method || entry.payment_method] || "Não informado"}</TableCell>
+                  <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{entry.generated_amount == null ? "—" : money(Number(entry.generated_amount))}</TableCell>
                   <TableCell>{{ prepare: "Preparação", payment: "Pagamento", shopify_completion: "Shopify" }[entry.stage]}</TableCell>
                   <TableCell><Badge variant="outline" className={entry.success ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}>{entry.success ? "Sucesso" : "Falhou"}</Badge></TableCell>
                   <TableCell className="max-w-md text-xs text-muted-foreground">{entry.error_message || (entry.provider_payment_id ? `Asaas: ${entry.provider_payment_id}` : "Concluído sem erro")}</TableCell>

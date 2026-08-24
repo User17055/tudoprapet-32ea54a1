@@ -584,6 +584,44 @@ Deno.serve(async (req) => {
       // Mantem Pedidos funcionando durante a janela entre deploy e migration.
       console.error("Falha ao carregar logs de checkout:", checkoutLogsError.message);
     }
+    const loggedSessionIds = [...new Set((checkoutLogs || [])
+      .map((entry) => entry.checkout_session_id)
+      .filter((id): id is string => Boolean(id)))];
+    const paymentBySession = new Map<string, any>();
+    if (loggedSessionIds.length) {
+      const { data: generatedPayments, error: generatedPaymentsError } = await adminDb
+        .from("payments")
+        .select("checkout_session_id,method,amount,status,provider_payment_id,created_at")
+        .in("checkout_session_id", loggedSessionIds)
+        .order("created_at", { ascending: false });
+      if (generatedPaymentsError) {
+        console.error("Falha ao carregar pagamentos dos logs:", generatedPaymentsError.message);
+      } else {
+        for (const payment of generatedPayments || []) {
+          if (!paymentBySession.has(payment.checkout_session_id)) {
+            paymentBySession.set(payment.checkout_session_id, payment);
+          }
+        }
+      }
+    }
+    const enrichedCheckoutLogs = (checkoutLogs || []).map((entry) => {
+      const payment = entry.checkout_session_id
+        ? paymentBySession.get(entry.checkout_session_id)
+        : null;
+      const metadata = entry.metadata && typeof entry.metadata === "object"
+        ? entry.metadata as Record<string, unknown>
+        : {};
+      const metadataAmount = Number(metadata.amount ?? metadata.total);
+      return {
+        ...entry,
+        generated_payment_method: payment?.method || entry.payment_method,
+        generated_amount: payment
+          ? Number(payment.amount)
+          : (Number.isFinite(metadataAmount) ? metadataAmount : null),
+        generated_payment_status: payment?.status || null,
+        provider_payment_id: payment?.provider_payment_id || entry.provider_payment_id,
+      };
+    });
     return jsonResponse({
       orders,
       count: orders.length,
@@ -593,7 +631,7 @@ Deno.serve(async (req) => {
       // mostraria "0 vendas pendentes" achando que conferiu, quando na verdade
       // nem olhou. O front usa este campo para preservar o aviso anterior.
       recoveryThrottled,
-      checkoutLogs: checkoutLogs || [],
+      checkoutLogs: enrichedCheckoutLogs,
       functions_version: FUNCTIONS_VERSION,
       server_time: new Date().toISOString(),
     });
