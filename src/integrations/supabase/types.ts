@@ -534,36 +534,6 @@ export type Database = {
         }
         Relationships: []
       }
-      customer_prices: {
-        Row: {
-          created_at: string
-          previous_price: number | null
-          price: number
-          price_changed_at: string | null
-          shopify_product_id: string
-          shopify_variant_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          previous_price?: number | null
-          price: number
-          price_changed_at?: string | null
-          shopify_product_id: string
-          shopify_variant_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          previous_price?: number | null
-          price?: number
-          price_changed_at?: string | null
-          shopify_product_id?: string
-          shopify_variant_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       franchise_prices: {
         Row: {
           created_at: string
