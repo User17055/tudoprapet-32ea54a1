@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareProductVariations,
   indexProductVariations,
   type ProductVariationItem,
 } from "@/hooks/useProductVariations";
@@ -51,6 +52,20 @@ describe("product variation groups", () => {
     expect(indexed.get("snack-100g")?.map((variation) => variation.shopify_product_id)).toEqual([
       "snack-100g",
       "snack-300g",
+    ]);
+  });
+
+  it("always orders numeric labels from the smallest measurement to the largest", () => {
+    const variations = [
+      item("1", "food", "food-2-5kg", "2,5KG", 0),
+      item("2", "food", "food-1kg", "1KG", 2),
+      item("3", "food", "food-500g", "500G", 1),
+    ].sort(compareProductVariations);
+
+    expect(variations.map((variation) => variation.label)).toEqual([
+      "500G",
+      "1KG",
+      "2,5KG",
     ]);
   });
 });
