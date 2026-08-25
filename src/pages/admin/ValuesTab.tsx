@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { exceedsShopifyPrice } from "@/lib/priceCap";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 
@@ -28,6 +29,11 @@ type FranchisePrice = {
   price: number;
 };
 
+// Formas cruas do PostgREST: `numeric` chega como string, a conversao e nossa.
+type CustomerPriceRow = Omit<CustomerPrice, "price" | "previous_price"> & { price: number | string; previous_price: number | string | null };
+type SubscriberPriceRow = Omit<SubscriberPrice, "subscriber_price"> & { subscriber_price: number | string };
+type FranchisePriceRow = Omit<FranchisePrice, "price"> & { price: number | string };
+
 type Draft = { customer?: string; franchise?: string };
 
 const money = (value: number) =>
@@ -49,19 +55,32 @@ export default function ValuesTab() {
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
+      // Leitura paginada nas tres tabelas. Sem isso o PostgREST corta em 1000
+      // linhas e esta tela mostra o campo VAZIO para variantes que tem valor
+      // cadastrado -- e quem salvasse por cima apagaria o valor achando que
+      // estava preenchendo pela primeira vez.
       const [shopify, customer, subscriber, franchise] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("customer_prices").select("shopify_product_id,shopify_variant_id,price,previous_price,price_changed_at"),
-        supabase.from("subscriber_prices").select("shopify_variant_id,subscriber_price"),
-        supabase.from("franchise_prices").select("shopify_product_id,shopify_variant_id,price"),
+        fetchAllRows<CustomerPriceRow>(
+          "customer_prices",
+          "shopify_product_id,shopify_variant_id,price,previous_price,price_changed_at",
+          { orderBy: "shopify_variant_id" },
+        ),
+        fetchAllRows<SubscriberPriceRow>(
+          "subscriber_prices",
+          "shopify_variant_id,subscriber_price",
+          { orderBy: "shopify_variant_id" },
+        ),
+        fetchAllRows<FranchisePriceRow>(
+          "franchise_prices",
+          "shopify_product_id,shopify_variant_id,price",
+          { orderBy: "shopify_variant_id" },
+        ),
       ]);
-      if (customer.error) throw customer.error;
-      if (subscriber.error) throw subscriber.error;
-      if (franchise.error) throw franchise.error;
       setProducts(shopify);
-      setCustomerPrices((customer.data || []).map((row) => ({ ...row, price: Number(row.price), previous_price: row.previous_price === null ? null : Number(row.previous_price) })));
-      setSubscriberPrices((subscriber.data || []).map((row) => ({ ...row, subscriber_price: Number(row.subscriber_price) })));
-      setFranchisePrices((franchise.data || []).map((row) => ({ ...row, price: Number(row.price) })));
+      setCustomerPrices(customer.map((row) => ({ ...row, price: Number(row.price), previous_price: row.previous_price === null ? null : Number(row.previous_price) })));
+      setSubscriberPrices(subscriber.map((row) => ({ ...row, subscriber_price: Number(row.subscriber_price) })));
+      setFranchisePrices(franchise.map((row) => ({ ...row, price: Number(row.price) })));
     } catch (error) {
       console.error(error);
       if (!silent) toast.error("Não foi possível carregar os valores.");
