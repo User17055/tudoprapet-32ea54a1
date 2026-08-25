@@ -108,6 +108,79 @@ export function toGraphqlDraftLineItems(
 
 
 // ---------------------------------------------------------------------------
+// Teto do valor cadastrado: nunca acima do preço da Shopify.
+//
+// Um pedido na Shopify só sabe registrar DESCONTO. `applied_discount` subtrai
+// do preço nativo da variante, não existe acréscimo, e a Shopify ignora `price`
+// quando a linha traz `variant_id` (ver buildDraftLineItems acima). Ou seja:
+// quando o valor cadastrado é MAIOR que o da Shopify, não há como o pedido
+// refletir o valor cobrado. Os dois lados divergem em silêncio, de duas formas
+// diferentes conforme a porta:
+//
+//   checkout próprio      o Asaas cobra o valor cadastrado (maior) e o pedido
+//   (checkout-prepare)    na Shopify registra o preço nativo (menor). O cliente
+//                         paga acima do que o próprio pedido documenta.
+//
+//   assinante / franquia  o cliente vai ao checkout hospedado da Shopify e paga
+//   (_shared/checkout)    o preço nativo (menor), enquanto o site anunciou o
+//                         cadastrado (maior). A loja recebe menos do que exibiu.
+//
+// A regra é o teto: o valor efetivo é o MENOR entre o cadastrado e o da
+// Shopify. Assim o valor cobrado sempre bate com o que o pedido registra — que
+// é o documento do pedido — e nunca se cobra acima dele.
+//
+// Isto é contenção, não a correção. Cadastrar acima do preço da Shopify passou
+// a ser barrado na tela Admin > Valores; o teto aqui existe para o dado que já
+// está gravado e para qualquer caminho novo que esqueça a validação.
+// ---------------------------------------------------------------------------
+
+export interface CappedPrice {
+  variantId: string;
+  /** O que estava cadastrado no banco. */
+  configured: number;
+  /** O preço da Shopify, que passou a valer. */
+  shopifyPrice: number;
+}
+
+/**
+ * O valor cadastrado passa do preço da Shopify?
+ *
+ * Preço da Shopify ausente, não numérico ou <= 0 devolve `false`: sem uma
+ * referência confiável não dá para afirmar que o cadastrado está errado, e
+ * baixar o valor para zero seria dar o produto. Esses casos ficam como estão —
+ * quem os detecta é a validação do admin, com o dado na mão.
+ */
+export function exceedsShopifyPrice(configured: number, shopifyPrice: number): boolean {
+  if (!Number.isFinite(configured) || configured <= 0) return false;
+  if (!Number.isFinite(shopifyPrice) || shopifyPrice <= 0) return false;
+  return configured > shopifyPrice;
+}
+
+/**
+ * Aplica o teto a um mapa de valores cadastrados.
+ *
+ * Não altera o mapa recebido: devolve um novo, mais a lista do que foi limitado
+ * para que o chamador registre em log. Variante sem preço da Shopify no mapa de
+ * referência passa intacta — não há com o que comparar.
+ */
+export function capPricesToShopify(
+  configured: Map<string, number>,
+  shopifyPrices: Map<string, number>,
+): { prices: Map<string, number>; capped: CappedPrice[] } {
+  const prices = new Map(configured);
+  const capped: CappedPrice[] = [];
+  for (const [variantId, price] of configured) {
+    const shopifyPrice = shopifyPrices.get(variantId);
+    if (shopifyPrice === undefined) continue;
+    if (!exceedsShopifyPrice(price, shopifyPrice)) continue;
+    prices.set(variantId, shopifyPrice);
+    capped.push({ variantId, configured: price, shopifyPrice });
+  }
+  return { prices, capped };
+}
+
+
+// ---------------------------------------------------------------------------
 // Parcelamento no cartão — juros repassados ao cliente.
 //
 // As taxas abaixo são exatamente as da conta Asaas da TudoPraPet

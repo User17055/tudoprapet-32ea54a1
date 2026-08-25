@@ -4,7 +4,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "./cors.ts";
-import { buildDraftLineItems } from "./pricing.ts";
+import { buildDraftLineItems, capPricesToShopify } from "./pricing.ts";
 import { createDraftOrder, fetchCurrentVariantPrices, findOrCreateCustomer } from "./shopify.ts";
 import { parseCheckoutItems } from "./validation.ts";
 
@@ -105,12 +105,26 @@ export async function handleSpecialPriceCheckout(
 
     const currentPriceMap = await fetchCurrentVariantPrices(variantIds, storefrontToken);
 
+    // Aqui o cliente termina a compra no checkout hospedado da Shopify, então
+    // quem cobra é a Shopify, pelo preço nativo menos o desconto da linha. Um
+    // valor cadastrado ACIMA do preço da Shopify não vira acréscimo nenhum: o
+    // site anuncia o valor maior e a Shopify cobra o menor — a loja recebe menos
+    // do que exibiu. O teto não muda o que a Shopify cobra (já era o preço
+    // nativo); o que ele faz é alinhar o valor efetivo com o valor cobrado e
+    // deixar a divergência registrada, em vez de passar despercebida.
+    const { prices: finalPriceMap, capped } = capPricesToShopify(specialPriceMap, currentPriceMap);
+    for (const cap of capped) {
+      console.error(
+        `${config.orderTag}: valor cadastrado ${cap.configured.toFixed(2)} da variante ${cap.variantId} passa do preço da Shopify ${cap.shopifyPrice.toFixed(2)}. A Shopify vai cobrar o preço dela. Corrija em Admin > Valores.`,
+      );
+    }
+
     const customerId = await findOrCreateCustomer(normalizedEmail, shopifyToken);
     if (!customerId) return errorResponse("Falha ao identificar cliente", 500);
 
     const lineItems = buildDraftLineItems(
       items,
-      specialPriceMap,
+      finalPriceMap,
       currentPriceMap,
       config.discountTitle,
     );
