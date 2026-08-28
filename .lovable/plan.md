@@ -1,52 +1,20 @@
-## Objetivo
-Permitir marcar cada produto (no admin) como visível para **cliente**, **franquia** ou **ambos**, ocultar os "franquia" de clientes normais, e definir preço especial de franquia.
+# Preço do cliente acima do preço da Shopify
 
-## Banco de dados (migration)
+## Problema confirmado
 
-1. **`profiles`**: adicionar coluna `is_franchisee boolean default false`.
-2. **`product_audience`** (nova tabela):
-   - `shopify_product_id text primary key`
-   - `audience text not null check (audience in ('cliente','franquia','ambos'))` — default `'cliente'`
-   - `created_at`, `updated_at`
-   - RLS: leitura pública (anon+authenticated); escrita apenas admin (`has_role`).
-   - GRANTs padrão.
-3. **`franchise_prices`** (nova tabela, espelho de `subscriber_prices`):
-   - `shopify_variant_id text primary key`
-   - `shopify_product_id text not null`
-   - `price numeric not null`
-   - `created_at`, `updated_at`
-   - RLS: leitura só para franqueado logado (`profiles.is_franchisee = true`) ou admin; escrita só admin.
-   - GRANTs.
+Em `checkout-prepare`, o total cobrado usa `catalogPrice = customerPriceMap.get(variantId) ?? detail.price`, mas o rascunho na Shopify é montado por `buildDraftLineItems`, que só sabe aplicar **desconto** por linha (`applied_discount`) quando o preço especial é *menor* que o preço da variante.
 
-## Frontend — Admin
+Consequência: quando o "Valor do Cliente" cadastrado em Valores é **maior** que o preço da Shopify, o cliente paga o valor maior, mas o pedido gerado na Shopify fica com o valor menor. O mesmo vale para `_shared/checkout.ts` (checkout de assinante/franquia), onde o preço do cliente só entra no mapa quando é menor.
 
-4. Nova aba **"Franquia"** (ou seção dentro de "Detalhes") no painel admin:
-   - Lista de produtos Shopify com seletor de audiência (Cliente / Franquia / Ambos) — grava em `product_audience`.
-   - Campo de preço de franquia por variante — grava em `franchise_prices`.
-5. Na aba de **usuários/perfis** (Detalhes), adicionar toggle "Franqueado" que atualiza `profiles.is_franchisee`.
+## O que fazer
 
-## Frontend — Loja
+1. **Linha com acréscimo no rascunho**: em `_shared/pricing.ts`, quando o preço efetivo for maior que o preço da variante na Shopify, montar a linha como item customizado (`title` + `originalUnitPrice` = preço efetivo) em vez de `variant_id`, mantendo SKU e título do produto nas propriedades da linha para rastreio. Quando for menor ou igual, manter o comportamento atual (variante + desconto).
+2. **Rastreio de estoque**: itens customizados não baixam estoque na Shopify. Definir junto ao dono se isso é aceitável ou se preferimos a alternativa (2b).
+   - 2b. Alternativa sem item customizado: manter a linha da variante e adicionar **uma linha customizada de ajuste** ("Ajuste de preço") com a diferença total. Estoque continua correto, mas o pedido mostra a linha extra.
+3. **Unificar em `_shared/checkout.ts`**: passar o preço do cliente como preço base (`currentPriceMap`) para assinante/franquia, de modo que o desconto do perfil seja calculado sobre o valor exibido no site, não sobre o da Shopify.
+4. **Testes**: acrescentar casos em `src/test/checkoutPricing.test.ts` cobrindo preço do cliente maior, menor e igual ao da Shopify, com e sem preço de assinante/franquia.
+5. **Deploy**: `checkout-prepare`, `subscriber-checkout`, `franchise-checkout` e publicação do frontend.
 
-6. Novo hook `useProductAudience()` (carrega mapa `product_id → audience` uma vez).
-7. Novo contexto/hook `useIsFranchisee()` lendo `profiles.is_franchisee` do usuário logado.
-8. Filtro de produtos aplicado em:
-   - `ProductGrid` (destaques)
-   - `Catalog` (catálogo)
-   - `ProductDetail` (bloquear/redirecionar se não permitido)
-   
-   Regra:
-   - Não-franqueado → mostra `cliente` e `ambos`
-   - Franqueado → mostra `franquia` e `ambos`
-9. Novo hook `useFranchisePrices()` análogo a `useSubscriberPrices`. Em `ProductCard` e `ProductDetail`, se usuário é franqueado e existe preço de franquia, exibir com destaque próprio (badge "Preço Franquia", cor diferente do sky do clube — sugiro `emerald`).
-10. Checkout: função edge `franchise-checkout` (baseada em `subscriber-checkout`) que cria Draft Order aplicando preço de franquia quando o usuário logado é franqueado.
+## Decisão necessária
 
-## Detalhes técnicos
-- Filtragem client-side (mesma abordagem já usada com `featured_products`).
-- Preço de franquia é exclusivo — não empilha com preço de clube. Precedência: franqueado > clube > varejo.
-- `has_role(auth.uid(),'admin')` continua sendo o gate de escrita.
-
-## Fora do escopo
-- Sincronização automática com tags da Shopify (você marca manualmente no admin).
-- Cadastro em massa de preços de franquia (fazer 1 a 1 na UI; posso adicionar import CSV depois se quiser).
-
-Confirma que posso seguir?
+Escolher entre item customizado (item 1, perde baixa de estoque) e linha de ajuste (item 2b, mantém estoque e mostra linha extra no pedido).
