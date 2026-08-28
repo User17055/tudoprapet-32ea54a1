@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
-import { fetchAllShopifyProducts } from "@/lib/shopify";
+import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
+import { ProductPicker } from "@/components/admin/ProductPicker";
+import { fuzzySearch, normalizeText } from "@/lib/fuzzySearch";
 
 interface Category {
   id: string;
@@ -98,7 +99,7 @@ function ValuesPanel() {
   const [value, setValue] = useState("");
   const [savingValue, setSavingValue] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const [{ data: ks }, { data: vals }] = await Promise.all([
       supabase.from("attribute_keys").select("*").order("sort_order").order("name"),
@@ -106,11 +107,11 @@ function ValuesPanel() {
     ]);
     setKeys((ks || []) as AttrKey[]);
     setItems((vals || []) as AttrValue[]);
-    if (!selectedKey && ks && ks.length > 0) setSelectedKey((ks[0] as AttrKey).name);
+    if (ks && ks.length > 0) setSelectedKey((current) => current || (ks[0] as AttrKey).name);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const handleAddKey = async () => {
     const name = newKeyName.trim();
@@ -512,7 +513,7 @@ function AssignPanel() {
   const [newValue, setNewValue] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
-  const [searchProduct, setSearchProduct] = useState("");
+  const [registrationFilter, setRegistrationFilter] = useState<"all" | "registered" | "unregistered">("all");
 
   // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
@@ -541,13 +542,34 @@ function AssignPanel() {
       ]),
     [allProductAttrs, allProductCats, allProductContent],
   );
-  const filteredProductsForSelect = useMemo(() => {
-    const q = searchProduct.trim().toLowerCase();
-    if (!q) return products.filter((p) => p.node.id === productId || !configuredIds.has(p.node.id));
-    return products
-      .filter((p) => p.node.id === productId || !configuredIds.has(p.node.id))
-      .filter((p) => p.node.title.toLowerCase().includes(q));
-  }, [products, productId, configuredIds, searchProduct]);
+  const listedProducts = useMemo(() => {
+    let result = products.filter((product) => {
+      const registered = configuredIds.has(product.node.id);
+      if (registrationFilter === "registered") return registered;
+      if (registrationFilter === "unregistered") return !registered;
+      return true;
+    });
+    if (filter.trim()) {
+      const query = normalizeText(filter);
+      const fields = (product: ShopifyProduct) => [
+          product.node.title,
+          product.node.vendor || "",
+          product.node.productType || "",
+          (product.node.tags || []).join(" "),
+          ...product.node.variants.edges.map((variant) => variant.node.title),
+        ];
+      result = query.length === 1
+        ? result.filter((product) => fields(product).some((value) => normalizeText(value).includes(query)))
+        : fuzzySearch(filter, result, (product) => [
+            { value: product.node.title, weight: 1 },
+            { value: product.node.vendor, weight: 0.9 },
+            { value: product.node.productType, weight: 0.8 },
+            { value: (product.node.tags || []).join(" "), weight: 0.75 },
+            ...product.node.variants.edges.map((variant) => ({ value: variant.node.title, weight: 0.8 })),
+          ]);
+    }
+    return result;
+  }, [configuredIds, filter, products, registrationFilter]);
 
   const reloadAll = async () => {
     const [pc, pcontent, pa] = await Promise.all([
@@ -668,8 +690,8 @@ function AssignPanel() {
       }
       toast.success("Salvo!");
       await reloadAll();
-    } catch (e: any) {
-      toast.error("Erro: " + (e?.message || ""));
+    } catch (e: unknown) {
+      toast.error("Erro: " + (e instanceof Error ? e.message : "erro desconhecido"));
     } finally {
       setSaving(false);
     }
@@ -692,7 +714,7 @@ function AssignPanel() {
     const { data, error } = await supabase.from("product_attributes").insert(rows).select();
     if (error) return toast.error("Erro: " + error.message);
     setAttrs([...attrs, ...((data || []) as ProductAttribute[])]);
-    setNewValue([] as any);
+    setNewValue([]);
     toast.success(`${toInsert.length} valor(es) adicionado(s)`);
     await reloadAll();
   };
@@ -734,9 +756,6 @@ function AssignPanel() {
 
   // Build summary of configured products
   const configuredProducts = products.filter((p) => configuredIds.has(p.node.id));
-  const filteredConfigured = configuredProducts.filter((p) =>
-    !filter.trim() ? true : p.node.title.toLowerCase().includes(filter.toLowerCase())
-  );
   const brandById = new Map(brands.map((b) => [b.id, b]));
   const catById = new Map(categories.map((c) => [c.id, c]));
   const summaryFor = (pid: string) => {
@@ -752,122 +771,72 @@ function AssignPanel() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="p-4 pb-3">
-          <CardTitle className="flex items-center justify-between gap-3 flex-wrap text-base">
-            <span>Produtos já configurados ({configuredProducts.length})</span>
-            <Input
-              placeholder="Filtrar..."
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="w-full sm:w-64"
-            />
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 pt-0">
-          {configuredProducts.length === 0 ? (
-            <p className="text-muted-foreground text-center py-6 text-sm">
-              Nenhum produto configurado ainda. Selecione um abaixo para começar.
-            </p>
-          ) : filteredConfigured.length === 0 ? (
-            <p className="text-muted-foreground text-center py-6 text-sm">Nenhum resultado.</p>
-          ) : (
-            <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
-              {filteredConfigured.map((p) => {
-                const s = summaryFor(p.node.id);
-                const active = productId === p.node.id;
-                return (
-                  <button
-                    key={p.node.id}
-                    onClick={() => {
-                      setProductId(p.node.id);
-                      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-                    }}
-                    className={`w-full text-left border rounded-lg p-3 transition-colors ${
-                      active ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-muted/40"
-                    }`}
-                  >
-                    <div className="font-medium text-sm mb-1.5">{p.node.title}</div>
-                    <div className="flex flex-wrap gap-1">
-                      {s.brand && (
-                        <Badge variant="default" className="text-[10px]">Marca: {s.brand.name}</Badge>
-                      )}
-                      {s.cats.map((c) => (
-                        <Badge key={c.id} variant="secondary" className="text-[10px]">
-                          {categoryPath(c, categories)}
-                        </Badge>
-                      ))}
-                      {s.attrs.map((a) => (
-                        <Badge key={a.id} variant="outline" className="text-[10px]">
-                          {a.attr_key}: {a.attr_value}
-                        </Badge>
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
+      <Card id="details-assignment-card">
         <CardHeader className="p-4 pb-3"><CardTitle className="text-base">Atribuir detalhes a um produto</CardTitle></CardHeader>
         <CardContent className="space-y-4 p-4 pt-0">
           <div>
             <label className="text-sm font-medium mb-2 block">
-              Buscar e selecionar produto <span className="text-xs text-muted-foreground font-normal">(apenas não configurados)</span>
+              Buscar e selecionar produto <span className="text-xs text-muted-foreground font-normal">(novos cadastros)</span>
             </label>
-            <Input
-              placeholder="Digite o nome do produto..."
-              value={searchProduct}
-              onChange={(e) => setSearchProduct(e.target.value)}
-              className="mb-2 h-9"
+            <ProductPicker
+              products={products}
+              value={productId}
+              onChange={setProductId}
+              excludeIds={configuredIds}
+              placeholder="Pesquisar produto por nome..."
             />
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {filteredProductsForSelect.map((p) => (
-                  <SelectItem key={p.node.id} value={p.node.id}>{p.node.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <p className="text-xs text-muted-foreground mt-1">
-              Produtos já configurados ficam ocultos aqui — edite-os pela lista acima.
+              Para editar um produto já configurado, selecione-o na lista abaixo.
             </p>
           </div>
-
-          {productId && selectedProduct && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm font-medium text-blue-900 mb-2">Variações disponíveis:</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedProduct.node.variants.edges.map((variant) => (
-                  <span key={variant.node.id} className="text-xs bg-white border border-blue-300 rounded px-2 py-1 text-blue-800">
-                    {variant.node.title}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           {productId && (
             <>
               {/* Preview */}
-              <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 mb-6 md:w-48">
-                <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+              <div className="grid gap-4 rounded-xl border border-border bg-muted/30 p-4 md:grid-cols-[180px_minmax(0,1fr)]">
+                <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border bg-white">
                   {selectedProduct?.node.images.edges[0]?.node ? (
                     <img
                       src={selectedProduct.node.images.edges[0].node.url}
                       alt={selectedProduct.node.images.edges[0].node.altText || selectedProduct.node.title || ""}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain p-2"
                     />
                   ) : (
                     <Package className="h-10 w-10 text-muted-foreground" />
                   )}
                 </div>
-                <p className="text-xs font-bold line-clamp-3">
-                  {selectedProduct?.node.title}
-                </p>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévia do produto</p>
+                      <p className="mt-1 text-base font-bold text-foreground">{selectedProduct?.node.title}</p>
+                      {selectedProduct?.node.vendor && (
+                        <p className="mt-1 text-sm text-muted-foreground">{selectedProduct.node.vendor}</p>
+                      )}
+                    </div>
+                    {selectedProduct && (
+                      <Badge variant={selectedProduct.node.variants.edges.some(({ node }) => node.availableForSale) ? "default" : "secondary"}>
+                        {selectedProduct.node.variants.edges.some(({ node }) => node.availableForSale) ? "Disponível" : "Esgotado"}
+                      </Badge>
+                    )}
+                  </div>
+                  {selectedProduct && (
+                    <p className="mt-3 text-xl font-bold tabular-nums">
+                      R$ {Number(selectedProduct.node.priceRange.minVariantPrice.amount).toFixed(2).replace(".", ",")}
+                    </p>
+                  )}
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Variações disponíveis</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProduct?.node.variants.edges.map((variant) => (
+                        <span key={variant.node.id} className="rounded-md border bg-white px-2 py-1 text-xs text-foreground">
+                          {variant.node.title}
+                          {!variant.node.availableForSale && <span className="ml-1 text-destructive">(esgotada)</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
@@ -999,6 +968,102 @@ function AssignPanel() {
                 Salvar categorias e marca
               </Button>
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="p-4 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Produtos ({listedProducts.length})</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {configuredProducts.length} cadastrados de {products.length} produtos carregados.
+              </p>
+            </div>
+            <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[260px_190px]">
+              <Input
+                placeholder="Filtrar por nome, marca ou variação..."
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                className="h-9"
+              />
+              <Select
+                value={registrationFilter}
+                onValueChange={(value) => setRegistrationFilter(value as "all" | "registered" | "unregistered")}
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="registered">Cadastrados</SelectItem>
+                  <SelectItem value="unregistered">Não cadastrados</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          {listedProducts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum produto encontrado neste filtro.</p>
+          ) : (
+            <div className="grid max-h-[620px] gap-2 overflow-y-auto pr-1 lg:grid-cols-2">
+              {listedProducts.map((product) => {
+                const registered = configuredIds.has(product.node.id);
+                const summary = summaryFor(product.node.id);
+                const image = product.node.images.edges[0]?.node;
+                const active = productId === product.node.id;
+                return (
+                  <button
+                    key={product.node.id}
+                    type="button"
+                    onClick={() => {
+                      setProductId(product.node.id);
+                      window.requestAnimationFrame(() => {
+                        document.getElementById("details-assignment-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      });
+                    }}
+                    className={`flex min-w-0 items-start gap-3 rounded-lg border p-3 text-left transition-colors ${
+                      active
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40 hover:bg-muted/40"
+                    }`}
+                  >
+                    <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-white">
+                      {image ? (
+                        <img src={image.url} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+                      ) : (
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="line-clamp-2 text-sm font-semibold text-foreground">{product.node.title}</span>
+                        <Badge variant={registered ? "default" : "secondary"} className="shrink-0 text-[10px]">
+                          {registered ? "Cadastrado" : "Não cadastrado"}
+                        </Badge>
+                      </span>
+                      {registered ? (
+                        <span className="mt-2 flex flex-wrap gap-1">
+                          {summary.brand && <Badge variant="outline" className="text-[10px]">{summary.brand.name}</Badge>}
+                          {summary.cats.slice(0, 2).map((category) => (
+                            <Badge key={category.id} variant="secondary" className="text-[10px]">
+                              {categoryPath(category, categories)}
+                            </Badge>
+                          ))}
+                          {summary.attrs.slice(0, 2).map((attribute) => (
+                            <Badge key={attribute.id} variant="outline" className="text-[10px]">
+                              {attribute.attr_key}: {attribute.attr_value}
+                            </Badge>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="mt-2 block text-xs text-muted-foreground">Clique para cadastrar os detalhes.</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
