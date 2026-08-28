@@ -5,9 +5,8 @@ import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken }
 import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } from "../_shared/checkout-input.ts";
 import {
   buildDraftLineItems,
+  buildPriceAdjustmentLine,
   buildShippingLine,
-  capPricesToShopify,
-  type CappedPrice,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
 import {
@@ -220,33 +219,18 @@ Deno.serve(async (req) => {
 
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
 
-    // Nenhum valor cobrado aqui pode passar do preço da Shopify. O rascunho do
-    // pedido só sabe registrar desconto, então um valor maior seria cobrado pelo
-    // Asaas e registrado menor na Shopify — o cliente pagaria acima do que o
-    // próprio pedido documenta. Ver capPricesToShopify em _shared/pricing.ts.
-    const catalog = capPricesToShopify(customerPriceMap, currentPriceMap);
-    const final = capPricesToShopify(specialPriceMap, currentPriceMap);
-
-    // specialPriceMap nasce como cópia de customerPriceMap, então a mesma
-    // variante costuma aparecer nas duas listas. Uma linha de log por variante.
-    const capsPorVariante = new Map<string, CappedPrice>();
-    for (const cap of [...catalog.capped, ...final.capped]) {
-      const conhecido = capsPorVariante.get(cap.variantId);
-      if (!conhecido || cap.configured > conhecido.configured) capsPorVariante.set(cap.variantId, cap);
-    }
-    for (const cap of capsPorVariante.values()) {
-      console.error(
-        `checkout-prepare: valor cadastrado ${cap.configured.toFixed(2)} da variante ${cap.variantId} passa do preço da Shopify ${cap.shopifyPrice.toFixed(2)}. Cobrando o da Shopify para o pedido não divergir. Corrija em Admin > Valores.`,
-      );
-    }
-
     let subtotal = 0;
     let total = 0;
+    // Preço efetivamente cobrado por unidade. É o que precisa chegar ao pedido
+    // da Shopify, seja como desconto (quando menor) ou como linha de ajuste
+    // (quando maior que o preço nativo da variante).
+    const finalPriceMap = new Map<string, number>();
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
-      const catalogPrice = catalog.prices.get(item.variantId) ?? detail.price;
-      const special = final.prices.get(item.variantId);
+      const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
+      const special = specialPriceMap.get(item.variantId);
       const unitPrice = special !== undefined && special > 0 && special < catalogPrice ? special : catalogPrice;
+      finalPriceMap.set(item.variantId, unitPrice);
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
       return {
@@ -351,7 +335,9 @@ Deno.serve(async (req) => {
     const discountTitle = customerType === "franchise"
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
-    const lineItems = buildDraftLineItems(input.items, final.prices, currentPriceMap, discountTitle);
+    const lineItems = buildDraftLineItems(input.items, finalPriceMap, currentPriceMap, discountTitle);
+    const adjustmentLine = buildPriceAdjustmentLine(input.items, finalPriceMap, currentPriceMap);
+    if (adjustmentLine) lineItems.push(adjustmentLine);
 
     const draft = await createFiscalDraftOrder({
       lineItems,

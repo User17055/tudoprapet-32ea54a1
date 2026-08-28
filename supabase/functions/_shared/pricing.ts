@@ -70,6 +70,42 @@ export function buildDraftLineItems(
   });
 }
 
+export const PRICE_ADJUSTMENT_TITLE = "Ajuste de preço TudoPraPet";
+
+/**
+ * A Shopify ignora "price" em linhas com variant_id e applied_discount só sabe
+ * baixar valor. Quando o preço definido no sistema é MAIOR que o da Shopify, o
+ * rascunho ficaria mais barato que o valor efetivamente cobrado. Para manter o
+ * pedido igual ao que o cliente pagou — e sem perder a baixa de estoque das
+ * variantes — a diferença entra como uma linha customizada de ajuste.
+ */
+export function buildPriceAdjustmentLine(
+  items: LineItem[],
+  finalPrices: Map<string, number>,
+  currentPrices: Map<string, number>,
+  title: string = PRICE_ADJUSTMENT_TITLE,
+): Record<string, unknown> | null {
+  let uplift = 0;
+  for (const item of items) {
+    const final = finalPrices.get(item.variantId);
+    const current = currentPrices.get(item.variantId);
+    if (
+      final === undefined || current === undefined ||
+      !Number.isFinite(final) || !Number.isFinite(current) || final <= current
+    ) continue;
+    uplift += (final - current) * item.quantity;
+  }
+  uplift = Number(uplift.toFixed(2));
+  if (uplift <= 0) return null;
+  return {
+    title,
+    price: uplift.toFixed(2),
+    quantity: 1,
+    requires_shipping: false,
+    taxable: false,
+  };
+}
+
 /** Converte as linhas REST legadas para o formato GraphQL sem perder a variante. */
 export function toGraphqlDraftLineItems(
   lines: Record<string, unknown>[],
@@ -78,12 +114,23 @@ export function toGraphqlDraftLineItems(
     const quantity = Number(line.quantity) || 1;
     const numericVariantId = String(line.variant_id || "");
     const discount = line.applied_discount as Record<string, unknown> | undefined;
+    // Linha customizada (ajuste de preço): não tem variante, leva título e valor.
+    if (!numericVariantId) {
+      return {
+        title: String(line.title || PRICE_ADJUSTMENT_TITLE),
+        originalUnitPrice: Number(Number(line.price).toFixed(2)),
+        quantity,
+        requiresShipping: line.requires_shipping === true,
+        taxable: line.taxable === true,
+      };
+    }
     const graphqlLine: Record<string, unknown> = {
       variantId: numericVariantId.startsWith("gid://")
         ? numericVariantId
         : `gid://shopify/ProductVariant/${numericVariantId}`,
       quantity,
     };
+
     if (discount) {
       // DraftOrderLineItemInput aplica o desconto fixo a cada unidade da linha.
       // Enviar `amount` (valor unitário x quantidade) faria a Shopify descontar
@@ -108,89 +155,34 @@ export function toGraphqlDraftLineItems(
 
 
 // ---------------------------------------------------------------------------
-// Teto do valor cadastrado: nunca acima do preço da Shopify.
+// Valor cadastrado acima do preço da Shopify.
 //
-// Um pedido na Shopify só sabe registrar DESCONTO. `applied_discount` subtrai
-// do preço nativo da variante, não existe acréscimo, e a Shopify ignora `price`
-// quando a linha traz `variant_id` (ver buildDraftLineItems acima). Ou seja:
-// quando o valor cadastrado é MAIOR que o da Shopify, não há como o pedido
-// refletir o valor cobrado. Os dois lados divergem em silêncio, de duas formas
-// diferentes conforme a porta:
+// Um pedido na Shopify só sabe registrar DESCONTO na linha da variante:
+// `applied_discount` subtrai do preço nativo, e a Shopify ignora `price` quando
+// a linha traz `variant_id` (ver buildDraftLineItems acima). Não existe
+// acréscimo na linha da variante.
 //
-//   checkout próprio      o Asaas cobra o valor cadastrado (maior) e o pedido
-//   (checkout-prepare)    na Shopify registra o preço nativo (menor). O cliente
-//                         paga acima do que o próprio pedido documenta.
+// Isso não impede cobrar acima do preço nativo — só impede fazê-lo naquela
+// linha. A diferença entra como uma linha customizada, sem variante, montada
+// por buildPriceAdjustmentLine. Assim o pedido registra o mesmo total que o
+// cliente paga, e a variante continua dando baixa no estoque.
 //
-//   assinante / franquia  o cliente vai ao checkout hospedado da Shopify e paga
-//   (_shared/checkout)    o preço nativo (menor), enquanto o site anunciou o
-//                         cadastrado (maior). A loja recebe menos do que exibiu.
-//
-// A regra é o teto: o valor efetivo é o MENOR entre o cadastrado e o da
-// Shopify. Assim o valor cobrado sempre bate com o que o pedido registra — que
-// é o documento do pedido — e nunca se cobra acima dele.
-//
-// Isto é contenção, não a correção. Cadastrar acima do preço da Shopify passou
-// a ser barrado na tela Admin > Valores; o teto aqui existe para o dado que já
-// está gravado e para qualquer caminho novo que esqueça a validação.
+// A função abaixo é só o teste da condição. Ela não decide nada: serve para o
+// admin saber que aquele valor vai gerar linha de ajuste, e é espelhada em
+// src/lib/priceCap.ts (src/test/priceCap.test.ts garante que concordam).
 // ---------------------------------------------------------------------------
-
-export interface CappedPrice {
-  variantId: string;
-  /** O que estava cadastrado no banco. */
-  configured: number;
-  /** O preço da Shopify, que passou a valer. */
-  shopifyPrice: number;
-}
 
 /**
  * O valor cadastrado passa do preço da Shopify?
  *
  * Preço da Shopify ausente, não numérico ou <= 0 devolve `false`: sem uma
- * referência confiável não dá para afirmar que o cadastrado está errado, e
- * baixar o valor para zero seria dar o produto. Esses casos ficam como estão —
- * quem os detecta é a validação do admin, com o dado na mão.
+ * referência confiável não dá para afirmar nada sobre o cadastrado.
  */
 export function exceedsShopifyPrice(configured: number, shopifyPrice: number): boolean {
   if (!Number.isFinite(configured) || configured <= 0) return false;
   if (!Number.isFinite(shopifyPrice) || shopifyPrice <= 0) return false;
   return configured > shopifyPrice;
 }
-
-/**
- * Aplica o teto a um mapa de valores cadastrados.
- *
- * Não altera o mapa recebido: devolve um novo, mais a lista do que foi limitado
- * para que o chamador registre em log. Variante sem preço da Shopify no mapa de
- * referência passa intacta — não há com o que comparar.
- */
-export function capPricesToShopify(
-  configured: Map<string, number>,
-  shopifyPrices: Map<string, number>,
-): { prices: Map<string, number>; capped: CappedPrice[] } {
-  const prices = new Map(configured);
-  const capped: CappedPrice[] = [];
-  for (const [variantId, price] of configured) {
-    const shopifyPrice = shopifyPrices.get(variantId);
-    if (shopifyPrice === undefined) continue;
-    if (!exceedsShopifyPrice(price, shopifyPrice)) continue;
-    prices.set(variantId, shopifyPrice);
-    capped.push({ variantId, configured: price, shopifyPrice });
-  }
-  return { prices, capped };
-}
-
-
-// ---------------------------------------------------------------------------
-// Parcelamento no cartão — juros repassados ao cliente.
-//
-// As taxas abaixo são exatamente as da conta Asaas da TudoPraPet
-// (GET /myAccount/fees): tarifa fixa por operação + percentual por faixa de
-// parcelas. O parcelado é "grossed up" para que o valor líquido recebido
-// continue igual ao total do pedido — ou seja, o custo do parcelamento é do
-// cliente. O à vista (1x) permanece sem acréscimo.
-//
-// IMPORTANTE: espelhado em src/lib/installments.ts (test garante a igualdade).
-// ---------------------------------------------------------------------------
 
 export const MAX_INSTALLMENTS = 12;
 export const MIN_INSTALLMENT_VALUE = 5;

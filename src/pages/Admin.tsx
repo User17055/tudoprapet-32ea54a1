@@ -78,6 +78,7 @@ interface Member {
 }
 
 type SubscriberPriceAdjustment = "percentage" | "amount";
+type SubscriberPriceCalculationMode = "automatic" | "manual";
 type SubscriberPriceFilter = "all" | "registered" | "unregistered";
 
 type SectionId =
@@ -339,6 +340,8 @@ function PricesTab() {
   const [saving, setSaving] = useState(false);
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
+  const [calculationMode, setCalculationMode] = useState<SubscriberPriceCalculationMode>("automatic");
+  const [manualCost, setManualCost] = useState("");
   const [adjustmentType, setAdjustmentType] = useState<SubscriberPriceAdjustment>("percentage");
   const [adjustment, setAdjustment] = useState("0");
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -422,6 +425,7 @@ function PricesTab() {
     if (productId && registeredProductIds.has(productId)) {
       setProductId("");
       setVariantId("");
+      setManualCost("");
       setAdjustment("0");
     }
   }, [productId, registeredProductIds]);
@@ -433,15 +437,19 @@ function PricesTab() {
     ? customerPrices.find((row) => row.shopify_variant_id === selectedVariant.id)?.price ?? shopifyPrice
     : null;
   const estimatedCost = selectedCustomerPrice === null ? null : selectedCustomerPrice / 2;
+  const manualCostValue = Number(manualCost.replace(",", "."));
+  const calculationBaseCost = calculationMode === "manual"
+    ? (manualCost.trim() !== "" && Number.isFinite(manualCostValue) ? manualCostValue : null)
+    : estimatedCost;
   const adjustmentValue = Number(adjustment.replace(",", "."));
-  const calculatedSubscriberPrice = estimatedCost === null || !Number.isFinite(adjustmentValue)
+  const calculatedSubscriberPrice = calculationBaseCost === null || !Number.isFinite(adjustmentValue)
     ? null
     : Math.round((adjustmentType === "percentage"
-      ? estimatedCost * (1 + adjustmentValue / 100)
-      : estimatedCost + adjustmentValue) * 100) / 100;
+      ? calculationBaseCost * (1 + adjustmentValue / 100)
+      : calculationBaseCost + adjustmentValue) * 100) / 100;
 
   const handleSave = async () => {
-    if (!productId || !variantId || calculatedSubscriberPrice === null) {
+    if (!productId || !variantId) {
       toast.error("Preencha todos os campos");
       return;
     }
@@ -454,6 +462,14 @@ function PricesTab() {
     }
     if (!Number.isFinite(adjustmentValue) || adjustmentValue < 0) {
       toast.error("Informe um reajuste igual ou maior que zero");
+      return;
+    }
+    if (calculationMode === "manual" && (calculationBaseCost === null || calculationBaseCost <= 0)) {
+      toast.error("Informe um custo manual maior que zero");
+      return;
+    }
+    if (calculatedSubscriberPrice === null) {
+      toast.error("Não foi possível calcular o preço");
       return;
     }
     const numeric = calculatedSubscriberPrice;
@@ -477,7 +493,7 @@ function PricesTab() {
       return;
     }
     toast.success("Preço salvo!");
-    setProductId(""); setVariantId(""); setAdjustment("0");
+    setProductId(""); setVariantId(""); setManualCost(""); setAdjustment("0");
     loadAll(true);
   };
 
@@ -559,7 +575,7 @@ function PricesTab() {
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Adicionar preço de assinante</CardTitle>
           <CardDescription>
-            O custo estimado é metade do Valor do Cliente definido no sistema. Sem valor personalizado, usamos o preço da Shopify.
+            Escolha entre usar o custo estimado atual ou informar o custo manualmente e aplicar o reajuste desejado.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
@@ -617,6 +633,7 @@ function PricesTab() {
                   onChange={(value) => {
                     setProductId(value);
                     setVariantId("");
+                    setManualCost("");
                     setAdjustment("0");
                   }}
                 />
@@ -639,14 +656,46 @@ function PricesTab() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Valor base do cliente</label>
-                <Input value={selectedCustomerPrice === null ? "" : `R$ ${selectedCustomerPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+              <div className="md:col-span-4">
+                <label className="mb-1 block text-sm font-medium">Modo de cálculo</label>
+                <Select
+                  value={calculationMode}
+                  onValueChange={(value) => setCalculationMode(value as SubscriberPriceCalculationMode)}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="automatic">Automático (custo estimado atual)</SelectItem>
+                    <SelectItem value="manual">Informar custo manualmente</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Custo estimado (50%)</label>
-                <Input value={estimatedCost === null ? "" : `R$ ${estimatedCost.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
-              </div>
+              {calculationMode === "automatic" ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Valor base do cliente</label>
+                    <Input value={selectedCustomerPrice === null ? "" : `R$ ${selectedCustomerPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Custo estimado (50%)</label>
+                    <Input value={estimatedCost === null ? "" : `R$ ${estimatedCost.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+                  </div>
+                </>
+              ) : (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium">Custo manual (R$)</label>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={manualCost}
+                    onChange={(event) => setManualCost(event.target.value)}
+                    placeholder="Ex: 50,00"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use margem de 0% para manter o preço igual ao custo.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium">Forma de reajuste</label>
                 <Select value={adjustmentType} onValueChange={(value) => setAdjustmentType(value as SubscriberPriceAdjustment)}>
@@ -833,6 +882,7 @@ function PricesTab() {
                             onClick={() => {
                               setProductId(product.node.id);
                               setVariantId(firstVariant?.id || "");
+                              setManualCost("");
                               setAdjustment("0");
                               window.scrollTo({ top: 0, behavior: "smooth" });
                             }}
