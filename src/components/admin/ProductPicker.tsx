@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import type { ShopifyProduct } from "@/lib/shopify";
+import { isProductAvailable } from "@/lib/productAvailability";
 
 interface Props {
   products: ShopifyProduct[];
@@ -12,6 +13,7 @@ interface Props {
   placeholder?: string;
   disabled?: boolean;
   excludeIds?: Set<string>;
+  showAvailability?: boolean;
 }
 
 /**
@@ -25,6 +27,7 @@ export function ProductPicker({
   placeholder = "Selecione um produto...",
   disabled,
   excludeIds,
+  showAvailability = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -37,6 +40,9 @@ export function ProductPicker({
   }, [open]);
 
   const selected = products.find((p) => p.node.id === value)?.node;
+  const selectedIsOutOfStock = selected
+    ? !isProductAvailable({ node: selected })
+    : false;
 
   const filtered = useMemo(() => {
     const normalize = (value: string) => value
@@ -75,6 +81,11 @@ export function ProductPicker({
             <span className="min-w-0 flex-1 truncate text-left" title={selected?.title}>
               {selected?.title || <span className="text-muted-foreground">{placeholder}</span>}
             </span>
+            {showAvailability && selectedIsOutOfStock && (
+              <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700">
+                Acabou
+              </span>
+            )}
           </span>
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -105,6 +116,7 @@ export function ProductPicker({
             filtered.map((p) => {
               const img = p.node.images.edges[0]?.node;
               const isSelected = p.node.id === value;
+              const isOutOfStock = !isProductAvailable(p);
               return (
                 <button
                   key={p.node.id}
@@ -114,8 +126,12 @@ export function ProductPicker({
                     setOpen(false);
                     setQuery("");
                   }}
-                  className={`flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent ${
-                    isSelected ? "bg-accent" : ""
+                  className={`flex w-full items-center gap-2 rounded-md border p-2 text-left text-sm transition-colors ${
+                    showAvailability && isOutOfStock
+                      ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
+                      : "border-transparent hover:bg-accent"
+                  } ${
+                    isSelected ? (showAvailability && isOutOfStock ? "ring-1 ring-red-400" : "bg-accent") : ""
                   }`}
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
@@ -126,6 +142,11 @@ export function ProductPicker({
                     )}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{p.node.title}</span>
+                  {showAvailability && isOutOfStock && (
+                    <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                      Acabou
+                    </span>
+                  )}
                   {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
                 </button>
               );

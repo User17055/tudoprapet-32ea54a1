@@ -8,6 +8,7 @@ import { ProductPicker } from "@/components/admin/ProductPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { normalizeText } from "@/lib/fuzzySearch";
+import { isProductAvailable } from "@/lib/productAvailability";
 import { productVariationSimilarity } from "@/lib/productVariationSuggestions";
 import {
   invalidateProductVariationsCache,
@@ -235,9 +236,14 @@ export default function VariationsTab() {
                 value={productId}
                 onChange={handleProductChange}
                 excludeIds={unavailableIds}
+                showAvailability
               />
               {selectedProduct && (
-                <div className="mt-2 flex items-center gap-2 rounded-md border bg-muted/30 p-2">
+                <div className={`mt-2 flex items-center gap-2 rounded-md border p-2 ${
+                  isProductAvailable({ node: selectedProduct })
+                    ? "bg-muted/30"
+                    : "border-red-300 bg-red-50"
+                }`}>
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
                     {selectedProduct.images.edges[0]?.node ? (
                       <img
@@ -254,6 +260,11 @@ export default function VariationsTab() {
                     <p className="break-words text-sm font-semibold text-foreground">
                       {selectedProduct.title}
                     </p>
+                    {!isProductAvailable({ node: selectedProduct }) && (
+                      <span className="mt-1 inline-flex rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                        Acabou
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -277,7 +288,11 @@ export default function VariationsTab() {
           {pending.length > 0 && (
             <div className="space-y-2 rounded-lg border p-3">
               {pending.map((item, index) => (
-                <div key={item.shopify_product_id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                <div key={item.shopify_product_id} className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 ${
+                  productsById.get(item.shopify_product_id) && !isProductAvailable({ node: productsById.get(item.shopify_product_id)! })
+                    ? "border-red-300 bg-red-50"
+                    : "border-transparent bg-muted/40"
+                }`}>
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white">
                       {productsById.get(item.shopify_product_id)?.images.edges[0]?.node ? (
@@ -297,6 +312,11 @@ export default function VariationsTab() {
                       <p className="mt-1 break-words text-sm font-semibold text-foreground">
                         {item.shopify_product_title}
                       </p>
+                      {productsById.get(item.shopify_product_id) && !isProductAvailable({ node: productsById.get(item.shopify_product_id)! }) && (
+                        <span className="mt-1 inline-flex rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          Acabou
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Button
@@ -325,12 +345,17 @@ export default function VariationsTab() {
                 {similarProducts.map((product) => {
                   const image = product.node.images.edges[0]?.node;
                   const suggestedLabel = suggestLabel(product.node.title);
+                  const isOutOfStock = !isProductAvailable(product);
                   return (
                     <button
                       key={product.node.id}
                       type="button"
                       onClick={() => addSuggestedItem(product)}
-                      className="flex items-center gap-3 rounded-lg border bg-white p-2 text-left transition hover:border-sky-400 hover:shadow-sm"
+                      className={`flex items-center gap-3 rounded-lg border p-2 text-left transition hover:shadow-sm ${
+                        isOutOfStock
+                          ? "border-red-300 bg-red-50 text-red-800 hover:border-red-500"
+                          : "bg-white hover:border-sky-400"
+                      }`}
                     >
                       <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                         {image ? (
@@ -341,6 +366,11 @@ export default function VariationsTab() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="line-clamp-2 text-xs font-semibold text-foreground">{product.node.title}</span>
+                        {isOutOfStock && (
+                          <span className="mt-1 inline-flex rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                            Acabou
+                          </span>
+                        )}
                         <span className="mt-1 flex items-center gap-1 text-xs font-bold text-sky-700">
                           <Plus className="h-3 w-3" />
                           {suggestedLabel ? `Adicionar ${suggestedLabel}` : "Selecionar"}
@@ -395,8 +425,13 @@ export default function VariationsTab() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     {items
                       .filter((item) => item.group_id === group.id)
-                      .map((item) => (
-                        <span key={item.id} className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2 text-sm">
+                      .map((item) => {
+                        const linkedProduct = productsById.get(item.shopify_product_id);
+                        const isOutOfStock = linkedProduct ? !isProductAvailable({ node: linkedProduct }) : false;
+                        return (
+                        <span key={item.id} className={`flex items-center gap-2 rounded-lg border p-2 text-sm ${
+                          isOutOfStock ? "border-red-300 bg-red-50 text-red-800" : "bg-muted/40"
+                        }`}>
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
                             {productsById.get(item.shopify_product_id)?.images.edges[0]?.node ? (
                               <img
@@ -412,9 +447,15 @@ export default function VariationsTab() {
                           <span>
                             <strong>{item.label}</strong>
                             <span className="ml-2 font-medium text-foreground">{item.shopify_product_title}</span>
+                            {isOutOfStock && (
+                              <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                                Acabou
+                              </span>
+                            )}
                           </span>
                         </span>
-                      ))}
+                        );
+                      })}
                   </div>
                 </div>
               ))}
