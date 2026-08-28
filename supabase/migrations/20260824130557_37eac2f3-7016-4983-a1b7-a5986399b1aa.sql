@@ -15,19 +15,23 @@ create index if not exists customer_prices_product_id_idx
 
 alter table public.customer_prices enable row level security;
 
+drop policy if exists "Anyone can view customer prices" on public.customer_prices;
 create policy "Anyone can view customer prices"
   on public.customer_prices for select
   using (true);
 
+drop policy if exists "Admins can insert customer prices" on public.customer_prices;
 create policy "Admins can insert customer prices"
   on public.customer_prices for insert to authenticated
   with check (public.has_role(auth.uid(), 'admin'));
 
+drop policy if exists "Admins can update customer prices" on public.customer_prices;
 create policy "Admins can update customer prices"
   on public.customer_prices for update to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
 
+drop policy if exists "Admins can delete customer prices" on public.customer_prices;
 create policy "Admins can delete customer prices"
   on public.customer_prices for delete to authenticated
   using (public.has_role(auth.uid(), 'admin'));
