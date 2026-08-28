@@ -112,9 +112,10 @@ export default function ValuesTab() {
       variant,
     }))), [products]);
 
-  // Diagnóstico do dado que já está gravado. A validação do save só vale daqui
-  // para a frente; quem foi salvo acima do preço da Shopify antes dela continua
-  // no banco, cobrando errado em silêncio, e precisa aparecer para ser corrigido.
+  // Quais variantes vão gerar linha de ajuste no pedido. Não é lista de erro --
+  // cobrar acima do preço da Shopify é suportado desde que a diferença apareça
+  // no pedido. É lista de conferência: quem cadastrou precisa saber que aquele
+  // valor não sai como preço da variante, e que o cliente vê a linha extra.
   const acimaDaShopify = useMemo(() => rows.filter((row) => {
     const shopifyPrice = Number(row.variant.price.amount);
     const customer = customerMap.get(row.variant.id);
@@ -133,14 +134,14 @@ export default function ValuesTab() {
     setDrafts((current) => ({ ...current, [variantId]: { ...current[variantId], [field]: value } }));
   };
 
-  // Um valor acima do Valor da Shopify não tem como ser cobrado corretamente: o
-  // pedido na Shopify só registra desconto, nunca acréscimo. No checkout próprio
-  // isso cobra do cliente mais do que o pedido documenta; no fluxo de assinante
-  // e franquia a Shopify cobra o preço dela e a loja recebe menos do que exibiu.
-  // Barrar aqui é o que impede o dado errado de nascer — o teto no servidor
-  // (capPricesToShopify) é só a rede de segurança para o que já está gravado.
-  const acimaDaShopifyMessage = (campo: string, shopifyPrice: number) =>
-    `O ${campo} não pode passar do Valor da Shopify (${money(shopifyPrice)}). O pedido na Shopify só registra desconto, então um valor maior seria cobrado sem aparecer no pedido.`;
+  // A linha da variante no pedido só registra desconto, nunca acréscimo. Um
+  // valor acima do Valor da Shopify por isso não sai como preço da variante: o
+  // servidor cobra a diferença numa linha separada (buildPriceAdjustmentLine).
+  // O total fica certo, mas o cliente enxerga essa linha no pedido, e o pedido
+  // deixa de mostrar o produto pelo valor cadastrado. Nada disso é erro — é o
+  // que quem salvou precisa saber que vai acontecer.
+  const acimaDaShopifyMessage = (campos: string[], shopifyPrice: number) =>
+    `${campos.join(" e ")} acima do Valor da Shopify (${money(shopifyPrice)}). A diferença entra no pedido como linha de ajuste, e o cliente vê essa linha. Confira se é intencional.`;
 
   const saveRow = async (row: (typeof rows)[number]) => {
     const draft = drafts[row.variant.id];
@@ -149,6 +150,10 @@ export default function ValuesTab() {
     const franchiseExisting = franchiseMap.get(row.variant.id);
     const shopifyPrice = Number(row.variant.price.amount);
     const operations: PromiseLike<{ error: { message: string } | null }>[] = [];
+    // Salvar acima do Valor da Shopify é permitido: buildPriceAdjustmentLine
+    // cobra a diferença numa linha própria. Não é erro, é uma consequência que
+    // quem salvou precisa enxergar.
+    const geraAjuste: string[] = [];
 
     if (draft.customer !== undefined) {
       const raw = draft.customer.trim();
@@ -157,7 +162,7 @@ export default function ValuesTab() {
       } else {
         const price = parsePrice(raw);
         if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor do Cliente válido.");
-        if (exceedsShopifyPrice(price, shopifyPrice)) return toast.error(acimaDaShopifyMessage("Valor do Cliente", shopifyPrice));
+        if (exceedsShopifyPrice(price, shopifyPrice)) geraAjuste.push("Valor do Cliente");
         operations.push(supabase.from("customer_prices").upsert({
           shopify_product_id: row.productId,
           shopify_variant_id: row.variant.id,
@@ -173,7 +178,7 @@ export default function ValuesTab() {
       } else {
         const price = parsePrice(raw);
         if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor da Franquia válido.");
-        if (exceedsShopifyPrice(price, shopifyPrice)) return toast.error(acimaDaShopifyMessage("Valor da Franquia", shopifyPrice));
+        if (exceedsShopifyPrice(price, shopifyPrice)) geraAjuste.push("Valor da Franquia");
         operations.push(supabase.from("franchise_prices").upsert({
           shopify_product_id: row.productId,
           shopify_variant_id: row.variant.id,
@@ -193,6 +198,7 @@ export default function ValuesTab() {
       return next;
     });
     toast.success("Valores atualizados.");
+    if (geraAjuste.length) toast.warning(acimaDaShopifyMessage(geraAjuste, shopifyPrice));
     await load(true);
   };
 
@@ -206,18 +212,18 @@ export default function ValuesTab() {
         <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Variantes</p><p className="mt-1 text-2xl font-bold">{rows.length}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Valores personalizados</p><p className="mt-1 text-2xl font-bold">{customerPrices.length}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Alterados nos últimos 30 dias</p><p className="mt-1 text-2xl font-bold text-amber-600">{customerPrices.filter(recentlyChanged).length}</p></CardContent></Card>
-        <Card className={acimaDaShopify.length > 0 ? "border-destructive" : undefined}><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Acima do Valor da Shopify</p><p className={`mt-1 text-2xl font-bold ${acimaDaShopify.length > 0 ? "text-destructive" : ""}`}>{acimaDaShopify.length}</p></CardContent></Card>
+        <Card className={acimaDaShopify.length > 0 ? "border-amber-500/50" : undefined}><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Geram linha de ajuste</p><p className={`mt-1 text-2xl font-bold ${acimaDaShopify.length > 0 ? "text-amber-600" : ""}`}>{acimaDaShopify.length}</p></CardContent></Card>
       </div>
 
       {acimaDaShopify.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <div>
-            <p className="font-medium text-destructive">
+            <p className="font-medium text-amber-700">
               {acimaDaShopify.length === 1 ? "1 variante está" : `${acimaDaShopify.length} variantes estão`} com valor acima do Valor da Shopify.
             </p>
             <p className="mt-1 text-muted-foreground">
-              O pedido na Shopify só registra desconto, nunca acréscimo, então esses valores não são cobrados como cadastrados: o sistema usa o Valor da Shopify para o pedido não divergir. Ajuste o valor cadastrado ou o preço na Shopify. As linhas afetadas estão marcadas na tabela.
+              A linha da variante no pedido só aceita desconto, então a diferença é cobrada à parte, numa linha "Ajuste de preço TudoPraPet" que o cliente vê no pedido. O valor total cobrado fica correto. Se não era essa a intenção, iguale o valor ao da Shopify. As linhas afetadas estão marcadas na tabela.
             </p>
           </div>
         </div>
@@ -259,7 +265,7 @@ export default function ValuesTab() {
                   const changed = recentlyChanged(customer);
                   const customerAcima = customer !== undefined && exceedsShopifyPrice(customer.price, shopifyPrice);
                   const franchiseAcima = franchise !== undefined && exceedsShopifyPrice(franchise.price, shopifyPrice);
-                  const acimaTitle = `Acima do Valor da Shopify (${money(shopifyPrice)}). O pedido na Shopify não registra acréscimo, então o sistema cobra o Valor da Shopify.`;
+                  const acimaTitle = `Acima do Valor da Shopify (${money(shopifyPrice)}). A diferença vai para uma linha de ajuste no pedido, visível para o cliente.`;
                   return (
                     <TableRow key={row.variant.id}>
                       <TableCell><div className="flex items-center gap-3">
@@ -275,12 +281,12 @@ export default function ValuesTab() {
                           <Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.customer ?? (customer ? decimal(customer.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} />
                           {/* Um marcador por campo: o valor acima do da Shopify é o mais grave e tem precedência sobre o aviso de alteração recente. */}
                           {customerAcima
-                            ? <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-destructive" /></span>
+                            ? <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>
                             : changed && <span title={`Alterado recentemente. Preço anterior: ${customer?.previous_price ? money(customer.previous_price) : "não informado"}`} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}
                         </div>
                       </TableCell>
                       <TableCell>{subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}</TableCell>
-                      <TableCell><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-destructive" /></span>}</div></TableCell>
+                      <TableCell><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div></TableCell>
                       <TableCell><Button size="icon" onClick={() => saveRow(row)} disabled={!draft || savingId === row.variant.id} aria-label={`Salvar valores de ${row.productTitle}`}>{savingId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button></TableCell>
                     </TableRow>
                   );

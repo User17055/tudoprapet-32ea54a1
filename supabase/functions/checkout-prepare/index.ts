@@ -8,6 +8,7 @@ import {
   buildPriceAdjustmentLine,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
+  resolveUnitPrice,
 } from "../_shared/pricing.ts";
 import {
   createFiscalDraftOrder,
@@ -228,8 +229,7 @@ Deno.serve(async (req) => {
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
       const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
-      const special = specialPriceMap.get(item.variantId);
-      const unitPrice = special !== undefined && special > 0 && special < catalogPrice ? special : catalogPrice;
+      const unitPrice = resolveUnitPrice(catalogPrice, specialPriceMap.get(item.variantId))!;
       finalPriceMap.set(item.variantId, unitPrice);
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
@@ -336,6 +336,10 @@ Deno.serve(async (req) => {
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
     const lineItems = buildDraftLineItems(input.items, finalPriceMap, currentPriceMap, discountTitle);
+    // Sem checagem de variante sem preço aqui, ao contrário de _shared/checkout.ts:
+    // input.items já foi reduzido a availableItems (linha 186), e todo item que
+    // sobrou tem detail -- logo, tem entrada em currentPriceMap. Quem não tinha
+    // saiu antes, como "Produto removido".
     const adjustmentLine = buildPriceAdjustmentLine(input.items, finalPriceMap, currentPriceMap);
     if (adjustmentLine) lineItems.push(adjustmentLine);
 
