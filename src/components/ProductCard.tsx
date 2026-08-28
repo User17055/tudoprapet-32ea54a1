@@ -81,8 +81,7 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
 
   const { node } = selectedProduct;
   const variationItems = getVariations(node.id).filter((item) =>
-    isVisibleTo(item.shopify_product_id, isFranchisee) &&
-    variationIsAvailable(item.shopify_product_id),
+    isVisibleTo(item.shopify_product_id, isFranchisee),
   );
   const displayTitle = getVariationGroupName(node.id) || node.title;
   const variant = node.variants.edges[0]?.node;
@@ -207,17 +206,19 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
           <div className="order-1 flex h-[2.9em] items-center gap-2 overflow-x-auto pr-1 hoverable:hidden hoverable:group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {variationItems.map((item) => {
               const active = item.shopify_product_id === node.id;
+              const available = variationIsAvailable(item.shopify_product_id);
               return (
                 <button
                   key={item.id}
                   type="button"
-                  title={`${item.label} — ${item.shopify_product_title}`}
-                  aria-label={`Selecionar ${item.label}`}
+                  title={`${item.label} — ${item.shopify_product_title}${available ? "" : " — Acabou"}`}
+                  aria-label={available ? `Selecionar ${item.label}` : `${item.label} — acabou`}
                   aria-pressed={active}
+                  disabled={!available}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    if (active) return;
+                    if (active || !available) return;
                     const nextProduct = products.find(
                       (candidate) => candidate.node.id === item.shopify_product_id,
                     );
@@ -228,12 +229,15 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
                     }
                   }}
                   className={`h-10 shrink-0 rounded-xl border px-3.5 text-[15px] font-bold uppercase leading-none transition-colors ${
-                    active
+                    !available
+                      ? "cursor-not-allowed border-red-400 bg-red-50 text-red-700"
+                      : active
                       ? "border-[#171717] bg-[#171717] text-white"
                       : "border-[#d7d9dd] bg-white text-[#51545a] hover:border-primary hover:text-primary"
                   }`}
                 >
                   {item.label}
+                  {!available && <span className="ml-1 text-[10px] font-black">Acabou</span>}
                 </button>
               );
             })}
