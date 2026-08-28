@@ -5,6 +5,7 @@ import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken }
 import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } from "../_shared/checkout-input.ts";
 import {
   buildDraftLineItems,
+  buildPriceAdjustmentLine,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
 } from "../_shared/pricing.ts";
@@ -219,11 +220,16 @@ Deno.serve(async (req) => {
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
     let subtotal = 0;
     let total = 0;
+    // Preço efetivamente cobrado por unidade. É o que precisa chegar ao pedido
+    // da Shopify, seja como desconto (quando menor) ou como linha de ajuste
+    // (quando maior que o preço nativo da variante).
+    const finalPriceMap = new Map<string, number>();
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
       const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
       const special = specialPriceMap.get(item.variantId);
       const unitPrice = special !== undefined && special > 0 && special < catalogPrice ? special : catalogPrice;
+      finalPriceMap.set(item.variantId, unitPrice);
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
       return {
@@ -328,7 +334,9 @@ Deno.serve(async (req) => {
     const discountTitle = customerType === "franchise"
       ? "Franquia TudoPraPet"
       : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
-    const lineItems = buildDraftLineItems(input.items, specialPriceMap, currentPriceMap, discountTitle);
+    const lineItems = buildDraftLineItems(input.items, finalPriceMap, currentPriceMap, discountTitle);
+    const adjustmentLine = buildPriceAdjustmentLine(input.items, finalPriceMap, currentPriceMap);
+    if (adjustmentLine) lineItems.push(adjustmentLine);
 
     const draft = await createFiscalDraftOrder({
       lineItems,

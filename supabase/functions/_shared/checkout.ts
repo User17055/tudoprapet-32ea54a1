@@ -4,7 +4,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "./cors.ts";
-import { buildDraftLineItems } from "./pricing.ts";
+import { buildDraftLineItems, buildPriceAdjustmentLine } from "./pricing.ts";
 import { createDraftOrder, fetchCurrentVariantPrices, findOrCreateCustomer } from "./shopify.ts";
 import { parseCheckoutItems } from "./validation.ts";
 
@@ -92,11 +92,15 @@ export async function handleSpecialPriceCheckout(
       .from("customer_prices")
       .select("shopify_variant_id,price")
       .in("shopify_variant_id", variantIds);
+    // O valor cadastrado em Valores é o preço regular exibido no site. O preço
+    // de perfil (clube/franquia) só vale quando é menor que ele.
+    const customerPriceMap = new Map<string, number>();
     for (const row of customerRows ?? []) {
       const customerPrice = Number(row.price);
+      if (!Number.isFinite(customerPrice) || customerPrice <= 0) continue;
+      customerPriceMap.set(row.shopify_variant_id, customerPrice);
       const profilePrice = specialPriceMap.get(row.shopify_variant_id);
-      if (Number.isFinite(customerPrice) && customerPrice > 0 &&
-          (profilePrice === undefined || customerPrice < profilePrice)) {
+      if (profilePrice === undefined || customerPrice < profilePrice) {
         specialPriceMap.set(row.shopify_variant_id, customerPrice);
       }
     }
@@ -108,12 +112,27 @@ export async function handleSpecialPriceCheckout(
     const customerId = await findOrCreateCustomer(normalizedEmail, shopifyToken);
     if (!customerId) return errorResponse("Falha ao identificar cliente", 500);
 
+    // Preço final por variante: o menor entre o preço de perfil e o preço
+    // regular do sistema; sem nenhum dos dois, o da Shopify.
+    const finalPriceMap = new Map<string, number>();
+    for (const item of items) {
+      const base = customerPriceMap.get(item.variantId) ?? currentPriceMap.get(item.variantId);
+      const special = specialPriceMap.get(item.variantId);
+      const final = special !== undefined && Number.isFinite(special) && special > 0 &&
+        (base === undefined || special < base)
+        ? special
+        : base;
+      if (final !== undefined && Number.isFinite(final)) finalPriceMap.set(item.variantId, final);
+    }
+
     const lineItems = buildDraftLineItems(
       items,
-      specialPriceMap,
+      finalPriceMap,
       currentPriceMap,
       config.discountTitle,
     );
+    const adjustmentLine = buildPriceAdjustmentLine(items, finalPriceMap, currentPriceMap);
+    if (adjustmentLine) lineItems.push(adjustmentLine);
 
     const { requestOk, invoiceUrl } = await createDraftOrder({
       line_items: lineItems,
