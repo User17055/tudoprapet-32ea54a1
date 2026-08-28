@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks } from "lucide-react";
+import { Check, Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
@@ -67,6 +67,18 @@ const categoryPath = (cat: Category, all: Category[]): string => {
     cur = parent;
   }
   return parts.join(" › ");
+};
+
+const rootCategoryId = (categoryId: string, categories: Category[]): string | null => {
+  let current = categories.find((category) => category.id === categoryId);
+  const seen = new Set<string>();
+  while (current) {
+    if (seen.has(current.id)) return null;
+    seen.add(current.id);
+    if (!current.parent_id) return current.id;
+    current = categories.find((category) => category.id === current?.parent_id);
+  }
+  return null;
 };
 
 export default function DetailsTab() {
@@ -506,11 +518,12 @@ function AssignPanel() {
 
   // selection for current product
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  const [categoryRootFilter, setCategoryRootFilter] = useState<string>("all");
   const [brandId, setBrandId] = useState<string>("none");
   const [attrs, setAttrs] = useState<ProductAttribute[]>([]);
   const [contentRow, setContentRow] = useState<ProductContentRow | null>(null);
-  const [newKey, setNewKey] = useState<string>("");
-  const [newValue, setNewValue] = useState<string[]>([]);
+  const [attributeFilter, setAttributeFilter] = useState("");
+  const [updatingAttribute, setUpdatingAttribute] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
   const [registrationFilter, setRegistrationFilter] = useState<"all" | "registered" | "unregistered">("all");
@@ -528,11 +541,24 @@ function AssignPanel() {
       setRegisteredKeys(((ks || []) as { name: string }[]).map((r) => r.name));
     })();
   }, []);
-  const activeKey = newKey;
-  const presetValues = useMemo(
-    () => allValues.filter((v) => v.attr_key === activeKey),
-    [allValues, activeKey]
-  );
+  const attributeGroups = useMemo(() => {
+    const query = normalizeText(attributeFilter);
+    const keys = Array.from(new Set([...registeredKeys, ...attrs.map((attribute) => attribute.attr_key)]));
+    return keys
+      .map((key) => {
+        const values = Array.from(new Set([
+          ...allValues.filter((item) => item.attr_key === key).map((item) => item.attr_value),
+          ...attrs.filter((item) => item.attr_key === key).map((item) => item.attr_value),
+        ]));
+        const keyMatches = !query || normalizeText(key).includes(query);
+        const visibleValues = keyMatches
+          ? values
+          : values.filter((value) => normalizeText(value).includes(query));
+        return { key, values: visibleValues };
+      })
+      .filter((group) => group.values.length > 0)
+      .sort((a, b) => a.key.localeCompare(b.key, "pt-BR"));
+  }, [allValues, attributeFilter, attrs, registeredKeys]);
   const configuredIds = useMemo(
     () =>
       new Set<string>([
@@ -607,6 +633,7 @@ function AssignPanel() {
   useEffect(() => {
     if (!productId) {
       setSelectedCats(new Set());
+      setCategoryRootFilter("all");
       setBrandId("none");
       setAttrs([]);
       setContentRow(null);
@@ -618,12 +645,19 @@ function AssignPanel() {
         supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
         supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
       ]);
-      setSelectedCats(new Set(((pc.data || []) as ProductCategoryLink[]).map((x) => x.category_id)));
+      const selectedCategoryIds = ((pc.data || []) as ProductCategoryLink[]).map((x) => x.category_id);
+      setSelectedCats(new Set(selectedCategoryIds));
+      const selectedRoots = new Set(
+        selectedCategoryIds
+          .map((categoryId) => rootCategoryId(categoryId, categories))
+          .filter((rootId): rootId is string => Boolean(rootId)),
+      );
+      setCategoryRootFilter(selectedRoots.size === 1 ? Array.from(selectedRoots)[0] : "all");
       setAttrs((pa.data || []) as ProductAttribute[]);
       setContentRow((content.data as ProductContentRow) || null);
       setBrandId((content.data as ProductContentRow | null)?.brand_id || "none");
     })();
-  }, [productId]);
+  }, [productId, categories]);
 
   const getParentIds = (id: string): string[] => {
     const parents: string[] = [];
@@ -648,6 +682,18 @@ function AssignPanel() {
         // Auto-select all parents
         getParentIds(id).forEach((parentId) => next.add(parentId));
       }
+      return next;
+    });
+  };
+
+  const changeCategoryRoot = (rootId: string) => {
+    setCategoryRootFilter(rootId);
+    if (rootId === "all") return;
+    setSelectedCats((current) => {
+      const next = new Set(
+        Array.from(current).filter((categoryId) => rootCategoryId(categoryId, categories) === rootId),
+      );
+      next.add(rootId);
       return next;
     });
   };
@@ -697,33 +743,33 @@ function AssignPanel() {
     }
   };
 
-  const handleAddAttr = async () => {
-    if (!productId) return;
-    const finalKey = newKey.trim();
-    const values = Array.isArray(newValue) ? newValue : (newValue ? [newValue] : []);
-    if (!finalKey || values.length === 0) return toast.error("Selecione um título e ao menos um valor");
-    const existing = new Set(attrs.filter((a) => a.attr_key === finalKey).map((a) => a.attr_value));
-    const toInsert = values.filter((v) => !existing.has(v));
-    if (toInsert.length === 0) return toast.error("Todos os valores já estão atribuídos");
-    const rows = toInsert.map((v, i) => ({
-      shopify_product_id: productId,
-      attr_key: finalKey,
-      attr_value: v,
-      sort_order: attrs.length + i,
-    }));
-    const { data, error } = await supabase.from("product_attributes").insert(rows).select();
-    if (error) return toast.error("Erro: " + error.message);
-    setAttrs([...attrs, ...((data || []) as ProductAttribute[])]);
-    setNewValue([]);
-    toast.success(`${toInsert.length} valor(es) adicionado(s)`);
-    await reloadAll();
-  };
-
-  const handleDelAttr = async (id: string) => {
-    const { error } = await supabase.from("product_attributes").delete().eq("id", id);
-    if (error) return toast.error("Erro");
-    setAttrs(attrs.filter((a) => a.id !== id));
-    await reloadAll();
+  const toggleAttribute = async (key: string, value: string) => {
+    if (!productId || updatingAttribute) return;
+    const operationKey = `${key}:${value}`;
+    const existing = attrs.find((attribute) => attribute.attr_key === key && attribute.attr_value === value);
+    setUpdatingAttribute(operationKey);
+    try {
+      if (existing) {
+        const { error } = await supabase.from("product_attributes").delete().eq("id", existing.id);
+        if (error) throw error;
+        setAttrs((current) => current.filter((attribute) => attribute.id !== existing.id));
+      } else {
+        const { data, error } = await supabase.from("product_attributes").insert({
+          shopify_product_id: productId,
+          attr_key: key,
+          attr_value: value,
+          sort_order: attrs.length,
+        }).select().single();
+        if (error) throw error;
+        setAttrs((current) => [...current, data as ProductAttribute]);
+      }
+      await reloadAll();
+    } catch (error) {
+      toast.error("Não foi possível atualizar o atributo.");
+      console.error(error);
+    } finally {
+      setUpdatingAttribute(null);
+    }
   };
 
   if (loading) {
@@ -847,8 +893,30 @@ function AssignPanel() {
                       Crie categorias na aba "Categorias" primeiro.
                     </p>
                   ) : (
-                    <div className="border border-border rounded-md p-2 max-h-72 overflow-auto">
-                      {renderCatTree(null)}
+                    <div className="space-y-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted-foreground">Pet</label>
+                        <Select value={categoryRootFilter} onValueChange={changeCategoryRoot}>
+                          <SelectTrigger><SelectValue placeholder="Selecione o pet" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos os pets</SelectItem>
+                            {rootCats.map((category) => (
+                              <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="border border-border rounded-md p-2 max-h-72 overflow-auto">
+                        {categoryRootFilter === "all" ? (
+                          renderCatTree(null)
+                        ) : childrenOf(categoryRootFilter).length > 0 ? (
+                          renderCatTree(categoryRootFilter)
+                        ) : (
+                          <p className="px-2 py-3 text-xs text-muted-foreground">
+                            Nenhuma subcategoria cadastrada para este pet.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                   {selectedCats.size > 0 && (
@@ -882,83 +950,86 @@ function AssignPanel() {
                   </Select>
 
                   <div className="mt-6">
-                    <label className="text-sm font-medium mb-2 block">Atributos extras</label>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Escolha um título e um valor previamente cadastrados na aba <strong>Valores</strong>. Eles aparecem como filtros no catálogo.
-                    </p>
-                    <div className="space-y-2">
-                      {attrs.map((a) => (
-                        <div key={a.id} className="flex items-center gap-2 text-sm border border-border rounded px-2 py-1.5">
-                          <span className="font-medium">{a.attr_key}:</span>
-                          <span className="flex-1">{a.attr_value}</span>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelAttr(a.id)}>
-                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                          </Button>
-                        </div>
-                      ))}
-                      {registeredKeys.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">
-                          Você ainda não cadastrou nenhum título. Vá à aba "Valores" para criar.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          <Select value={newKey} onValueChange={(v) => { setNewKey(v); setNewValue([]); }}>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Escolha o título" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {registeredKeys.map((k) => (
-                                <SelectItem key={k} value={k}>{k}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {newKey && (
-                            <div className="border border-border rounded-md p-2 max-h-48 overflow-auto">
-                              {presetValues.length === 0 ? (
-                                <p className="text-xs text-muted-foreground px-1 py-1">
-                                  Nenhum valor cadastrado para "{newKey}".
-                                </p>
-                              ) : (
-                                presetValues.map((v) => {
-                                  const already = attrs.some((a) => a.attr_key === newKey && a.attr_value === v.attr_value);
-                                  const checked = newValue.includes(v.attr_value);
-                                  return (
-                                    <label
-                                      key={v.id}
-                                      className={`flex items-center gap-2 py-1 px-1 rounded text-sm ${already ? "opacity-50" : "hover:bg-muted/50 cursor-pointer"}`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        className="h-4 w-4"
-                                        disabled={already}
-                                        checked={checked}
-                                        onChange={() =>
-                                          setNewValue((prev) =>
-                                            prev.includes(v.attr_value)
-                                              ? prev.filter((x) => x !== v.attr_value)
-                                              : [...prev, v.attr_value]
-                                          )
-                                        }
-                                      />
-                                      <span>{v.attr_value}</span>
-                                      {already && <span className="text-[10px] text-muted-foreground ml-auto">já atribuído</span>}
-                                    </label>
-                                  );
-                                })
-                              )}
-                            </div>
-                          )}
-                          <Button
-                            onClick={handleAddAttr}
-                            disabled={!newKey || newValue.length === 0}
-                            className="w-full"
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Adicionar {newValue.length > 0 ? `(${newValue.length})` : ""}
-                          </Button>
-                        </div>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label className="text-sm font-medium">Atributos extras</label>
+                      {attrs.length > 0 && (
+                        <Badge variant="secondary">
+                          {attrs.length} {attrs.length === 1 ? "selecionado" : "selecionados"}
+                        </Badge>
                       )}
                     </div>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Clique em um valor para atribuir ou remover. A alteração é salva automaticamente.
+                    </p>
+
+                    {(registeredKeys.length > 0 || attrs.length > 0) && (
+                      <Input
+                        className="mb-3"
+                        placeholder="Buscar atributo ou valor..."
+                        value={attributeFilter}
+                        onChange={(event) => setAttributeFilter(event.target.value)}
+                      />
+                    )}
+
+                    {registeredKeys.length === 0 && attrs.length === 0 ? (
+                      <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                        Você ainda não cadastrou atributos. Vá à aba <strong>Valores</strong> para criar os títulos e valores.
+                      </p>
+                    ) : attributeGroups.length === 0 ? (
+                      <p className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
+                        Nenhum atributo encontrado para essa busca.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {attributeGroups.map((group) => {
+                          const selectedCount = attrs.filter((attribute) => attribute.attr_key === group.key).length;
+                          return (
+                            <div key={group.key} className="rounded-lg border border-border p-3">
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold">{group.key}</p>
+                                {selectedCount > 0 && (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {selectedCount} {selectedCount === 1 ? "marcado" : "marcados"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {group.values.map((value) => {
+                                  const selected = attrs.some(
+                                    (attribute) => attribute.attr_key === group.key && attribute.attr_value === value,
+                                  );
+                                  const operationKey = `${group.key}:${value}`;
+                                  const updating = updatingAttribute === operationKey;
+                                  return (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      aria-pressed={selected}
+                                      disabled={Boolean(updatingAttribute)}
+                                      onClick={() => toggleAttribute(group.key, value)}
+                                      className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
+                                        selected
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-border bg-background text-foreground hover:border-primary hover:text-primary"
+                                      }`}
+                                    >
+                                      {updating ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : selected ? (
+                                        <Check className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <Plus className="h-3.5 w-3.5" />
+                                      )}
+                                      {value}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
