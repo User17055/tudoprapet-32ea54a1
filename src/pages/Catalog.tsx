@@ -26,7 +26,7 @@ import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { fuzzySearch } from "@/lib/fuzzySearch";
-import { isProductAvailable } from "@/lib/productAvailability";
+import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -221,8 +221,8 @@ const Catalog = () => {
     const visibleIds = new Set(visible.map((product) => product.node.id));
     return visible.filter((product) => {
       const group = getVariations(product.node.id);
-      const representative = group.find((item) => visibleIds.has(item.shopify_product_id));
-      return !representative || representative.shopify_product_id === product.node.id;
+      const representativeId = selectVariationRepresentative(group, productById, visibleIds);
+      return !representativeId || representativeId === product.node.id;
     });
   }, [
     products,
@@ -232,6 +232,7 @@ const Catalog = () => {
     variationsLoading,
     getVariations,
     isVisibleTo,
+    productById,
   ]);
   const hasRequestedSearch = requestedSearch.trim().length > 0;
   const discoverableProducts = useMemo(
