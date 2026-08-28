@@ -211,8 +211,8 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
                 <button
                   key={item.id}
                   type="button"
-                  title={`${item.label} — ${item.shopify_product_title}${available ? "" : " — Acabou"}`}
-                  aria-label={available ? `Selecionar ${item.label}` : `${item.label} — acabou`}
+                  title={`${item.label} — ${item.shopify_product_title}`}
+                  aria-label={available ? `Selecionar ${item.label}` : `${item.label} indisponível`}
                   aria-pressed={active}
                   disabled={!available}
                   onClick={(event) => {
@@ -230,14 +230,13 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
                   }}
                   className={`h-10 shrink-0 rounded-xl border px-3.5 text-[15px] font-bold uppercase leading-none transition-colors ${
                     !available
-                      ? "cursor-not-allowed border-red-400 bg-red-50 text-red-700"
+                      ? "cursor-not-allowed border-[#d7d9dd] bg-[#f3f4f6] text-[#8b8f97]"
                       : active
                       ? "border-[#171717] bg-[#171717] text-white"
                       : "border-[#d7d9dd] bg-white text-[#51545a] hover:border-primary hover:text-primary"
                   }`}
                 >
                   {item.label}
-                  {!available && <span className="ml-1 text-[10px] font-black">Acabou</span>}
                 </button>
               );
             })}
