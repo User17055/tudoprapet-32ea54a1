@@ -1,17 +1,34 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 
 type CustomerPrice = { shopify_variant_id: string; price: number };
 
 let cached: CustomerPrice[] | null = null;
 let pending: Promise<CustomerPrice[]> | null = null;
 
+// Mesmo defeito que tirou produtos da loja em 19/08/2026, agora na tabela de
+// precos: o PostgREST corta a resposta (1000 linhas por padrao no Supabase) e um
+// `select()` sem paginacao devolve so a primeira pagina. Aqui o efeito e outro,
+// e igualmente silencioso -- toda variante alem da primeira pagina fica sem
+// valor cadastrado e os consumidores caem no `?? shopifyPrice`, exibindo o preco
+// da Shopify em vez do valor do cliente. Sem erro, sem log, sem aviso.
+
+/** Le a tabela inteira, pagina a pagina. Usada tambem pela tela de Valores. */
+export async function fetchAllCustomerPrices(): Promise<CustomerPrice[]> {
+  const rows = await fetchAllRows<{ shopify_variant_id: string; price: number | string }>(
+    "customer_prices",
+    "shopify_variant_id,price",
+    { orderBy: "shopify_variant_id" },
+  );
+  // O PostgREST devolve `numeric` como string; comparar string com numero
+  // quebraria o teto de preco em silencio.
+  return rows.map((row) => ({ ...row, price: Number(row.price) }));
+}
+
 const fetchPrices = () => {
   if (!pending) {
     pending = (async () => {
-      const { data, error } = await supabase.from("customer_prices").select("shopify_variant_id,price");
-      if (error) throw error;
-      cached = (data || []).map((row) => ({ ...row, price: Number(row.price) }));
+      cached = await fetchAllCustomerPrices();
       return cached;
     })().finally(() => { pending = null; });
   }

@@ -4,7 +4,12 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "./cors.ts";
-import { buildDraftLineItems, buildPriceAdjustmentLine } from "./pricing.ts";
+import {
+  buildDraftLineItems,
+  buildPriceAdjustmentLine,
+  findUnpricedVariants,
+  resolveUnitPrice,
+} from "./pricing.ts";
 import { createDraftOrder, fetchCurrentVariantPrices, findOrCreateCustomer } from "./shopify.ts";
 import { parseCheckoutItems } from "./validation.ts";
 
@@ -117,12 +122,8 @@ export async function handleSpecialPriceCheckout(
     const finalPriceMap = new Map<string, number>();
     for (const item of items) {
       const base = customerPriceMap.get(item.variantId) ?? currentPriceMap.get(item.variantId);
-      const special = specialPriceMap.get(item.variantId);
-      const final = special !== undefined && Number.isFinite(special) && special > 0 &&
-        (base === undefined || special < base)
-        ? special
-        : base;
-      if (final !== undefined && Number.isFinite(final)) finalPriceMap.set(item.variantId, final);
+      const final = resolveUnitPrice(base, specialPriceMap.get(item.variantId));
+      if (final !== undefined) finalPriceMap.set(item.variantId, final);
     }
 
     const lineItems = buildDraftLineItems(
@@ -133,6 +134,18 @@ export async function handleSpecialPriceCheckout(
     );
     const adjustmentLine = buildPriceAdjustmentLine(items, finalPriceMap, currentPriceMap);
     if (adjustmentLine) lineItems.push(adjustmentLine);
+
+    // Diferente do checkout próprio, aqui os itens NÃO passam por um filtro de
+    // disponibilidade antes da precificação: parseCheckoutItems valida o formato,
+    // não a existência na Shopify. Então uma variante pode chegar até aqui sem
+    // preço nativo, e nesse caso o ajuste não consegue cobrar a diferença --
+    // volta a divergência silenciosa. Não dá para corrigir sem inventar preço;
+    // dá para não deixar passar em branco.
+    for (const variantId of findUnpricedVariants(items, finalPriceMap, currentPriceMap)) {
+      console.error(
+        `${config.orderTag}: variante ${variantId} sem preço da Shopify. O valor de ${finalPriceMap.get(variantId)?.toFixed(2)} não entra na linha de ajuste e o pedido pode registrar menos do que foi anunciado.`,
+      );
+    }
 
     const { requestOk, invoiceUrl } = await createDraftOrder({
       line_items: lineItems,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 
 interface FranchisePrice {
   shopify_variant_id: string;
@@ -10,18 +10,28 @@ interface FranchisePrice {
 let cached: FranchisePrice[] | null = null;
 let pending: Promise<FranchisePrice[]> | null = null;
 
+/** Le a tabela inteira, pagina a pagina. Usada tambem pela tela de Valores. */
+export async function fetchAllFranchisePrices(): Promise<FranchisePrice[]> {
+  const rows = await fetchAllRows<{ shopify_variant_id: string; price: number | string }>(
+    "franchise_prices",
+    "shopify_variant_id, price",
+    { orderBy: "shopify_variant_id" },
+  );
+  return rows.map((r) => ({ shopify_variant_id: r.shopify_variant_id, price: Number(r.price) }));
+}
+
 async function fetchPrices(): Promise<FranchisePrice[]> {
   if (cached) return cached;
   if (pending) return pending;
   pending = (async () => {
     try {
-      const { data } = await supabase
-        .from("franchise_prices")
-        .select("shopify_variant_id, price");
-      cached = ((data || []) as { shopify_variant_id: string; price: number }[]).map((r) => ({
-        shopify_variant_id: r.shopify_variant_id,
-        price: Number(r.price),
-      }));
+      // O erro precisa subir. Antes a leitura era `const { data } = await ...`,
+      // sem olhar `error`: uma falha transitoria devolvia `data` nulo, gravava
+      // lista VAZIA no cache e -- como `[]` e truthy -- ela ficava ali para
+      // sempre. O franqueado passava a sessao inteira vendo o preco da Shopify
+      // em vez do preco de franquia, sem nada no console. E o mesmo defeito que
+      // o fix de 19/08 tratou em product_audience, que nao chegou ate aqui.
+      cached = await fetchAllFranchisePrices();
       return cached;
     } finally {
       pending = null;

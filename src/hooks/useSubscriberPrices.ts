@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/fetchAllRows';
 
 interface SubscriberPrice {
   shopify_variant_id: string;
@@ -9,23 +9,32 @@ interface SubscriberPrice {
 let cachedPrices: SubscriberPrice[] | null = null;
 let fetchPromise: Promise<SubscriberPrice[]> | null = null;
 
+/** Le a tabela inteira, pagina a pagina. Usada tambem pela tela de Valores. */
+export async function fetchAllSubscriberPrices(): Promise<SubscriberPrice[]> {
+  const rows = await fetchAllRows<{ shopify_variant_id: string; subscriber_price: number | string }>(
+    'subscriber_prices',
+    'shopify_variant_id, subscriber_price',
+    { orderBy: 'shopify_variant_id' },
+  );
+  return rows.map((r) => ({
+    shopify_variant_id: r.shopify_variant_id,
+    subscriber_price: Number(r.subscriber_price),
+  }));
+}
+
 async function fetchPrices(): Promise<SubscriberPrice[]> {
   if (cachedPrices) return cachedPrices;
   if (fetchPromise) return fetchPromise;
-  
+
   fetchPromise = (async () => {
     try {
-      const { data, error } = await supabase
-        .from('subscriber_prices')
-        .select('shopify_variant_id, subscriber_price');
-      if (error) throw error;
-      cachedPrices = data || [];
+      cachedPrices = await fetchAllSubscriberPrices();
       return cachedPrices;
     } finally {
       fetchPromise = null;
     }
   })();
-  
+
   return fetchPromise;
 }
 

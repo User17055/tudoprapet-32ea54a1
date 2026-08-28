@@ -70,6 +70,34 @@ export function buildDraftLineItems(
   });
 }
 
+/**
+ * O preço unitário efetivamente cobrado: o preço de perfil (clube/franquia)
+ * quando existe e é menor que o de catálogo, senão o de catálogo.
+ *
+ * Repare no que esta função NÃO recebe: o preço da Shopify. É de propósito.
+ *
+ * Em 28/08 duas correções do mesmo bug se encontraram num merge. Uma limitava o
+ * preço final ao da Shopify, a outra cobrava a diferença numa linha de ajuste.
+ * Juntas, o preço chegava limitado em buildPriceAdjustmentLine, o acréscimo
+ * nunca era calculado e a linha de ajuste sumia -- sem erro de compilação e sem
+ * nenhum teste falhando, porque a lógica estava solta dentro de cada porta.
+ *
+ * Concentrando a decisão aqui, e sem o preço da Shopify no escopo, limitar o
+ * valor deixa de ser algo que se faz por descuido: não há o que comparar.
+ */
+export function resolveUnitPrice(
+  catalogPrice: number | undefined,
+  specialPrice: number | undefined,
+): number | undefined {
+  const catalogo = catalogPrice !== undefined && Number.isFinite(catalogPrice) ? catalogPrice : undefined;
+  const especial = specialPrice !== undefined && Number.isFinite(specialPrice) && specialPrice > 0
+    ? specialPrice
+    : undefined;
+  if (especial === undefined) return catalogo;
+  if (catalogo === undefined) return especial;
+  return especial < catalogo ? especial : catalogo;
+}
+
 export const PRICE_ADJUSTMENT_TITLE = "Ajuste de preço TudoPraPet";
 
 /**
@@ -105,6 +133,34 @@ export function buildPriceAdjustmentLine(
     taxable: false,
   };
 }
+
+/**
+ * Variantes que ficaram sem preço da Shopify para comparar.
+ *
+ * buildPriceAdjustmentLine ignora o item quando o preço nativo não veio --
+ * fetchCurrentVariantPrices só devolve a variante que a Storefront API
+ * respondeu com preço numérico, e ela some quando o produto foi despublicado ou
+ * removido. Sem essa referência não dá para calcular a diferença, então o
+ * acréscimo simplesmente não entra no ajuste e a divergência volta calada, que é
+ * exatamente o bug que a linha de ajuste veio resolver.
+ *
+ * Isto não conserta o caso: só o torna visível no log. Quem chama decide.
+ */
+export function findUnpricedVariants(
+  items: LineItem[],
+  finalPrices: Map<string, number>,
+  currentPrices: Map<string, number>,
+): string[] {
+  const semPreco = new Set<string>();
+  for (const item of items) {
+    if (currentPrices.has(item.variantId)) continue;
+    const final = finalPrices.get(item.variantId);
+    if (final === undefined || !Number.isFinite(final)) continue;
+    semPreco.add(item.variantId);
+  }
+  return [...semPreco];
+}
+
 
 /** Converte as linhas REST legadas para o formato GraphQL sem perder a variante. */
 export function toGraphqlDraftLineItems(
@@ -155,16 +211,34 @@ export function toGraphqlDraftLineItems(
 
 
 // ---------------------------------------------------------------------------
-// Parcelamento no cartão — juros repassados ao cliente.
+// Valor cadastrado acima do preço da Shopify.
 //
-// As taxas abaixo são exatamente as da conta Asaas da TudoPraPet
-// (GET /myAccount/fees): tarifa fixa por operação + percentual por faixa de
-// parcelas. O parcelado é "grossed up" para que o valor líquido recebido
-// continue igual ao total do pedido — ou seja, o custo do parcelamento é do
-// cliente. O à vista (1x) permanece sem acréscimo.
+// Um pedido na Shopify só sabe registrar DESCONTO na linha da variante:
+// `applied_discount` subtrai do preço nativo, e a Shopify ignora `price` quando
+// a linha traz `variant_id` (ver buildDraftLineItems acima). Não existe
+// acréscimo na linha da variante.
 //
-// IMPORTANTE: espelhado em src/lib/installments.ts (test garante a igualdade).
+// Isso não impede cobrar acima do preço nativo — só impede fazê-lo naquela
+// linha. A diferença entra como uma linha customizada, sem variante, montada
+// por buildPriceAdjustmentLine. Assim o pedido registra o mesmo total que o
+// cliente paga, e a variante continua dando baixa no estoque.
+//
+// A função abaixo é só o teste da condição. Ela não decide nada: serve para o
+// admin saber que aquele valor vai gerar linha de ajuste, e é espelhada em
+// src/lib/priceCap.ts (src/test/priceCap.test.ts garante que concordam).
 // ---------------------------------------------------------------------------
+
+/**
+ * O valor cadastrado passa do preço da Shopify?
+ *
+ * Preço da Shopify ausente, não numérico ou <= 0 devolve `false`: sem uma
+ * referência confiável não dá para afirmar nada sobre o cadastrado.
+ */
+export function exceedsShopifyPrice(configured: number, shopifyPrice: number): boolean {
+  if (!Number.isFinite(configured) || configured <= 0) return false;
+  if (!Number.isFinite(shopifyPrice) || shopifyPrice <= 0) return false;
+  return configured > shopifyPrice;
+}
 
 export const MAX_INSTALLMENTS = 12;
 export const MIN_INSTALLMENT_VALUE = 5;
