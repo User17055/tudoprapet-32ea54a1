@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { normalizeText } from "@/lib/fuzzySearch";
 import { productVariationSimilarity } from "@/lib/productVariationSuggestions";
 import {
   invalidateProductVariationsCache,
@@ -41,13 +42,14 @@ export default function VariationsTab() {
   const [productId, setProductId] = useState("");
   const [label, setLabel] = useState("");
   const [pending, setPending] = useState<PendingItem[]>([]);
+  const [groupFilter, setGroupFilter] = useState("");
 
   const load = async () => {
     setLoading(true);
     try {
       const [shop, groupRows, itemRows] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("product_variation_groups").select("*").order("created_at"),
+        supabase.from("product_variation_groups").select("*").order("created_at", { ascending: false }),
         supabase.from("product_variation_items").select("*").order("sort_order"),
       ]);
       if (groupRows.error) throw groupRows.error;
@@ -82,6 +84,17 @@ export default function VariationsTab() {
     () => new Map(products.map((product) => [product.node.id, product.node])),
     [products],
   );
+  const visibleGroups = useMemo(() => {
+    const query = normalizeText(groupFilter);
+    if (!query) return groups;
+    return groups.filter((group) => {
+      if (normalizeText(group.name).includes(query)) return true;
+      return items.some((item) =>
+        item.group_id === group.id && [item.label, item.shopify_product_title]
+          .some((value) => normalizeText(value).includes(query)),
+      );
+    });
+  }, [groupFilter, groups, items]);
   const similarProducts = useMemo(() => {
     const referenceTitle = pending[0]?.shopify_product_title;
     if (!referenceTitle) return [];
@@ -350,15 +363,28 @@ export default function VariationsTab() {
       <Card>
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Grupos cadastrados ({groups.length})</CardTitle>
+          <CardDescription>
+            Os grupos mais recentes aparecem primeiro. Pesquise pelo nome do grupo, produto ou tamanho.
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
+          {!loading && groups.length > 0 && (
+            <Input
+              className="mb-3"
+              value={groupFilter}
+              onChange={(event) => setGroupFilter(event.target.value)}
+              placeholder="Buscar grupo, produto ou tamanho..."
+            />
+          )}
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : groups.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Nenhum grupo cadastrado.</p>
+          ) : visibleGroups.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma variação encontrada para essa busca.</p>
           ) : (
             <div className="space-y-3">
-              {groups.map((group) => (
+              {visibleGroups.map((group) => (
                 <div key={group.id} className="rounded-lg border p-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-bold">{group.name}</p>

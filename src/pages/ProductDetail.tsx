@@ -62,7 +62,7 @@ const ProductDetail = () => {
     loading: franchiseAccessLoading,
   } = useFranchisePrices();
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
-  const { getVariations } = useProductVariations();
+  const { getVariations } = useProductVariations(handle);
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);

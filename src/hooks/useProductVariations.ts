@@ -58,8 +58,8 @@ export function compareProductVariations(a: ProductVariationItem, b: ProductVari
   return a.sort_order - b.sort_order || a.label.localeCompare(b.label, "pt-BR", { numeric: true });
 }
 
-async function fetchProductVariations(): Promise<ProductVariationsData> {
-  if (cachedData) return cachedData;
+async function fetchProductVariations(forceRefresh = false): Promise<ProductVariationsData> {
+  if (!forceRefresh && cachedData) return cachedData;
   if (pendingData) return pendingData;
 
   pendingData = (async () => {
@@ -104,18 +104,18 @@ export function indexProductVariations(items: ProductVariationItem[]) {
   return result;
 }
 
-export function useProductVariations() {
+export function useProductVariations(refreshKey?: string) {
   const [data, setData] = useState<ProductVariationsData>(
     cachedData || { items: [], groups: [] },
   );
   const [loading, setLoading] = useState(!cachedData);
 
   useEffect(() => {
-    fetchProductVariations()
+    fetchProductVariations(Boolean(refreshKey))
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   const itemsByProduct = useMemo(() => indexProductVariations(data.items), [data.items]);
   const groupNames = useMemo(
