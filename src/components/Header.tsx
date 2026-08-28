@@ -15,6 +15,7 @@ import { isAudienceVisibleTo, useProductAudience } from "@/hooks/useProductAudie
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useCustomerPrices } from "@/hooks/useCustomerPrices";
+import { isProductAvailable } from "@/lib/productAvailability";
 import logo from "@/assets/tpp-logo.svg";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
@@ -128,6 +129,7 @@ export const Header = () => {
               isFranchisee,
             ),
           )
+          .filter(isProductAvailable)
           .slice(0, 6);
 
         setSearchResults(matchingProducts);

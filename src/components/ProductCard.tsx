@@ -10,6 +10,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ProductImage } from "@/components/ProductImage";
 import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
+import { isProductAvailable } from "@/lib/productAvailability";
 
 interface Props {
   product: ShopifyProduct;
@@ -46,8 +47,17 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
   const { getCustomerPrice } = useCustomerPrices();
   const { isVisibleTo } = useProductAudience();
   const { getVariations, getVariationGroupName } = useProductVariations();
+  const variationIsAvailable = (productId: string) => {
+    const candidate = products.find((item) => item.node.id === productId);
+    if (candidate) return isProductAvailable(candidate);
+    if (product.node.id === productId) return isProductAvailable(product);
+    // Alguns cards de relacionados não recebem o catálogo completo. Nesse
+    // caso, o clique navega para a página e ela confirma o estoque novamente.
+    return true;
+  };
   const initialVariationItems = getVariations(product.node.id).filter((item) =>
-    isVisibleTo(item.shopify_product_id, isFranchisee),
+    isVisibleTo(item.shopify_product_id, isFranchisee) &&
+    variationIsAvailable(item.shopify_product_id),
   );
   const initialVariationKey = initialVariationItems
     .map((item) => `${item.shopify_product_id}:${item.label}`)
@@ -71,7 +81,8 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
 
   const { node } = selectedProduct;
   const variationItems = getVariations(node.id).filter((item) =>
-    isVisibleTo(item.shopify_product_id, isFranchisee),
+    isVisibleTo(item.shopify_product_id, isFranchisee) &&
+    variationIsAvailable(item.shopify_product_id),
   );
   const displayTitle = getVariationGroupName(node.id) || node.title;
   const variant = node.variants.edges[0]?.node;
