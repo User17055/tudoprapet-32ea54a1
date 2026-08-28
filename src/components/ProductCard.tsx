@@ -16,6 +16,8 @@ interface Props {
   product: ShopifyProduct;
   products?: ShopifyProduct[];
   searchQuery?: string;
+  compact?: boolean;
+  hideVariations?: boolean;
 }
 
 const formatPrice = (value: number) =>
@@ -36,7 +38,13 @@ const extractMeasurements = (value: string) =>
     .match(/\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l)\b/g)
     ?.map((term) => term.replace(/\s+/g, "").replace(",", ".")) || [];
 
-export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = "" }: Props) => {
+export const ProductCard = ({
+  product,
+  products = EMPTY_PRODUCTS,
+  searchQuery = "",
+  compact = false,
+  hideVariations = false,
+}: Props) => {
   const navigate = useNavigate();
   const [selectedProduct, setSelectedProduct] = useState(product);
 
@@ -188,10 +196,10 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
         </button>
       </div>
 
-      <div className="mt-4 flex min-h-[2.9em] flex-col">
+      <div className={`${compact ? "mt-2.5" : "mt-4"} flex min-h-[2.9em] flex-col`}>
         <h3
-          className={`line-clamp-2 text-[15px] font-normal leading-[1.35] text-[#202633] ${
-            variationItems.length > 1
+          className={`line-clamp-2 ${compact ? "text-[13px]" : "text-[15px]"} font-normal leading-[1.35] text-[#202633] ${
+            variationItems.length > 1 && !hideVariations
               ? "order-2 hoverable:group-hover:hidden"
               : ""
           }`}
@@ -202,7 +210,7 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
         {/* No toque nao existe hover, entao as variacoes ficam sempre visiveis acima
             do titulo. Onde ha mouse, o comportamento continua sendo o de sempre:
             escondidas ate o hover, quando entao substituem o titulo. */}
-        {variationItems.length > 1 && (
+        {!hideVariations && variationItems.length > 1 && (
           <div className="order-1 flex h-[2.9em] items-center gap-2 overflow-x-auto pr-1 hoverable:hidden hoverable:group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {variationItems.map((item) => {
               const active = item.shopify_product_id === node.id;
@@ -244,7 +252,7 @@ export const ProductCard = ({ product, products = EMPTY_PRODUCTS, searchQuery = 
         )}
       </div>
 
-      <div className="mt-4 flex flex-col items-start gap-1">
+      <div className={`${compact ? "mt-2.5" : "mt-4"} flex flex-col items-start gap-1`}>
         {showOriginalPrice && originalPrice && (
           <span className="text-[13px] font-normal leading-none text-[#777] tabular-nums">
             A partir de <span className="line-through">{formatPrice(originalPrice)}</span>
