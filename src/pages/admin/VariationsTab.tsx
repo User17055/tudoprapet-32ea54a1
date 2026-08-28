@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Loader2, Plus, Trash2 } from "lucide-react";
+import { Boxes, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { productVariationSimilarity } from "@/lib/productVariationSuggestions";
 import {
   invalidateProductVariationsCache,
   type ProductVariationItem,
@@ -77,6 +78,24 @@ export default function VariationsTab() {
     () => products.find((item) => item.node.id === productId)?.node,
     [products, productId],
   );
+  const productsById = useMemo(
+    () => new Map(products.map((product) => [product.node.id, product.node])),
+    [products],
+  );
+  const similarProducts = useMemo(() => {
+    const referenceTitle = pending[0]?.shopify_product_title;
+    if (!referenceTitle) return [];
+    return products
+      .filter((product) => !unavailableIds.has(product.node.id))
+      .map((product) => ({
+        product,
+        score: productVariationSimilarity(referenceTitle, product.node.title),
+      }))
+      .filter(({ score }) => score >= 0.6)
+      .sort((a, b) => b.score - a.score || a.product.node.title.localeCompare(b.product.node.title, "pt-BR"))
+      .slice(0, 12)
+      .map(({ product }) => product);
+  }, [products, pending, unavailableIds]);
 
   const handleProductChange = (nextProductId: string) => {
     setProductId(nextProductId);
@@ -103,6 +122,24 @@ export default function VariationsTab() {
     ]);
     setProductId("");
     setLabel("");
+  };
+
+  const addSuggestedItem = (product: ShopifyProduct) => {
+    const suggestedLabel = suggestLabel(product.node.title);
+    if (!suggestedLabel) {
+      handleProductChange(product.node.id);
+      toast.info("Confira e informe o nome da opção antes de adicionar.");
+      return;
+    }
+    setPending((current) => [
+      ...current,
+      {
+        shopify_product_id: product.node.id,
+        shopify_product_handle: product.node.handle,
+        shopify_product_title: product.node.title,
+        label: suggestedLabel,
+      },
+    ]);
   };
 
   const saveGroup = async () => {
@@ -228,13 +265,26 @@ export default function VariationsTab() {
             <div className="space-y-2 rounded-lg border p-3">
               {pending.map((item, index) => (
                 <div key={item.shopify_product_id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
-                  <div className="min-w-0">
-                    <span className="mr-2 rounded-md bg-primary px-2 py-1 text-xs font-bold text-primary-foreground">
-                      {item.label}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white">
+                      {productsById.get(item.shopify_product_id)?.images.edges[0]?.node ? (
+                        <img
+                          src={productsById.get(item.shopify_product_id)!.images.edges[0].node.url}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <Boxes className="h-4 w-4 text-muted-foreground" />
+                      )}
                     </span>
-                    <span className="break-words text-sm font-semibold text-foreground">
-                      {item.shopify_product_title}
-                    </span>
+                    <div className="min-w-0">
+                      <span className="rounded-md bg-primary px-2 py-1 text-xs font-bold text-primary-foreground">
+                        {item.label}
+                      </span>
+                      <p className="mt-1 break-words text-sm font-semibold text-foreground">
+                        {item.shopify_product_title}
+                      </p>
+                    </div>
                   </div>
                   <Button
                     type="button"
@@ -246,6 +296,47 @@ export default function VariationsTab() {
                   </Button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {similarProducts.length > 0 && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50/50 p-3">
+              <div className="mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-sky-600" />
+                <div>
+                  <p className="text-sm font-bold text-sky-900">Produtos parecidos</p>
+                  <p className="text-xs text-sky-700">Clique para adicionar ao grupo sem precisar pesquisar novamente.</p>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {similarProducts.map((product) => {
+                  const image = product.node.images.edges[0]?.node;
+                  const suggestedLabel = suggestLabel(product.node.title);
+                  return (
+                    <button
+                      key={product.node.id}
+                      type="button"
+                      onClick={() => addSuggestedItem(product)}
+                      className="flex items-center gap-3 rounded-lg border bg-white p-2 text-left transition hover:border-sky-400 hover:shadow-sm"
+                    >
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                        {image ? (
+                          <img src={image.url} alt="" className="h-full w-full object-contain" />
+                        ) : (
+                          <Boxes className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="line-clamp-2 text-xs font-semibold text-foreground">{product.node.title}</span>
+                        <span className="mt-1 flex items-center gap-1 text-xs font-bold text-sky-700">
+                          <Plus className="h-3 w-3" />
+                          {suggestedLabel ? `Adicionar ${suggestedLabel}` : "Selecionar"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -279,9 +370,23 @@ export default function VariationsTab() {
                     {items
                       .filter((item) => item.group_id === group.id)
                       .map((item) => (
-                        <span key={item.id} className="rounded-lg border bg-muted/40 px-3 py-1.5 text-sm">
-                          <strong>{item.label}</strong>
-                          <span className="ml-2 font-medium text-foreground">{item.shopify_product_title}</span>
+                        <span key={item.id} className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2 text-sm">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                            {productsById.get(item.shopify_product_id)?.images.edges[0]?.node ? (
+                              <img
+                                src={productsById.get(item.shopify_product_id)!.images.edges[0].node.url}
+                                alt=""
+                                className="h-full w-full object-contain"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Boxes className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </span>
+                          <span>
+                            <strong>{item.label}</strong>
+                            <span className="ml-2 font-medium text-foreground">{item.shopify_product_title}</span>
+                          </span>
                         </span>
                       ))}
                   </div>
