@@ -70,6 +70,42 @@ export function buildDraftLineItems(
   });
 }
 
+export const PRICE_ADJUSTMENT_TITLE = "Ajuste de preço TudoPraPet";
+
+/**
+ * A Shopify ignora "price" em linhas com variant_id e applied_discount só sabe
+ * baixar valor. Quando o preço definido no sistema é MAIOR que o da Shopify, o
+ * rascunho ficaria mais barato que o valor efetivamente cobrado. Para manter o
+ * pedido igual ao que o cliente pagou — e sem perder a baixa de estoque das
+ * variantes — a diferença entra como uma linha customizada de ajuste.
+ */
+export function buildPriceAdjustmentLine(
+  items: LineItem[],
+  finalPrices: Map<string, number>,
+  currentPrices: Map<string, number>,
+  title: string = PRICE_ADJUSTMENT_TITLE,
+): Record<string, unknown> | null {
+  let uplift = 0;
+  for (const item of items) {
+    const final = finalPrices.get(item.variantId);
+    const current = currentPrices.get(item.variantId);
+    if (
+      final === undefined || current === undefined ||
+      !Number.isFinite(final) || !Number.isFinite(current) || final <= current
+    ) continue;
+    uplift += (final - current) * item.quantity;
+  }
+  uplift = Number(uplift.toFixed(2));
+  if (uplift <= 0) return null;
+  return {
+    title,
+    price: uplift.toFixed(2),
+    quantity: 1,
+    requires_shipping: false,
+    taxable: false,
+  };
+}
+
 /** Converte as linhas REST legadas para o formato GraphQL sem perder a variante. */
 export function toGraphqlDraftLineItems(
   lines: Record<string, unknown>[],
@@ -78,12 +114,23 @@ export function toGraphqlDraftLineItems(
     const quantity = Number(line.quantity) || 1;
     const numericVariantId = String(line.variant_id || "");
     const discount = line.applied_discount as Record<string, unknown> | undefined;
+    // Linha customizada (ajuste de preço): não tem variante, leva título e valor.
+    if (!numericVariantId) {
+      return {
+        title: String(line.title || PRICE_ADJUSTMENT_TITLE),
+        originalUnitPrice: Number(Number(line.price).toFixed(2)),
+        quantity,
+        requiresShipping: line.requires_shipping === true,
+        taxable: line.taxable === true,
+      };
+    }
     const graphqlLine: Record<string, unknown> = {
       variantId: numericVariantId.startsWith("gid://")
         ? numericVariantId
         : `gid://shopify/ProductVariant/${numericVariantId}`,
       quantity,
     };
+
     if (discount) {
       // DraftOrderLineItemInput aplica o desconto fixo a cada unidade da linha.
       // Enviar `amount` (valor unitário x quantidade) faria a Shopify descontar
