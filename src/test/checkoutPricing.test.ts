@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDraftLineItems,
+  buildPriceAdjustmentLine,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
   gidToNumericId,
@@ -211,5 +212,46 @@ describe("toGraphqlDraftLineItems", () => {
       valueType: "FIXED_AMOUNT",
       value: 2.26,
     });
+  });
+});
+
+describe("buildPriceAdjustmentLine", () => {
+  it("não cria ajuste quando o preço final é igual ou menor que o da Shopify", () => {
+    expect(buildPriceAdjustmentLine(
+      itemsOf({ variantId: VARIANT_A, quantity: 2 }),
+      new Map([[VARIANT_A, 100]]),
+      new Map([[VARIANT_A, 100]]),
+    )).toBeNull();
+    expect(buildPriceAdjustmentLine(
+      itemsOf({ variantId: VARIANT_A, quantity: 2 }),
+      new Map([[VARIANT_A, 80]]),
+      new Map([[VARIANT_A, 100]]),
+    )).toBeNull();
+  });
+
+  it("cobra a diferença por unidade quando o preço do sistema é maior", () => {
+    const line = buildPriceAdjustmentLine(
+      itemsOf({ variantId: VARIANT_A, quantity: 2 }, { variantId: VARIANT_B, quantity: 1 }),
+      new Map([[VARIANT_A, 120], [VARIANT_B, 50]]),
+      new Map([[VARIANT_A, 100], [VARIANT_B, 60]]),
+    );
+
+    expect(line).not.toBeNull();
+    expect(line!.price).toBe("40.00");
+    expect(line!.quantity).toBe(1);
+    expect(line!.requires_shipping).toBe(false);
+  });
+
+  it("converte o ajuste para o formato GraphQL sem variante", () => {
+    const line = buildPriceAdjustmentLine(
+      itemsOf({ variantId: VARIANT_A, quantity: 1 }),
+      new Map([[VARIANT_A, 110.5]]),
+      new Map([[VARIANT_A, 100]]),
+    )!;
+    const [graphql] = toGraphqlDraftLineItems([line]);
+
+    expect(graphql.variantId).toBeUndefined();
+    expect(graphql.originalUnitPrice).toBe(10.5);
+    expect(graphql.quantity).toBe(1);
   });
 });
