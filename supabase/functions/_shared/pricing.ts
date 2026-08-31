@@ -244,6 +244,38 @@ export const MAX_INSTALLMENTS = 12;
 export const MIN_INSTALLMENT_VALUE = 5;
 export const CARD_OPERATION_FEE = 0.49;
 
+// Piso do Asaas para qualquer cobrança: abaixo disso a API recusa com 400
+// invalid_object. Até 31/08/2026 nada barrava esse caso, então o pedido era
+// preparado, o rascunho nascia na Shopify e só depois a cobrança falhava — e a
+// mensagem que sobrava para o cliente falava de cartão mesmo em compra no Pix.
+// Não é hipótese: houve 6 ocorrências entre 17/08 e 31/08/2026, uma delas de
+// R$ 3,85. O desconto do Clube derruba carrinho pequeno abaixo do piso, então
+// quem mais esbarra nisso é justamente o assinante.
+export const MIN_CHARGE_VALUE = 5;
+
+/**
+ * Reconhece a recusa de valor mínimo do Asaas pela mensagem de erro. Mora aqui,
+ * e não solto dentro do handler, para que o teste exercite a mesma expressão
+ * que roda em produção: uma cópia da regex no teste passaria a valer sozinha no
+ * dia em que o handler mudasse.
+ */
+export function isBelowMinimumChargeError(message: string): boolean {
+  return /Asaas 400:[\s\S]*n[aã]o pode ser menor que/i.test(message);
+}
+
+/**
+ * Aviso único de carrinho abaixo do piso, compartilhado pelas duas portas.
+ * O total é opcional porque o mesmo aviso serve quando o Asaas é quem recusa e
+ * só temos a mensagem dele, sem o valor da sacola em mãos.
+ */
+export function belowMinimumChargeMessage(total?: number): string {
+  const base = `O valor mínimo para pagamento é R$ ${MIN_CHARGE_VALUE},00`;
+  if (total === undefined || !Number.isFinite(total)) {
+    return `${base}. Adicione mais itens para concluir a compra.`;
+  }
+  return `${base} e seu carrinho está em R$ ${total.toFixed(2).replace(".", ",")}. Adicione mais itens para concluir a compra.`;
+}
+
 /** Percentual da Asaas por faixa: até 6x = 3,49%; até 12x = 3,99%. */
 export function cardFeePercent(installments: number): number {
   if (installments <= 1) return 2.99;

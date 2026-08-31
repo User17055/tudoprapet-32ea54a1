@@ -11,6 +11,21 @@ export interface CheckoutAttemptLog {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Detalhe a registrar quando o pedido foi concluido mas a credencial fiscal
+ * brasileira nao gravou na Shopify.
+ *
+ * Nao e falha de venda: o pedido existe, foi pago, e o CPF/CNPJ continua nos
+ * atributos. E um registro de rastreio -- ate 31/08/2026 esse caso so virava
+ * console.warn, e os logs de edge function do projeto tem retencao curta, o
+ * que fazia a busca devolver zero tanto na ausencia quanto na presenca do
+ * problema. Sem isto nao ha como cruzar essas conclusoes com os pedidos que o
+ * Mintegra recusa por "CPF ou CNPJ invalido".
+ */
+export function taxCredentialGapMessage(error?: string | null): string {
+  return `Pedido concluido, mas a credencial fiscal (CPF/CNPJ) nao gravou na Shopify: ${error || "motivo nao informado"}`;
+}
+
 /** Registro operacional sem dados sensiveis de cartao. Falha de log nunca derruba o checkout. */
 export async function writeCheckoutAttemptLog(admin: any, value: CheckoutAttemptLog): Promise<void> {
   try {

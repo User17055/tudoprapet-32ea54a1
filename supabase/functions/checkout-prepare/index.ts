@@ -4,10 +4,12 @@ import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken } from "../_shared/checkout-access.ts";
 import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } from "../_shared/checkout-input.ts";
 import {
+  belowMinimumChargeMessage,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
+  MIN_CHARGE_VALUE,
   resolveUnitPrice,
 } from "../_shared/pricing.ts";
 import {
@@ -300,6 +302,13 @@ Deno.serve(async (req) => {
         : normalized.includes("moto") || normalized.includes("local") ? "local_delivery"
         : "shipping";
       total = money(total + shippingAmount);
+    }
+    // Barra antes de existir sessão e rascunho. O Asaas recusa cobrança abaixo
+    // do piso de qualquer jeito; sem esta guarda o pedido chegava a nascer na
+    // Shopify para só então falhar no pagamento, e o rascunho ficava pendurado.
+    // O total já inclui o frete, que é a última parcela capaz de cruzar o piso.
+    if (total < MIN_CHARGE_VALUE) {
+      return errorResponse(belowMinimumChargeMessage(total), 422);
     }
     const accessToken = newCheckoutAccessToken();
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);

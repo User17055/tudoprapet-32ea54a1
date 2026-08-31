@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  belowMinimumChargeMessage,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
   findUnpricedVariants,
+  isBelowMinimumChargeError,
+  MIN_CHARGE_VALUE,
   resolveUnitPrice,
   gidToNumericId,
   toGraphqlDraftLineItems,
@@ -421,5 +424,52 @@ describe("resolveUnitPrice", () => {
     expect(resolveUnitPrice(undefined, 80)).toBe(80);
     expect(resolveUnitPrice(undefined, undefined)).toBeUndefined();
     expect(resolveUnitPrice(NaN, undefined)).toBeUndefined();
+  });
+});
+
+describe("piso de valor do Asaas", () => {
+  // Recusa real devolvida pelo Asaas em 31/08/2026, copiada do log de
+  // tentativas de compra do admin. É este o texto que o handler recebe.
+  const recusaReal = 'Asaas 400: [{"code":"invalid_object","description":"O valor da cobrança (R$ 2,96) menos o valor do desconto (R$ 0,00) não pode ser menor que R$ 5,00."}]';
+
+  it("mantém o piso alinhado com o do Asaas", () => {
+    expect(MIN_CHARGE_VALUE).toBe(5);
+  });
+
+  it("reconhece a recusa real de valor mínimo", () => {
+    expect(isBelowMinimumChargeError(recusaReal)).toBe(true);
+  });
+
+  it("reconhece a mesma recusa sem acentuação", () => {
+    // O texto vem do Asaas e já apareceu sem acento em outros erros da conta.
+    expect(isBelowMinimumChargeError(recusaReal.replace(/ã/g, "a"))).toBe(true);
+  });
+
+  it("não confunde com os outros 400 que têm tratamento próprio", () => {
+    expect(isBelowMinimumChargeError('Asaas 400: [{"code":"invalid_creditCard"}]')).toBe(false);
+    expect(isBelowMinimumChargeError('Asaas 400: [{"code":"invalid_billingType"}]')).toBe(false);
+    expect(isBelowMinimumChargeError("Asaas 401: chave inválida")).toBe(false);
+    expect(isBelowMinimumChargeError("")).toBe(false);
+  });
+
+  it("informa o valor da sacola quando ele é conhecido", () => {
+    const aviso = belowMinimumChargeMessage(2.96);
+    expect(aviso).toContain("R$ 5,00");
+    expect(aviso).toContain("R$ 2,96");
+  });
+
+  it("omite a sacola quando só se tem a recusa do Asaas", () => {
+    const aviso = belowMinimumChargeMessage();
+    expect(aviso).toContain("R$ 5,00");
+    expect(aviso).not.toContain("carrinho está em");
+  });
+
+  it("nunca atribui a culpa ao cartão", () => {
+    // O motivo deste teste: até 31/08/2026 quem pagava no Pix com carrinho
+    // abaixo do piso recebia "confira os dados do cartão" sem ter digitado um.
+    for (const aviso of [belowMinimumChargeMessage(2.96), belowMinimumChargeMessage()]) {
+      expect(aviso.toLowerCase()).not.toContain("cartão");
+      expect(aviso.toLowerCase()).not.toContain("titular");
+    }
   });
 });
