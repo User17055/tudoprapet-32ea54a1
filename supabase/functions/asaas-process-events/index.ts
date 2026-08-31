@@ -10,6 +10,7 @@ import {
   type LocalPaymentStatus,
 } from "../_shared/payment-events.ts";
 import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
+import { taxCredentialGapMessage, writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { timingSafeEqual } from "../_shared/webhook.ts";
 import {
   type AsaasBudget,
@@ -183,6 +184,18 @@ async function finalizePaidCheckout(admin: SupabaseClient, payment: PaymentRow) 
   const cpfCnpj = (session.customer_snapshot as { cpfCnpj?: string } | null)?.cpfCnpj ?? null;
   const result = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken, false, cpfCnpj);
   if (!result.requestOk || !result.orderId) throw new Error("Falha ao concluir Draft Order Shopify");
+
+  // Este é o caminho dominante do Pix: quem confirma é o webhook, não a tela.
+  // Medir só pelo checkout-payment mediria a porta errada.
+  if (result.taxCredentialStored === false) {
+    await writeCheckoutAttemptLog(admin, {
+      checkoutSessionId: session.id,
+      stage: "shopify_completion",
+      success: true,
+      errorMessage: taxCredentialGapMessage(result.taxCredentialError),
+      metadata: { shopifyOrderId: result.orderId, taxCredentialStored: false },
+    });
+  }
 
 
   const { error: completedError } = await admin.from("checkout_sessions").update({

@@ -42,3 +42,36 @@ describe("exceedsShopifyPrice", () => {
     expect(exceedsShopifyPrice(0, 160)).toBe(false);
   });
 });
+
+describe("resolveSyncPrice", () => {
+  // Por que este teste existe: entre 28/08 e 31/08/2026 a tela somava o valor
+  // JÁ CADASTRADO ao máximo e nunca o descartava. Como o destino da escrita é o
+  // preço público da Shopify, baixar um valor empurrava o valor antigo para o
+  // catálogo, e apagar um valor empurrava o valor apagado.
+
+  it("empurra o novo valor, não o que está sendo substituído", () => {
+    // Shopify 135,60; cadastrado 570,00; admin digita 200,00.
+    expect(client.resolveSyncPrice(135.6, 200)).toBe(200);
+  });
+
+  it("não empurra nada quando o valor é apagado", () => {
+    // Campo esvaziado: a linha será removida, então não há valor a sincronizar.
+    expect(client.resolveSyncPrice(135.6, undefined)).toBe(135.6);
+  });
+
+  it("preserva o campo que não foi editado", () => {
+    expect(client.resolveSyncPrice(100, 150, 120)).toBe(150);
+    expect(client.resolveSyncPrice(100, undefined, 120)).toBe(120);
+  });
+
+  it("mantém o preço da Shopify quando nenhum valor o supera", () => {
+    expect(client.resolveSyncPrice(100, 80, 60)).toBe(100);
+    expect(client.resolveSyncPrice(100)).toBe(100);
+  });
+
+  it("ignora valores inválidos em vez de zerar o catálogo", () => {
+    expect(client.resolveSyncPrice(100, 0)).toBe(100);
+    expect(client.resolveSyncPrice(100, -5)).toBe(100);
+    expect(client.resolveSyncPrice(100, NaN)).toBe(100);
+  });
+});

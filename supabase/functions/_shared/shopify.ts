@@ -925,6 +925,20 @@ export interface CompleteDraftOrderResult {
   orderId: string | null;
   alreadyCompleted: boolean;
   error: string | null;
+  /**
+   * A credencial fiscal brasileira (TAX_CREDENTIAL_BR) ficou gravada no
+   * rascunho? `undefined` significa que nem chegou a ser avaliada: sem CPF
+   * informado, ou rascunho já concluído antes desta chamada.
+   *
+   * Existe porque a falha era invisível. Até 31/08/2026 ela produzia apenas um
+   * console.warn, e os logs de edge function deste projeto têm retenção curta
+   * -- procurar por ela depois devolvia zero tanto se nunca tivesse acontecido
+   * quanto se tivesse acontecido em todo pedido. Sem este campo não há como
+   * responder se os pedidos que o Mintegra recusa por "CPF ou CNPJ inválido"
+   * são justamente os que caíram no fallback de atributos.
+   */
+  taxCredentialStored?: boolean;
+  taxCredentialError?: string | null;
 }
 
 export interface TaxCredentialResult {
@@ -1072,8 +1086,12 @@ export async function completeDraftOrder(
   // A extensao fiscal da Shopify e inconsistente para alguns CPFs validos. O
   // documento tambem fica nos atributos do pedido; nao prenda uma venda ja paga
   // como rascunho apenas porque a extensao localizada foi rejeitada.
+  let taxCredentialStored: boolean | undefined;
+  let taxCredentialError: string | null = null;
   if (cpfCnpj) {
     const taxCredential = await setDraftOrderTaxCredential(draftOrderId, cpfCnpj, token);
+    taxCredentialStored = taxCredential.ok;
+    taxCredentialError = taxCredential.error;
     if (!taxCredential.ok) {
       console.warn(`Draft ${draftOrderId}: credencial fiscal nao persistiu; concluindo com CPF/CNPJ nos atributos.`, taxCredential.error);
     }
@@ -1113,6 +1131,8 @@ export async function completeDraftOrder(
       orderId: String(completedOrderId),
       alreadyCompleted: false,
       error: null,
+      taxCredentialStored,
+      taxCredentialError,
     };
   }
 
@@ -1125,7 +1145,14 @@ export async function completeDraftOrder(
     const body = await read.json();
     const orderId = body?.draft_order?.order_id;
     if (orderId) {
-      return { requestOk: true, orderId: String(orderId), alreadyCompleted: true, error: null };
+      return {
+        requestOk: true,
+        orderId: String(orderId),
+        alreadyCompleted: true,
+        error: null,
+        taxCredentialStored,
+        taxCredentialError,
+      };
     }
   }
 
@@ -1134,6 +1161,8 @@ export async function completeDraftOrder(
     requestOk: false,
     orderId: null,
     alreadyCompleted: false,
+    taxCredentialStored,
+    taxCredentialError,
     error: shopifyErrorMessage(
       completionErrors.length ? completionErrors : completionText,
       `Shopify nao concluiu o rascunho (HTTP ${completed.status}).`,

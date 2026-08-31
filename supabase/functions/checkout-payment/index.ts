@@ -16,13 +16,16 @@ import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 import {
+  belowMinimumChargeMessage,
   installmentPlan,
+  isBelowMinimumChargeError,
   MAX_INSTALLMENTS,
   maxInstallmentsFor,
+  MIN_CHARGE_VALUE,
   MIN_INSTALLMENT_VALUE,
   type InstallmentPlan,
 } from "../_shared/pricing.ts";
-import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
+import { taxCredentialGapMessage, writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 
 function dateInSaoPaulo(addDays = 0): string {
   const date = new Date(Date.now() + addDays * 86_400_000);
@@ -327,6 +330,12 @@ Deno.serve(async (req) => {
       termDays = credit?.payment_term_days ?? 7;
     }
     const dueDate = dateInSaoPaulo(termDays);
+    // `checkout-prepare` já barra o carrinho abaixo do piso, mas uma sessão
+    // criada antes desta guarda ainda chega aqui. Recusar antes de abrir a
+    // tentativa evita gravar uma tentativa que só pode falhar.
+    if (Number(session.total) < MIN_CHARGE_VALUE) {
+      return errorResponse(belowMinimumChargeMessage(Number(session.total)), 422);
+    }
     const { data: attempt, error: attemptError } = await admin.rpc("create_payment_attempt", {
       p_checkout_session_id: sessionId,
       p_provider: "asaas",
@@ -469,7 +478,14 @@ Deno.serve(async (req) => {
         checkoutSessionId: sessionId, userId: logContext.userId,
         customerName: customer.name, customerEmail: customer.email,
         paymentMethod: "terms", stage: "shopify_completion", success: true,
-        providerPaymentId: providerPayment.id, metadata: { shopifyOrderId: completed.orderId },
+        errorMessage: completed.taxCredentialStored === false
+          ? taxCredentialGapMessage(completed.taxCredentialError)
+          : null,
+        providerPaymentId: providerPayment.id,
+        metadata: {
+          shopifyOrderId: completed.orderId,
+          taxCredentialStored: completed.taxCredentialStored ?? null,
+        },
       });
       await admin.from("checkout_sessions").update({
         status: "credit_approved",
@@ -566,9 +582,16 @@ Deno.serve(async (req) => {
             customerName: customer.name, customerEmail: customer.email,
             paymentMethod: "credit_card", stage: "shopify_completion",
             success: completed.requestOk && Boolean(completed.orderId),
-            errorMessage: completed.requestOk ? null : completed.error,
+            errorMessage: completed.requestOk
+              ? (completed.taxCredentialStored === false
+                ? taxCredentialGapMessage(completed.taxCredentialError)
+                : null)
+              : completed.error,
             providerPaymentId: providerPayment.id,
-            metadata: completed.orderId ? { shopifyOrderId: completed.orderId } : {},
+            metadata: {
+              ...(completed.orderId ? { shopifyOrderId: completed.orderId } : {}),
+              taxCredentialStored: completed.taxCredentialStored ?? null,
+            },
           });
           if (completed.requestOk && completed.orderId) {
             await admin.from("checkout_sessions").update({
@@ -633,8 +656,23 @@ Deno.serve(async (req) => {
     if (/Asaas 400:.*invalid_creditCard/i.test(message)) {
       return errorResponse("Transação não autorizada. Confira os dados do cartão ou tente outro cartão.", 402);
     }
+    // Sessão criada antes da guarda de piso, ou piso do Asaas alterado sem
+    // aviso: o motivo é legítimo e o cliente consegue agir sobre ele.
+    if (isBelowMinimumChargeError(message)) {
+      return errorResponse(belowMinimumChargeMessage(), 422);
+    }
+    // Este é o balde genérico, o último 400 antes do fim. Ele afirmava cartão
+    // para qualquer erro: quem pagava no Pix recebia "confira os dados do
+    // cartão" sem nunca ter digitado um, e ia conferir um cartão que não
+    // existia. O motivo real fica no log da tentativa, logo acima; aqui o que
+    // não se pode é apontar a causa errada.
     if (/Asaas 400:/.test(message)) {
-      return errorResponse("Não foi possível validar o cartão e os dados do titular. Confira as informações e tente novamente.", 400);
+      return errorResponse(
+        logContext.method === "credit_card"
+          ? "Não foi possível validar o cartão e os dados do titular. Confira as informações e tente novamente."
+          : "Não foi possível gerar a cobrança. Tente novamente ou fale com o atendimento.",
+        400,
+      );
     }
     if (/Asaas 401:/.test(message)) {
       return errorResponse("Pagamento temporariamente indisponível. Tente novamente mais tarde.", 503);
