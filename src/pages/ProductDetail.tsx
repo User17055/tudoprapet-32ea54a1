@@ -62,10 +62,35 @@ const ProductDetail = () => {
     loading: franchiseAccessLoading,
   } = useFranchisePrices();
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
-  const { getVariations } = useProductVariations();
+  const { getVariations } = useProductVariations(handle);
+  const [variationProducts, setVariationProducts] = useState<Record<string, ShopifyProduct | null>>({});
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);
+  const visibleVariationItems = product
+    ? getVariations(product.node.id).filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
+    : [];
+  const visibleVariationKey = visibleVariationItems
+    .map((item) => `${item.shopify_product_id}:${item.shopify_product_handle}`)
+    .join("|");
+
+  useEffect(() => {
+    let active = true;
+    if (!product || !visibleVariationKey) {
+      setVariationProducts({});
+      return () => { active = false; };
+    }
+    Promise.all(visibleVariationItems.map(async (item) => {
+      if (item.shopify_product_id === product.node.id) return [item.shopify_product_id, product] as const;
+      const linkedProduct = await fetchShopifyProductByHandle(item.shopify_product_handle, false).catch(() => null);
+      return [item.shopify_product_id, linkedProduct] as const;
+    })).then((entries) => {
+      if (active) setVariationProducts(Object.fromEntries(entries));
+    });
+    return () => { active = false; };
+    // A chave serializada evita repetir a consulta quando apenas o componente renderiza novamente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.node.id, visibleVariationKey]);
 
   useEffect(() => {
     const el = thumbsRef.current;
@@ -254,9 +279,7 @@ const ProductDetail = () => {
 
 
   const { node } = product;
-  const productVariations = getVariations(node.id).filter((item) =>
-    isVisibleTo(item.shopify_product_id, isFranchisee),
-  );
+  const productVariations = visibleVariationItems;
   const variant = node.variants.edges[selectedVariantIdx]?.node;
   const images = node.images.edges;
   const visibleRecommended = recommended.filter(
@@ -635,6 +658,23 @@ const ProductDetail = () => {
                 <div className="flex flex-wrap gap-2">
                   {productVariations.map((item) => {
                     const active = item.shopify_product_id === node.id;
+                    const linkedProduct = variationProducts[item.shopify_product_id];
+                    const available = linkedProduct ? isProductAvailable(linkedProduct) : true;
+                    if (!available) {
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          disabled
+                          title={`${item.shopify_product_title} — Acabou`}
+                          aria-label={`${item.label} — acabou`}
+                          className="cursor-not-allowed rounded-lg border-2 border-red-400 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+                        >
+                          {item.label}
+                          <span className="ml-1.5 text-[10px] font-black uppercase">Acabou</span>
+                        </button>
+                      );
+                    }
                     return (
                       <Link
                         key={item.id}

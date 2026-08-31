@@ -19,6 +19,13 @@ const queryCache = new Map<
 const productListCache = new Map<string, TimedCacheEntry<ShopifyProduct[]>>();
 const productByHandleCache = new Map<string, ShopifyProduct>();
 
+/** Limpa preços/produtos em memória após uma alteração feita pelo Admin API. */
+export function invalidateShopifyCatalogCache() {
+  queryCache.clear();
+  productListCache.clear();
+  productByHandleCache.clear();
+}
+
 export interface ShopifyProduct {
   node: {
     id: string;

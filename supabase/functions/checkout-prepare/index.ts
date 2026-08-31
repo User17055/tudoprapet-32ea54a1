@@ -379,10 +379,24 @@ Deno.serve(async (req) => {
     if (!draft.draftOrderId) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
       console.error(`Shopify nao devolveu rascunho para o checkout ${session.id}:`, draft.error);
-      return errorResponse(
-        draft.error || "Falha ao preparar pedido na Shopify",
-        502,
-      );
+      await writeCheckoutAttemptLog(admin, {
+        checkoutSessionId: session.id,
+        userId: auth.user?.id,
+        customerName: input.customer.name,
+        customerEmail: input.customer.email,
+        paymentMethod: intendedMethod,
+        stage: "prepare",
+        success: false,
+        errorMessage: draft.error || "Shopify nao devolveu o identificador do rascunho.",
+        metadata: {
+          customerType,
+          delivery: shippingCode,
+          failurePoint: "draft_creation",
+          itemCount: input.items.length,
+          hasPriceAdjustment: Boolean(adjustmentLine),
+        },
+      });
+      return errorResponse("Não foi possível preparar o pedido na Shopify. Tente novamente.", 502);
     }
     // Grave o vinculo imediatamente. Mesmo que a credencial fiscal seja
     // rejeitada, o rascunho continua rastreavel para diagnostico/recuperacao.
@@ -405,7 +419,13 @@ Deno.serve(async (req) => {
         stage: "prepare",
         success: false,
         errorMessage: draft.error || "Shopify nao criou o rascunho.",
-        metadata: { customerType, delivery: shippingCode },
+        metadata: {
+          customerType,
+          delivery: shippingCode,
+          failurePoint: "draft_validation",
+          itemCount: input.items.length,
+          hasPriceAdjustment: Boolean(adjustmentLine),
+        },
       });
       return errorResponse("Não foi possível preparar o pedido na Shopify. Tente novamente.", 502);
     }
