@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { attemptStatusLabel, type AttemptTone } from "@/lib/checkoutAttempt";
 import { type PrintableOrder, orderToA4Html, orderToZpl } from "@/lib/orderPrint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,13 @@ const FULFILLMENT: Record<string, string> = {
   fulfilled: "Encerrado", partial: "Parcial", restocked: "Devolvido", unfulfilled: "Não separado",
 };
 const money = (value: number, currency = "BRL") => new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value || 0);
+// Âmbar para "Cobrança criada": não é erro, mas também não é dinheiro na conta.
+const ATTEMPT_TONE: Record<AttemptTone, string> = {
+  ok: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  pending: "border-amber-200 bg-amber-50 text-amber-700",
+  error: "border-red-200 bg-red-50 text-red-700",
+};
+
 const PAYMENT_METHOD: Record<string, string> = {
   pix: "Pix",
   credit_card: "Cartão",
@@ -300,11 +308,11 @@ export default function OrdersTab() {
           <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-bold">Tentativas de compra</p>
-              <p className="text-xs text-muted-foreground">Últimos registros de preparação e pagamento, sem dados sensíveis do cartão.</p>
+              <p className="text-xs text-muted-foreground">Últimos registros de preparação e pagamento, sem dados sensíveis do cartão. <strong>Cobrança criada não é pagamento recebido</strong> — a confirmação aparece na lista de pedidos abaixo.</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative sm:w-72"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={logQuery} onChange={(event) => setLogQuery(event.target.value)} placeholder="Buscar cliente, e-mail ou erro" className="pl-9" /></div>
-              <Select value={logStatus} onValueChange={setLogStatus}><SelectTrigger className="sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="success">Sucesso</SelectItem><SelectItem value="error">Falhas</SelectItem></SelectContent></Select>
+              <Select value={logStatus} onValueChange={setLogStatus}><SelectTrigger className="sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="success">Sem erro</SelectItem><SelectItem value="error">Falhas</SelectItem></SelectContent></Select>
             </div>
           </div>
           {filteredLogs.length === 0 ? <p className="rounded-lg bg-slate-50 py-8 text-center text-sm text-muted-foreground">Nenhuma tentativa registrada.</p> : (
@@ -316,7 +324,10 @@ export default function OrdersTab() {
                   <TableCell className="whitespace-nowrap font-medium">{PAYMENT_METHOD[entry.generated_payment_method || entry.payment_method] || "Não informado"}</TableCell>
                   <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">{entry.generated_amount == null ? "—" : money(Number(entry.generated_amount))}</TableCell>
                   <TableCell>{{ prepare: "Preparação", payment: "Pagamento", shopify_completion: "Shopify" }[entry.stage]}</TableCell>
-                  <TableCell><Badge variant="outline" className={entry.success ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}>{entry.success ? "Sucesso" : "Falhou"}</Badge></TableCell>
+                  <TableCell>{(() => {
+                    const status = attemptStatusLabel(entry.stage, entry.success);
+                    return <Badge variant="outline" className={ATTEMPT_TONE[status.tone]}>{status.label}</Badge>;
+                  })()}</TableCell>
                   <TableCell className="max-w-md text-xs text-muted-foreground">{entry.error_message || (entry.provider_payment_id ? `Asaas: ${entry.provider_payment_id}` : "Concluído sem erro")}</TableCell>
                 </TableRow>)}
               </TableBody></Table>
