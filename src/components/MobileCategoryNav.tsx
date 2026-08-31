@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Grid2X2, Package } from "lucide-react";
@@ -16,6 +16,12 @@ interface MobileCategoryNavProps {
   childrenOf: Map<string, Category[]>;
   isActive: (slug: string) => boolean;
   onNavigate: () => void;
+  /**
+   * Conteúdo fixo no rodapé do painel. O painel é um portal `fixed inset-0`
+   * opaco: qualquer coisa que o Header desenhe ao lado dele fica coberta e
+   * inalcançável. Quem precisa aparecer junto do menu entra por aqui.
+   */
+  footer?: ReactNode;
 }
 
 interface ProductCategoryLink {
@@ -24,7 +30,7 @@ interface ProductCategoryLink {
 }
 
 /** Menu mobile em tela cheia com pets no topo e categorias ilustradas. */
-export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate }: MobileCategoryNavProps) => {
+export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate, footer }: MobileCategoryNavProps) => {
   const initialRoot = items.find((item) => isActive(item.slug)) || items[0];
   const [selectedRootId, setSelectedRootId] = useState(initialRoot?.id || "");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -254,6 +260,12 @@ export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate }: M
           </>
         )}
       </main>
+
+      {footer && (
+        <footer className="shrink-0 border-t border-[#ededed] bg-white px-5 py-4">
+          {footer}
+        </footer>
+      )}
     </div>,
     document.body,
   );

@@ -261,6 +261,51 @@ export const Header = () => {
     );
   };
 
+  // Conta, pedidos e WhatsApp. Vive numa variável porque o menu mobile tem dois
+  // destinos possíveis: o rodapé do painel em tela cheia, ou o próprio <nav>
+  // enquanto as categorias carregam e o painel ainda não existe.
+  const accountLinks = (
+    <div className="flex flex-col gap-3">
+      {user ? (
+        <Link
+          to="/perfil"
+          onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+        >
+          <User className="h-4 w-4" />
+          {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
+        </Link>
+      ) : (
+        <Link
+          to="/login"
+          onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-2 text-sm font-bold text-primary py-1"
+        >
+          <User className="h-4 w-4" />
+          Entrar / Cadastrar
+        </Link>
+      )}
+      <Link
+        to="/meus-pedidos"
+        onClick={() => setMobileOpen(false)}
+        className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+      >
+        <Package className="h-4 w-4" />
+        Meus Pedidos
+      </Link>
+      <a
+        href={WHATSAPP_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => setMobileOpen(false)}
+        className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
+      >
+        <MessageCircle className="h-4 w-4" />
+        Fale no WhatsApp
+      </a>
+    </div>
+  );
+
   return (
     <header
       className={`sticky top-0 z-50 bg-card shadow-[0_4px_16px_-14px_rgba(15,23,42,0.3)] transition-transform duration-300 ${
@@ -395,52 +440,30 @@ export const Header = () => {
       {mobileOpen && (
         <nav className="border-t border-border px-4 py-2 flex flex-col animate-fade-in-up lg:hidden">
           {categoriesLoading ? (
-            <div className="flex flex-col gap-3 py-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-4 w-24 rounded-full" />
-              ))}
-            </div>
+            <>
+              <div className="flex flex-col gap-3 py-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-4 w-24 rounded-full" />
+                ))}
+              </div>
+              <div className="mt-2 pt-3">{accountLinks}</div>
+            </>
           ) : (
+            // Estes links precisam viajar para DENTRO do painel. O
+            // MobileCategoryNav monta um portal `fixed inset-0` opaco no
+            // document.body, então tudo que ficar aqui no fluxo normal some
+            // debaixo dele -- e em celular o cabeçalho não tem outro acesso a
+            // login (o ícone de conta é `hidden md:flex`). Deixados aqui, os
+            // links continuavam existindo no HTML e funcionando por URL
+            // direta, então quem testasse por /login não veria problema algum.
             <MobileCategoryNav
               items={navItems}
               childrenOf={childrenOf}
               isActive={isCategoryActive}
               onNavigate={() => setMobileOpen(false)}
+              footer={accountLinks}
             />
           )}
-
-          <div className="mt-2 pt-3 flex flex-col gap-3">
-            {user ? (
-              <Link
-                to="/perfil"
-                className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
-              >
-                <User className="h-4 w-4" />
-                {user.user_metadata?.first_name || user.user_metadata?.name || user.email?.split("@")[0]}
-              </Link>
-            ) : (
-              <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-primary py-1">
-                <User className="h-4 w-4" />
-                Entrar / Cadastrar
-              </Link>
-            )}
-            <Link
-              to="/meus-pedidos"
-              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
-            >
-              <Package className="h-4 w-4" />
-              Meus Pedidos
-            </Link>
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors py-1"
-            >
-              <MessageCircle className="h-4 w-4" />
-              Fale no WhatsApp
-            </a>
-          </div>
         </nav>
       )}
     </header>
