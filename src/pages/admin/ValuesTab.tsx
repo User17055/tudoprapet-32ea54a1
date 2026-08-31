@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
-import { exceedsShopifyPrice } from "@/lib/priceCap";
+import { exceedsShopifyPrice, resolveSyncPrice } from "@/lib/priceCap";
 import { fetchAllShopifyProducts, invalidateShopifyCatalogCache, type ShopifyProduct } from "@/lib/shopify";
 
 type CustomerPrice = {
@@ -139,20 +139,24 @@ export default function ValuesTab() {
     const franchiseExisting = franchiseMap.get(row.variant.id);
     const shopifyPrice = Number(row.variant.price.amount);
     const operations: PromiseLike<{ error: { message: string } | null }>[] = [];
-    let synchronizedShopifyPrice = Math.max(
-      shopifyPrice,
-      customerExisting?.price || 0,
-      franchiseExisting?.price || 0,
-    );
+    // Valor que cada tabela vai ter DEPOIS de salvar -- é só isso que pode
+    // entrar na sincronização, porque o destino da escrita é o preço público da
+    // Shopify. Partir do valor atual e nunca descartá-lo fazia com que baixar
+    // um valor de 570 para 200 ainda empurrasse 570 para o catálogo, e apagar o
+    // valor empurrasse o valor apagado. Campo não editado mantém o que existe;
+    // campo esvaziado vira undefined, porque a linha será removida.
+    let customerAfter = customerExisting?.price;
+    let franchiseAfter = franchiseExisting?.price;
 
     if (draft.customer !== undefined) {
       const raw = draft.customer.trim();
       if (!raw) {
+        customerAfter = undefined;
         if (customerExisting) operations.push(supabase.from("customer_prices").delete().eq("shopify_variant_id", row.variant.id));
       } else {
         const price = parsePrice(raw);
         if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor do Cliente válido.");
-        synchronizedShopifyPrice = Math.max(synchronizedShopifyPrice, price);
+        customerAfter = price;
         operations.push(supabase.from("customer_prices").upsert({
           shopify_product_id: row.productId,
           shopify_variant_id: row.variant.id,
@@ -164,11 +168,12 @@ export default function ValuesTab() {
     if (draft.franchise !== undefined) {
       const raw = draft.franchise.trim();
       if (!raw) {
+        franchiseAfter = undefined;
         if (franchiseExisting) operations.push(supabase.from("franchise_prices").delete().eq("shopify_variant_id", row.variant.id));
       } else {
         const price = parsePrice(raw);
         if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor da Franquia válido.");
-        synchronizedShopifyPrice = Math.max(synchronizedShopifyPrice, price);
+        franchiseAfter = price;
         operations.push(supabase.from("franchise_prices").upsert({
           shopify_product_id: row.productId,
           shopify_variant_id: row.variant.id,
@@ -176,6 +181,8 @@ export default function ValuesTab() {
         }, { onConflict: "shopify_variant_id" }));
       }
     }
+
+    const synchronizedShopifyPrice = resolveSyncPrice(shopifyPrice, customerAfter, franchiseAfter);
 
     setSavingId(row.variant.id);
     if (exceedsShopifyPrice(synchronizedShopifyPrice, shopifyPrice)) {
