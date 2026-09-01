@@ -26,7 +26,7 @@
  * REGRA: incremente a cada entrega que mexa em supabase/functions/.
  * `scripts/check-deploy.sh` compara este valor com o que a function publicada devolve.
  */
-export const FUNCTIONS_VERSION = "2026-08-31.1";
+export const FUNCTIONS_VERSION = "2026-09-01.1";
 
 const ALLOWED_HEADERS = [
   // canônicos do SDK
@@ -37,6 +37,11 @@ const ALLOWED_HEADERS = [
   "x-retry-count",
   // agente de impressão local (admin-orders)
   "x-print-agent-token",
+  // o navegador declara aqui se ACHA que tem sessão (SESSION_CLAIM_HEADER, em
+  // _shared/checkout-access.ts). Escrito literal porque cors.ts não importa de
+  // ninguém -- se o nome mudar lá, o preflight passa a barrar o cabeçalho e o
+  // checkout de quem está logado quebra. Os dois valores andam juntos.
+  "x-tpp-session",
 
   // enviados por versões mais novas do cliente Supabase
   "x-supabase-client-platform",

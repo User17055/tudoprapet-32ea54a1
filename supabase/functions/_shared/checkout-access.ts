@@ -7,7 +7,38 @@ export interface OptionalCheckoutUser {
   invalidAuthorization: boolean;
 }
 
+/** Cabeçalho em que o cliente declara o que ele ACHA que é. Ver SESSION_CLAIM. */
+export const SESSION_CLAIM_HEADER = "x-tpp-session";
+
+/**
+ * O que o navegador declarou sobre a própria sessão.
+ *
+ * Existe porque o servidor, sozinho, NÃO consegue distinguir um visitante de
+ * alguém cuja sessão morreu. Medido no código do SDK em 01/09/2026:
+ *
+ *   // supabase-js, _getAccessToken()
+ *   return data.session?.access_token ?? this.supabaseKey
+ *
+ * Sem sessão viva o SDK manda a CHAVE PÚBLICA no Authorization -- exatamente o
+ * mesmo header de quem nunca logou. Os dois casos chegam aqui idênticos, byte a
+ * byte. Quem sabe a diferença é o navegador, que ainda tem o `user` na tela.
+ *
+ * Por isso a informação vem declarada, e não deduzida.
+ *
+ * `unknown` (cabeçalho ausente) preserva o comportamento antigo de propósito: as
+ * functions publicam antes do frontend, e durante essa janela nenhum cliente
+ * manda o cabeçalho. Tratar ausência como suspeita derrubaria o checkout inteiro
+ * no intervalo entre as duas publicações.
+ */
+export type SessionClaim = "user" | "guest" | "unknown";
+
+export function readSessionClaim(req: Request): SessionClaim {
+  const raw = req.headers.get(SESSION_CLAIM_HEADER)?.trim().toLowerCase();
+  return raw === "user" ? "user" : raw === "guest" ? "guest" : "unknown";
+}
+
 export async function optionalCheckoutUser(req: Request): Promise<OptionalCheckoutUser> {
+  const claim = readSessionClaim(req);
   const authorization = req.headers.get("Authorization");
   if (!authorization) return { user: null, client: null, invalidAuthorization: false };
 
@@ -18,8 +49,17 @@ export async function optionalCheckoutUser(req: Request): Promise<OptionalChecko
   );
   const { data: { user }, error } = await client.auth.getUser();
   // O SDK envia a chave pública como Authorization em chamadas anônimas. Ela
-  // passa pelo gateway, mas não representa usuário; nesse caso seguimos como guest.
-  if (error || !user) return { user: null, client, invalidAuthorization: false };
+  // passa pelo gateway, mas não representa usuário; nesse caso seguimos como
+  // guest -- A MENOS que o navegador tenha declarado ter sessão. Aí as duas
+  // versões se contradizem, e a contradição é o sinal: a sessão morreu entre
+  // abrir a tela e enviar o pedido.
+  //
+  // Deixar passar como guest é o que produzia o pior defeito deste checkout: o
+  // assinante do Clube era cobrado preço cheio, porque `customerType` só vira
+  // "subscriber" dentro de `if (auth.user)`, e nada aparecia na tela nem no log.
+  if (error || !user) {
+    return { user: null, client, invalidAuthorization: claim === "user" };
+  }
   return { user, client, invalidAuthorization: false };
 }
 

@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   Check,
@@ -52,6 +52,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { isDeadSessionError, sessionClaimHeaders } from "@/lib/checkoutSession";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
@@ -278,7 +279,8 @@ export default function Checkout() {
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("preview") === "1";
   const launch = useMemo(() => readCheckoutLaunch(), []);
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
+  const navigate = useNavigate();
   const { isSubscribed } = useSubscription();
   const {
     items: cartItems,
@@ -702,6 +704,7 @@ export default function Checkout() {
       try {
         const { data } = await supabase.functions.invoke("checkout-status", {
           body: credentials,
+          headers: sessionClaimHeaders(Boolean(user)),
         });
         if (!stopped && data) {
           if (data.summary) setSummary(data.summary);
@@ -823,7 +826,7 @@ export default function Checkout() {
     const timer = window.setTimeout(async () => {
       const { data, error } = await supabase.functions.invoke(
         "checkout-shipping-options",
-        { body: { items, customer, address } },
+        { body: { items, customer, address }, headers: sessionClaimHeaders(Boolean(user)) },
       );
       if (!active) return;
       const options: ShippingOption[] =
@@ -915,6 +918,19 @@ export default function Checkout() {
         : "Endereço adicionado a esta compra.",
     });
   };
+  // A sessão morreu entre abrir o checkout e enviar o pedido. Insistir não
+  // adianta -- o token não melhora sozinho, e a tela continuaria mostrando a
+  // pessoa como logada, porque o AuthContext monta o `user` a partir do
+  // localStorage sem validar nada com o servidor. Encerrar a sessão local é o
+  // que faz a contradição parar de existir.
+  const handleDeadSession = async () => {
+    toast.error("Sua sessão expirou", {
+      description: "Entre de novo para concluir a compra. Sua sacola foi preservada.",
+    });
+    await logout();
+    navigate("/login?next=/checkout");
+  };
+
   const saveCheckoutContact = async () => {
     if (!validContact()) {
       setContactError(
@@ -940,6 +956,9 @@ export default function Checkout() {
         error,
         "Não foi possível salvar seus dados. Confira o CPF ou CNPJ.",
       );
+      // Era isto que a cliente via em 01/09/2026: "Não autorizado" numa caixa
+      // vermelha, sobre um CPF válido, sem nenhuma pista do que fazer.
+      if (isDeadSessionError(detail)) return void handleDeadSession();
       setContactError(detail);
       return;
     }
@@ -1074,6 +1093,7 @@ export default function Checkout() {
       const { data: prepared, error: prepareError } =
         await supabase.functions.invoke("checkout-prepare", {
           body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod },
+          headers: sessionClaimHeaders(Boolean(user)),
         });
       if (prepareError || prepared?.error) {
         const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
@@ -1117,6 +1137,7 @@ export default function Checkout() {
       const { data: paymentData, error: paymentError } =
         await supabase.functions.invoke("checkout-payment", {
           body: paymentBody,
+          headers: sessionClaimHeaders(Boolean(user)),
         });
       if (paymentError || paymentData?.error) {
         const detail = paymentData?.error || await edgeFunctionErrorText(paymentError, "Falha ao criar cobrança.");
@@ -1139,6 +1160,12 @@ export default function Checkout() {
       if (paymentData.status === "credit_approved") finishSuccess();
     } catch (error) {
       const detail = errorText(error, "Não foi possível concluir o checkout.");
+      // Antes desta entrega, sessão morta não chegava aqui: as portas seguiam
+      // como visitante e a compra ia adiante com preço de não-assinante.
+      if (isDeadSessionError(detail)) {
+        setBusy(false);
+        return void handleDeadSession();
+      }
       setMessage(detail);
       if (paymentMethod === "credit_card") setCardFailure(detail);
     } finally {
@@ -1153,6 +1180,7 @@ export default function Checkout() {
     try {
       const { data, error } = await supabase.functions.invoke("checkout-payment", {
         body: { ...credentials, action: "cancel_pix" },
+        headers: sessionClaimHeaders(Boolean(user)),
       });
       if (error || data?.error) {
         const detail = data?.error || await edgeFunctionErrorText(error, "Não foi possível cancelar o Pix.");
