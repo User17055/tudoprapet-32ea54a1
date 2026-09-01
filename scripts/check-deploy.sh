@@ -63,6 +63,26 @@ if [ -z "$ALL_FUNCTIONS" ]; then
   exit 2
 fi
 
+# Functions que legitimamente NÃO carregam o marcador, e por isso não contam como
+# atraso. O marcador viaja dentro de `_shared/cors.ts`; quem não importa esse
+# módulo não tem como devolvê-lo, esteja publicado ou não.
+#
+# `mcp` é gerada pela plataforma e não usa o `_shared/`. Antes desta exceção ela
+# fazia o `--all` sair com código 1 SEMPRE, inclusive com tudo publicado — e o
+# workflow diário roda justamente o `--all`. Alarme que toca todo dia é alarme
+# que ninguém lê, que é o contrário do que este script existe para fazer.
+#
+# A lista de alvos continua derivada do repositório de propósito: a exceção é
+# nominal e visível em revisão, não um filtro que possa esconder function nova.
+NO_MARKER_FUNCTIONS="mcp"
+
+has_no_marker() {
+  for exception in $NO_MARKER_FUNCTIONS; do
+    [ "$1" = "$exception" ] && return 0
+  done
+  return 1
+}
+
 case "${1:-}" in
   --all) targets="$ALL_FUNCTIONS" ;;
   "")    targets="shopify-pickup-webhook" ;;
@@ -98,7 +118,9 @@ for fn in $targets; do
 
   found="$(printf '%s' "$headers" | sed -n "s/^[Xx]-[Tt][Pp][Pp]-[Ff]unctions-[Vv]ersion:[[:space:]]*//p" | head -1)"
 
-  if [ -z "$found" ]; then
+  if [ -z "$found" ] && has_no_marker "$fn"; then
+    echo "SEM MARCADOR (não importa _shared/cors.ts — fora deste controle)"
+  elif [ -z "$found" ]; then
     echo "DESATUALIZADO (sem $VERSION_HEADER — versão anterior ao marcador)"
     saw_stale=1
   elif [ "$found" = "$expected" ]; then
