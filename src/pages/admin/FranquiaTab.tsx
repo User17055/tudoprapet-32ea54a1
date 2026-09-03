@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Loader2, Store, Tag, Package, Eye, EyeOff } from "lucide-react";
+import { Trash2, Loader2, Store, Tag, Package, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
@@ -14,6 +14,7 @@ import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { fetchAllProductAudience, invalidateAudienceCache, type ProductAudience } from "@/hooks/useProductAudience";
 import { invalidateFranchisePricesCache } from "@/hooks/useFranchisePrices";
+import { cn } from "@/lib/utils";
 
 export default function FranquiaTab() {
   return (
@@ -380,82 +381,188 @@ interface FranchPrice {
   price: number;
 }
 
+type FranchisePriceCalculationMode = "automatic" | "manual";
+type FranchisePriceAdjustment = "percentage" | "amount";
+type FranchisePriceFilter = "all" | "registered" | "unregistered";
+
 function FranchisePricesPanel() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [prices, setPrices] = useState<FranchPrice[]>([]);
+  const [customerPrices, setCustomerPrices] = useState<{ shopify_variant_id: string; price: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
-  const [price, setPrice] = useState("");
+  const [calculationMode, setCalculationMode] = useState<FranchisePriceCalculationMode>("automatic");
+  const [manualCost, setManualCost] = useState("");
+  const [adjustmentType, setAdjustmentType] = useState<FranchisePriceAdjustment>("percentage");
+  const [adjustment, setAdjustment] = useState("0");
+  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState("");
+  const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [registrationFilter, setRegistrationFilter] = useState<FranchisePriceFilter>("all");
 
-  const load = async () => {
-    setLoading(true);
-    const [shop, rows] = await Promise.all([
-      fetchAllShopifyProducts(),
-      supabase.from("franchise_prices").select("*").order("updated_at", { ascending: false }),
-    ]);
-    setProducts(shop);
-    setPrices(((rows.data || []) as { shopify_product_id: string; shopify_variant_id: string; price: number }[]).map((r) => ({
-      shopify_product_id: r.shopify_product_id,
-      shopify_variant_id: r.shopify_variant_id,
-      price: Number(r.price),
-    })));
-    setLoading(false);
+  const loadAll = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [shop, franchise, customer] = await Promise.all([
+        fetchAllShopifyProducts(),
+        supabase.from("franchise_prices").select("*").order("updated_at", { ascending: false }),
+        supabase.from("customer_prices").select("shopify_variant_id,price"),
+      ]);
+      if (franchise.error) throw franchise.error;
+      if (customer.error) throw customer.error;
+      setProducts(shop);
+      setPrices((franchise.data || []).map((row) => ({ ...row, price: Number(row.price) })));
+      setCustomerPrices((customer.data || []).map((row) => ({ ...row, price: Number(row.price) })));
+    } catch (error) {
+      if (!silent) toast.error("Erro ao carregar dados");
+      console.error(error);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    loadAll();
+    const onFocus = () => loadAll(true);
+    window.addEventListener("focus", onFocus);
+    const channel = supabase
+      .channel("admin-franchise-prices")
+      .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, () => loadAll(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, () => loadAll(true))
+      .subscribe();
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const selectedProduct = useMemo(
     () => products.find((p) => p.node.id === productId),
     [products, productId]
   );
 
+  const registeredProductIds = useMemo(
+    () => new Set(prices.map((item) => item.shopify_product_id)),
+    [prices],
+  );
+
+  const priceByProductId = useMemo(() => {
+    const map = new Map<string, FranchPrice>();
+    prices.forEach((item) => map.set(item.shopify_product_id, item));
+    return map;
+  }, [prices]);
+
+  const listedProducts = useMemo(() => products.filter((product) => {
+    const registered = registeredProductIds.has(product.node.id);
+    if (registrationFilter === "registered") return registered;
+    if (registrationFilter === "unregistered") return !registered;
+    return true;
+  }), [products, registeredProductIds, registrationFilter]);
+
+  useEffect(() => {
+    if (productId && registeredProductIds.has(productId)) {
+      setProductId("");
+      setVariantId("");
+      setManualCost("");
+      setAdjustment("0");
+    }
+  }, [productId, registeredProductIds]);
+
+  const selectedVariant = selectedProduct?.node.variants.edges.find((variant) => variant.node.id === variantId)?.node
+    || selectedProduct?.node.variants.edges[0]?.node;
+  const shopifyPrice = selectedVariant ? Number(selectedVariant.price.amount) : null;
+  const selectedCustomerPrice = selectedVariant
+    ? customerPrices.find((row) => row.shopify_variant_id === selectedVariant.id)?.price ?? shopifyPrice
+    : null;
+  const estimatedCost = selectedCustomerPrice === null ? null : selectedCustomerPrice / 2;
+  const manualCostValue = Number(manualCost.replace(",", "."));
+  const calculationBaseCost = calculationMode === "manual"
+    ? (manualCost.trim() !== "" && Number.isFinite(manualCostValue) ? manualCostValue : null)
+    : estimatedCost;
+  const adjustmentValue = Number(adjustment.replace(",", "."));
+  const calculatedFranchisePrice = calculationBaseCost === null || !Number.isFinite(adjustmentValue)
+    ? null
+    : Math.round((adjustmentType === "percentage"
+      ? calculationBaseCost * (1 + adjustmentValue / 100)
+      : calculationBaseCost + adjustmentValue) * 100) / 100;
+
   const handleSave = async () => {
-    if (!productId || !variantId || !price) return toast.error("Preencha todos os campos");
-    const numeric = parseFloat(price.replace(",", "."));
-    if (isNaN(numeric) || numeric <= 0) return toast.error("Preço inválido");
+    if (!productId || !variantId) return toast.error("Preencha todos os campos");
+    if (registeredProductIds.has(productId)) return toast.error("Este produto já possui preço de franquia cadastrado.");
+    if (!Number.isFinite(adjustmentValue) || adjustmentValue < 0) return toast.error("Informe um reajuste igual ou maior que zero");
+    if (calculationMode === "manual" && (calculationBaseCost === null || calculationBaseCost <= 0)) {
+      return toast.error("Informe um custo manual maior que zero");
+    }
+    if (calculatedFranchisePrice === null || calculatedFranchisePrice <= 0) return toast.error("Preço inválido");
     setSaving(true);
     const { error } = await supabase
       .from("franchise_prices")
       .upsert(
-        { shopify_variant_id: variantId, shopify_product_id: productId, price: numeric },
+        { shopify_variant_id: variantId, shopify_product_id: productId, price: calculatedFranchisePrice },
         { onConflict: "shopify_variant_id" }
       );
     setSaving(false);
     if (error) return toast.error("Erro: " + error.message);
     invalidateFranchisePricesCache();
     toast.success("Preço de franquia salvo");
-    setProductId(""); setVariantId(""); setPrice("");
-    load();
+    setProductId(""); setVariantId(""); setManualCost(""); setAdjustment("0");
+    loadAll(true);
   };
 
   const handleDelete = async (variantId: string) => {
     const { error } = await supabase.from("franchise_prices").delete().eq("shopify_variant_id", variantId);
     if (error) return toast.error("Erro ao excluir");
     invalidateFranchisePricesCache();
-    setPrices(prices.filter((p) => p.shopify_variant_id !== variantId));
+    setPrices((current) => current.filter((item) => item.shopify_variant_id !== variantId));
+    if (editingVariantId === variantId) {
+      setEditingVariantId(null);
+      setEditingPrice("");
+    }
     toast.success("Removido");
   };
 
-  const productById = useMemo(() => {
-    const m = new Map<string, ShopifyProduct["node"]>();
-    products.forEach((p) => m.set(p.node.id, p.node));
-    return m;
-  }, [products]);
+  const startEditingPrice = (item: FranchPrice) => {
+    setEditingVariantId(item.shopify_variant_id);
+    setEditingPrice(String(item.price));
+  };
+
+  const cancelEditingPrice = () => {
+    setEditingVariantId(null);
+    setEditingPrice("");
+  };
+
+  const handleUpdatePrice = async (item: FranchPrice) => {
+    if (updatingPrice) return;
+    const numeric = parseFloat(editingPrice.replace(",", "."));
+    if (isNaN(numeric) || numeric <= 0) return toast.error("Preço inválido");
+    setUpdatingPrice(true);
+    const { error } = await supabase
+      .from("franchise_prices")
+      .update({ price: numeric })
+      .eq("shopify_variant_id", item.shopify_variant_id);
+    setUpdatingPrice(false);
+    if (error) return toast.error("Erro ao atualizar: " + error.message);
+    invalidateFranchisePricesCache();
+    setPrices((current) => current.map((row) => row.shopify_variant_id === item.shopify_variant_id ? { ...row, price: numeric } : row));
+    cancelEditingPrice();
+    toast.success("Preço atualizado!");
+  };
 
   const previewImage = selectedProduct?.node.images.edges[0]?.node;
-  const previewVariant = selectedProduct?.node.variants.edges.find((v) => v.node.id === variantId)?.node
-    || selectedProduct?.node.variants.edges[0]?.node;
+  const previewVariant = selectedVariant;
   const previewPrice = previewVariant ? parseFloat(previewVariant.price.amount) : null;
-  const previewFranchise = price ? parseFloat(price.replace(",", ".")) : null;
+  const previewCompare = previewVariant?.compareAtPrice ? parseFloat(previewVariant.compareAtPrice.amount) : null;
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Adicionar preço de franquia</CardTitle>
-          <CardDescription>Preço exclusivo pago por franqueados.</CardDescription>
+          <CardDescription>
+            Escolha entre usar o custo estimado atual ou informar o custo manualmente e aplicar o reajuste desejado.
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           <div className="grid gap-4 md:grid-cols-[200px_1fr]">
@@ -481,11 +588,14 @@ function FranchisePricesPanel() {
                 )}
                 {previewPrice !== null && (
                   <div className="mt-1.5">
+                    {previewCompare && previewCompare > previewPrice && (
+                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">R$ {previewCompare.toFixed(2)}</p>
+                    )}
                     <p className="text-base font-bold tabular-nums">R$ {previewPrice.toFixed(2)}</p>
-                    {previewFranchise !== null && !isNaN(previewFranchise) && previewFranchise > 0 && (
+                    {calculatedFranchisePrice !== null && calculatedFranchisePrice > 0 && (
                       <div className="mt-1 flex items-center gap-1">
                         <span className="font-bold text-emerald-600 tabular-nums">
-                          R$ {previewFranchise.toFixed(2)}
+                          R$ {calculatedFranchisePrice.toFixed(2)}
                         </span>
                         <Store className="h-3.5 w-3.5 text-emerald-600" />
                       </div>
@@ -496,32 +606,18 @@ function FranchisePricesPanel() {
             </div>
 
             {/* Form */}
-            <div className="grid content-start gap-3 md:grid-cols-2">
-              <div className="md:col-span-2">
+            <div className="grid content-start gap-3 md:grid-cols-4">
+              <div className="md:col-span-4">
                 <label className="mb-1 block text-sm font-medium">Produto</label>
                 <ProductPicker
                   products={products}
                   value={productId}
-                  onChange={(v) => { setProductId(v); setVariantId(""); }}
-                  placeholder="Selecione um produto..."
+                  excludeIds={registeredProductIds}
+                  onChange={(value) => { setProductId(value); setVariantId(""); setManualCost(""); setAdjustment("0"); }}
+                  placeholder="Pesquisar ou selecionar um produto..."
                 />
               </div>
-              {selectedProduct && (
-                <div className="md:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                  <p className="text-sm font-medium text-emerald-900 mb-2">Variações disponíveis:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedProduct.node.variants.edges.map((variant) => (
-                      <span
-                        key={variant.node.id}
-                        className={`text-xs rounded px-2 py-1 ${variantId === variant.node.id ? 'bg-emerald-600 text-white border border-emerald-600' : 'bg-white border border-emerald-300 text-emerald-800'}`}
-                      >
-                        {variant.node.title} • R$ {parseFloat(variant.node.price.amount).toFixed(2)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div>
+              <div className="md:col-span-4">
                 <label className="mb-1 block text-sm font-medium">Variante</label>
                 <Select value={variantId} onValueChange={setVariantId} disabled={!selectedProduct}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -534,12 +630,56 @@ function FranchisePricesPanel() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Preço franquia (R$)</label>
-                <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
+              <div className="md:col-span-4">
+                <label className="mb-1 block text-sm font-medium">Modo de cálculo</label>
+                <Select value={calculationMode} onValueChange={(value) => setCalculationMode(value as FranchisePriceCalculationMode)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="automatic">Automático (custo estimado atual)</SelectItem>
+                    <SelectItem value="manual">Informar custo manualmente</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="md:col-span-2">
-                <Button onClick={handleSave} disabled={saving} className="w-full">
+              {calculationMode === "automatic" ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Valor base do cliente</label>
+                    <Input value={selectedCustomerPrice === null ? "" : `R$ ${selectedCustomerPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Custo estimado (50%)</label>
+                    <Input value={estimatedCost === null ? "" : `R$ ${estimatedCost.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+                  </div>
+                </>
+              ) : (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium">Custo manual (R$)</label>
+                  <Input type="number" min="0.01" step="0.01" value={manualCost} onChange={(event) => setManualCost(event.target.value)} placeholder="Ex: 50,00" />
+                  <p className="mt-1 text-xs text-muted-foreground">Use margem de 0% para manter o preço igual ao custo.</p>
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium">Forma de reajuste</label>
+                <Select value={adjustmentType} onValueChange={(value) => setAdjustmentType(value as FranchisePriceAdjustment)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Margem em %</SelectItem>
+                    <SelectItem value="amount">Acréscimo em R$</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">{adjustmentType === "percentage" ? "Margem (%)" : "Acréscimo (R$)"}</label>
+                <Input type="number" min="0" step={adjustmentType === "percentage" ? "1" : "0.01"} value={adjustment} onChange={(event) => setAdjustment(event.target.value)} placeholder="0" />
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-3 md:col-span-4">
+                <p className="text-xs font-medium text-emerald-700">Preço calculado para a franquia</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">
+                  {calculatedFranchisePrice === null ? "—" : `R$ ${calculatedFranchisePrice.toFixed(2)}`}
+                </p>
+              </div>
+              <div className="md:col-span-4">
+                <Button onClick={handleSave} disabled={saving}>
                   {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Salvar
                 </Button>
               </div>
@@ -550,36 +690,95 @@ function FranchisePricesPanel() {
 
       <Card>
         <CardHeader className="p-4 pb-3">
-          <CardTitle className="text-base">Preços cadastrados ({prices.length})</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Produtos ({listedProducts.length})</CardTitle>
+              <CardDescription>Todos os produtos do Shopify e seus preços para franquias.</CardDescription>
+            </div>
+            <Select value={registrationFilter} onValueChange={(value) => setRegistrationFilter(value as FranchisePriceFilter)}>
+              <SelectTrigger className="h-9 w-full sm:w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="registered">Cadastrados</SelectItem>
+                <SelectItem value="unregistered">Não cadastrados</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-          ) : prices.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">Nenhum preço cadastrado.</p>
+          ) : listedProducts.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">Nenhum produto neste filtro.</p>
           ) : (
             <Table className="[&_th]:h-9 [&_td]:py-2.5">
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>
+                  <TableHead className="w-40">Status</TableHead>
                   <TableHead>Variante</TableHead>
+                  <TableHead className="text-right">Valor base</TableHead>
+                  <TableHead className="text-right">Custo estimado</TableHead>
                   <TableHead className="text-right">Preço franquia</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-28"><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {prices.map((sp) => {
-                  const prod = productById.get(sp.shopify_product_id);
-                  const variant = prod?.variants.edges.find((v) => v.node.id === sp.shopify_variant_id);
+                {listedProducts.map((product) => {
+                  const registeredPrice = priceByProductId.get(product.node.id);
+                  const firstVariant = product.node.variants.edges[0]?.node;
+                  const registeredVariant = registeredPrice
+                    ? product.node.variants.edges.find((variant) => variant.node.id === registeredPrice.shopify_variant_id)?.node
+                    : null;
+                  const displayedVariant = registeredVariant || firstVariant;
+                  const productPrice = displayedVariant ? Number(displayedVariant.price.amount) : null;
+                  const customerPrice = displayedVariant
+                    ? customerPrices.find((row) => row.shopify_variant_id === displayedVariant.id)?.price ?? productPrice
+                    : null;
+                  const productImage = product.node.images.edges[0]?.node;
                   return (
-                    <TableRow key={sp.shopify_variant_id}>
-                      <TableCell className="font-medium">{prod?.title || "Produto removido"}</TableCell>
-                      <TableCell>{variant?.node.title || sp.shopify_variant_id}</TableCell>
-                      <TableCell className="text-right font-bold text-emerald-600">R$ {sp.price.toFixed(2)}</TableCell>
+                    <TableRow key={product.node.id}>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(sp.shopify_variant_id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex min-w-[220px] items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                            {productImage ? <img src={productImage.url} alt={productImage.altText || product.node.title} className="h-full w-full object-cover" loading="lazy" /> : <Package className="h-5 w-5 text-muted-foreground" />}
+                          </div>
+                          <span className="font-medium line-clamp-2">{product.node.title}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", registeredPrice ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                          <span className={cn("h-1.5 w-1.5 rounded-full", registeredPrice ? "bg-emerald-500" : "bg-amber-500")} />
+                          {registeredPrice ? "Cadastrado" : "Não cadastrado"}
+                        </span>
+                      </TableCell>
+                      <TableCell>{displayedVariant?.title || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{customerPrice === null ? "—" : `R$ ${customerPrice.toFixed(2)}`}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{customerPrice === null ? "—" : `R$ ${(customerPrice / 2).toFixed(2)}`}</TableCell>
+                      <TableCell className="text-right">
+                        {registeredPrice ? editingVariantId === registeredPrice.shopify_variant_id ? (
+                          <div className="ml-auto flex w-36 items-center gap-2">
+                            <span className="text-sm text-muted-foreground">R$</span>
+                            <Input type="number" min="0.01" step="0.01" value={editingPrice} onChange={(event) => setEditingPrice(event.target.value)} disabled={updatingPrice} onKeyDown={(event) => { if (event.key === "Enter") handleUpdatePrice(registeredPrice); if (event.key === "Escape") cancelEditingPrice(); }} className="h-8 text-right font-bold" autoFocus aria-label={`Novo preço de ${product.node.title}`} />
+                          </div>
+                        ) : <span className="font-bold text-emerald-600 tabular-nums">R$ {registeredPrice.price.toFixed(2)}</span> : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {registeredPrice ? (
+                          <div className="flex justify-end">
+                            {editingVariantId === registeredPrice.shopify_variant_id ? <>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => handleUpdatePrice(registeredPrice)} disabled={updatingPrice} aria-label="Salvar novo preço">{updatingPrice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={cancelEditingPrice} disabled={updatingPrice} aria-label="Cancelar edição"><X className="h-4 w-4" /></Button>
+                            </> : <>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditingPrice(registeredPrice)} aria-label={`Editar preço de ${product.node.title}`}><Pencil className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(registeredPrice.shopify_variant_id)} aria-label={`Excluir preço de ${product.node.title}`}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            </>}
+                          </div>
+                        ) : (
+                          <Button variant="outline" size="sm" disabled={!firstVariant} onClick={() => { setProductId(product.node.id); setVariantId(firstVariant?.id || ""); setManualCost(""); setAdjustment("0"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+                            Cadastrar
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
