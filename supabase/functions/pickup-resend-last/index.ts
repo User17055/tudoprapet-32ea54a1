@@ -1,6 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { extractPickupCode, normalizePhone, PICKUP_HOURS, STORE_NAME } from "../_shared/pickup.ts";
-import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
+import { resolveOrderIsPickup, savePickupCodeOnOrder } from "../_shared/shopify.ts";
 import { isAlreadyPickedUp } from "../_shared/pickup.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 
