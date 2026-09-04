@@ -9,7 +9,7 @@ import {
   PICKUP_HOURS,
   STORE_NAME,
 } from "../_shared/pickup.ts";
-import { savePickupCodeOnOrder } from "../_shared/shopify.ts";
+import { resolveOrderIsPickup, savePickupCodeOnOrder } from "../_shared/shopify.ts";
 import { requireAdmin } from "../_shared/auth.ts";
 
 const SHOPIFY_API_VERSION = "2025-07";
@@ -92,6 +92,17 @@ Deno.serve(async (req) => {
 
       const numericId = String(order.id).replace(/\D/g, "");
       const orderGid = `gid://shopify/Order/${numericId}`;
+
+      // Mesma regra do webhook e do "Reenviar último": só retirada comprovada.
+      const verdict = await resolveOrderIsPickup({ shopDomain, adminToken, numericOrderId: numericId, order });
+      if (verdict.isPickup !== true) {
+        skipped++;
+        results.push({
+          order_number: orderNumber, customer_name: customerName, status: "skipped",
+          reason: verdict.isPickup === null ? "método de entrega indeterminado" : "não é retirada",
+        });
+        continue;
+      }
 
       try {
         const resp = await fetch(endpoint, {

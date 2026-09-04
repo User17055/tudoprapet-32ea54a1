@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
     // Mesma regra do webhook (evidência no pedido → method_type=pick_up), mas
     // aqui o indeterminado é RECUSADO: reenvio manual não tem a urgência do
     // webhook, e um código de retirada num pedido de entrega já causou incidente (#1123).
-    const verdict = await resolveOrderIsPickup({ shopDomain, adminToken, numericId, numericOrderId: numericId, order });
+    const verdict = await resolveOrderIsPickup({ shopDomain, adminToken, numericOrderId: numericId, order });
     if (verdict.isPickup !== true) {
       return new Response(JSON.stringify({
         error: verdict.isPickup === null
