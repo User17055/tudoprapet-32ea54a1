@@ -6,6 +6,8 @@ import {
   type NoteAttribute,
   PICKUP_CODE_ATTRIBUTE,
   PICKUP_DONE_ATTRIBUTE,
+  pickupEvidenceFromOrder,
+  resolvePickupVerdict,
 } from "./pickup.ts";
 import { toGraphqlDraftLineItems } from "./pricing.ts";
 
