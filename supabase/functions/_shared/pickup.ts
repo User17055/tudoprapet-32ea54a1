@@ -65,6 +65,40 @@ export function isPickupMethod(methodType: string | null | undefined): boolean {
 }
 
 /**
+ * Evidência explícita de retirada gravada no próprio pedido: tag `retirada` /
+ * `pick_up`, ou atributo `shipping_code=pick_up` / `delivery_method_type=pick_up`
+ * (gravados pelo nosso checkout em Draft Orders pagos fora da Shopify, que não
+ * recebem method_type=pick_up da plataforma).
+ *
+ * Mesma regra usada pelo webhook e pelos botões de reenvio — se mudar aqui,
+ * muda para todos.
+ */
+export function pickupEvidenceFromOrder(order: {
+  tags?: string | null;
+  note_attributes?: Array<{ name?: string; value?: string }> | null;
+}): boolean {
+  const tags = String(order?.tags || "").toLowerCase();
+  const attributes = Array.isArray(order?.note_attributes)
+    ? order.note_attributes.map((item) => `${item?.name || ""}=${item?.value || ""}`).join(" ").toLowerCase()
+    : "";
+  return /(^|,)\s*(retirada|pick_up)\s*(,|$)/.test(tags) ||
+    /shipping_code\s*=\s*pick_up|delivery_method_type\s*=\s*pick_up/.test(attributes);
+}
+
+/**
+ * Decide se um pedido é de retirada a partir das duas fontes disponíveis.
+ * `null` = indeterminado (sem evidência no pedido e sem method_type legível).
+ */
+export function resolvePickupVerdict(opts: {
+  evidence: boolean;
+  methodTypes: string[];
+}): boolean | null {
+  if (opts.evidence) return true;
+  if (opts.methodTypes.length === 0) return null;
+  return opts.methodTypes.some(isPickupMethod);
+}
+
+/**
  * Chave estável por (evento, pedido). Os três tópicos que viram
  * `order_ready_for_pickup` produzem a MESMA chave, então a API externa
  * consegue descartar a repetição — inclusive as retentativas da Shopify.

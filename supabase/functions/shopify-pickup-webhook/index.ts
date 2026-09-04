@@ -6,6 +6,7 @@ import {
   isPickupMethod,
   normalizePhone,
   PICKUP_HOURS,
+  pickupEvidenceFromOrder,
   shouldSavePickupCode,
   STORE_NAME,
 } from "../_shared/pickup.ts";
@@ -29,17 +30,6 @@ const corsHeaders = corsHeadersWith(
  */
 interface FulfillmentOrderLike {
   delivery_method?: { method_type?: string };
-}
-
-function pickupEvidenceFromOrder(order: Record<string, unknown>): boolean {
-  const tags = String(order.tags || "").toLowerCase();
-  const attributes = Array.isArray(order.note_attributes)
-    ? order.note_attributes.map((item: { name?: string; value?: string }) =>
-      `${item?.name || ""}=${item?.value || ""}`
-    ).join(" ").toLowerCase()
-    : "";
-  return /(^|,)\s*(retirada|pick_up)\s*(,|$)/.test(tags) ||
-    /shipping_code\s*=\s*pick_up|delivery_method_type\s*=\s*pick_up/.test(attributes);
 }
 
 async function resolvePickupEvidence(

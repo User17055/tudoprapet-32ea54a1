@@ -6,6 +6,8 @@ import {
   type NoteAttribute,
   PICKUP_CODE_ATTRIBUTE,
   PICKUP_DONE_ATTRIBUTE,
+  pickupEvidenceFromOrder,
+  resolvePickupVerdict,
 } from "./pickup.ts";
 import { toGraphqlDraftLineItems } from "./pricing.ts";
 
@@ -278,6 +280,85 @@ export function markOrderPickedUp(opts: {
     name: PICKUP_DONE_ATTRIBUTE,
     value: opts.at ?? new Date().toISOString(),
   });
+}
+
+/**
+ * Remove um note_attribute do pedido preservando todos os demais.
+ * Usado para desfazer um "Codigo de retirada" gravado indevidamente num
+ * pedido de entrega. Devolve os atributos que ficaram gravados.
+ */
+export async function removeOrderNoteAttribute(opts: {
+  shopDomain: string;
+  adminToken: string;
+  numericOrderId: string;
+  name: string;
+}): Promise<{ ok: boolean; before: NoteAttribute[]; after: NoteAttribute[] }> {
+  const orderUrl = `https://${opts.shopDomain}/admin/api/2025-07/orders/${opts.numericOrderId}.json`;
+  const state = await fetchOrderPickupState(opts);
+  const before = state.noteAttributes ?? [];
+  if (state.noteAttributes === null) {
+    // Sem leitura confiável não escrevemos: o PUT substitui o array inteiro.
+    return { ok: false, before, after: before };
+  }
+  const after = before.filter((attr) => attr?.name !== opts.name);
+  if (after.length === before.length) return { ok: true, before, after };
+  const upd = await fetch(orderUrl, {
+    method: "PUT",
+    headers: { "X-Shopify-Access-Token": opts.adminToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ order: { id: Number(opts.numericOrderId), note_attributes: after } }),
+  });
+  if (!upd.ok) {
+    console.error(`Failed to remove ${opts.name} from order: ${upd.status} ${await upd.text()}`);
+    return { ok: false, before, after: before };
+  }
+  return { ok: true, before, after };
+}
+
+/**
+ * Descobre se o pedido é de retirada — mesma regra do webhook:
+ * 1) evidência explícita no pedido (tag/atributo do nosso checkout);
+ * 2) senão, method_type dos fulfillment_orders (`pick_up`).
+ *
+ * Devolve `null` quando não dá para determinar. Cada chamador decide o que
+ * fazer com o indeterminado (o webhook envia; os reenvios manuais recusam).
+ */
+export async function resolveOrderIsPickup(opts: {
+  shopDomain: string;
+  adminToken: string;
+  numericOrderId: string;
+  order?: { tags?: string | null; note_attributes?: NoteAttribute[] | null } | null;
+}): Promise<{ isPickup: boolean | null; methodTypes: string[]; evidence: boolean }> {
+  let order = opts.order;
+  if (!order) {
+    try {
+      const r = await fetch(
+        `https://${opts.shopDomain}/admin/api/2025-07/orders/${opts.numericOrderId}.json?fields=tags,note_attributes`,
+        { headers: { "X-Shopify-Access-Token": opts.adminToken } },
+      );
+      order = r.ok ? (await r.json())?.order ?? {} : {};
+    } catch {
+      order = {};
+    }
+  }
+  const evidence = pickupEvidenceFromOrder(order ?? {});
+  let methodTypes: string[] = [];
+  if (!evidence) {
+    try {
+      const r = await fetch(
+        `https://${opts.shopDomain}/admin/api/2025-07/orders/${opts.numericOrderId}/fulfillment_orders.json`,
+        { headers: { "X-Shopify-Access-Token": opts.adminToken } },
+      );
+      if (r.ok) {
+        const body = await r.json() as { fulfillment_orders?: Array<{ delivery_method?: { method_type?: string } }> };
+        methodTypes = (body.fulfillment_orders ?? [])
+          .map((f) => f?.delivery_method?.method_type)
+          .filter((m): m is string => !!m);
+      }
+    } catch (e) {
+      console.error(`fulfillment_orders fetch failed for ${opts.numericOrderId}:`, e);
+    }
+  }
+  return { isPickup: resolvePickupVerdict({ evidence, methodTypes }), methodTypes, evidence };
 }
 
 /**
