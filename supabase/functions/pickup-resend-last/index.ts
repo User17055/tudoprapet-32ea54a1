@@ -110,6 +110,22 @@ Deno.serve(async (req) => {
     const orderGid = `gid://shopify/Order/${numericId}`;
     const orderNumber = String(order.name || order.order_number || "");
 
+    // Só pedido comprovadamente de retirada recebe "venha buscar na loja".
+    // Mesma regra do webhook (evidência no pedido → method_type=pick_up), mas
+    // aqui o indeterminado é RECUSADO: reenvio manual não tem a urgência do
+    // webhook, e um código de retirada num pedido de entrega já causou incidente (#1123).
+    const verdict = await resolveOrderIsPickup({ shopDomain, adminToken, numericId, numericOrderId: numericId, order });
+    if (verdict.isPickup !== true) {
+      return new Response(JSON.stringify({
+        error: verdict.isPickup === null
+          ? `Pedido ${orderNumber} sem método de entrega determinável — mensagem não enviada`
+          : `Pedido ${orderNumber} não é de retirada (${verdict.methodTypes.join(", ") || "entrega"}) — mensagem não enviada`,
+        not_pickup: true,
+        order_number: orderNumber,
+        method_types: verdict.methodTypes,
+      }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const outbound = {
       event: "order_ready_for_pickup",
       shopify_order_id: orderGid,
