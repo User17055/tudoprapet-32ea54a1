@@ -210,3 +210,29 @@ describe("isAlreadyPickedUp", () => {
     expect(isAlreadyPickedUp({})).toBe(false);
   });
 });
+
+import { pickupEvidenceFromOrder, resolvePickupVerdict } from "../../supabase/functions/_shared/pickup";
+
+describe("pickupEvidenceFromOrder (regra compartilhada webhook/reenvio)", () => {
+  it("aceita tag retirada e atributo shipping_code=pick_up", () => {
+    expect(pickupEvidenceFromOrder({ tags: "clube, retirada" })).toBe(true);
+    expect(pickupEvidenceFromOrder({ note_attributes: [{ name: "shipping_code", value: "pick_up" }] })).toBe(true);
+  });
+  it("rejeita pedido de entrega sem marcação", () => {
+    expect(pickupEvidenceFromOrder({ tags: "clube", note_attributes: [{ name: "CPF/CNPJ", value: "1" }] })).toBe(false);
+    expect(pickupEvidenceFromOrder({})).toBe(false);
+  });
+});
+
+describe("resolvePickupVerdict", () => {
+  it("evidência explícita vence", () => {
+    expect(resolvePickupVerdict({ evidence: true, methodTypes: ["shipping"] })).toBe(true);
+  });
+  it("usa method_type quando não há evidência", () => {
+    expect(resolvePickupVerdict({ evidence: false, methodTypes: ["shipping"] })).toBe(false);
+    expect(resolvePickupVerdict({ evidence: false, methodTypes: ["shipping", "pick_up"] })).toBe(true);
+  });
+  it("indeterminado sem nenhuma fonte", () => {
+    expect(resolvePickupVerdict({ evidence: false, methodTypes: [] })).toBeNull();
+  });
+});
