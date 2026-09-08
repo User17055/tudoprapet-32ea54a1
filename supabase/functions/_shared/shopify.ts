@@ -181,7 +181,9 @@ export async function findOrCreateCustomer(
     } }),
   });
   if (!createRes.ok && phone) {
-    console.warn("Customer create with phone failed:", await createRes.text());
+    const phoneFailure = await createRes.text();
+    console.warn("Customer create with phone failed:", shortShopifyFailure(phoneFailure));
+    diagnostics.reason = `A loja recusou o cadastro com telefone: ${shortShopifyFailure(phoneFailure)}`;
     createRes = await fetch(`${ADMIN_API}/customers.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
@@ -194,22 +196,35 @@ export async function findOrCreateCustomer(
       } }),
     });
   }
+  diagnostics.createStatus = createRes.status;
   if (!createRes.ok) {
     const failureText = await createRes.text();
-    console.error("Customer create failed:", failureText);
+    console.error("Customer create failed:", shortShopifyFailure(failureText));
+    diagnostics.reason = `A loja recusou criar o cliente (HTTP ${createRes.status}): ${shortShopifyFailure(failureText)}`;
     // A busca por email da Shopify tem atraso de indexacao: um cadastro recem
     // criado (ou criado em outro canal) nao aparece em customers/search.json e
     // a criacao volta com "email has already been taken". Sem este resgate o
     // checkout morria em "Shopify nao criou ou localizou o cliente do pedido".
     if (/has already been taken|already exists/i.test(failureText)) {
       const existingId = await lookupCustomerIdByEmail(normalizedEmail, token);
-      if (existingId) return existingId;
+      if (existingId) {
+        diagnostics.reason = undefined;
+        return existingId;
+      }
+      diagnostics.reason =
+        `O e-mail ${normalizedEmail} ja pertence a um cadastro que a loja nao devolve na busca (HTTP ${createRes.status}).`;
     }
     return null;
   }
 
   const data = await createRes.json();
-  return data?.customer?.id ?? null;
+  const createdId = data?.customer?.id ?? null;
+  if (!createdId) {
+    diagnostics.reason = "A loja aceitou a criacao do cliente mas nao devolveu o identificador.";
+  } else {
+    diagnostics.reason = undefined;
+  }
+  return createdId;
 }
 
 /** Preço atual de cada variante na Storefront API, indexado pelo GID. */
