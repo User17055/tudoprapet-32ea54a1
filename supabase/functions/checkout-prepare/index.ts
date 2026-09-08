@@ -433,7 +433,7 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      return errorResponse(customerFacingDraftError(userErrors), 502);
+      return errorResponse(customerFacingDraftError(userErrors, draft.error), 502);
     }
 
     // Grave o vinculo imediatamente. Mesmo que a credencial fiscal seja
