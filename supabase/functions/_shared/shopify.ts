@@ -85,10 +85,29 @@ function brazilPhone(value?: string): string | undefined {
 }
 
 
+/**
+ * Motivo real da falha, para o log e para a tela do administrativo.
+ *
+ * Antes so existia "Shopify nao criou ou localizou o cliente do pedido", que
+ * nao diz se a loja recusou o telefone, se o e-mail ja pertence a outro
+ * cadastro ou se o token perdeu escopo de clientes.
+ */
+export interface CustomerLookupDiagnostics {
+  reason?: string;
+  searchStatus?: number;
+  createStatus?: number;
+}
+
+function shortShopifyFailure(text: string): string {
+  const trimmed = String(text || "").replace(/\s+/g, " ").trim();
+  return trimmed.slice(0, 300) || "sem detalhe da Shopify";
+}
+
 export async function findOrCreateCustomer(
   email: string,
   token: string,
   details: ShopifyCustomerDetails = {},
+  diagnostics: CustomerLookupDiagnostics = {},
 ): Promise<number | null> {
   const normalizedEmail = email.trim().toLowerCase();
   const names = customerNames(details.name);
@@ -97,6 +116,19 @@ export async function findOrCreateCustomer(
     `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${normalizedEmail}`)}`,
     { headers: { "X-Shopify-Access-Token": token } },
   );
+  diagnostics.searchStatus = searchRes.status;
+  if (!searchRes.ok) {
+    // Busca REST fora do ar ou sem escopo: tente pelo GraphQL antes de criar,
+    // senao a criacao volta com "email has already been taken" e o checkout cai.
+    const failureText = await searchRes.text();
+    console.error("Customer search failed:", shortShopifyFailure(failureText));
+    diagnostics.reason = `A loja recusou a busca do cliente (HTTP ${searchRes.status}): ${shortShopifyFailure(failureText)}`;
+    const existingId = await lookupCustomerIdByEmail(normalizedEmail, token);
+    if (existingId) {
+      diagnostics.reason = undefined;
+      return existingId;
+    }
+  }
   if (searchRes.ok) {
     const data = await searchRes.json();
     const existing = data?.customers?.[0];
