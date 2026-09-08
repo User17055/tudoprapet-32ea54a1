@@ -775,18 +775,24 @@ export async function createFiscalDraftOrder(
       countryCode: "BR",
     }
     : undefined;
+  const customerDiagnostics: CustomerLookupDiagnostics = {};
   const customerId = await findOrCreateCustomer(input.email, token, {
     name: input.customerName,
     phone: input.phone,
     address: input.shippingAddress || input.billingAddress,
-  });
+  }, customerDiagnostics);
   if (!customerId) {
     return {
       requestOk: false,
       invoiceUrl: null,
       draftOrderId: null,
       taxCredentialStored: false,
-      error: "Shopify nao criou ou localizou o cliente do pedido.",
+      error: customerDiagnostics.reason
+        ? `Cliente do pedido nao criado na Shopify. ${customerDiagnostics.reason}`
+        : "Shopify nao criou ou localizou o cliente do pedido (sem detalhe devolvido pela loja).",
+      userErrors: customerDiagnostics.reason
+        ? [{ field: ["customer"], message: customerDiagnostics.reason }]
+        : [],
     };
   }
   const normalizedPhone = brazilPhone(input.phone);
