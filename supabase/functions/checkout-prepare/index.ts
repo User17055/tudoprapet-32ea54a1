@@ -468,7 +468,7 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      return errorResponse(customerFacingDraftError(draft.userErrors ?? []), 502);
+      return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
 
     }
     if (!draft.taxCredentialStored) {
