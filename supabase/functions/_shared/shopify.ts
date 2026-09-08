@@ -9,6 +9,13 @@ import {
   pickupEvidenceFromOrder,
   resolvePickupVerdict,
 } from "./pickup.ts";
+import {
+  describeDraftFailure,
+  hasFieldError,
+  isRetryableShopifyFailure,
+  normalizeShopifyUserErrors,
+  type ShopifyUserError,
+} from "./checkout-failure.ts";
 import { toGraphqlDraftLineItems } from "./pricing.ts";
 
 export const SHOP_DOMAIN = "petjoy-deals-hb8r9.myshopify.com";
@@ -52,11 +59,31 @@ function customerAddress(address?: Record<string, unknown>): Record<string, unkn
   };
 }
 
+/**
+ * Telefone em E.164 apenas quando ele e realmente um numero brasileiro valido.
+ *
+ * Enviar um numero malformado fazia a Shopify recusar a mutacao inteira com
+ * "phone: Phone is invalid" -- e o cliente via so "nao foi possivel preparar o
+ * pedido". Melhor omitir o telefone do que perder a venda.
+ */
+export function isValidBrazilPhone(value?: string): boolean {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length >= 12) digits = digits.slice(2);
+  if (digits.length !== 10 && digits.length !== 11) return false;
+  const areaCode = Number(digits.slice(0, 2));
+  if (areaCode < 11 || areaCode > 99) return false;
+  if (digits.length === 11 && digits[2] !== "9") return false;
+  if (digits.length === 10 && !/^[2-8]/.test(digits[2])) return false;
+  return true;
+}
+
 function brazilPhone(value?: string): string | undefined {
   let digits = String(value || "").replace(/\D/g, "");
   if (digits.startsWith("55") && digits.length >= 12) digits = digits.slice(2);
-  return digits ? `+55${digits}` : undefined;
+  if (!isValidBrazilPhone(digits)) return undefined;
+  return `+55${digits}`;
 }
+
 
 export async function findOrCreateCustomer(
   email: string,
@@ -136,9 +163,19 @@ export async function findOrCreateCustomer(
     });
   }
   if (!createRes.ok) {
-    console.error("Customer create failed:", await createRes.text());
+    const failureText = await createRes.text();
+    console.error("Customer create failed:", failureText);
+    // A busca por email da Shopify tem atraso de indexacao: um cadastro recem
+    // criado (ou criado em outro canal) nao aparece em customers/search.json e
+    // a criacao volta com "email has already been taken". Sem este resgate o
+    // checkout morria em "Shopify nao criou ou localizou o cliente do pedido".
+    if (/has already been taken|already exists/i.test(failureText)) {
+      const existingId = await lookupCustomerIdByEmail(normalizedEmail, token);
+      if (existingId) return existingId;
+    }
     return null;
   }
+
   const data = await createRes.json();
   return data?.customer?.id ?? null;
 }
@@ -405,7 +442,12 @@ export interface DraftOrderResult {
 export interface FiscalDraftOrderResult extends DraftOrderResult {
   taxCredentialStored: boolean;
   error: string | null;
+  /** Campos recusados pela Shopify, quando houver. */
+  userErrors?: ShopifyUserError[];
+  /** Quantas tentativas foram necessarias (retentativa segura). */
+  attempts?: number;
 }
+
 
 export interface FiscalDraftOrderInput {
   lineItems: Record<string, unknown>[];
@@ -701,87 +743,139 @@ export async function createFiscalDraftOrder(
     };
   }
   const normalizedPhone = brazilPhone(input.phone);
+  const buildVariables = (withPhone: boolean) => ({ input: {
+    lineItems: toGraphqlDraftLineItems(input.lineItems),
+    email: input.email,
+    ...(withPhone && normalizedPhone ? { phone: normalizedPhone } : {}),
+    purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
+    shippingLine: input.shippingLine.shippingRateHandle
+      ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
+      : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
+    shippingAddress: graphqlAddress(input.shippingAddress),
+    billingAddress: graphqlAddress(input.billingAddress),
+    useCustomerDefaultAddress: false,
+    tags: input.tags,
+    note: input.note,
+    customAttributes: [
+      ...input.customAttributes.filter((attribute) =>
+        attribute.key !== "checkout_draft_format" && attribute.key !== "CPF/CNPJ"
+      ),
+      { key: "CPF/CNPJ", value },
+      { key: "checkout_draft_format", value: "graphql_v2" },
+    ],
+  } });
+
+  const runMutation = async (withPhone: boolean) => {
+    const response = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
+          draftOrderCreate(input: $input) {
+            draftOrder { id legacyResourceId invoiceUrl }
+            userErrors { field message }
+          }
+        }`,
+        variables: buildVariables(withPhone),
+      }),
+    });
+    const responseText = await response.text();
+    let body: any = null;
+    try {
+      body = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      body = null;
+    }
+    return { status: response.status, ok: response.ok, body };
+  };
+
+  const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  let withPhone = Boolean(normalizedPhone);
+  let phoneRetried = false;
+  let attempts = 0;
+  let lastErrors: ShopifyUserError[] = [];
+  let lastStatus = 0;
+  let lastInvoiceUrl: string | null = null;
+
+  // Ate 3 tentativas apenas para falhas passageiras (429/5xx/throttling) e uma
+  // repeticao sem telefone quando a Shopify recusa esse campo especifico.
+  // Recusa de campo definitiva nao e repetida: a cobranca nunca e criada aqui,
+  // entao nenhuma retentativa gera risco de duplicidade no Asaas.
+  for (let round = 0; round < 4; round++) {
+    attempts += 1;
+    const { status, ok, body } = await runMutation(withPhone);
+    const payload = body?.data?.draftOrderCreate;
+    const draft = payload?.draftOrder;
+    const draftOrderId: string | null = draft?.legacyResourceId
+      ? String(draft.legacyResourceId)
+      : (draft?.id ? (String(draft.id).split("/").pop() ?? null) : null);
+    const invoiceUrl = draft?.invoiceUrl ?? null;
+    const creationErrors = normalizeShopifyUserErrors(
+      body?.errors?.length ? body.errors : (payload?.userErrors ?? []),
+    );
+    lastStatus = status;
+    lastErrors = creationErrors;
+    lastInvoiceUrl = invoiceUrl;
+
+    if (ok && draftOrderId && !creationErrors.length) {
+      const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
+      return {
+        requestOk: true,
+        invoiceUrl,
+        draftOrderId,
+        taxCredentialStored: credential.ok,
+        error: credential.error,
+        attempts,
+      };
+    }
+
+    if (draftOrderId) await deleteDraftOrder(draftOrderId, token);
+    console.error(
+      `Criacao GraphQL do rascunho falhou (tentativa ${attempts}, HTTP ${status}):`,
+      describeDraftFailure(creationErrors, "sem detalhe da Shopify"),
+    );
+
+    if (withPhone && !phoneRetried && hasFieldError(creationErrors, /phone/i)) {
+      phoneRetried = true;
+      withPhone = false;
+      continue;
+    }
+    if (isRetryableShopifyFailure(status, creationErrors) && round < 3) {
+      await sleep(500 * (round + 1));
+      continue;
+    }
+    break;
+  }
+
+  return {
+    requestOk: false,
+    invoiceUrl: lastInvoiceUrl,
+    draftOrderId: null,
+    taxCredentialStored: false,
+    error: describeDraftFailure(lastErrors, `Shopify nao criou o rascunho (HTTP ${lastStatus}).`),
+    userErrors: lastErrors,
+    attempts,
+  };
+}
+
+/** Busca direta por e-mail: resgate quando a indexacao da busca ainda nao pegou. */
+async function lookupCustomerIdByEmail(email: string, token: string): Promise<number | null> {
   const response = await fetch(`${ADMIN_API}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
     body: JSON.stringify({
-      query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
-        draftOrderCreate(input: $input) {
-          draftOrder {
-            id legacyResourceId invoiceUrl
-          }
-          userErrors { field message }
-        }
-      }`,
-      variables: { input: {
-        lineItems: toGraphqlDraftLineItems(input.lineItems),
-        email: input.email,
-        phone: normalizedPhone,
-        purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
-        shippingLine: input.shippingLine.shippingRateHandle
-          ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
-          : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
-        shippingAddress: graphqlAddress(input.shippingAddress),
-        billingAddress: graphqlAddress(input.billingAddress),
-        useCustomerDefaultAddress: false,
-        tags: input.tags,
-        note: input.note,
-        customAttributes: [
-          ...input.customAttributes.filter((attribute) =>
-            attribute.key !== "checkout_draft_format" && attribute.key !== "CPF/CNPJ"
-          ),
-          { key: "CPF/CNPJ", value },
-          { key: "checkout_draft_format", value: "graphql_v2" },
-        ],
-      } },
+      query: `query($query: String!) { customers(first: 1, query: $query) { nodes { id legacyResourceId } } }`,
+      variables: { query: `email:${email}` },
     }),
   });
-
-
-  const responseText = await response.text();
-  let body: any = null;
-  try {
-    body = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    body = null;
-  }
-  const payload = body?.data?.draftOrderCreate;
-  const draft = payload?.draftOrder;
-  const draftOrderId: string | null = draft?.legacyResourceId
-    ? String(draft.legacyResourceId)
-    : (draft?.id ? (String(draft.id).split("/").pop() ?? null) : null);
-  const invoiceUrl = draft?.invoiceUrl ?? null;
-
-  const creationErrors = body?.errors?.length ? body.errors : (payload?.userErrors ?? []);
-  if (!response.ok || !draftOrderId || creationErrors.length) {
-    const error = shopifyErrorMessage(creationErrors, `Shopify nao criou o rascunho (HTTP ${response.status}).`);
-    console.error("Criacao GraphQL do rascunho falhou:", error);
-    if (draftOrderId) await deleteDraftOrder(draftOrderId, token);
-    return {
-      requestOk: false,
-      invoiceUrl,
-      draftOrderId: null,
-      taxCredentialStored: false,
-      error,
-    };
-  }
-
-  // A mutacao acima envia cliente, enderecos, variantes e modalidade de entrega
-  // de uma vez. Se a Shopify devolver o draft sem userErrors, nao fazemos uma
-  // segunda leitura bloqueante: campos de cliente/endereco podem ser ocultados
-  // conforme as permissoes do token mesmo quando foram gravados corretamente.
-  // A credencial fiscal continua sendo acrescentada separadamente e em modo
-  // best-effort, sem impedir a cobranca.
-  const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
-  return {
-    requestOk: true,
-    invoiceUrl,
-    draftOrderId,
-    taxCredentialStored: credential.ok,
-    error: credential.error,
-  };
-
+  if (!response.ok) return null;
+  const body = await response.json().catch(() => null);
+  const node = body?.data?.customers?.nodes?.[0];
+  const legacy = node?.legacyResourceId ?? (node?.id ? String(node.id).split("/").pop() : null);
+  const numeric = Number(legacy);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
+
 
 export interface ShopifyLocalPickupOption {
   handle: string;

@@ -170,6 +170,15 @@ Deno.serve(async (req) => {
     if (!cancellingExpiredPix && ["paid", "paid_pending_shopify", "shopify_created", "cancelled", "expired"].includes(session.status)) {
       return jsonResponse({ sessionId, status: session.status, orderId: session.shopify_order_id });
     }
+    // Sem rascunho na Shopify nao existe pedido para vincular ao pagamento.
+    // Cobrar aqui criaria dinheiro sem venda: barre antes de tocar no Asaas.
+    if (body.action !== "cancel_pix" && (!session.shopify_draft_order_id || session.status === "failed")) {
+      return errorResponse(
+        "Este checkout não foi concluído na loja. Volte à sacola e refaça o pedido — nada foi cobrado.",
+        409,
+      );
+    }
+
 
     const requestedMethod = body.method === "credit_card" ? "credit_card" : "pix";
     const method = session.customer_type === "franchise" ? "terms" : requestedMethod;

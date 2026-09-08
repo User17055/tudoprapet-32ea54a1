@@ -66,6 +66,18 @@ export function validCpfCnpj(value: string): boolean {
   return normalized.length === 11 ? validCpf(normalized) : validCnpj(normalized);
 }
 
+/** Telefone brasileiro aceito pela Shopify: DDD real + celular com 9 ou fixo. */
+export function validBrazilPhone(value: string): boolean {
+  let normalized = digits(value);
+  if (normalized.startsWith("55") && normalized.length >= 12) normalized = normalized.slice(2);
+  if (normalized.length !== 10 && normalized.length !== 11) return false;
+  const areaCode = Number(normalized.slice(0, 2));
+  if (areaCode < 11 || areaCode > 99) return false;
+  if (normalized.length === 11) return normalized[2] === "9";
+  return /^[2-8]/.test(normalized[2]);
+}
+
+
 export function parseCheckoutAddress(raw: unknown): ValidationResult<CheckoutAddressInput> {
   const source = raw && typeof raw === "object" && !Array.isArray(raw)
     ? raw as Record<string, unknown>
@@ -104,9 +116,12 @@ export function parseCheckoutCustomer(raw: unknown): ValidationResult<CheckoutCu
   if (!validCpfCnpj(customer.cpfCnpj)) {
     return { ok: false, message: "Informe um CPF ou CNPJ válido" };
   }
-  if (customer.mobilePhone.length < 10 || customer.mobilePhone.length > 11) {
-    return { ok: false, message: "Informe um telefone válido" };
+  // Validado aqui, e nao pela Shopify: um numero fora do padrao brasileiro
+  // fazia o draftOrderCreate recusar tudo com "phone: Phone is invalid".
+  if (!validBrazilPhone(customer.mobilePhone)) {
+    return { ok: false, message: "Informe um celular válido com DDD, no formato (11) 99999-9999" };
   }
+
   return { ok: true, value: customer };
 }
 

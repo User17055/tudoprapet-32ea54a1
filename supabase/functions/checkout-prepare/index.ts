@@ -20,6 +20,7 @@ import {
 } from "../_shared/shopify.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
+import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
 
 function readFirstEnv(keys: string[]): string {
@@ -33,6 +34,22 @@ function readFirstEnv(keys: string[]): string {
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
+
+/** Diz ao cliente qual dado revisar, em vez do genérico "tente novamente". */
+function customerFacingDraftError(errors: ShopifyUserError[]): string {
+  if (hasFieldError(errors, /phone/i)) return "Revise o telefone informado: a loja não conseguiu aceitá-lo.";
+  if (hasFieldError(errors, /email/i)) return "Revise o e-mail informado: a loja não conseguiu aceitá-lo.";
+  if (hasFieldError(errors, /(zip|postal|province|address)/i)) {
+    return "Revise o endereço informado (CEP, estado ou rua): a loja não conseguiu aceitá-lo.";
+  }
+  if (hasFieldError(errors, /(taxcredential|localizedfield)/i)) return "Revise o CPF/CNPJ informado.";
+  if (hasFieldError(errors, /(lineitem|variant)/i)) {
+    return "Um dos produtos da sacola ficou indisponível. Revise a sacola e tente de novo.";
+  }
+  if (hasFieldError(errors, /shipping/i)) return "Escolha novamente a forma de entrega e tente de novo.";
+  return "Não foi possível preparar o pedido na Shopify. Tente novamente em alguns instantes.";
+}
+
 
 function shopifyAddress(address: CheckoutAddressInput, customerName: string, phone: string) {
   const names = customerName.trim().split(/\s+/);
@@ -387,6 +404,7 @@ Deno.serve(async (req) => {
     }, shopifyToken);
     if (!draft.draftOrderId) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
+      const userErrors = draft.userErrors ?? [];
       console.error(`Shopify nao devolveu rascunho para o checkout ${session.id}:`, draft.error);
       await writeCheckoutAttemptLog(admin, {
         checkoutSessionId: session.id,
@@ -403,10 +421,15 @@ Deno.serve(async (req) => {
           failurePoint: "draft_creation",
           itemCount: input.items.length,
           hasPriceAdjustment: Boolean(adjustmentLine),
+          // Campo exato recusado pela Shopify e quantas tentativas foram feitas.
+          shopifyUserErrors: userErrors,
+          rejectedFields: userErrors.map((error) => error.field).filter(Boolean),
+          shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      return errorResponse("Não foi possível preparar o pedido na Shopify. Tente novamente.", 502);
+      return errorResponse(customerFacingDraftError(userErrors), 502);
     }
+
     // Grave o vinculo imediatamente. Mesmo que a credencial fiscal seja
     // rejeitada, o rascunho continua rastreavel para diagnostico/recuperacao.
     const { error: draftUpdateError } = await admin.from("checkout_sessions")
@@ -434,9 +457,13 @@ Deno.serve(async (req) => {
           failurePoint: "draft_validation",
           itemCount: input.items.length,
           hasPriceAdjustment: Boolean(adjustmentLine),
+          shopifyUserErrors: draft.userErrors ?? [],
+          rejectedFields: (draft.userErrors ?? []).map((error) => error.field).filter(Boolean),
+          shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      return errorResponse("Não foi possível preparar o pedido na Shopify. Tente novamente.", 502);
+      return errorResponse(customerFacingDraftError(draft.userErrors ?? []), 502);
+
     }
     if (!draft.taxCredentialStored) {
       console.warn(`Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`, draft.error);
