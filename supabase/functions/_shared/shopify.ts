@@ -791,7 +791,7 @@ export async function createFiscalDraftOrder(
         ? `Cliente do pedido nao criado na Shopify. ${customerDiagnostics.reason}`
         : "Shopify nao criou ou localizou o cliente do pedido (sem detalhe devolvido pela loja).",
       userErrors: customerDiagnostics.reason
-        ? [{ field: ["customer"], message: customerDiagnostics.reason }]
+        ? [{ field: "customer", message: customerDiagnostics.reason }]
         : [],
     };
   }
