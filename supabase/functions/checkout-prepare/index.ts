@@ -36,7 +36,13 @@ function money(value: number): number {
 }
 
 /** Diz ao cliente qual dado revisar, em vez do genérico "tente novamente". */
-function customerFacingDraftError(errors: ShopifyUserError[]): string {
+function customerFacingDraftError(errors: ShopifyUserError[], detail?: string | null): string {
+  if (hasFieldError(errors, /customer/i)) {
+    // Cadastro do cliente: o motivo vem da própria loja e é o que o
+    // atendimento precisa ver para resolver (e-mail duplicado, telefone já
+    // usado, escopo do token). Mostrar o texto genérico aqui esconde a causa.
+    return `Não foi possível vincular seu cadastro na loja. ${detail || "Fale com o atendimento."}`;
+  }
   if (hasFieldError(errors, /phone/i)) return "Revise o telefone informado: a loja não conseguiu aceitá-lo.";
   if (hasFieldError(errors, /email/i)) return "Revise o e-mail informado: a loja não conseguiu aceitá-lo.";
   if (hasFieldError(errors, /(zip|postal|province|address)/i)) {
@@ -427,7 +433,7 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      return errorResponse(customerFacingDraftError(userErrors), 502);
+      return errorResponse(customerFacingDraftError(userErrors, draft.error), 502);
     }
 
     // Grave o vinculo imediatamente. Mesmo que a credencial fiscal seja
@@ -462,7 +468,7 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      return errorResponse(customerFacingDraftError(draft.userErrors ?? []), 502);
+      return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
 
     }
     if (!draft.taxCredentialStored) {

@@ -85,10 +85,29 @@ function brazilPhone(value?: string): string | undefined {
 }
 
 
+/**
+ * Motivo real da falha, para o log e para a tela do administrativo.
+ *
+ * Antes so existia "Shopify nao criou ou localizou o cliente do pedido", que
+ * nao diz se a loja recusou o telefone, se o e-mail ja pertence a outro
+ * cadastro ou se o token perdeu escopo de clientes.
+ */
+export interface CustomerLookupDiagnostics {
+  reason?: string;
+  searchStatus?: number;
+  createStatus?: number;
+}
+
+function shortShopifyFailure(text: string): string {
+  const trimmed = String(text || "").replace(/\s+/g, " ").trim();
+  return trimmed.slice(0, 300) || "sem detalhe da Shopify";
+}
+
 export async function findOrCreateCustomer(
   email: string,
   token: string,
   details: ShopifyCustomerDetails = {},
+  diagnostics: CustomerLookupDiagnostics = {},
 ): Promise<number | null> {
   const normalizedEmail = email.trim().toLowerCase();
   const names = customerNames(details.name);
@@ -97,6 +116,19 @@ export async function findOrCreateCustomer(
     `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${normalizedEmail}`)}`,
     { headers: { "X-Shopify-Access-Token": token } },
   );
+  diagnostics.searchStatus = searchRes.status;
+  if (!searchRes.ok) {
+    // Busca REST fora do ar ou sem escopo: tente pelo GraphQL antes de criar,
+    // senao a criacao volta com "email has already been taken" e o checkout cai.
+    const failureText = await searchRes.text();
+    console.error("Customer search failed:", shortShopifyFailure(failureText));
+    diagnostics.reason = `A loja recusou a busca do cliente (HTTP ${searchRes.status}): ${shortShopifyFailure(failureText)}`;
+    const existingId = await lookupCustomerIdByEmail(normalizedEmail, token);
+    if (existingId) {
+      diagnostics.reason = undefined;
+      return existingId;
+    }
+  }
   if (searchRes.ok) {
     const data = await searchRes.json();
     const existing = data?.customers?.[0];
@@ -149,7 +181,9 @@ export async function findOrCreateCustomer(
     } }),
   });
   if (!createRes.ok && phone) {
-    console.warn("Customer create with phone failed:", await createRes.text());
+    const phoneFailure = await createRes.text();
+    console.warn("Customer create with phone failed:", shortShopifyFailure(phoneFailure));
+    diagnostics.reason = `A loja recusou o cadastro com telefone: ${shortShopifyFailure(phoneFailure)}`;
     createRes = await fetch(`${ADMIN_API}/customers.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
@@ -162,22 +196,35 @@ export async function findOrCreateCustomer(
       } }),
     });
   }
+  diagnostics.createStatus = createRes.status;
   if (!createRes.ok) {
     const failureText = await createRes.text();
-    console.error("Customer create failed:", failureText);
+    console.error("Customer create failed:", shortShopifyFailure(failureText));
+    diagnostics.reason = `A loja recusou criar o cliente (HTTP ${createRes.status}): ${shortShopifyFailure(failureText)}`;
     // A busca por email da Shopify tem atraso de indexacao: um cadastro recem
     // criado (ou criado em outro canal) nao aparece em customers/search.json e
     // a criacao volta com "email has already been taken". Sem este resgate o
     // checkout morria em "Shopify nao criou ou localizou o cliente do pedido".
     if (/has already been taken|already exists/i.test(failureText)) {
       const existingId = await lookupCustomerIdByEmail(normalizedEmail, token);
-      if (existingId) return existingId;
+      if (existingId) {
+        diagnostics.reason = undefined;
+        return existingId;
+      }
+      diagnostics.reason =
+        `O e-mail ${normalizedEmail} ja pertence a um cadastro que a loja nao devolve na busca (HTTP ${createRes.status}).`;
     }
     return null;
   }
 
   const data = await createRes.json();
-  return data?.customer?.id ?? null;
+  const createdId = data?.customer?.id ?? null;
+  if (!createdId) {
+    diagnostics.reason = "A loja aceitou a criacao do cliente mas nao devolveu o identificador.";
+  } else {
+    diagnostics.reason = undefined;
+  }
+  return createdId;
 }
 
 /** Preço atual de cada variante na Storefront API, indexado pelo GID. */
@@ -728,18 +775,24 @@ export async function createFiscalDraftOrder(
       countryCode: "BR",
     }
     : undefined;
+  const customerDiagnostics: CustomerLookupDiagnostics = {};
   const customerId = await findOrCreateCustomer(input.email, token, {
     name: input.customerName,
     phone: input.phone,
     address: input.shippingAddress || input.billingAddress,
-  });
+  }, customerDiagnostics);
   if (!customerId) {
     return {
       requestOk: false,
       invoiceUrl: null,
       draftOrderId: null,
       taxCredentialStored: false,
-      error: "Shopify nao criou ou localizou o cliente do pedido.",
+      error: customerDiagnostics.reason
+        ? `Cliente do pedido nao criado na Shopify. ${customerDiagnostics.reason}`
+        : "Shopify nao criou ou localizou o cliente do pedido (sem detalhe devolvido pela loja).",
+      userErrors: customerDiagnostics.reason
+        ? [{ field: "customer", message: customerDiagnostics.reason }]
+        : [],
     };
   }
   const normalizedPhone = brazilPhone(input.phone);
