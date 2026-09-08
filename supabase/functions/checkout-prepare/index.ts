@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
       "SHOPIFY_ACCESS_TOKEN",
       "SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2",
     ]);
-    if (!storefrontToken || !shopifyToken) return errorResponse("Shopify não configurada", 500);
+    if (!storefrontToken || !shopifyToken) return errorResponse("Loja temporariamente indisponível. Tente novamente em instantes.", 500);
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
     if (auth.user) {
@@ -298,7 +298,7 @@ Deno.serve(async (req) => {
         ? pickupOptions.find((option) => option.handle === input.delivery.optionHandle)
         : pickupOptions[0];
       if (!selectedPickup) {
-        return errorResponse("A retirada na loja está indisponível na Shopify. Verifique o local e o estoque.", 409);
+        return errorResponse("A retirada na loja está indisponível no momento. Tente novamente em instantes.", 409);
       }
       shippingMethod = selectedPickup.title;
       shippingRateHandle = selectedPickup.handle;
