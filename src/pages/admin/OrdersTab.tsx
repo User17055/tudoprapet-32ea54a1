@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { attemptStatusLabel, type AttemptTone } from "@/lib/checkoutAttempt";
+import { describeCheckoutFailure } from "@/lib/checkoutFailure";
 import { type PrintableOrder, orderToA4Html, orderToZpl } from "@/lib/orderPrint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,10 +31,12 @@ interface CheckoutAttemptLog {
   success: boolean;
   error_message: string | null;
   provider_payment_id: string | null;
+  metadata?: unknown;
   generated_payment_method?: "pix" | "credit_card" | "terms" | "unknown";
   generated_amount?: number | null;
   generated_payment_status?: string | null;
 }
+
 interface OrdersResponse {
   orders: PrintableOrder[];
   count: number;
@@ -328,7 +331,23 @@ export default function OrdersTab() {
                     const status = attemptStatusLabel(entry.stage, entry.success);
                     return <Badge variant="outline" className={ATTEMPT_TONE[status.tone]}>{status.label}</Badge>;
                   })()}</TableCell>
-                  <TableCell className="max-w-md text-xs text-muted-foreground">{entry.error_message || (entry.provider_payment_id ? `Asaas: ${entry.provider_payment_id}` : "Concluído sem erro")}</TableCell>
+                  <TableCell className="max-w-md text-xs text-muted-foreground">{(() => {
+                    if (entry.success) {
+                      return entry.provider_payment_id ? `Asaas: ${entry.provider_payment_id}` : "Concluído sem erro";
+                    }
+                    const explanation = describeCheckoutFailure(entry);
+                    if (!explanation) return "Falha sem detalhe registrado";
+                    return (
+                      <div className="space-y-1">
+                        <div className="font-medium text-foreground">{explanation.reason}</div>
+                        {explanation.fields.length > 0 && (
+                          <div>Campo recusado: {explanation.fields.join(", ")}</div>
+                        )}
+                        {explanation.detail && <div className="text-[11px]">{explanation.detail}</div>}
+                      </div>
+                    );
+                  })()}</TableCell>
+
                 </TableRow>)}
               </TableBody></Table>
             </div>
