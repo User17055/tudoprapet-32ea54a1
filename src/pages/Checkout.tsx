@@ -66,7 +66,9 @@ import {
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
 import {
+  formatCardExpiry,
   formatCardNumber,
+  parseCardExpiry,
   validateCard,
   type CardErrors,
 } from "@/lib/cardValidation";
@@ -2681,38 +2683,24 @@ function PaymentStep(props: {
                   />
                   <CardFieldError message={props.errors.number} />
                 </Field>
-                <Field label="Mês">
+                <Field label="Validade">
                   <Input
-                    maxLength={2}
-                    value={props.card.expiryMonth}
+                    maxLength={7}
+                    value={formatCardExpiry(props.card.expiryMonth, props.card.expiryYear)}
                     onChange={(e) => {
-                      props.setCard({ ...props.card, expiryMonth: e.target.value.replace(/\D/g, "").slice(0, 2) });
-                      props.setErrors({ ...props.errors, expiryMonth: undefined });
-                    }}
-                    inputMode="numeric"
-                    autoComplete="cc-exp-month"
-                    placeholder="MM"
-                    aria-invalid={Boolean(props.errors.expiryMonth)}
-                  />
-                  <CardFieldError message={props.errors.expiryMonth} />
-                </Field>
-                <Field label="Ano">
-                  <Input
-                    maxLength={4}
-                    value={props.card.expiryYear}
-                    onChange={(e) => {
-                      props.setCard({
-                        ...props.card,
-                        expiryYear: e.target.value.replace(/\D/g, "").slice(0, 4),
+                      props.setCard({ ...props.card, ...parseCardExpiry(e.target.value) });
+                      props.setErrors({
+                        ...props.errors,
+                        expiryMonth: undefined,
+                        expiryYear: undefined,
                       });
-                      props.setErrors({ ...props.errors, expiryYear: undefined });
                     }}
                     inputMode="numeric"
-                    autoComplete="cc-exp-year"
-                    placeholder="AAAA ou AA"
-                    aria-invalid={Boolean(props.errors.expiryYear)}
+                    autoComplete="cc-exp"
+                    placeholder="MM/AA"
+                    aria-invalid={Boolean(props.errors.expiryMonth || props.errors.expiryYear)}
                   />
-                  <CardFieldError message={props.errors.expiryYear} />
+                  <CardFieldError message={props.errors.expiryMonth || props.errors.expiryYear} />
                 </Field>
                 <Field label="CVV">
                   <Input

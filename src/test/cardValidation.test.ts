@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatCardNumber, isValidCardNumber, validateCard } from "@/lib/cardValidation";
+import {
+  formatCardExpiry,
+  formatCardNumber,
+  isValidCardNumber,
+  parseCardExpiry,
+  validateCard,
+} from "@/lib/cardValidation";
 
 const valid = {
   holderName: "Maria da Silva",
@@ -20,6 +26,12 @@ describe("card validation", () => {
     expect(formatCardNumber("4111-1111 1111.1111abc")).toBe("4111 1111 1111 1111");
   });
 
+  it("formats and separates the card expiry date", () => {
+    expect(parseCardExpiry("09/30")).toEqual({ expiryMonth: "09", expiryYear: "30" });
+    expect(parseCardExpiry("09/2030")).toEqual({ expiryMonth: "09", expiryYear: "2030" });
+    expect(formatCardExpiry("09", "30")).toBe("09/30");
+  });
+
   it("reports each invalid field", () => {
     const errors = validateCard({
       holderName: "1",
@@ -38,4 +50,3 @@ describe("card validation", () => {
     expect(errors.ccv).toContain("4 dígitos");
   });
 });
-

@@ -15,6 +15,21 @@ export function formatCardNumber(value: string): string {
   return cardDigits(value).slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 ");
 }
 
+export function parseCardExpiry(value: string): Pick<CardFormValue, "expiryMonth" | "expiryYear"> {
+  const digits = cardDigits(value).slice(0, 6);
+  return {
+    expiryMonth: digits.slice(0, 2),
+    expiryYear: digits.slice(2),
+  };
+}
+
+export function formatCardExpiry(expiryMonth: string, expiryYear: string): string {
+  const month = cardDigits(expiryMonth).slice(0, 2);
+  const year = cardDigits(expiryYear).slice(0, 4);
+  if (!year) return month;
+  return `${month}/${year}`;
+}
+
 export function isValidCardNumber(value: string): boolean {
   const number = cardDigits(value);
   if (number.length < 13 || number.length > 19 || /^(\d)\1+$/.test(number)) return false;
@@ -62,4 +77,3 @@ export function validateCard(value: CardFormValue, now = new Date()): CardErrors
   }
   return errors;
 }
-
