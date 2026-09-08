@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     if (!customer.ok) return errorResponse(customer.message, 400);
     if (!address.ok) return errorResponse(address.message, 400);
     const token = shopifyToken();
-    if (!token) return errorResponse("Shopify não configurada", 500);
+    if (!token) return errorResponse("Loja temporariamente indisponível. Tente novamente em instantes.", 500);
     const providerOptions = await fetchShopifyDraftDeliveryOptions({
       items: items.value,
       customerName: customer.value.name,

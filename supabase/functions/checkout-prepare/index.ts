@@ -35,25 +35,26 @@ function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/** Diz ao cliente qual dado revisar, em vez do genérico "tente novamente". */
-function customerFacingDraftError(errors: ShopifyUserError[], detail?: string | null): string {
-  if (hasFieldError(errors, /customer/i)) {
-    // Cadastro do cliente: o motivo vem da própria loja e é o que o
-    // atendimento precisa ver para resolver (e-mail duplicado, telefone já
-    // usado, escopo do token). Mostrar o texto genérico aqui esconde a causa.
-    return `Não foi possível vincular seu cadastro na loja. ${detail || "Fale com o atendimento."}`;
-  }
-  if (hasFieldError(errors, /phone/i)) return "Revise o telefone informado: a loja não conseguiu aceitá-lo.";
-  if (hasFieldError(errors, /email/i)) return "Revise o e-mail informado: a loja não conseguiu aceitá-lo.";
+/**
+ * Mensagem ao cliente: nunca expõe o motivo técnico nem o texto cru da loja
+ * (e-mail duplicado, telefone em uso, escopo de token etc.). O detalhe real
+ * fica só no log administrativo (checkout_attempt_logs). Aqui o cliente recebe
+ * no máximo uma dica genérica de qual dado revisar.
+ */
+function customerFacingDraftError(errors: ShopifyUserError[], _detail?: string | null): string {
+  if (hasFieldError(errors, /phone/i)) return "Não conseguimos concluir seu pedido. Revise o telefone informado e tente novamente.";
+  if (hasFieldError(errors, /email/i)) return "Não conseguimos concluir seu pedido. Revise o e-mail informado e tente novamente.";
   if (hasFieldError(errors, /(zip|postal|province|address)/i)) {
-    return "Revise o endereço informado (CEP, estado ou rua): a loja não conseguiu aceitá-lo.";
+    return "Não conseguimos concluir seu pedido. Revise o endereço informado e tente novamente.";
   }
-  if (hasFieldError(errors, /(taxcredential|localizedfield)/i)) return "Revise o CPF/CNPJ informado.";
+  if (hasFieldError(errors, /(taxcredential|localizedfield)/i)) {
+    return "Não conseguimos concluir seu pedido. Revise o CPF/CNPJ informado e tente novamente.";
+  }
   if (hasFieldError(errors, /(lineitem|variant)/i)) {
     return "Um dos produtos da sacola ficou indisponível. Revise a sacola e tente de novo.";
   }
   if (hasFieldError(errors, /shipping/i)) return "Escolha novamente a forma de entrega e tente de novo.";
-  return "Não foi possível preparar o pedido na Shopify. Tente novamente em alguns instantes.";
+  return "Não conseguimos concluir seu pedido agora. Tente novamente em alguns instantes ou fale com o atendimento.";
 }
 
 
@@ -115,7 +116,7 @@ Deno.serve(async (req) => {
       "SHOPIFY_ACCESS_TOKEN",
       "SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2",
     ]);
-    if (!storefrontToken || !shopifyToken) return errorResponse("Shopify não configurada", 500);
+    if (!storefrontToken || !shopifyToken) return errorResponse("Loja temporariamente indisponível. Tente novamente em instantes.", 500);
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
     if (auth.user) {
@@ -297,7 +298,7 @@ Deno.serve(async (req) => {
         ? pickupOptions.find((option) => option.handle === input.delivery.optionHandle)
         : pickupOptions[0];
       if (!selectedPickup) {
-        return errorResponse("A retirada na loja está indisponível na Shopify. Verifique o local e o estoque.", 409);
+        return errorResponse("A retirada na loja está indisponível no momento. Tente novamente em instantes.", 409);
       }
       shippingMethod = selectedPickup.title;
       shippingRateHandle = selectedPickup.handle;
