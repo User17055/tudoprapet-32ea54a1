@@ -531,16 +531,24 @@ const Catalog = () => {
 
       <div className="border-b border-border pb-5">
         <h3 className="font-display font-bold text-sm uppercase tracking-wide mb-3">Buscar</h3>
-        <div className="flex gap-2">
+        <form
+          className="flex gap-2"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applySearch();
+          }}
+        >
           <Input
+            type="search"
+            enterKeyHint="search"
             placeholder="Buscar..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && applySearch()}
             className="rounded-full"
           />
-          <Button size="sm" onClick={applySearch} className="rounded-full shrink-0">Ir</Button>
-        </div>
+          <Button type="submit" size="sm" className="shrink-0 rounded-full">Pesquisar</Button>
+        </form>
       </div>
 
       <Accordion

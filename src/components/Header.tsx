@@ -200,6 +200,9 @@ export const Header = () => {
             <div className="grid grid-cols-1 gap-2 bg-muted/25 p-3 xl:grid-cols-2">
               {searchResults.slice(0, 4).map((product) => {
                 const image = product.node.images.edges[0]?.node;
+                const available = product.node.variants.edges.some(
+                  (item) => item.node.availableForSale,
+                );
                 const variant =
                   product.node.variants.edges.find((item) => item.node.availableForSale)?.node ||
                   product.node.variants.edges[0]?.node;
@@ -214,7 +217,9 @@ export const Header = () => {
                     key={product.node.id}
                     to={`/product/${product.node.handle}`}
                     onClick={openProduct}
-                    className="flex min-h-[118px] min-w-0 items-center gap-3 rounded-lg border border-border bg-white p-3 transition-shadow hover:shadow-sm"
+                    className={`flex min-h-[118px] min-w-0 items-center gap-3 rounded-lg border p-3 transition-shadow hover:shadow-sm ${
+                      available ? "border-border bg-white" : "border-slate-200 bg-slate-100 text-slate-500"
+                    }`}
                   >
                     <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden bg-white">
                       {image ? (
@@ -222,7 +227,7 @@ export const Header = () => {
                           src={image.url}
                           alt={image.altText || product.node.title}
                           loading="lazy"
-                          className="h-full w-full object-contain p-1"
+                          className={`h-full w-full object-contain p-1 ${available ? "" : "grayscale opacity-50"}`}
                         />
                       ) : (
                         <Package className="h-8 w-8 text-muted-foreground" />
@@ -232,6 +237,11 @@ export const Header = () => {
                       <p className="line-clamp-2 text-xs font-medium leading-snug text-foreground" title={product.node.title}>
                         {product.node.title}
                       </p>
+                      {!available && (
+                        <span className="mt-1.5 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                          Indisponível
+                        </span>
+                      )}
                       <p className="mt-1.5 text-base font-extrabold text-foreground">
                         {formatPrice(price)}
                       </p>
@@ -339,7 +349,8 @@ export const Header = () => {
           }}
         >
           <input
-            type="text"
+                  type="search"
+                  enterKeyHint="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => {
@@ -416,7 +427,8 @@ export const Header = () => {
           }}
         >
           <input
-            type="text"
+                    type="search"
+                    enterKeyHint="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => {

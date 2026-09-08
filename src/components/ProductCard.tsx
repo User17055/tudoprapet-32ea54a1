@@ -161,8 +161,8 @@ export const ProductCard = ({
         )}
 
         {isOutOfStock && (
-          <span className="absolute left-2.5 top-2.5 z-[2] inline-flex h-[26px] items-center justify-center rounded-full bg-[#1d1d1f]/85 px-2.5 text-[11px] font-semibold leading-none text-white">
-            Esgotado
+          <span className="absolute left-2.5 top-2.5 z-[2] inline-flex h-[26px] items-center justify-center rounded-full bg-slate-200 px-2.5 text-[11px] font-semibold leading-none text-slate-600">
+            Indisponível
           </span>
         )}
 
@@ -186,7 +186,7 @@ export const ProductCard = ({
           onClick={handleAddToCart}
           disabled={isLoading || !variant?.availableForSale}
           aria-label="Adicionar ao carrinho"
-          className="absolute bottom-4 right-4 z-[2] flex h-12 w-12 items-center justify-center rounded-full bg-[#171717] text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-primary active:scale-95 disabled:opacity-50"
+          className="absolute bottom-4 right-4 z-[2] flex h-12 w-12 items-center justify-center rounded-full bg-[#171717] text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-primary active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100 disabled:shadow-none"
         >
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />

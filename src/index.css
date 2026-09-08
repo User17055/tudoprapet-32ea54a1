@@ -73,10 +73,18 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+    overflow-x: hidden;
   }
+  html, body, #root { width: 100%; min-width: 0; }
+  img, video, canvas, svg { max-width: 100%; }
+  main, section, article, aside, nav, header, footer { min-width: 0; }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
   }
+}
+
+@media (max-width: 639px) {
+  input, select, textarea { font-size: 16px !important; }
 }
 
 @layer utilities {

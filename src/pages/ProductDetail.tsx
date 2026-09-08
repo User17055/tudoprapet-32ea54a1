@@ -666,12 +666,12 @@ const ProductDetail = () => {
                           key={item.id}
                           type="button"
                           disabled
-                          title={`${item.shopify_product_title} — Acabou`}
-                          aria-label={`${item.label} — acabou`}
-                          className="cursor-not-allowed rounded-lg border-2 border-red-400 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+                          title={`${item.shopify_product_title} — Indisponível`}
+                          aria-label={`${item.label} — indisponível`}
+                          className="cursor-not-allowed rounded-lg border-2 border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-500"
                         >
                           {item.label}
-                          <span className="ml-1.5 text-[10px] font-black uppercase">Acabou</span>
+                          <span className="ml-1.5 text-[10px] font-black uppercase">Indisponível</span>
                         </button>
                       );
                     }
@@ -703,14 +703,19 @@ const ProductDetail = () => {
                   {node.variants.edges.map((v, i) => (
                     <button
                       key={v.node.id}
+                      type="button"
+                      disabled={!v.node.availableForSale}
                       onClick={() => setSelectedVariantIdx(i)}
                       className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
-                        i === selectedVariantIdx
+                        !v.node.availableForSale
+                          ? "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-500"
+                          : i === selectedVariantIdx
                           ? "border-primary bg-primary/5 text-primary"
                           : "border-border hover:border-primary/50"
                       }`}
                     >
                       {v.node.title}
+                      {!v.node.availableForSale && <span className="ml-1.5 text-[10px] font-bold uppercase">Indisponível</span>}
                     </button>
                   ))}
                 </div>

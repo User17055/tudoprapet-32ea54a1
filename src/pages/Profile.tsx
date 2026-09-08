@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  ChevronRight,
   Crown,
   ExternalLink,
   Loader2,
@@ -10,7 +9,6 @@ import {
   MapPin,
   Package,
   Plus,
-  RotateCcw,
   ShieldCheck,
   ShoppingBag,
   Trash2,
@@ -116,8 +114,6 @@ const Profile = () => {
   const [searchParams] = useSearchParams();
   const returnToCheckout = searchParams.get("retorno") === "checkout";
   const [orders, setOrders] = useState<OrderSummary[]>([]);
-  const [totalSavings, setTotalSavings] = useState(0);
-  const [orderCount, setOrderCount] = useState(0);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [addresses, setAddresses] = useState<AccountAddress[]>([]);
   const [contact, setContact] = useState<AccountContact>({ name: "", email: "", cpfCnpj: "", mobilePhone: "" });
@@ -143,8 +139,6 @@ const Profile = () => {
       if (!error && data) {
         const all = data.orders || [];
         setOrders(all.slice(0, 4));
-        setOrderCount(all.length);
-        setTotalSavings(data.total_savings || 0);
       }
       setOrdersLoading(false);
     });
@@ -253,27 +247,6 @@ const Profile = () => {
     toast.success("Dados pessoais salvos.");
   };
 
-  const accountLinks = [
-    {
-      to: "/meus-pedidos",
-      icon: Package,
-      title: "Meus pedidos",
-      description: "Acompanhe suas compras",
-    },
-    {
-      to: "/carrinho",
-      icon: ShoppingBag,
-      title: "Meu carrinho",
-      description: "Continue sua compra",
-    },
-    {
-      to: "/catalogo",
-      icon: RotateCcw,
-      title: "Comprar de novo",
-      description: "Voltar ao catálogo",
-    },
-  ];
-
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
       <Header />
@@ -281,8 +254,8 @@ const Profile = () => {
       <main className="flex-1">
         {/* Faixa de título no padrão do catálogo */}
         <div className="border-b border-border bg-white">
-          <div className="container mx-auto py-8 md:py-10">
-            <Breadcrumb className="mb-6">
+          <div className="container mx-auto py-5 sm:py-8 md:py-10">
+            <Breadcrumb className="mb-4 sm:mb-6">
               <BreadcrumbList>
                 <BreadcrumbItem>
                   <BreadcrumbLink asChild>
@@ -296,14 +269,14 @@ const Profile = () => {
               </BreadcrumbList>
             </Breadcrumb>
 
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[hsl(218_70%_15%)] font-display text-xl font-bold text-white">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[hsl(218_70%_15%)] font-display text-base font-bold text-white sm:h-16 sm:w-16 sm:text-xl">
                   {initials}
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="truncate font-display font-900 text-2xl text-foreground md:text-3xl">
+                    <h1 className="truncate font-display font-900 text-xl text-foreground sm:text-2xl md:text-3xl">
                       Olá, {firstName || fullName}
                     </h1>
                     {isSubscribed ? (
@@ -334,100 +307,15 @@ const Profile = () => {
           </div>
         </div>
 
-        <div className="container mx-auto py-8">
-          {/* Resumo no padrão de Meus Pedidos */}
-          <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                  <Package className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Pedidos realizados</p>
-                  <p className="font-display text-2xl font-bold">
-                    {ordersLoading ? "—" : orderCount}
-                  </p>
-                </div>
-              </div>
-            </div>
+        <div className="container mx-auto py-5 sm:py-8">
+          <nav className="mb-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Atalhos da conta">
+            <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/meus-pedidos"><Package className="mr-1.5 h-4 w-4" />Meus pedidos</Link></Button>
+            <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/carrinho"><ShoppingBag className="mr-1.5 h-4 w-4" />Carrinho</Link></Button>
+            <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/catalogo">Comprar novamente</Link></Button>
+            {isAdmin && <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/admin"><ShieldCheck className="mr-1.5 h-4 w-4" />Painel admin</Link></Button>}
+          </nav>
 
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-pet-green/10">
-                  <ShieldCheck className="h-6 w-6 text-pet-green" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status da conta</p>
-                  <p className="font-display text-2xl font-bold">Ativa</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border-0 bg-gradient-to-br from-primary to-[hsl(218_70%_15%)] p-5 text-white">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20">
-                  <Crown className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <p className="text-xs opacity-90">Você economizou</p>
-                  <p className="font-display text-2xl font-bold">
-                    {ordersLoading ? "—" : formatCurrency(totalSavings)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-            <aside className="space-y-4">
-              <nav
-                className="overflow-hidden rounded-xl border border-border bg-card"
-                aria-label="Menu da conta"
-              >
-                <div className="border-b border-border px-5 py-4">
-                  <h2 className="font-display font-bold text-foreground">
-                    Acessos rápidos
-                  </h2>
-                </div>
-                <div className="p-2">
-                  {accountLinks.map((item) => (
-                    <Link
-                      key={item.title}
-                      to={item.to}
-                      className="group flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-muted"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <item.icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-foreground">
-                          {item.title}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {item.description}
-                        </p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
-                    </Link>
-                  ))}
-                </div>
-              </nav>
-
-              {isAdmin && (
-                <Button
-                  asChild
-                  variant="outline"
-                  className="btn-bounce h-11 w-full justify-start rounded-full"
-                >
-                  <Link to="/admin">
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                    Acessar painel admin
-                  </Link>
-                </Button>
-              )}
-            </aside>
-
-            <div className="space-y-6">
+          <div className="mx-auto max-w-5xl space-y-5 sm:space-y-6">
             {returnToCheckout && <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold text-foreground">Complete o cadastro para finalizar sua compra</p><p className="text-sm text-muted-foreground">Depois de salvar seus dados e endereço, volte ao checkout.</p></div><Button asChild className="shrink-0"><Link to="/checkout">Voltar ao checkout</Link></Button></div>}
             <section className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="border-b border-border px-5 py-4 md:px-6">
@@ -439,21 +327,21 @@ const Profile = () => {
               </div>
             </section>
             <section className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 md:px-6">
+              <div className="flex flex-col items-start gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
                 <div>
                   <h2 className="font-display text-lg font-bold text-foreground">Meus endereços</h2>
                   <p className="text-sm text-muted-foreground">Use no checkout sem preencher tudo novamente.</p>
                 </div>
-                <Button type="button" size="sm" className="shrink-0 rounded-full" onClick={openNewAddress}><Plus className="mr-1.5 h-4 w-4" />Adicionar</Button>
+                <Button type="button" size="sm" className="w-full shrink-0 rounded-full sm:w-auto" onClick={openNewAddress}><Plus className="mr-1.5 h-4 w-4" />Adicionar endereço</Button>
               </div>
               <div className="p-4 md:p-5">
-                {addressesLoading ? <div className="h-20 animate-pulse rounded-xl bg-muted/60" /> : addresses.length === 0 && !addressFormOpen ? <div className="flex flex-col items-center py-8 text-center"><MapPin className="h-9 w-9 text-muted-foreground" /><p className="mt-3 font-bold">Nenhum endereço cadastrado</p><p className="mt-1 text-sm text-muted-foreground">Cadastre agora para agilizar sua próxima compra.</p><Button type="button" variant="outline" className="mt-4 rounded-full" onClick={openNewAddress}>Cadastrar endereço</Button></div> : <div className="grid gap-3 sm:grid-cols-2">{addresses.map((address) => <article key={address.id} className="relative rounded-xl border border-border p-4"><div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><MapPin className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong>{address.label}</strong>{address.isDefaultShipping && <Badge variant="outline" className="border-pet-green/30 bg-pet-green/10 text-pet-green">Padrão</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{address.address1}, {address.number}{address.address2 ? `, ${address.address2}` : ""}</p><p className="text-sm text-muted-foreground">{address.neighborhood} • {address.city}/{address.provinceCode} • {address.postalCode}</p></div></div><div className="mt-3 flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => editAddress(address)}>Editar</Button>{address.id && <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => void deleteAddress(address.id!)} aria-label={`Remover endereço ${address.label}`}><Trash2 className="h-4 w-4" /></Button>}</div></article>)}</div>}
+                {addressesLoading ? <div className="h-20 animate-pulse rounded-xl bg-muted/60" /> : addresses.length === 0 && !addressFormOpen ? <div className="flex flex-col items-center py-8 text-center"><MapPin className="h-9 w-9 text-muted-foreground" /><p className="mt-3 font-bold">Nenhum endereço cadastrado</p><p className="mt-1 text-sm text-muted-foreground">Cadastre agora para agilizar sua próxima compra.</p><Button type="button" variant="outline" className="mt-4 rounded-full" onClick={openNewAddress}>Cadastrar endereço</Button></div> : <div className="grid gap-3 sm:grid-cols-2">{addresses.map((address) => <article key={address.id} className="relative min-w-0 rounded-xl border border-border p-4"><div className="flex min-w-0 items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><MapPin className="h-4 w-4" /></span><div className="min-w-0 flex-1 break-words"><div className="flex flex-wrap items-center gap-2"><strong>{address.label}</strong>{address.isDefaultShipping && <Badge variant="outline" className="border-pet-green/30 bg-pet-green/10 text-pet-green">Padrão</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{address.address1}, {address.number}{address.address2 ? `, ${address.address2}` : ""}</p><p className="text-sm text-muted-foreground">{address.neighborhood} • {address.city}/{address.provinceCode} • {address.postalCode}</p></div></div><div className="mt-3 flex justify-end gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => editAddress(address)}>Editar</Button>{address.id && <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => void deleteAddress(address.id!)} aria-label={`Remover endereço ${address.label}`}><Trash2 className="h-4 w-4" /></Button>}</div></article>)}</div>}
                 {addressFormOpen && <div className="mt-4 rounded-xl border border-primary/20 bg-muted/20 p-4"><div className="mb-4 flex items-center justify-between"><h3 className="font-bold">{addressForm.id ? "Editar endereço" : "Novo endereço"}</h3><Button type="button" variant="ghost" size="sm" onClick={() => setAddressFormOpen(false)}>Cancelar</Button></div><div className="grid gap-3 sm:grid-cols-2"><ProfileField label="Nome do endereço"><Input placeholder="Casa, Trabalho..." value={addressForm.label} onChange={(event) => setAddressForm({ ...addressForm, label: event.target.value })} /></ProfileField><ProfileField label="Destinatário"><Input value={addressForm.recipientName} onChange={(event) => setAddressForm({ ...addressForm, recipientName: event.target.value })} /></ProfileField><ProfileField label="CEP"><div className="relative"><Input placeholder="00000-000" maxLength={9} inputMode="numeric" value={addressForm.postalCode} onChange={(event) => setAddressForm({ ...addressForm, postalCode: maskCep(event.target.value) })} />{cepLoading && <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-primary" />}</div></ProfileField><ProfileField label="Rua"><Input value={addressForm.address1} onChange={(event) => setAddressForm({ ...addressForm, address1: event.target.value })} /></ProfileField><ProfileField label="Número"><Input value={addressForm.number} onChange={(event) => setAddressForm({ ...addressForm, number: event.target.value })} /></ProfileField><ProfileField label="Complemento"><Input placeholder="Opcional" value={addressForm.address2} onChange={(event) => setAddressForm({ ...addressForm, address2: event.target.value })} /></ProfileField><ProfileField label="Bairro"><Input value={addressForm.neighborhood} onChange={(event) => setAddressForm({ ...addressForm, neighborhood: event.target.value })} /></ProfileField><ProfileField label="Cidade"><Input value={addressForm.city} onChange={(event) => setAddressForm({ ...addressForm, city: event.target.value })} /></ProfileField><ProfileField label="UF"><Input maxLength={2} value={addressForm.provinceCode} onChange={(event) => setAddressForm({ ...addressForm, provinceCode: event.target.value.toUpperCase() })} /></ProfileField></div><label className="mt-4 flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={addressForm.isDefaultShipping} onChange={(event) => setAddressForm({ ...addressForm, isDefaultShipping: event.target.checked })} />Usar como endereço padrão</label>{addressError && <p className="mt-3 text-sm font-medium text-destructive">{addressError}</p>}<Button type="button" className="mt-4 w-full sm:w-auto" disabled={addressBusy} onClick={() => void saveAddress()}>{addressBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar endereço</Button></div>}
               </div>
             </section>
 
             <section className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 md:px-6">
+              <div className="flex flex-col items-start gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
                 <div>
                   <h2 className="font-display text-lg font-bold text-foreground">
                     Pedidos recentes
@@ -464,7 +352,7 @@ const Profile = () => {
                   asChild
                   variant="ghost"
                   size="sm"
-                  className="btn-bounce shrink-0 rounded-full text-primary"
+                  className="btn-bounce w-full shrink-0 justify-center rounded-full text-primary sm:w-auto"
                 >
                   <Link to="/meus-pedidos">Ver todos</Link>
                 </Button>
@@ -575,7 +463,6 @@ const Profile = () => {
                 )}
               </div>
             </section>
-            </div>
           </div>
         </div>
       </main>

@@ -200,8 +200,8 @@ export default function Admin() {
     <div className="min-h-screen bg-[#f4f6fa] text-[#1c2333]">
       <header className="sticky top-0 z-50 flex h-20 items-center justify-between gap-4 bg-[#112f5f] px-4 text-white shadow-lg sm:px-7">
         <Link to="/" className="flex min-w-0 items-center" aria-label="TudoPraPet">
-          <span className="flex h-14 shrink-0 items-center rounded-xl bg-white px-3 shadow-sm">
-            <img src={logo} alt="" className="h-auto w-48" />
+          <span className="flex h-12 shrink-0 items-center rounded-xl bg-white px-2.5 shadow-sm sm:h-14 sm:px-3">
+            <img src={logo} alt="" className="h-auto w-36 sm:w-48" />
           </span>
         </Link>
 
@@ -300,29 +300,23 @@ export default function Admin() {
               </div>
             ))}
           </nav>
-          <img
-            src="/admin-decor/semfundo.png"
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-[-20px] z-0 w-[285px] max-w-none drop-shadow-[0_10px_12px_rgba(10,25,49,0.22)]"
-          />
         </aside>
 
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="min-w-0 flex-1 overflow-x-hidden px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-[1440px]">
-            <div className="mb-6 flex items-start gap-3">
+            <div className="mb-5 flex min-w-0 items-start gap-3 sm:mb-6">
               <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112f5f] text-[#f1c548] shadow-sm">
                 <ActiveIcon className="h-5 w-5" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b17c15]">
                   {NAV_GROUPS.find((group) => group.items.some((item) => item.id === active.id))?.label}
                 </p>
-                <h1 className="text-2xl font-extrabold tracking-tight text-[#0a1931]">{active.label}</h1>
+                <h1 className="break-words text-xl font-extrabold tracking-tight text-[#0a1931] sm:text-2xl">{active.label}</h1>
                 <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
               </div>
             </div>
-            <section key={active.id} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+            <section key={active.id} className="min-w-0 overflow-x-auto pb-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
               <ActiveComponent />
             </section>
           </div>
