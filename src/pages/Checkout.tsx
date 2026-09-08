@@ -1153,7 +1153,7 @@ export default function Checkout() {
           });
         } else {
           toast.warning("Pagamento realizado, mas o cartão não foi salvo", {
-            description: "A tokenização precisa estar habilitada na conta Asaas.",
+            description: "Você poderá informar o cartão novamente na próxima compra.",
           });
         }
       }
@@ -2204,7 +2204,7 @@ function PaymentCheckoutScreen({
                 <h2 className="font-bold text-slate-900">Formas de pagamento</h2>
               </div>
               <p className="mb-5 text-sm text-slate-500">
-                Pix, crédito no site ou débito pela página segura do Asaas.
+                Pix, crédito no site ou débito em página segura.
               </p>
               <div className="[&>div>div[data-step-item]:last-child]:hidden">
                 {children}
@@ -2576,20 +2576,20 @@ function PaymentStep(props: {
           onClick={() => props.setMethod("credit_card")}
           icon={<CreditCard className="h-5 w-5" />}
           title="Cartão"
-          text="Processado com segurança pelo Asaas"
+          text="Processado em ambiente seguro"
         />
         <Choice
           active={props.method === "debit_card"}
           onClick={() => props.setMethod("debit_card")}
           icon={<WalletCards className="h-5 w-5" />}
           title="Débito"
-          text="Pagamento à vista no ambiente do Asaas"
+          text="Pagamento à vista em ambiente seguro"
         />
       </div>
       {props.method === "debit_card" && (
         <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-950">
           <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
-          <p>Você será direcionado à página segura do Asaas para informar o cartão de débito. O pedido será confirmado automaticamente após a aprovação.</p>
+          <p>Você será direcionado a uma página segura para informar o cartão de débito. O pedido será confirmado automaticamente após a aprovação.</p>
         </div>
       )}
       {props.method === "credit_card" && (
@@ -2976,15 +2976,15 @@ function PaymentWaiting({
         </span>
         <h2 className="mt-5 text-xl font-bold text-slate-950">Pague com cartão de débito</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
-          O débito é concluído no ambiente seguro do Asaas. Depois do pagamento, volte a esta página para acompanhar a confirmação automática.
+          O débito é concluído em ambiente seguro. Depois do pagamento, volte a esta página para acompanhar a confirmação automática.
         </p>
         <Button asChild size="lg" className="mt-6 h-12 w-full max-w-sm bg-blue-700 text-base font-bold hover:bg-blue-800">
           <a href={payment.invoiceUrl} target="_blank" rel="noreferrer">Abrir pagamento seguro</a>
         </Button>
         <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
-          <LockKeyhole className="h-3.5 w-3.5" /> Você não será cobrado até confirmar no Asaas
+          <LockKeyhole className="h-3.5 w-3.5" /> Você não será cobrado até confirmar o pagamento
         </div>
-        <Wait label="Aguardando pagamento no Asaas" />
+        <Wait label="Aguardando o pagamento" />
       </div>
     );
   }
@@ -2993,7 +2993,7 @@ function PaymentWaiting({
       <CreditCard className="mx-auto mb-4 h-14 w-14 text-blue-900" />
       <h2 className="text-xl font-bold">Pagamento enviado</h2>
       <p className="mt-2 text-slate-600">
-        Aguardando confirmação segura do Asaas.
+        Aguardando a confirmação segura do pagamento.
       </p>
       <Wait />
     </div>
