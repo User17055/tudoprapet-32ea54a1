@@ -2,6 +2,13 @@
 // Cobre também os registros antigos, cujo error_message veio cru da Shopify.
 
 const PATTERNS: Array<[RegExp, string]> = [
+  // Casos específicos primeiro: eles ficariam escondidos atrás de "cliente".
+  [
+    /ja pertence a um cadastro|has already been taken|already exists/i,
+    "O e-mail já pertence a outro cadastro na loja e a busca não o devolve — una os cadastros na loja",
+  ],
+  [/HTTP 40[13]|unauthorized|forbidden|acesso/i, "A loja recusou o acesso do site (permissão do token) — falar com o suporte"],
+  [/recusou o cadastro com telefone|telefone/i, "Telefone recusado pela loja — peça o celular com DDD ao cliente"],
   [/phone/i, "Telefone recusado pela loja — peça o celular com DDD ao cliente"],
   [/e-?mail|email/i, "E-mail recusado pela loja — confirme o endereço do cliente"],
   [/zip|postal|cep/i, "CEP recusado pela loja"],
