@@ -1153,7 +1153,7 @@ export default function Checkout() {
           });
         } else {
           toast.warning("Pagamento realizado, mas o cartão não foi salvo", {
-            description: "A tokenização precisa estar habilitada na conta Asaas.",
+            description: "Você poderá informar o cartão novamente na próxima compra.",
           });
         }
       }
