@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
 
     const rawBody = await req.json() as Record<string, unknown>;
     const intendedMethod = rawBody.paymentMethod === "credit_card" ? "credit_card"
+      : rawBody.paymentMethod === "debit_card" ? "debit_card"
       : rawBody.paymentMethod === "pix" ? "pix" : "unknown";
     const parsed = parseCheckoutPrepareInput(rawBody);
     if (!parsed.ok) return errorResponse(parsed.message, 400);

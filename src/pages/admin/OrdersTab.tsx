@@ -26,13 +26,13 @@ interface CheckoutAttemptLog {
   checkout_session_id: string | null;
   customer_name: string | null;
   customer_email: string | null;
-  payment_method: "pix" | "credit_card" | "terms" | "unknown";
+  payment_method: "pix" | "credit_card" | "debit_card" | "terms" | "unknown";
   stage: "prepare" | "payment" | "shopify_completion";
   success: boolean;
   error_message: string | null;
   provider_payment_id: string | null;
   metadata?: unknown;
-  generated_payment_method?: "pix" | "credit_card" | "terms" | "unknown";
+  generated_payment_method?: "pix" | "credit_card" | "debit_card" | "terms" | "unknown";
   generated_amount?: number | null;
   generated_payment_status?: string | null;
 }
@@ -79,6 +79,7 @@ const ATTEMPT_TONE: Record<AttemptTone, string> = {
 const PAYMENT_METHOD: Record<string, string> = {
   pix: "Pix",
   credit_card: "Cartão",
+  debit_card: "Débito",
   terms: "Prazo",
   unknown: "Não informado",
 };

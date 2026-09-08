@@ -24,6 +24,7 @@ import {
   Store,
   Trash2,
   UserRound,
+  WalletCards,
   XCircle,
 } from "lucide-react";
 import { gsap } from "gsap";
@@ -71,6 +72,7 @@ import {
 } from "@/lib/cardValidation";
 import { useCartStore, type CartItem } from "@/stores/cartStore";
 import { toast } from "sonner";
+import { customerPaymentError } from "@/lib/paymentError";
 
 type Customer = {
   name: string;
@@ -102,6 +104,7 @@ type SavedPayment = {
   holderName: string | null;
   isDefault: boolean;
 };
+type PaymentMethod = "pix" | "credit_card" | "debit_card";
 type ShippingOption = {
   handle: string;
   code: string | null;
@@ -333,7 +336,7 @@ export default function Checkout() {
   const [shippingAvailabilityLoading, setShippingAvailabilityLoading] =
     useState(false);
   const [shippingQuoteKey, setShippingQuoteKey] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"pix" | "credit_card">(
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
     "pix",
   );
   const [savedPayments, setSavedPayments] = useState<SavedPayment[]>([]);
@@ -1141,7 +1144,7 @@ export default function Checkout() {
         });
       if (paymentError || paymentData?.error) {
         const detail = paymentData?.error || await edgeFunctionErrorText(paymentError, "Falha ao criar cobrança.");
-        throw new Error(detail);
+        throw new Error(customerPaymentError(detail));
       }
       if (paymentData.cardSaveRequested) {
         if (paymentData.cardSaved) {
@@ -1367,13 +1370,21 @@ export default function Checkout() {
           setSavedPaymentId("");
           setPaymentMethod("pix");
         }}
+        onChooseDebitAfterFailure={() => {
+          setCardFailure(null);
+          setMessage("");
+          setSavedPaymentId("");
+          setPaymentMethod("debit_card");
+        }}
         message={message}
         submitLabel={
           isFranchisee
             ? "Finalizar pedido"
             : paymentMethod === "pix"
               ? "Gerar Pix e finalizar"
-              : "Pagar com cartão"
+              : paymentMethod === "debit_card"
+                ? "Continuar para o débito"
+                : "Pagar com cartão"
         }
         onBack={() => {
           setMessage("");
@@ -2139,6 +2150,7 @@ function PaymentCheckoutScreen({
   cardFailure,
   onDismissCardFailure,
   onChoosePixAfterFailure,
+  onChooseDebitAfterFailure,
   message,
   submitLabel,
   onBack,
@@ -2158,6 +2170,7 @@ function PaymentCheckoutScreen({
   cardFailure: string | null;
   onDismissCardFailure: () => void;
   onChoosePixAfterFailure: () => void;
+  onChooseDebitAfterFailure: () => void;
   message: string;
   submitLabel: string;
   onBack: () => void;
@@ -2173,20 +2186,25 @@ function PaymentCheckoutScreen({
     isDefaultBilling: true,
   };
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-slate-50 pb-24 lg:pb-0">
       <div className="mx-auto max-w-[1240px]">
         <CheckoutHeader onBack={onBack} />
       </div>
-      <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8 lg:px-0">
-        <h1 className="mb-5 text-2xl font-bold text-slate-950">Pagamento</h1>
+      <div className="mx-auto max-w-[1240px] px-3 py-4 sm:px-6 sm:py-8 lg:px-0">
+        <div className="mb-5">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700">Última etapa</p>
+          <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">Finalize seu pagamento</h1>
+          <p className="mt-1 text-sm text-slate-600">Escolha a opção mais conveniente. Seus dados são enviados com segurança.</p>
+        </div>
         <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px] xl:gap-10">
           <div className="space-y-6">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
-              <h2 className="mb-1 font-bold text-slate-900">
-                Formas de pagamento
-              </h2>
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-800"><LockKeyhole className="h-4 w-4" /></span>
+                <h2 className="font-bold text-slate-900">Formas de pagamento</h2>
+              </div>
               <p className="mb-5 text-sm text-slate-500">
-                Escolha como deseja pagar seu pedido.
+                Pix, crédito no site ou débito pela página segura do Asaas.
               </p>
               <div className="[&>div>div[data-step-item]:last-child]:hidden">
                 {children}
@@ -2238,7 +2256,7 @@ function PaymentCheckoutScreen({
             >
               Alterar forma de entrega ou endereço
             </button>
-            <div className="rounded-xl border border-slate-200 p-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <OrderSummary
                 summary={summary}
                 cartItems={cartItems}
@@ -2252,16 +2270,18 @@ function PaymentCheckoutScreen({
                 cardPlan={cardPlan}
               />
             </div>
-            <Button
-              type="button"
-              size="lg"
-              className="h-12 w-full bg-blue-700 hover:bg-blue-800"
-              disabled={busy}
-              onClick={onNext}
-            >
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {busy ? "Processando..." : submitLabel}
-            </Button>
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+              <Button
+                type="button"
+                size="lg"
+                className="mx-auto h-12 w-full max-w-[1240px] bg-blue-700 text-base font-bold hover:bg-blue-800"
+                disabled={busy}
+                onClick={onNext}
+              >
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {busy ? "Processando..." : submitLabel}
+              </Button>
+            </div>
           </aside>
         </div>
       </div>
@@ -2313,6 +2333,9 @@ function PaymentCheckoutScreen({
               </Button>
               <Button type="button" variant="outline" className="h-11" onClick={onChoosePixAfterFailure}>
                 Escolher Pix
+              </Button>
+              <Button type="button" variant="ghost" className="h-11" onClick={onChooseDebitAfterFailure}>
+                Pagar no débito
               </Button>
             </div>
           </div>
@@ -2467,8 +2490,8 @@ function AddressRegistrationSheet({
 function PaymentStep(props: {
   franchise: boolean;
   deliveryMode: "pick_up" | "shipping";
-  method: "pix" | "credit_card";
-  setMethod: (v: "pix" | "credit_card") => void;
+  method: PaymentMethod;
+  setMethod: (v: PaymentMethod) => void;
   shippingOptions: ShippingOption[];
   shippingHandle: string;
   setShippingHandle: (v: string) => void;
@@ -2540,7 +2563,7 @@ function PaymentStep(props: {
             </div>
           </div>
         )}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Choice
           active={props.method === "pix"}
           onClick={() => props.setMethod("pix")}
@@ -2555,7 +2578,20 @@ function PaymentStep(props: {
           title="Cartão"
           text="Processado com segurança pelo Asaas"
         />
+        <Choice
+          active={props.method === "debit_card"}
+          onClick={() => props.setMethod("debit_card")}
+          icon={<WalletCards className="h-5 w-5" />}
+          title="Débito"
+          text="Pagamento à vista no ambiente do Asaas"
+        />
       </div>
+      {props.method === "debit_card" && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-950">
+          <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
+          <p>Você será direcionado à página segura do Asaas para informar o cartão de débito. O pedido será confirmado automaticamente após a aprovação.</p>
+        </div>
+      )}
       {props.method === "credit_card" && (
         <div className="space-y-4">
           <div className="space-y-2">
@@ -2713,7 +2749,11 @@ function PaymentStep(props: {
         back={props.onBack}
         next={props.onNext}
         nextLabel={
-          props.method === "pix" ? "Gerar Pix e finalizar" : "Pagar com cartão"
+          props.method === "pix"
+            ? "Gerar Pix e finalizar"
+            : props.method === "debit_card"
+              ? "Continuar para o débito"
+              : "Pagar com cartão"
         }
       />
     </div>
@@ -2925,6 +2965,26 @@ function PaymentWaiting({
             {cancelling ? "Voltando..." : "Voltar"}
           </Button>
         </div>
+      </div>
+    );
+  }
+  if (payment?.invoiceUrl) {
+    return (
+      <div className="py-8 text-center sm:py-12">
+        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-900">
+          <WalletCards className="h-8 w-8" />
+        </span>
+        <h2 className="mt-5 text-xl font-bold text-slate-950">Pague com cartão de débito</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
+          O débito é concluído no ambiente seguro do Asaas. Depois do pagamento, volte a esta página para acompanhar a confirmação automática.
+        </p>
+        <Button asChild size="lg" className="mt-6 h-12 w-full max-w-sm bg-blue-700 text-base font-bold hover:bg-blue-800">
+          <a href={payment.invoiceUrl} target="_blank" rel="noreferrer">Abrir pagamento seguro</a>
+        </Button>
+        <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+          <LockKeyhole className="h-3.5 w-3.5" /> Você não será cobrado até confirmar no Asaas
+        </div>
+        <Wait label="Aguardando pagamento no Asaas" />
       </div>
     );
   }

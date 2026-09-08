@@ -93,7 +93,7 @@ interface PaymentRow {
   status: LocalPaymentStatus;
   is_active: boolean;
   provider_payment_id: string | null;
-  method: "pix" | "boleto" | "credit_card" | "terms";
+  method: "pix" | "boleto" | "credit_card" | "debit_card" | "terms";
   pix_expires_at?: string | null;
 }
 

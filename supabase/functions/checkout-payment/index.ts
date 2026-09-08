@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     userId?: string | null;
     customerName?: string;
     customerEmail?: string;
-    method: "pix" | "credit_card" | "terms" | "unknown";
+    method: "pix" | "credit_card" | "debit_card" | "terms" | "unknown";
   } = { method: "unknown" };
   try {
     const auth = await optionalCheckoutUser(req);
@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
     const body = await req.json() as Record<string, unknown>;
     requestedAction = typeof body.action === "string" ? body.action : "";
     logContext.method = body.method === "credit_card" ? "credit_card"
+      : body.method === "debit_card" ? "debit_card"
       : body.method === "pix" ? "pix" : "unknown";
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
     const accessToken = typeof body.accessToken === "string" ? body.accessToken : null;
@@ -180,7 +181,9 @@ Deno.serve(async (req) => {
     }
 
 
-    const requestedMethod = body.method === "credit_card" ? "credit_card" : "pix";
+    const requestedMethod = body.method === "credit_card" ? "credit_card"
+      : body.method === "debit_card" ? "debit_card"
+      : "pix";
     const method = session.customer_type === "franchise" ? "terms" : requestedMethod;
     const { data: active } = await admin.from("payments").select("*")
       .eq("checkout_session_id", sessionId)
@@ -306,6 +309,16 @@ Deno.serve(async (req) => {
         }
         return jsonResponse(safePaymentResponse(sessionId, active.id, active.status, qr, null, pixExpiresAt));
       }
+      if (active.provider_payment_id && method === "debit_card" && active.status !== "confirmed") {
+        const remote = await getAsaasPayment(active.provider_payment_id, CUSTOMER_FACING);
+        return jsonResponse(safePaymentResponse(
+          sessionId,
+          active.id,
+          active.status,
+          null,
+          typeof remote.invoiceUrl === "string" ? remote.invoiceUrl : null,
+        ));
+      }
       return jsonResponse(safePaymentResponse(sessionId, active.id, active.status, null));
     }
 
@@ -363,7 +376,10 @@ Deno.serve(async (req) => {
 
     const createInput: AsaasPaymentInput = {
       customer: providerCustomerId,
-      billingType: session.customer_type === "franchise" ? "UNDEFINED" : method === "credit_card" ? "CREDIT_CARD" : "PIX",
+      billingType: session.customer_type === "franchise"
+        ? "UNDEFINED"
+        : method === "debit_card" ? "CREDIT_CARD"
+        : method === "credit_card" ? "CREDIT_CARD" : "PIX",
       value: Number(session.total),
       dueDate,
       description: `Pedido TudoPraPet ${sessionId.slice(0, 8)}`,
@@ -627,6 +643,25 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (method === "debit_card") {
+      const invoiceUrl = typeof providerPayment.invoiceUrl === "string"
+        ? providerPayment.invoiceUrl
+        : null;
+      if (!invoiceUrl) {
+        await admin.from("payments").update({ status: "failed", is_active: false })
+          .eq("id", paymentAttempt.id);
+        throw new Error("Asaas não devolveu a página segura para pagamento no débito");
+      }
+      await admin.from("checkout_sessions").update({ status: "payment_processing" }).eq("id", sessionId);
+      return jsonResponse(safePaymentResponse(
+        sessionId,
+        paymentAttempt.id,
+        directStatus,
+        null,
+        invoiceUrl,
+      ));
+    }
+
     const qr = await getAsaasPixQrCode(providerPayment.id, CUSTOMER_FACING);
     const pixExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     await Promise.all([
@@ -663,7 +698,7 @@ Deno.serve(async (req) => {
       return errorResponse("O pagamento por cartão ainda não está habilitado nesta conta. Use Pix ou fale com o atendimento.", 503);
     }
     if (/Asaas 400:.*invalid_creditCard/i.test(message)) {
-      return errorResponse("Transação não autorizada. Confira os dados do cartão ou tente outro cartão.", 402);
+      return errorResponse("O banco não autorizou esta compra. Confira os dados, tente outro cartão ou escolha Pix ou débito.", 402);
     }
     // Sessão criada antes da guarda de piso, ou piso do Asaas alterado sem
     // aviso: o motivo é legítimo e o cliente consegue agir sobre ele.
@@ -679,6 +714,8 @@ Deno.serve(async (req) => {
       return errorResponse(
         logContext.method === "credit_card"
           ? "Não foi possível validar o cartão e os dados do titular. Confira as informações e tente novamente."
+          : logContext.method === "debit_card"
+          ? "Não foi possível abrir o pagamento no débito. Tente novamente ou escolha Pix."
           : "Não foi possível gerar a cobrança. Tente novamente ou fale com o atendimento.",
         400,
       );

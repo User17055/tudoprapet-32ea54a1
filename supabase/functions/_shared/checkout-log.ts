@@ -3,7 +3,7 @@ export interface CheckoutAttemptLog {
   userId?: string | null;
   customerName?: string | null;
   customerEmail?: string | null;
-  paymentMethod?: "pix" | "credit_card" | "terms" | "unknown";
+  paymentMethod?: "pix" | "credit_card" | "debit_card" | "terms" | "unknown";
   stage: "prepare" | "payment" | "shopify_completion";
   success: boolean;
   errorMessage?: string | null;
