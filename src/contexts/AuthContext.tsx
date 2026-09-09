@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (input: { firstName: string; lastName: string; email: string; cpf: string; password: string; acquisitionSource: string; referralCode?: string }) => Promise<{ success: boolean; error?: string }>;
+  register: (input: { firstName: string; lastName: string; email: string; cpf: string; password: string; acquisitionSource: string; referralCode?: string }) => Promise<{ success: boolean; signedIn?: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (input: { firstName: string; lastName: string; email: string; cpf: string; password: string; acquisitionSource: string; referralCode?: string }) => {
     try {
       const fullName = `${input.firstName} ${input.lastName}`.trim();
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,
         options: {
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         return { success: false, error: traduzirErro(error, 'Nao foi possivel criar a conta. Tente novamente.') };
       }
-      return { success: true };
+      return { success: true, signedIn: Boolean(data.session) };
     } catch {
       return { success: false, error: 'Nao foi possivel criar a conta. Verifique sua conexao.' };
     }

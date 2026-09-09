@@ -86,8 +86,13 @@ const Register = () => {
         referralCode: normalizedReferralCode,
       });
       if (result.success) {
-        toast.success('Conta criada! Confira seu e-mail para continuar.');
-        navigate('/login');
+        if (result.signedIn) {
+          toast.success('Conta criada! Você já está conectado.');
+          navigate('/perfil', { replace: true });
+        } else {
+          toast.success('Conta criada! Confira seu e-mail para continuar.');
+          navigate('/login', { replace: true });
+        }
       } else {
         toast.error(result.error || 'Erro ao criar conta.');
       }
