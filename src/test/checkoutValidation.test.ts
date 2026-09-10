@@ -14,6 +14,11 @@ function rejectionOf(raw: unknown): string {
 }
 
 describe("parseCheckoutItems", () => {
+  it("recusa a mesma variante em linhas separadas", () => {
+    const result = parseCheckoutItems([VALID, { ...VALID, quantity: 4 }]);
+    expect(result).toEqual({ ok: false, message: "Produto duplicado no carrinho" });
+  });
+
   it("accepts a well formed cart", () => {
     const result = parseCheckoutItems([VALID]);
     expect(result).toEqual({ ok: true, value: [VALID] });

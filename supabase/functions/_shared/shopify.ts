@@ -508,6 +508,7 @@ export interface FiscalDraftOrderInput {
   tags: string[];
   note: string;
   customAttributes: Array<{ key: string; value: string }>;
+  reserveInventoryUntil?: string;
 }
 
 export interface ShopifyVariantCheckoutDetail {
@@ -519,12 +520,14 @@ export interface ShopifyVariantCheckoutDetail {
   price: number;
   availableForSale: boolean;
   quantityAvailable: number | null;
+  inventoryTracked: boolean | null;
   imageUrl: string | null;
 }
 
 export async function fetchVariantCheckoutDetails(
   variantIds: string[],
   storefrontToken: string,
+  adminToken: string,
 ): Promise<Map<string, ShopifyVariantCheckoutDetail>> {
   const buildQuery = (withInventory: boolean) => `query($ids:[ID!]!){ nodes(ids:$ids){ ... on ProductVariant {
         id title availableForSale ${withInventory ? "quantityAvailable" : ""} price { amount }
@@ -543,13 +546,14 @@ export async function fetchVariantCheckoutDetails(
   };
 
   let body = await request(true);
-  // O token Storefront pode não ter unauthenticated_read_product_inventory. Nesse
-  // caso seguimos apenas com availableForSale em vez de derrubar o checkout.
+  // Alguns tokens Storefront antigos não possuem o escopo de inventário. Não
+  // podemos tratar essa ausência como estoque ilimitado: o Admin API abaixo
+  // confirma se a variante é rastreada e traz a quantidade real.
   const inventoryDenied = (body?.errors ?? []).some((e: { message?: string }) =>
     String(e?.message || "").includes("quantityAvailable")
   );
   if (inventoryDenied) {
-    console.warn("Storefront sem acesso a quantityAvailable; usando apenas availableForSale");
+    console.warn("Storefront sem acesso a quantityAvailable; consultando inventário pelo Admin API");
     body = await request(false);
   }
   if (body?.errors?.length) {
@@ -570,9 +574,58 @@ export async function fetchVariantCheckoutDetails(
       productTitle: String(node.product?.title || "Produto"),
       price,
       availableForSale: Boolean(node.availableForSale),
-      quantityAvailable: Number.isFinite(Number(node.quantityAvailable)) ? Number(node.quantityAvailable) : null,
+      quantityAvailable: node.quantityAvailable !== null && node.quantityAvailable !== undefined &&
+          Number.isFinite(Number(node.quantityAvailable))
+        ? Number(node.quantityAvailable)
+        : null,
+      inventoryTracked: null,
       imageUrl: node.image?.url || null,
     });
+  }
+
+  const inventoryResponse = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": adminToken },
+    body: JSON.stringify({
+      query: `query($ids:[ID!]!){ nodes(ids:$ids){ ... on ProductVariant {
+        id inventoryQuantity inventoryItem { tracked }
+      } } }`,
+      variables: { ids: variantIds },
+    }),
+  });
+  if (!inventoryResponse.ok) {
+    throw new Error(`Falha ao confirmar estoque no Admin da Shopify (${inventoryResponse.status})`);
+  }
+  const inventoryBody = await inventoryResponse.json();
+  if (inventoryBody?.errors?.length) {
+    console.error("Admin inventário:", JSON.stringify(inventoryBody.errors).slice(0, 800));
+    throw new Error("Shopify não permitiu confirmar a quantidade em estoque");
+  }
+  for (const node of inventoryBody?.data?.nodes ?? []) {
+    const detail = details.get(String(node?.id || ""));
+    if (!detail) continue;
+    const tracked = node?.inventoryItem?.tracked;
+    if (tracked === false) {
+      detail.inventoryTracked = false;
+      detail.quantityAvailable = null;
+      continue;
+    }
+    const adminQuantity = node?.inventoryQuantity !== null && node?.inventoryQuantity !== undefined &&
+        Number.isFinite(Number(node.inventoryQuantity))
+      ? Number(node.inventoryQuantity)
+      : null;
+    if (tracked !== true || adminQuantity === null) {
+      throw new Error(`Quantidade de estoque desconhecida para a variante ${detail.id}`);
+    }
+    detail.inventoryTracked = true;
+    detail.quantityAvailable = detail.quantityAvailable === null
+      ? adminQuantity
+      : Math.min(detail.quantityAvailable, adminQuantity);
+  }
+  for (const detail of details.values()) {
+    if (detail.inventoryTracked === null) {
+      throw new Error(`Inventário não confirmado para a variante ${detail.id}`);
+    }
   }
   return details;
 }
@@ -809,6 +862,7 @@ export async function createFiscalDraftOrder(
     useCustomerDefaultAddress: false,
     tags: input.tags,
     note: input.note,
+    ...(input.reserveInventoryUntil ? { reserveInventoryUntil: input.reserveInventoryUntil } : {}),
     customAttributes: [
       ...input.customAttributes.filter((attribute) =>
         attribute.key !== "checkout_draft_format" && attribute.key !== "CPF/CNPJ"
@@ -825,7 +879,7 @@ export async function createFiscalDraftOrder(
       body: JSON.stringify({
         query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
           draftOrderCreate(input: $input) {
-            draftOrder { id legacyResourceId invoiceUrl }
+            draftOrder { id legacyResourceId invoiceUrl reserveInventoryUntil }
             userErrors { field message }
           }
         }`,
@@ -871,6 +925,23 @@ export async function createFiscalDraftOrder(
     lastInvoiceUrl = invoiceUrl;
 
     if (ok && draftOrderId && !creationErrors.length) {
+      if (input.reserveInventoryUntil) {
+        const requestedReservation = Date.parse(input.reserveInventoryUntil);
+        const confirmedReservation = Date.parse(String(draft?.reserveInventoryUntil || ""));
+        if (!Number.isFinite(confirmedReservation) ||
+          confirmedReservation < requestedReservation - 1_000) {
+          await deleteDraftOrder(draftOrderId, token);
+          return {
+            requestOk: false,
+            invoiceUrl: null,
+            draftOrderId: null,
+            taxCredentialStored: false,
+            error: "Shopify criou o rascunho sem confirmar a reserva de estoque.",
+            userErrors: [{ field: "reserveInventoryUntil", message: "Reserva de estoque não confirmada" }],
+            attempts,
+          };
+        }
+      }
       const credential = await setDraftOrderTaxCredential(draftOrderId, value, token);
       return {
         requestOk: true,

@@ -22,6 +22,7 @@ import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
+import { hasSufficientInventory } from "../_shared/inventory.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -154,7 +155,7 @@ Deno.serve(async (req) => {
 
     const requestedItems = input.items;
     const requestedVariantIds = requestedItems.map((item) => item.variantId);
-    const details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken);
+    const details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken, shopifyToken);
     const unavailableItems: Array<{
       variantId: string;
       productTitle: string;
@@ -180,7 +181,7 @@ Deno.serve(async (req) => {
         });
         return false;
       }
-      if (!detail.availableForSale || (detail.quantityAvailable !== null && detail.quantityAvailable < item.quantity)) {
+      if (!hasSufficientInventory(detail, item.quantity)) {
         unavailableItems.push({
           variantId: item.variantId,
           productTitle: detail.productTitle,
@@ -339,6 +340,7 @@ Deno.serve(async (req) => {
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);
     const tokenExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
     const sessionExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const inventoryReservedUntil = new Date(Date.now() + 20 * 60 * 1000).toISOString();
     const { data: session, error: sessionError } = await admin.from("checkout_sessions").insert({
       user_id: auth.user?.id ?? null,
       customer_type: customerType,
@@ -362,6 +364,7 @@ Deno.serve(async (req) => {
       },
       anonymous_access_token_hash: accessTokenHash,
       anonymous_access_token_expires_at: tokenExpiresAt,
+      inventory_reserved_until: inventoryReservedUntil,
       session_expires_at: sessionExpiresAt,
     }).select("id").single();
     if (sessionError) throw sessionError;
@@ -409,6 +412,7 @@ Deno.serve(async (req) => {
         { key: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
         { key: "shipping_option_handle", value: shippingRateHandle || input.delivery.optionHandle || shippingCode },
       ],
+      reserveInventoryUntil: inventoryReservedUntil,
     }, shopifyToken);
     if (!draft.draftOrderId) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);

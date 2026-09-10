@@ -32,6 +32,7 @@ export function parseCheckoutItems(raw: unknown): ValidationResult<LineItem[]> {
   }
 
   const items: LineItem[] = [];
+  const seenVariantIds = new Set<string>();
 
   for (const entry of raw) {
     if (typeof entry !== "object" || entry === null) {
@@ -43,13 +44,16 @@ export function parseCheckoutItems(raw: unknown): ValidationResult<LineItem[]> {
     if (typeof variantId !== "string" || !VARIANT_GID.test(variantId)) {
       return { ok: false, message: "Identificador de produto inválido" };
     }
-
     if (typeof quantity !== "number" || !Number.isInteger(quantity)) {
       return { ok: false, message: "Quantidade inválida" };
     }
     if (quantity < 1 || quantity > MAX_QUANTITY) {
       return { ok: false, message: `Quantidade deve estar entre 1 e ${MAX_QUANTITY}` };
     }
+    if (seenVariantIds.has(variantId)) {
+      return { ok: false, message: "Produto duplicado no carrinho" };
+    }
+    seenVariantIds.add(variantId);
 
     items.push({ variantId, quantity });
   }

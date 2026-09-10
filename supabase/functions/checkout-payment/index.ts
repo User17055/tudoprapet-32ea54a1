@@ -179,6 +179,15 @@ Deno.serve(async (req) => {
         409,
       );
     }
+    if (body.action !== "cancel_pix") {
+      const reservedUntil = Date.parse(String(session.inventory_reserved_until || ""));
+      if (!Number.isFinite(reservedUntil) || reservedUntil <= Date.now()) {
+        return errorResponse(
+          "A reserva de estoque deste checkout venceu. Volte à sacola e refaça o pedido — nada foi cobrado.",
+          409,
+        );
+      }
+    }
 
 
     const requestedMethod = body.method === "credit_card" ? "credit_card"
@@ -642,7 +651,6 @@ Deno.serve(async (req) => {
         cardLastFour: String(providerPayment.creditCardNumber || submittedCard?.number || "").replace(/\D/g, "").slice(-4) || null,
       });
     }
-
     if (method === "debit_card") {
       const invoiceUrl = typeof providerPayment.invoiceUrl === "string"
         ? providerPayment.invoiceUrl
