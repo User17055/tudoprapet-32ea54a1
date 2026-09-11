@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
 
     const requestedItems = input.items;
     const requestedVariantIds = requestedItems.map((item) => item.variantId);
-    let details;
+    let details: Awaited<ReturnType<typeof fetchVariantCheckoutDetails>>;
     try {
       details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken, shopifyToken);
     } catch (error) {
