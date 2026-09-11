@@ -2,7 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken } from "../_shared/checkout-access.ts";
-import { parseCheckoutPrepareInput, shippingLabel, type CheckoutAddressInput } from "../_shared/checkout-input.ts";
+import { parseCheckoutPrepareInput, shippingLabel } from "../_shared/checkout-input.ts";
 import {
   belowMinimumChargeMessage,
   buildDraftLineItems,
@@ -18,6 +18,7 @@ import {
   fetchShopifyDraftPickupOptions,
   fetchVariantCheckoutDetails,
 } from "../_shared/shopify.ts";
+import { shopifyAddress } from "../_shared/shopify-address.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
@@ -58,22 +59,6 @@ function customerFacingDraftError(errors: ShopifyUserError[], _detail?: string |
   return "Não conseguimos concluir seu pedido agora. Tente novamente em alguns instantes ou fale com o atendimento.";
 }
 
-
-function shopifyAddress(address: CheckoutAddressInput, customerName: string, phone: string) {
-  const names = customerName.trim().split(/\s+/);
-  const firstName = names.shift() || "Cliente";
-  return {
-    first_name: firstName,
-    last_name: names.join(" ") || firstName,
-    address1: `${address.address1}, ${address.number}`,
-    address2: [address.address2, address.neighborhood].filter(Boolean).join(" - ") || undefined,
-    city: address.city,
-    province_code: address.provinceCode,
-    zip: address.postalCode,
-    country_code: "BR",
-    phone: `+55${phone}`,
-  };
-}
 
 async function requestKey(req: Request, userId: string | null): Promise<string> {
   const forwarded = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";

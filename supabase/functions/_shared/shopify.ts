@@ -821,6 +821,10 @@ export async function createFiscalDraftOrder(
       lastName: address.last_name,
       address1: address.address1,
       address2: address.address2 || undefined,
+      // Sem esta linha o bairro que checkout-prepare põe em `company` morre
+      // aqui: este conversor é o único caminho do endereço até o GraphQL, e
+      // campo omitido não vira erro — vira silêncio.
+      company: address.company || undefined,
       city: address.city,
       zip: address.zip,
       phone: address.phone,
