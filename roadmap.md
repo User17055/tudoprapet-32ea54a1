@@ -16,6 +16,6 @@
 - [x] Registrar falha técnica de permissão no administrativo sem expor detalhes ao cliente
 - [x] Manter bloqueio de venda quando o estoque não puder ser confirmado
 - [x] Publicar `checkout-prepare` e confirmar versão `2026-09-11.1`
-- [ ] Incluir `read_products` e `read_inventory` no app Shopify e reinstalar — aguardando ação no Shopify Admin
-- [ ] Reautorizar a conexão para renovar `SHOPIFY_ACCESS_TOKEN` — depende da etapa anterior
-- [ ] Confirmar em produção a leitura de estoque e a criação do Draft Order
+- [x] Incluir `read_products` e `read_inventory` no app Shopify e reinstalar
+- [x] Confirmar que o token gerenciado de produção foi renovado e pertence ao app TudoPraPet Clube
+- [ ] Confirmar em produção a criação do Draft Order (leitura de produto e estoque já validada)
