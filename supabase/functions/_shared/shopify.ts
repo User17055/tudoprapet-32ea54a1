@@ -524,6 +524,35 @@ export interface ShopifyVariantCheckoutDetail {
   imageUrl: string | null;
 }
 
+export class ShopifyInventoryVerificationError extends Error {
+  readonly code: "admin_scope_denied" | "admin_inventory_unavailable";
+  readonly requiredScopes: string[];
+
+  constructor(
+    message: string,
+    code: "admin_scope_denied" | "admin_inventory_unavailable",
+    requiredScopes: string[] = [],
+  ) {
+    super(message);
+    this.name = "ShopifyInventoryVerificationError";
+    this.code = code;
+    this.requiredScopes = requiredScopes;
+  }
+}
+
+function inventoryGraphqlErrorDetail(errors: Array<Record<string, unknown>>): string {
+  return errors
+    .map((error) => {
+      const extensions = error.extensions && typeof error.extensions === "object"
+        ? error.extensions as Record<string, unknown>
+        : {};
+      const requiredAccess = typeof extensions.requiredAccess === "string" ? ` (${extensions.requiredAccess})` : "";
+      return `${String(error.message || "Erro de inventário sem mensagem")}${requiredAccess}`;
+    })
+    .join("; ")
+    .slice(0, 800);
+}
+
 export async function fetchVariantCheckoutDetails(
   variantIds: string[],
   storefrontToken: string,
@@ -594,12 +623,42 @@ export async function fetchVariantCheckoutDetails(
     }),
   });
   if (!inventoryResponse.ok) {
-    throw new Error(`Falha ao confirmar estoque no Admin da Shopify (${inventoryResponse.status})`);
+    const responseText = shortShopifyFailure(await inventoryResponse.text());
+    console.error(`Admin inventário HTTP ${inventoryResponse.status}:`, responseText);
+    throw new ShopifyInventoryVerificationError(
+      `Falha ao confirmar estoque no Admin da Shopify (HTTP ${inventoryResponse.status}): ${responseText}`,
+      "admin_inventory_unavailable",
+    );
   }
   const inventoryBody = await inventoryResponse.json();
   if (inventoryBody?.errors?.length) {
-    console.error("Admin inventário:", JSON.stringify(inventoryBody.errors).slice(0, 800));
-    throw new Error("Shopify não permitiu confirmar a quantidade em estoque");
+    const errors = inventoryBody.errors as Array<Record<string, unknown>>;
+    const detail = inventoryGraphqlErrorDetail(errors);
+    console.error("Admin inventário:", JSON.stringify(errors).slice(0, 800));
+    const denied = errors.some((error) => {
+      const extensions = error.extensions && typeof error.extensions === "object"
+        ? error.extensions as Record<string, unknown>
+        : {};
+      return extensions.code === "ACCESS_DENIED" || /required access|access denied/i.test(String(error.message || ""));
+    });
+    if (denied) {
+      const requiredScopes = [...new Set(errors.flatMap((error) => {
+        const extensions = error.extensions && typeof error.extensions === "object"
+          ? error.extensions as Record<string, unknown>
+          : {};
+        const source = `${String(error.message || "")} ${String(extensions.requiredAccess || "")}`;
+        return ["read_products", "read_inventory"].filter((scope) => source.includes(scope));
+      }))];
+      throw new ShopifyInventoryVerificationError(
+        `Shopify Admin recusou a confirmação de estoque por falta de escopo: ${detail}`,
+        "admin_scope_denied",
+        requiredScopes,
+      );
+    }
+    throw new ShopifyInventoryVerificationError(
+      `Shopify Admin não confirmou o estoque: ${detail}`,
+      "admin_inventory_unavailable",
+    );
   }
   for (const node of inventoryBody?.data?.nodes ?? []) {
     const detail = details.get(String(node?.id || ""));

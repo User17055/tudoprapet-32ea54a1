@@ -10,3 +10,12 @@
 - [ ] 8. Sem monitor permanente; sem segredo em log
 - [ ] 9. Registrar resultado/IDs/rollback (docs/)
 - [ ] #1123: confirmar entrega, remover "Codigo de retirada" preservando demais, avisar operação
+
+## Checkout — escopos de estoque Shopify (11/09/2026)
+
+- [x] Registrar falha técnica de permissão no administrativo sem expor detalhes ao cliente
+- [x] Manter bloqueio de venda quando o estoque não puder ser confirmado
+- [x] Publicar `checkout-prepare` e confirmar versão `2026-09-11.1`
+- [ ] Incluir `read_products` e `read_inventory` no app Shopify e reinstalar — aguardando ação no Shopify Admin
+- [ ] Reautorizar a conexão para renovar `SHOPIFY_ACCESS_TOKEN` — depende da etapa anterior
+- [ ] Confirmar em produção a leitura de estoque e a criação do Draft Order
