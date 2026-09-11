@@ -17,6 +17,7 @@ import {
   fetchShopifyDraftDeliveryOptions,
   fetchShopifyDraftPickupOptions,
   fetchVariantCheckoutDetails,
+  ShopifyInventoryVerificationError,
 } from "../_shared/shopify.ts";
 import { shopifyAddress } from "../_shared/shopify-address.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
@@ -140,7 +141,31 @@ Deno.serve(async (req) => {
 
     const requestedItems = input.items;
     const requestedVariantIds = requestedItems.map((item) => item.variantId);
-    const details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken, shopifyToken);
+    let details;
+    try {
+      details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken, shopifyToken);
+    } catch (error) {
+      const inventoryError = error instanceof ShopifyInventoryVerificationError ? error : null;
+      const technicalMessage = error instanceof Error ? error.message : String(error);
+      await writeCheckoutAttemptLog(admin, {
+        checkoutSessionId: null,
+        userId: auth.user?.id,
+        customerName: input.customer.name,
+        customerEmail: input.customer.email,
+        paymentMethod: intendedMethod,
+        stage: "prepare",
+        success: false,
+        errorMessage: technicalMessage,
+        metadata: {
+          failurePoint: "inventory_verification",
+          errorCode: inventoryError?.code || "inventory_verification_failed",
+          requiredScopes: inventoryError?.requiredScopes ?? [],
+          itemCount: requestedItems.length,
+        },
+      });
+      console.error("checkout-prepare inventory verification:", technicalMessage);
+      return errorResponse("Loja temporariamente indisponível. Tente novamente em instantes.", 503);
+    }
     const unavailableItems: Array<{
       variantId: string;
       productTitle: string;
