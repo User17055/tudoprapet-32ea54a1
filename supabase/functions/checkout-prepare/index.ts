@@ -379,10 +379,10 @@ Deno.serve(async (req) => {
       // cadastrado de cobranca tambem identifica o cliente/destinatario; quem
       // define PICK_UP e o handle nativo da shippingLine, nao a ausencia de CEP.
       shippingAddress: (input.delivery.address || input.billingAddress)
-        ? shopifyAddress(input.delivery.address || input.billingAddress!, input.customer.name, input.customer.mobilePhone)
+        ? shopifyAddress(input.delivery.address || input.billingAddress!, input.customer.name, input.customer.mobilePhone, input.customer.cpfCnpj)
         : undefined,
       billingAddress: (input.billingAddress || input.delivery.address)
-        ? shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone)
+        ? shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone, input.customer.cpfCnpj)
         : undefined,
       tags: [
         "checkout-proprio",
