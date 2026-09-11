@@ -41,6 +41,7 @@ export function shopifyAddress(
   address: CheckoutAddressInput,
   customerName: string,
   phone: string,
+  cpfCnpj: string,
 ): ShopifyRestAddress {
   const names = customerName.trim().split(/\s+/);
   const firstName = names.shift() || "Cliente";
@@ -56,19 +57,26 @@ export function shopifyAddress(
     address1: `${address.address1}, ${address.number}`,
     address2: [address.address2, address.neighborhood].filter(Boolean).join(" - ") || undefined,
 
-    // Bairro também em campo próprio, porque é o que trava a emissão.
-    // `company` é o único campo livre no endereço da Shopify e é onde
-    // integrações brasileiras costumam procurar dado extra.
+    // É DAQUI que o Omie.Hub lê o CPF/CNPJ do cliente. Não dos atributos do
+    // pedido, não do campo localizado TAX_CREDENTIAL_BR -- do `company` do
+    // endereço.
     //
-    // ACRÉSCIMO PURO, e é isso que torna a mudança segura: `company` ia vazio
-    // até 11/09/2026, e o bairro continua duplicado dentro de `address2`. Se o
-    // Omie ignorar este campo, o resultado é idêntico ao de hoje; se ler, o
-    // bloqueio de "Bairro é obrigatório" desaparece. Não há cenário em que
-    // isto piore o que já chega lá.
+    // Isso não está em documentação nenhuma da Omie; foi medido. Em 11/09/2026
+    // o pedido #1169 estava parado com "CPF ou CNPJ do cliente esta vazio ou
+    // invalido", como outros 72. Preenchendo à mão o campo "Empresa" do
+    // endereço de entrega na Shopify com os 11 dígitos, o Omie passou a puxar
+    // o cadastro inteiro e o pedido destravou. Nenhum outro campo mudou.
     //
-    // Custo conhecido: `company` sai impresso como nome de empresa em
-    // etiqueta e romaneio da Shopify.
-    company: address.neighborhood || undefined,
+    // Só dígitos: o Omie valida o documento, e "779.995.178-87" não passa.
+    //
+    // O bairro NÃO cabe aqui -- este campo tem dono. Ele continua indo dentro
+    // de `address2`, que é para onde o próprio formulário brasileiro da
+    // Shopify também o manda. Hoje o Omie não o extrai de lá, e esse pedaço
+    // segue em aberto.
+    //
+    // Custo conhecido: `company` sai impresso como nome de empresa em etiqueta
+    // e romaneio da Shopify -- aparecerá o CPF. É o preço de emitir a nota.
+    company: cpfCnpj.replace(/\D/g, "") || undefined,
 
     city: address.city,
     province_code: address.provinceCode,
