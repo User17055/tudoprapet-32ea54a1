@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   };
 
   const [scopesResponse, installationResponse] = await Promise.all([
-    fetch(`${ADMIN_API}/oauth/access_scopes.json`, { headers }),
+    fetch(`https://petjoy-deals-hb8r9.myshopify.com/admin/oauth/access_scopes.json`, { headers }),
     fetch(`${ADMIN_API}/graphql.json`, {
       method: "POST",
       headers,
