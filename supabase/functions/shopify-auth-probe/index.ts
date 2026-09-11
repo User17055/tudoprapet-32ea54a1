@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
     "X-Shopify-Access-Token": token,
   };
 
-  const [scopesResponse, installationResponse] = await Promise.all([
+  const [scopesResponse, installationResponse, inventoryResponse] = await Promise.all([
     fetch(`https://petjoy-deals-hb8r9.myshopify.com/admin/oauth/access_scopes.json`, { headers }),
     fetch(`${ADMIN_API}/graphql.json`, {
       method: "POST",
@@ -27,10 +27,22 @@ Deno.serve(async (req) => {
         }`,
       }),
     }),
+    fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        query: `query InventoryProbe {
+          productVariants(first: 1) {
+            nodes { id inventoryQuantity inventoryItem { tracked } }
+          }
+        }`,
+      }),
+    }),
   ]);
 
   const scopesPayload = await scopesResponse.json().catch(() => null);
   const installationPayload = await installationResponse.json().catch(() => null);
+  const inventoryPayload = await inventoryResponse.json().catch(() => null);
   const restScopes = Array.isArray(scopesPayload?.access_scopes)
     ? scopesPayload.access_scopes.map((scope: { handle?: string }) => scope.handle).filter(Boolean)
     : [];
@@ -50,5 +62,10 @@ Deno.serve(async (req) => {
         }
       : null,
     graphqlErrors: installationPayload?.errors?.map((error: { message?: string }) => error.message).filter(Boolean) ?? [],
+    inventoryStatus: inventoryResponse.status,
+    inventoryReadable: Boolean(inventoryPayload?.data?.productVariants?.nodes?.[0]),
+    inventoryTracked: inventoryPayload?.data?.productVariants?.nodes?.[0]?.inventoryItem?.tracked ?? null,
+    inventoryQuantityKnown: Number.isFinite(inventoryPayload?.data?.productVariants?.nodes?.[0]?.inventoryQuantity),
+    inventoryErrors: inventoryPayload?.errors?.map((error: { message?: string }) => error.message).filter(Boolean) ?? [],
   });
 });
