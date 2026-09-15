@@ -1045,22 +1045,46 @@ export async function createFiscalDraftOrder(
   };
 }
 
-/** Busca direta por e-mail: resgate quando a indexacao da busca ainda nao pegou. */
+/**
+ * Busca direta por e-mail: resgate quando a indexacao da busca ainda nao pegou.
+ *
+ * O termo VAI ENTRE ASPAS. A busca da Shopify quebra o texto em tokens, então
+ * um e-mail com underscore/ponto/arroba (fran_coimbra_@hotmail.com) some da
+ * busca quando enviado cru -- era exatamente o caso em que o cadastro existia,
+ * a criacao voltava "email has already been taken" e o checkout morria.
+ * Tentamos variantes e, no fim, comparamos o e-mail devolvido para nao pegar
+ * um cadastro parecido de outra pessoa.
+ */
 async function lookupCustomerIdByEmail(email: string, token: string): Promise<number | null> {
-  const response = await fetch(`${ADMIN_API}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-    body: JSON.stringify({
-      query: `query($query: String!) { customers(first: 1, query: $query) { nodes { id legacyResourceId } } }`,
-      variables: { query: `email:${email}` },
-    }),
-  });
-  if (!response.ok) return null;
-  const body = await response.json().catch(() => null);
-  const node = body?.data?.customers?.nodes?.[0];
-  const legacy = node?.legacyResourceId ?? (node?.id ? String(node.id).split("/").pop() : null);
-  const numeric = Number(legacy);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  const target = email.trim().toLowerCase();
+  const localPart = target.split("@")[0] || target;
+  const queries = [
+    `email:"${target}"`,
+    `email:${target}`,
+    `"${target}"`,
+    `email:*${localPart}*`,
+  ];
+
+  for (const searchQuery of queries) {
+    const response = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query:
+          `query($query: String!) { customers(first: 25, query: $query) { nodes { id legacyResourceId email } } }`,
+        variables: { query: searchQuery },
+      }),
+    });
+    if (!response.ok) continue;
+    const body = await response.json().catch(() => null);
+    const nodes: Array<{ id?: string; legacyResourceId?: string; email?: string }> =
+      body?.data?.customers?.nodes ?? [];
+    const match = nodes.find((node) => String(node.email || "").trim().toLowerCase() === target);
+    const legacy = match?.legacyResourceId ?? (match?.id ? String(match.id).split("/").pop() : null);
+    const numeric = Number(legacy);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
 }
 
 
