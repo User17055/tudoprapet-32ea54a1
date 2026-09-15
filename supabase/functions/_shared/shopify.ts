@@ -909,7 +909,11 @@ export async function createFiscalDraftOrder(
     phone: input.phone,
     address: input.shippingAddress || input.billingAddress,
   }, customerDiagnostics);
-  if (!customerId) {
+  // Quando o e-mail pertence a um cadastro que a loja nao devolve em nenhuma
+  // busca, seguir sem purchasingEntity: o rascunho ainda vai com e-mail, nome,
+  // telefone, endereco e CPF/CNPJ, e a Shopify religa o cliente pelo e-mail.
+  // Perder a venda por causa de um cadastro duplicado e o pior desfecho.
+  if (!customerId && !customerDiagnostics.emailTakenByHiddenCustomer) {
     return {
       requestOk: false,
       invoiceUrl: null,
@@ -923,12 +927,18 @@ export async function createFiscalDraftOrder(
         : [],
     };
   }
+  if (!customerId) {
+    console.warn(
+      "Rascunho seguindo sem vinculo de cliente:",
+      customerDiagnostics.reason ?? "cadastro duplicado nao localizado",
+    );
+  }
   const normalizedPhone = brazilPhone(input.phone);
   const buildVariables = (withPhone: boolean) => ({ input: {
     lineItems: toGraphqlDraftLineItems(input.lineItems),
     email: input.email,
     ...(withPhone && normalizedPhone ? { phone: normalizedPhone } : {}),
-    purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
+    ...(customerId ? { purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` } } : {}),
     shippingLine: input.shippingLine.shippingRateHandle
       ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
       : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
