@@ -521,6 +521,12 @@ export interface FiscalDraftOrderInput {
   note: string;
   customAttributes: Array<{ key: string; value: string }>;
   reserveInventoryUntil?: string;
+  /**
+   * Só exija a reserva confirmada quando algum item tem estoque rastreado.
+   * Itens sem rastreamento nunca geram reserva, e cobrar a confirmação deles
+   * descartava um rascunho válido e barrava a compra.
+   */
+  requireInventoryReservation?: boolean;
 }
 
 export interface ShopifyVariantCheckoutDetail {
@@ -1010,7 +1016,7 @@ export async function createFiscalDraftOrder(
     lastInvoiceUrl = invoiceUrl;
 
     if (ok && draftOrderId && !creationErrors.length) {
-      if (input.reserveInventoryUntil) {
+      if (input.reserveInventoryUntil && input.requireInventoryReservation !== false) {
         const requestedReservation = Date.parse(input.reserveInventoryUntil);
         const confirmedReservation = Date.parse(String(draft?.reserveInventoryUntil || ""));
         if (!Number.isFinite(confirmedReservation) ||
