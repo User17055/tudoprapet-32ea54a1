@@ -443,32 +443,51 @@ function FranchisePricesPanel() {
     [products, productId]
   );
 
-  const registeredProductIds = useMemo(
-    () => new Set(prices.map((item) => item.shopify_product_id)),
-    [prices],
-  );
-
-  const priceByProductId = useMemo(() => {
+  // O preço de franquia é por variante: um produto pode ter várias variantes
+  // cadastradas, e cada uma precisa da própria linha para editar e excluir.
+  const priceByVariantId = useMemo(() => {
     const map = new Map<string, FranchPrice>();
-    prices.forEach((item) => map.set(item.shopify_product_id, item));
+    prices.forEach((item) => map.set(item.shopify_variant_id, item));
     return map;
   }, [prices]);
 
-  const listedProducts = useMemo(() => products.filter((product) => {
-    const registered = registeredProductIds.has(product.node.id);
-    if (registrationFilter === "registered") return registered;
-    if (registrationFilter === "unregistered") return !registered;
-    return true;
-  }), [products, registeredProductIds, registrationFilter]);
+  // Só some do seletor o produto que já tem TODAS as variantes cadastradas.
+  const fullyRegisteredProductIds = useMemo(
+    () => new Set(
+      products
+        .filter((product) => {
+          const variants = product.node.variants.edges;
+          return variants.length > 0 &&
+            variants.every((variant) => priceByVariantId.has(variant.node.id));
+        })
+        .map((product) => product.node.id),
+    ),
+    [products, priceByVariantId],
+  );
+
+  const variantRows = useMemo(
+    () => products.flatMap((product) =>
+      product.node.variants.edges.map((variant) => ({
+        product,
+        variant: variant.node,
+        registeredPrice: priceByVariantId.get(variant.node.id) ?? null,
+      }))
+    ).filter((row) => {
+      if (registrationFilter === "registered") return !!row.registeredPrice;
+      if (registrationFilter === "unregistered") return !row.registeredPrice;
+      return true;
+    }),
+    [products, priceByVariantId, registrationFilter],
+  );
 
   useEffect(() => {
-    if (productId && registeredProductIds.has(productId)) {
+    if (variantId && priceByVariantId.has(variantId)) {
       setProductId("");
       setVariantId("");
       setManualCost("");
       setAdjustment("0");
     }
-  }, [productId, registeredProductIds]);
+  }, [variantId, priceByVariantId]);
 
   const selectedVariant = selectedProduct?.node.variants.edges.find((variant) => variant.node.id === variantId)?.node
     || selectedProduct?.node.variants.edges[0]?.node;
@@ -490,7 +509,7 @@ function FranchisePricesPanel() {
 
   const handleSave = async () => {
     if (!productId || !variantId) return toast.error("Preencha todos os campos");
-    if (registeredProductIds.has(productId)) return toast.error("Este produto já possui preço de franquia cadastrado.");
+    if (priceByVariantId.has(variantId)) return toast.error("Esta variação já possui preço de franquia cadastrado.");
     if (!Number.isFinite(adjustmentValue) || adjustmentValue < 0) return toast.error("Informe um reajuste igual ou maior que zero");
     if (calculationMode === "manual" && (calculationBaseCost === null || calculationBaseCost <= 0)) {
       return toast.error("Informe um custo manual maior que zero");
