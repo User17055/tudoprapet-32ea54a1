@@ -711,7 +711,7 @@ function FranchisePricesPanel() {
         <CardHeader className="p-4 pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Produtos ({listedProducts.length})</CardTitle>
+              <CardTitle className="text-base">Variações ({variantRows.length})</CardTitle>
               <CardDescription>Todos os produtos do Shopify e seus preços para franquias.</CardDescription>
             </div>
             <Select value={registrationFilter} onValueChange={(value) => setRegistrationFilter(value as FranchisePriceFilter)}>
@@ -727,7 +727,7 @@ function FranchisePricesPanel() {
         <CardContent className="p-4 pt-0">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-          ) : listedProducts.length === 0 ? (
+          ) : variantRows.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">Nenhum produto neste filtro.</p>
           ) : (
             <Table className="[&_th]:h-9 [&_td]:py-2.5">
