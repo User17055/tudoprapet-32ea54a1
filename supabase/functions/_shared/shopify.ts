@@ -169,6 +169,13 @@ export async function findOrCreateCustomer(
       return existing.id;
     }
   }
+  // Busca REST vazia nao prova que o cadastro nao existe: tente o GraphQL antes
+  // de criar, senao a criacao volta "email has already been taken".
+  const alreadyRegistered = await lookupCustomerIdByEmail(normalizedEmail, token);
+  if (alreadyRegistered) {
+    diagnostics.reason = undefined;
+    return alreadyRegistered;
+  }
   const address = customerAddress(details.address);
   let createRes = await fetch(`${ADMIN_API}/customers.json`, {
     method: "POST",
