@@ -96,6 +96,8 @@ export interface CustomerLookupDiagnostics {
   reason?: string;
   searchStatus?: number;
   createStatus?: number;
+  /** E-mail já cadastrado, mas a loja não devolve o registro em nenhuma busca. */
+  emailTakenByHiddenCustomer?: boolean;
 }
 
 function shortShopifyFailure(text: string): string {
