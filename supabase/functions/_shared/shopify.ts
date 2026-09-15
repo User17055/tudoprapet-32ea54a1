@@ -112,8 +112,10 @@ export async function findOrCreateCustomer(
   const normalizedEmail = email.trim().toLowerCase();
   const names = customerNames(details.name);
   const phone = brazilPhone(details.phone);
+  // Aspas obrigatorias: sem elas a busca tokeniza o e-mail e cadastros com
+  // underscore/ponto no endereco simplesmente nao aparecem.
   const searchRes = await fetch(
-    `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${normalizedEmail}`)}`,
+    `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:"${normalizedEmail}"`)}`,
     { headers: { "X-Shopify-Access-Token": token } },
   );
   diagnostics.searchStatus = searchRes.status;
