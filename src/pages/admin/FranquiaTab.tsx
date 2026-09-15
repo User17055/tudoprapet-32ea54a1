@@ -631,7 +631,7 @@ function FranchisePricesPanel() {
                 <ProductPicker
                   products={products}
                   value={productId}
-                  excludeIds={registeredProductIds}
+                  excludeIds={fullyRegisteredProductIds}
                   onChange={(value) => { setProductId(value); setVariantId(""); setManualCost(""); setAdjustment("0"); }}
                   placeholder="Pesquisar ou selecionar um produto..."
                 />
