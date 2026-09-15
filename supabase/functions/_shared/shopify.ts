@@ -222,6 +222,7 @@ export async function findOrCreateCustomer(
         diagnostics.reason = undefined;
         return existingId;
       }
+      diagnostics.emailTakenByHiddenCustomer = true;
       diagnostics.reason =
         `O e-mail ${normalizedEmail} ja pertence a um cadastro que a loja nao devolve na busca (HTTP ${createRes.status}).`;
     }
