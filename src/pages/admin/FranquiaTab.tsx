@@ -743,20 +743,15 @@ function FranchisePricesPanel() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {listedProducts.map((product) => {
-                  const registeredPrice = priceByProductId.get(product.node.id);
-                  const firstVariant = product.node.variants.edges[0]?.node;
-                  const registeredVariant = registeredPrice
-                    ? product.node.variants.edges.find((variant) => variant.node.id === registeredPrice.shopify_variant_id)?.node
-                    : null;
-                  const displayedVariant = registeredVariant || firstVariant;
-                  const productPrice = displayedVariant ? Number(displayedVariant.price.amount) : null;
-                  const customerPrice = displayedVariant
-                    ? customerPrices.find((row) => row.shopify_variant_id === displayedVariant.id)?.price ?? productPrice
-                    : null;
+                {variantRows.map(({ product, variant, registeredPrice }) => {
+                  const firstVariant = variant;
+                  const displayedVariant = variant;
+                  const productPrice = Number(variant.price.amount);
+                  const customerPrice = customerPrices.find((row) => row.shopify_variant_id === variant.id)?.price
+                    ?? productPrice;
                   const productImage = product.node.images.edges[0]?.node;
                   return (
-                    <TableRow key={product.node.id}>
+                    <TableRow key={`${product.node.id}-${variant.id}`}>
                       <TableCell>
                         <div className="flex min-w-[220px] items-center gap-3">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
