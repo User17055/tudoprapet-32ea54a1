@@ -96,6 +96,8 @@ export interface CustomerLookupDiagnostics {
   reason?: string;
   searchStatus?: number;
   createStatus?: number;
+  /** E-mail já cadastrado, mas a loja não devolve o registro em nenhuma busca. */
+  emailTakenByHiddenCustomer?: boolean;
 }
 
 function shortShopifyFailure(text: string): string {
@@ -112,8 +114,10 @@ export async function findOrCreateCustomer(
   const normalizedEmail = email.trim().toLowerCase();
   const names = customerNames(details.name);
   const phone = brazilPhone(details.phone);
+  // Aspas obrigatorias: sem elas a busca tokeniza o e-mail e cadastros com
+  // underscore/ponto no endereco simplesmente nao aparecem.
   const searchRes = await fetch(
-    `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:${normalizedEmail}`)}`,
+    `${ADMIN_API}/customers/search.json?query=${encodeURIComponent(`email:"${normalizedEmail}"`)}`,
     { headers: { "X-Shopify-Access-Token": token } },
   );
   diagnostics.searchStatus = searchRes.status;
@@ -167,6 +171,13 @@ export async function findOrCreateCustomer(
       return existing.id;
     }
   }
+  // Busca REST vazia nao prova que o cadastro nao existe: tente o GraphQL antes
+  // de criar, senao a criacao volta "email has already been taken".
+  const alreadyRegistered = await lookupCustomerIdByEmail(normalizedEmail, token);
+  if (alreadyRegistered) {
+    diagnostics.reason = undefined;
+    return alreadyRegistered;
+  }
   const address = customerAddress(details.address);
   let createRes = await fetch(`${ADMIN_API}/customers.json`, {
     method: "POST",
@@ -211,6 +222,7 @@ export async function findOrCreateCustomer(
         diagnostics.reason = undefined;
         return existingId;
       }
+      diagnostics.emailTakenByHiddenCustomer = true;
       diagnostics.reason =
         `O e-mail ${normalizedEmail} ja pertence a um cadastro que a loja nao devolve na busca (HTTP ${createRes.status}).`;
     }
@@ -509,6 +521,12 @@ export interface FiscalDraftOrderInput {
   note: string;
   customAttributes: Array<{ key: string; value: string }>;
   reserveInventoryUntil?: string;
+  /**
+   * Só exija a reserva confirmada quando algum item tem estoque rastreado.
+   * Itens sem rastreamento nunca geram reserva, e cobrar a confirmação deles
+   * descartava um rascunho válido e barrava a compra.
+   */
+  requireInventoryReservation?: boolean;
 }
 
 export interface ShopifyVariantCheckoutDetail {
@@ -897,7 +915,11 @@ export async function createFiscalDraftOrder(
     phone: input.phone,
     address: input.shippingAddress || input.billingAddress,
   }, customerDiagnostics);
-  if (!customerId) {
+  // Quando o e-mail pertence a um cadastro que a loja nao devolve em nenhuma
+  // busca, seguir sem purchasingEntity: o rascunho ainda vai com e-mail, nome,
+  // telefone, endereco e CPF/CNPJ, e a Shopify religa o cliente pelo e-mail.
+  // Perder a venda por causa de um cadastro duplicado e o pior desfecho.
+  if (!customerId && !customerDiagnostics.emailTakenByHiddenCustomer) {
     return {
       requestOk: false,
       invoiceUrl: null,
@@ -911,12 +933,18 @@ export async function createFiscalDraftOrder(
         : [],
     };
   }
+  if (!customerId) {
+    console.warn(
+      "Rascunho seguindo sem vinculo de cliente:",
+      customerDiagnostics.reason ?? "cadastro duplicado nao localizado",
+    );
+  }
   const normalizedPhone = brazilPhone(input.phone);
   const buildVariables = (withPhone: boolean) => ({ input: {
     lineItems: toGraphqlDraftLineItems(input.lineItems),
     email: input.email,
     ...(withPhone && normalizedPhone ? { phone: normalizedPhone } : {}),
-    purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` },
+    ...(customerId ? { purchasingEntity: { customerId: `gid://shopify/Customer/${customerId}` } } : {}),
     shippingLine: input.shippingLine.shippingRateHandle
       ? { shippingRateHandle: input.shippingLine.shippingRateHandle }
       : { title: input.shippingLine.title, price: Number(input.shippingLine.price) },
@@ -988,7 +1016,7 @@ export async function createFiscalDraftOrder(
     lastInvoiceUrl = invoiceUrl;
 
     if (ok && draftOrderId && !creationErrors.length) {
-      if (input.reserveInventoryUntil) {
+      if (input.reserveInventoryUntil && input.requireInventoryReservation !== false) {
         const requestedReservation = Date.parse(input.reserveInventoryUntil);
         const confirmedReservation = Date.parse(String(draft?.reserveInventoryUntil || ""));
         if (!Number.isFinite(confirmedReservation) ||
@@ -1045,22 +1073,46 @@ export async function createFiscalDraftOrder(
   };
 }
 
-/** Busca direta por e-mail: resgate quando a indexacao da busca ainda nao pegou. */
+/**
+ * Busca direta por e-mail: resgate quando a indexacao da busca ainda nao pegou.
+ *
+ * O termo VAI ENTRE ASPAS. A busca da Shopify quebra o texto em tokens, então
+ * um e-mail com underscore/ponto/arroba (fran_coimbra_@hotmail.com) some da
+ * busca quando enviado cru -- era exatamente o caso em que o cadastro existia,
+ * a criacao voltava "email has already been taken" e o checkout morria.
+ * Tentamos variantes e, no fim, comparamos o e-mail devolvido para nao pegar
+ * um cadastro parecido de outra pessoa.
+ */
 async function lookupCustomerIdByEmail(email: string, token: string): Promise<number | null> {
-  const response = await fetch(`${ADMIN_API}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
-    body: JSON.stringify({
-      query: `query($query: String!) { customers(first: 1, query: $query) { nodes { id legacyResourceId } } }`,
-      variables: { query: `email:${email}` },
-    }),
-  });
-  if (!response.ok) return null;
-  const body = await response.json().catch(() => null);
-  const node = body?.data?.customers?.nodes?.[0];
-  const legacy = node?.legacyResourceId ?? (node?.id ? String(node.id).split("/").pop() : null);
-  const numeric = Number(legacy);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  const target = email.trim().toLowerCase();
+  const localPart = target.split("@")[0] || target;
+  const queries = [
+    `email:"${target}"`,
+    `email:${target}`,
+    `"${target}"`,
+    `email:*${localPart}*`,
+  ];
+
+  for (const searchQuery of queries) {
+    const response = await fetch(`${ADMIN_API}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({
+        query:
+          `query($query: String!) { customers(first: 25, query: $query) { nodes { id legacyResourceId email } } }`,
+        variables: { query: searchQuery },
+      }),
+    });
+    if (!response.ok) continue;
+    const body = await response.json().catch(() => null);
+    const nodes: Array<{ id?: string; legacyResourceId?: string; email?: string }> =
+      body?.data?.customers?.nodes ?? [];
+    const match = nodes.find((node) => String(node.email || "").trim().toLowerCase() === target);
+    const legacy = match?.legacyResourceId ?? (match?.id ? String(match.id).split("/").pop() : null);
+    const numeric = Number(legacy);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
 }
 
 

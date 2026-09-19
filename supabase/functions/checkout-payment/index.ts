@@ -179,17 +179,6 @@ Deno.serve(async (req) => {
         409,
       );
     }
-    if (body.action !== "cancel_pix") {
-      const reservedUntil = Date.parse(String(session.inventory_reserved_until || ""));
-      if (!Number.isFinite(reservedUntil) || reservedUntil <= Date.now()) {
-        return errorResponse(
-          "A reserva de estoque deste checkout venceu. Volte à sacola e refaça o pedido — nada foi cobrado.",
-          409,
-        );
-      }
-    }
-
-
     const requestedMethod = body.method === "credit_card" ? "credit_card"
       : body.method === "debit_card" ? "debit_card"
       : "pix";
@@ -199,6 +188,19 @@ Deno.serve(async (req) => {
       .eq("is_active", true)
       .in("status", ["pending", "processing", "cancellation_requested", "confirmed"])
       .order("attempt_number", { ascending: false }).limit(1).maybeSingle();
+
+    // A reserva vencida so barra a PRIMEIRA cobranca deste checkout. Quem ja
+    // tem cobranca ativa (Pix aberto, cartao recusado, retomada da sessao)
+    // continua de onde parou: mandar refazer o pedido inteiro perdia a venda.
+    if (body.action !== "cancel_pix" && !active) {
+      const reservedUntil = Date.parse(String(session.inventory_reserved_until || ""));
+      if (!Number.isFinite(reservedUntil) || reservedUntil <= Date.now()) {
+        return errorResponse(
+          "A reserva de estoque deste checkout venceu. Volte à sacola e refaça o pedido — nada foi cobrado.",
+          409,
+        );
+      }
+    }
 
     if (body.action === "cancel_pix") {
       if (!active) return jsonResponse({ sessionId, cancelled: true });

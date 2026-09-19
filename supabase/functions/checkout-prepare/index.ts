@@ -423,6 +423,11 @@ Deno.serve(async (req) => {
         { key: "shipping_option_handle", value: shippingRateHandle || input.delivery.optionHandle || shippingCode },
       ],
       reserveInventoryUntil: inventoryReservedUntil,
+      // Produtos com estoque sem rastreamento nao geram reserva na Shopify;
+      // exigir confirmacao neles descartava o rascunho e travava a compra.
+      requireInventoryReservation: input.items.some(
+        (item) => details.get(item.variantId)?.inventoryTracked !== false,
+      ),
     }, shopifyToken);
     if (!draft.draftOrderId) {
       await admin.from("checkout_sessions").update({ status: "failed" }).eq("id", session.id);
