@@ -853,80 +853,6 @@ export type Database = {
         }
         Relationships: []
       }
-      product_cost_history: {
-        Row: {
-          changed_at: string
-          id: string
-          new_cost: number
-          old_cost: number | null
-          shopify_variant_id: string
-          source: string
-        }
-        Insert: {
-          changed_at?: string
-          id?: string
-          new_cost: number
-          old_cost?: number | null
-          shopify_variant_id: string
-          source?: string
-        }
-        Update: {
-          changed_at?: string
-          id?: string
-          new_cost?: number
-          old_cost?: number | null
-          shopify_variant_id?: string
-          source?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_cost_history_shopify_variant_id_fkey"
-            columns: ["shopify_variant_id"]
-            isOneToOne: false
-            referencedRelation: "product_costs"
-            referencedColumns: ["shopify_variant_id"]
-          },
-        ]
-      }
-      product_costs: {
-        Row: {
-          cost: number
-          cost_changed_at: string | null
-          created_at: string
-          previous_cost: number | null
-          shopify_product_id: string
-          shopify_variant_id: string
-          sku: string
-          source: string
-          synced_at: string
-          updated_at: string
-        }
-        Insert: {
-          cost: number
-          cost_changed_at?: string | null
-          created_at?: string
-          previous_cost?: number | null
-          shopify_product_id: string
-          shopify_variant_id: string
-          sku: string
-          source?: string
-          synced_at?: string
-          updated_at?: string
-        }
-        Update: {
-          cost?: number
-          cost_changed_at?: string | null
-          created_at?: string
-          previous_cost?: number | null
-          shopify_product_id?: string
-          shopify_variant_id?: string
-          sku?: string
-          source?: string
-          synced_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       product_audience: {
         Row: {
           audience: string
@@ -1014,6 +940,80 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      product_cost_history: {
+        Row: {
+          changed_at: string
+          id: string
+          new_cost: number
+          old_cost: number | null
+          shopify_variant_id: string
+          source: string
+        }
+        Insert: {
+          changed_at?: string
+          id?: string
+          new_cost: number
+          old_cost?: number | null
+          shopify_variant_id: string
+          source?: string
+        }
+        Update: {
+          changed_at?: string
+          id?: string
+          new_cost?: number
+          old_cost?: number | null
+          shopify_variant_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_cost_history_shopify_variant_id_fkey"
+            columns: ["shopify_variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_costs"
+            referencedColumns: ["shopify_variant_id"]
+          },
+        ]
+      }
+      product_costs: {
+        Row: {
+          cost: number
+          cost_changed_at: string | null
+          created_at: string
+          previous_cost: number | null
+          shopify_product_id: string
+          shopify_variant_id: string
+          sku: string
+          source: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          cost: number
+          cost_changed_at?: string | null
+          created_at?: string
+          previous_cost?: number | null
+          shopify_product_id: string
+          shopify_variant_id: string
+          sku: string
+          source?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          cost?: number
+          cost_changed_at?: string | null
+          created_at?: string
+          previous_cost?: number | null
+          shopify_product_id?: string
+          shopify_variant_id?: string
+          sku?: string
+          source?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       product_variation_groups: {
         Row: {
