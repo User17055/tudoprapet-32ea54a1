@@ -54,3 +54,31 @@ it("reconhece sachê como ração úmida", () => {
   expect(result.categoryIds).toEqual(["dogs", "dog-food", "dog-wet"]);
   expect(result.attributes).toContainEqual({ attr_key: "Tipo", attr_value: "Ração úmida" });
 });
+
+it("reconhece filhotes mesmo quando o valor cadastrado está no singular", () => {
+  const result = suggestProductDetails(
+    { title: "Ração para Cães Filhotes" },
+    categories,
+    [],
+    [{ attr_key: "Idade", attr_value: "Filhote" }],
+  );
+  expect(result.attributes).toContainEqual({ attr_key: "Idade", attr_value: "Filhote" });
+});
+
+it("pode sugerir mais de um porte para rações de raças médias e grandes", () => {
+  const result = suggestProductDetails(
+    { title: "Ração Premier Cães Adultos Raças Médias e Grandes" },
+    categories,
+    [],
+    [
+      { attr_key: "Raça", attr_value: "Pequena" },
+      { attr_key: "Raça", attr_value: "Média" },
+      { attr_key: "Raça", attr_value: "Grande" },
+    ],
+  );
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Raça", attr_value: "Média" },
+    { attr_key: "Raça", attr_value: "Grande" },
+  ]));
+  expect(result.attributes).not.toContainEqual({ attr_key: "Raça", attr_value: "Pequena" });
+});

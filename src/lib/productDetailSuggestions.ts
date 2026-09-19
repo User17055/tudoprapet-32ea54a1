@@ -37,6 +37,13 @@ const CAT_TERMS = ["gato", "gatos", "felino", "felinos", "cat", "cats"];
 const FEED_TERMS = ["racao", "racoes", "alimento completo"];
 const WET_TERMS = ["umida", "umido", "sache", "pate", "lata"];
 const DRY_TERMS = ["seca", "seco", "grao", "graos"];
+const PUPPY_TERMS = ["filhote", "filhotes", "puppy", "puppies", "junior"];
+const ADULT_TERMS = ["adulto", "adultos", "adult"];
+const SENIOR_TERMS = ["senior", "idoso", "idosos", "maduro", "maduros"];
+const SMALL_TERMS = ["raca pequena", "racas pequenas", "porte pequeno", "portes pequenos", "pequena", "pequenas", "pequeno", "pequenos", "mini", "small"];
+const MEDIUM_TERMS = ["raca media", "racas medias", "porte medio", "portes medios", "media", "medias", "medio", "medios", "medium"];
+const LARGE_TERMS = ["raca grande", "racas grandes", "porte grande", "portes grandes", "grande", "grandes", "large"];
+const GIANT_TERMS = ["raca gigante", "racas gigantes", "porte gigante", "portes gigantes", "gigante", "gigantes", "giant"];
 
 const ancestorsOf = (categoryId: string, categories: SuggestionCategory[]) => {
   const result: string[] = [];
@@ -70,6 +77,13 @@ export function suggestProductDetails(
   const isFeed = hasTerm(source, FEED_TERMS);
   const isWet = hasTerm(source, WET_TERMS);
   const isDry = isFeed && !isWet;
+  const isPuppy = hasTerm(source, PUPPY_TERMS);
+  const isAdult = hasTerm(source, ADULT_TERMS);
+  const isSenior = hasTerm(source, SENIOR_TERMS);
+  const isSmall = hasTerm(source, SMALL_TERMS);
+  const isMedium = hasTerm(source, MEDIUM_TERMS);
+  const isLarge = hasTerm(source, LARGE_TERMS);
+  const isGiant = hasTerm(source, GIANT_TERMS);
   const petTerms = isDog && !isCat ? DOG_TERMS : isCat && !isDog ? CAT_TERMS : [];
 
   const roots = categories.filter((category) => !category.parent_id);
@@ -115,6 +129,13 @@ export function suggestProductDetails(
     if (petTerms.length && (key === "pet" || key.includes("especie")) && hasTerm(value, petTerms)) return true;
     if (isDry && (key === "tipo" || key === "formato") && hasTerm(value, [...DRY_TERMS, "racao seca"])) return true;
     if (isWet && (key === "tipo" || key === "formato") && hasTerm(value, [...WET_TERMS, "racao umida"])) return true;
+    if ((key === "idade" || key.includes("fase")) && isPuppy && hasTerm(value, PUPPY_TERMS)) return true;
+    if ((key === "idade" || key.includes("fase")) && isAdult && hasTerm(value, ADULT_TERMS)) return true;
+    if ((key === "idade" || key.includes("fase")) && isSenior && hasTerm(value, SENIOR_TERMS)) return true;
+    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isSmall && hasTerm(value, ["pequena", "pequeno", "mini", "small"])) return true;
+    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isMedium && hasTerm(value, ["media", "medio", "medium"])) return true;
+    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isLarge && hasTerm(value, ["grande", "large"])) return true;
+    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isGiant && hasTerm(value, ["gigante", "giant"])) return true;
     return false;
   });
 
