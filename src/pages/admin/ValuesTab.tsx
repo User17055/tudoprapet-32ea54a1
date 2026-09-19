@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Loader2, Package, Search } from "lucide-react";
+import { AlertTriangle, Check, Download, Loader2, Package, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,11 +36,42 @@ type FranchisePriceRow = Omit<FranchisePrice, "price"> & { price: number | strin
 
 type Draft = { customer?: string; franchise?: string };
 
+type OlistSyncItem = {
+  productId: string;
+  variantId: string;
+  sku: string;
+  isFeed: boolean;
+};
+
+type OlistSyncResponse = {
+  ok?: boolean;
+  error?: string;
+  updated?: number;
+  notFound?: number;
+  failed?: number;
+  results?: Array<{ sku?: string; status?: string }>;
+};
+
 const money = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 const parsePrice = (value: string) => Number(value.replace(",", "."));
 const decimal = (value: number) => value.toFixed(2).replace(".", ",");
+
+const normalizedText = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase("pt-BR");
+
+// A classificacao usa os metadados da Shopify e, por ultimo, o titulo. Assim a
+// operacao em massa funciona agora, mas pode ser tornada exata cadastrando a tag
+// ou o tipo de produto "racao" na Shopify.
+const isFeedProduct = (product: ShopifyProduct) => {
+  const searchable = [product.node.productType || "", ...(product.node.tags || []), product.node.title]
+    .map(normalizedText)
+    .join(" ");
+  return /\bracao\b|\bracoes\b/.test(searchable);
+};
 
 export default function ValuesTab() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
@@ -51,6 +82,8 @@ export default function ValuesTab() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [syncingOlistId, setSyncingOlistId] = useState<string | null>(null);
+  const [bulkSyncingOlist, setBulkSyncingOlist] = useState(false);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -109,8 +142,69 @@ export default function ValuesTab() {
       productId: product.node.id,
       productTitle: product.node.title,
       image: product.node.images.edges[0]?.node,
+      isFeed: isFeedProduct(product),
       variant,
     }))), [products]);
+
+  const feedRowsWithSku = useMemo(
+    () => rows.filter((row) => row.isFeed && row.variant.sku?.trim()),
+    [rows],
+  );
+
+  const syncFromOlist = async (items: OlistSyncItem[], bulk = false) => {
+    if (items.length === 0) {
+      toast.error("Nenhuma ração com SKU foi encontrada na Shopify.");
+      return;
+    }
+    if (bulk) setBulkSyncingOlist(true);
+    else setSyncingOlistId(items[0].variantId);
+
+    let updated = 0;
+    let notFound = 0;
+    let failed = 0;
+    let fatalError = "";
+    const issueSkus: string[] = [];
+    try {
+      // A function aceita lotes pequenos para nao estourar o limite da API da Olist.
+      for (let index = 0; index < items.length; index += 25) {
+        const { data, error } = await supabase.functions.invoke("admin-olist-cost-sync", {
+          body: { items: items.slice(index, index + 25) },
+        });
+        const response = data as OlistSyncResponse | null;
+        if (error || !response?.ok) {
+          fatalError = response?.error || error?.message || "A sincronização foi recusada.";
+          break;
+        }
+        updated += response.updated || 0;
+        notFound += response.notFound || 0;
+        failed += response.failed || 0;
+        issueSkus.push(...(response.results || [])
+          .filter((result) => result.status !== "updated" && result.sku)
+          .map((result) => result.sku!));
+      }
+      if (fatalError) {
+        toast.error("Não foi possível consultar a Olist.", { description: fatalError });
+      } else if (notFound || failed) {
+        toast.warning(`${updated} atualizado${updated === 1 ? "" : "s"}; ${notFound} SKU${notFound === 1 ? "" : "s"} não encontrado${notFound === 1 ? "" : "s"}; ${failed} erro${failed === 1 ? "" : "s"}.`, {
+          description: issueSkus.length ? `Confira: ${issueSkus.join(", ")}` : undefined,
+          duration: 12000,
+        });
+      } else {
+        toast.success(`${updated} produto${updated === 1 ? "" : "s"} atualizado${updated === 1 ? "" : "s"} pela Olist.`);
+      }
+      if (updated > 0) await load(true);
+    } finally {
+      setBulkSyncingOlist(false);
+      setSyncingOlistId(null);
+    }
+  };
+
+  const syncAllFeedCosts = () => syncFromOlist(feedRowsWithSku.map((row) => ({
+    productId: row.productId,
+    variantId: row.variant.id,
+    sku: row.variant.sku!.trim(),
+    isFeed: true,
+  })), true);
 
   // Variantes cujo preço-base ainda precisa ser sincronizado com a Shopify.
   // Depois da sincronização, o pedido mantém a variante e não precisa exibir
@@ -126,7 +220,7 @@ export default function ValuesTab() {
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
     if (!normalized) return rows;
-    return rows.filter((row) => `${row.productTitle} ${row.variant.title}`.toLocaleLowerCase("pt-BR").includes(normalized));
+    return rows.filter((row) => `${row.productTitle} ${row.variant.title} ${row.variant.sku || ""}`.toLocaleLowerCase("pt-BR").includes(normalized));
   }, [query, rows]);
 
   const setDraft = (variantId: string, field: keyof Draft, value: string) => {
@@ -252,9 +346,15 @@ export default function ValuesTab() {
             <CardTitle className="text-base">Valores por produto</CardTitle>
             <CardDescription>Cadastre os valores específicos de cliente e franquia para cada variante.</CardDescription>
           </div>
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto ou variante" className="pl-9" />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button variant="outline" onClick={syncAllFeedCosts} disabled={bulkSyncingOlist || loading}>
+              {bulkSyncingOlist ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              Atualizar rações pela Olist ({feedRowsWithSku.length})
+            </Button>
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto, variante ou SKU" className="pl-9" />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -271,7 +371,7 @@ export default function ValuesTab() {
                   <TableHead className="min-w-[250px]">Valor do Cliente</TableHead>
                   <TableHead className="min-w-[160px]">Valor do Assinante</TableHead>
                   <TableHead className="min-w-[230px]">Valor da Franquia</TableHead>
-                  <TableHead className="w-20" />
+                  <TableHead className="min-w-[120px]" />
                 </TableRow></TableHeader>
                 <TableBody>{filteredRows.map((row) => {
                   const customer = customerMap.get(row.variant.id);
@@ -289,7 +389,12 @@ export default function ValuesTab() {
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                           {row.image ? <img src={row.image.url} alt="" className="h-full w-full object-cover" /> : <Package className="h-5 w-5 text-muted-foreground" />}
                         </div>
-                        <div><p className="font-medium">{row.productTitle}</p><p className="text-xs text-muted-foreground">{row.variant.title}</p></div>
+                        <div>
+                          <p className="font-medium">{row.productTitle}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {row.variant.title}{row.variant.sku ? ` · SKU ${row.variant.sku}` : " · sem SKU"}{row.isFeed ? " · ração" : ""}
+                          </p>
+                        </div>
                       </div></TableCell>
                       <TableCell><Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" /></TableCell>
                       <TableCell>
@@ -304,7 +409,24 @@ export default function ValuesTab() {
                       </TableCell>
                       <TableCell>{subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}</TableCell>
                       <TableCell><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div></TableCell>
-                      <TableCell><Button size="icon" onClick={() => saveRow(row)} disabled={(!draft && !customerAcima && !franchiseAcima) || savingId === row.variant.id} aria-label={`Salvar valores de ${row.productTitle}`}>{savingId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button></TableCell>
+                      <TableCell><div className="flex gap-2">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          disabled={!row.variant.sku?.trim() || syncingOlistId === row.variant.id || bulkSyncingOlist}
+                          title={row.variant.sku ? "Buscar custo deste SKU na Olist" : "Cadastre o SKU na Shopify primeiro"}
+                          aria-label={`Buscar custo de ${row.productTitle} na Olist`}
+                          onClick={() => syncFromOlist([{
+                            productId: row.productId,
+                            variantId: row.variant.id,
+                            sku: row.variant.sku!.trim(),
+                            isFeed: row.isFeed,
+                          }])}
+                        >
+                          {syncingOlistId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        </Button>
+                        <Button size="icon" onClick={() => saveRow(row)} disabled={(!draft && !customerAcima && !franchiseAcima) || savingId === row.variant.id} aria-label={`Salvar valores de ${row.productTitle}`}>{savingId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button>
+                      </div></TableCell>
                     </TableRow>
                   );
                 })}</TableBody>
