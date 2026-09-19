@@ -47,6 +47,25 @@ interface ProductContentRow {
   brand_id: string | null;
 }
 
+interface DetailProfile {
+  id: string;
+  name: string;
+  brand_id: string | null;
+}
+
+interface DetailProfileCategory {
+  profile_id: string;
+  category_id: string;
+}
+
+interface DetailProfileAttribute {
+  id: string;
+  profile_id: string;
+  attr_key: string;
+  attr_value: string;
+  sort_order: number;
+}
+
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -527,6 +546,14 @@ function AssignPanel() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
   const [registrationFilter, setRegistrationFilter] = useState<"all" | "registered" | "unregistered">("all");
+  const [profiles, setProfiles] = useState<DetailProfile[]>([]);
+  const [profileCategories, setProfileCategories] = useState<DetailProfileCategory[]>([]);
+  const [profileAttributes, setProfileAttributes] = useState<DetailProfileAttribute[]>([]);
+  const [profileName, setProfileName] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [applyingProfile, setApplyingProfile] = useState(false);
 
   // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
@@ -608,6 +635,17 @@ function AssignPanel() {
     setAllProductAttrs((pa.data || []) as ProductAttribute[]);
   };
 
+  const reloadProfiles = async () => {
+    const [profileRows, categoryRows, attributeRows] = await Promise.all([
+      supabase.from("product_detail_profiles").select("id, name, brand_id").order("name"),
+      supabase.from("product_detail_profile_categories").select("profile_id, category_id"),
+      supabase.from("product_detail_profile_attributes").select("*").order("sort_order"),
+    ]);
+    setProfiles((profileRows.data || []) as DetailProfile[]);
+    setProfileCategories((categoryRows.data || []) as DetailProfileCategory[]);
+    setProfileAttributes((attributeRows.data || []) as DetailProfileAttribute[]);
+  };
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -620,7 +658,7 @@ function AssignPanel() {
         setProducts(shop);
         setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
-        await reloadAll();
+        await Promise.all([reloadAll(), reloadProfiles()]);
       } catch (e) {
         toast.error("Erro ao carregar dados");
       } finally {
@@ -769,6 +807,126 @@ function AssignPanel() {
       console.error(error);
     } finally {
       setUpdatingAttribute(null);
+    }
+  };
+
+  const handleCreateProfile = async () => {
+    const name = profileName.trim();
+    if (!productId) return toast.error("Selecione e configure um produto modelo primeiro.");
+    if (!name) return toast.error("Informe um nome para o perfil.");
+    if (selectedCats.size === 0 && attrs.length === 0 && brandId === "none") {
+      return toast.error("O produto modelo ainda não possui detalhes para salvar.");
+    }
+    setSavingProfile(true);
+    let createdId = "";
+    try {
+      const { data, error } = await supabase.from("product_detail_profiles").insert({
+        name,
+        brand_id: brandId === "none" ? null : brandId,
+      }).select("id").single();
+      if (error) throw error;
+      createdId = data.id;
+
+      if (selectedCats.size > 0) {
+        const { error: categoryError } = await supabase.from("product_detail_profile_categories").insert(
+          Array.from(selectedCats).map((categoryId) => ({ profile_id: createdId, category_id: categoryId })),
+        );
+        if (categoryError) throw categoryError;
+      }
+      if (attrs.length > 0) {
+        const { error: attributeError } = await supabase.from("product_detail_profile_attributes").insert(
+          attrs.map((attribute, index) => ({
+            profile_id: createdId,
+            attr_key: attribute.attr_key,
+            attr_value: attribute.attr_value,
+            sort_order: index,
+          })),
+        );
+        if (attributeError) throw attributeError;
+      }
+      setProfileName("");
+      setSelectedProfileId(createdId);
+      await reloadProfiles();
+      toast.success(`Perfil "${name}" criado.`);
+    } catch (error: unknown) {
+      if (createdId) await supabase.from("product_detail_profiles").delete().eq("id", createdId);
+      const message = error instanceof Error ? error.message : "erro desconhecido";
+      toast.error(message.includes("duplicate") ? "Já existe um perfil com esse nome." : `Erro: ${message}`);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleDeleteProfile = async (profile: DetailProfile) => {
+    if (!confirm(`Excluir o perfil "${profile.name}"? Os produtos já cadastrados não serão alterados.`)) return;
+    const { error } = await supabase.from("product_detail_profiles").delete().eq("id", profile.id);
+    if (error) return toast.error("Não foi possível excluir o perfil.");
+    if (selectedProfileId === profile.id) setSelectedProfileId("");
+    await reloadProfiles();
+    toast.success("Perfil excluído.");
+  };
+
+  const toggleBulkProduct = (id: string) => {
+    setBulkSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleApplyProfile = async () => {
+    const profile = profiles.find((item) => item.id === selectedProfileId);
+    if (!profile) return toast.error("Selecione um perfil.");
+    if (bulkSelectedIds.size === 0) return toast.error("Selecione pelo menos um produto.");
+    setApplyingProfile(true);
+    try {
+      const productIds = Array.from(bulkSelectedIds);
+      const categoryIds = profileCategories
+        .filter((item) => item.profile_id === profile.id)
+        .map((item) => item.category_id);
+      const profileAttrs = profileAttributes.filter((item) => item.profile_id === profile.id);
+
+      if (categoryIds.length > 0) {
+        const { error } = await supabase.from("product_categories").upsert(
+          productIds.flatMap((shopifyProductId) => categoryIds.map((categoryId) => ({
+            shopify_product_id: shopifyProductId,
+            category_id: categoryId,
+          }))),
+          { onConflict: "shopify_product_id,category_id", ignoreDuplicates: true },
+        );
+        if (error) throw error;
+      }
+      if (profileAttrs.length > 0) {
+        const { error } = await supabase.from("product_attributes").upsert(
+          productIds.flatMap((shopifyProductId) => profileAttrs.map((attribute) => ({
+            shopify_product_id: shopifyProductId,
+            attr_key: attribute.attr_key,
+            attr_value: attribute.attr_value,
+            sort_order: attribute.sort_order,
+          }))),
+          { onConflict: "shopify_product_id,attr_key,attr_value", ignoreDuplicates: true },
+        );
+        if (error) throw error;
+      }
+      if (profile.brand_id) {
+        const { error } = await supabase.from("product_content").upsert(
+          productIds.map((shopifyProductId) => ({
+            shopify_product_id: shopifyProductId,
+            brand_id: profile.brand_id,
+          })),
+          { onConflict: "shopify_product_id" },
+        );
+        if (error) throw error;
+      }
+
+      await reloadAll();
+      toast.success(`Perfil aplicado em ${productIds.length} ${productIds.length === 1 ? "produto" : "produtos"}.`);
+      setBulkSelectedIds(new Set());
+    } catch (error: unknown) {
+      toast.error("Erro: " + (error instanceof Error ? error.message : "erro desconhecido"));
+    } finally {
+      setApplyingProfile(false);
     }
   };
 
@@ -1038,6 +1196,146 @@ function AssignPanel() {
                 {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Salvar categorias e marca
               </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-base">Perfis para cadastro em massa</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Salve os detalhes do produto modelo e aplique-os a todos os produtos que você selecionar.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-5 p-4 pt-0">
+          <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Criar perfil com o produto atual</label>
+              <Input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                placeholder='Ex.: Ração seca para cães'
+                disabled={!productId || savingProfile}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                O perfil guardará as categorias, os atributos e a marca opcional do produto aberto acima.
+              </p>
+            </div>
+            <Button onClick={handleCreateProfile} disabled={!productId || savingProfile}>
+              {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Salvar perfil
+            </Button>
+          </div>
+
+          {profiles.length === 0 ? (
+            <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+              Nenhum perfil criado ainda. Configure um produto acima e salve o primeiro perfil.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Perfil que será aplicado</label>
+                  <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione um perfil" /></SelectTrigger>
+                    <SelectContent>
+                      {profiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedProfileId && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const profile = profiles.find((item) => item.id === selectedProfileId);
+                      if (profile) handleDeleteProfile(profile);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />Excluir perfil
+                  </Button>
+                )}
+              </div>
+
+              {selectedProfileId && (() => {
+                const profile = profiles.find((item) => item.id === selectedProfileId);
+                const categoryIds = profileCategories.filter((item) => item.profile_id === selectedProfileId);
+                const profileAttrs = profileAttributes.filter((item) => item.profile_id === selectedProfileId);
+                const profileBrand = profile?.brand_id ? brands.find((brand) => brand.id === profile.brand_id) : null;
+                return (
+                  <div className="flex flex-wrap gap-1.5 rounded-lg border p-3">
+                    {profileBrand && <Badge variant="outline">Marca: {profileBrand.name}</Badge>}
+                    {categoryIds.map((item) => {
+                      const category = categories.find((candidate) => candidate.id === item.category_id);
+                      return category ? <Badge key={item.category_id} variant="secondary">{categoryPath(category, categories)}</Badge> : null;
+                    })}
+                    {profileAttrs.map((attribute) => (
+                      <Badge key={attribute.id} variant="outline">{attribute.attr_key}: {attribute.attr_value}</Badge>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <div>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">Produtos que receberão o perfil</p>
+                    <p className="text-xs text-muted-foreground">
+                      As informações serão adicionadas sem apagar categorias ou atributos existentes.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setBulkSelectedIds(new Set(listedProducts.map((product) => product.node.id)))}
+                    >
+                      Selecionar visíveis
+                    </Button>
+                    {bulkSelectedIds.size > 0 && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setBulkSelectedIds(new Set())}>
+                        Limpar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid max-h-72 gap-2 overflow-y-auto rounded-lg border p-2 md:grid-cols-2">
+                  {listedProducts.map((product) => {
+                    const checked = bulkSelectedIds.has(product.node.id);
+                    const image = product.node.images.edges[0]?.node;
+                    return (
+                      <label
+                        key={product.node.id}
+                        className={`flex cursor-pointer items-center gap-3 rounded-md border p-2 transition-colors ${checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0"
+                          checked={checked}
+                          onChange={() => toggleBulkProduct(product.node.id)}
+                        />
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border bg-white">
+                          {image ? <img src={image.url} alt="" className="h-full w-full object-contain p-0.5" loading="lazy" /> : <Package className="h-4 w-4 text-muted-foreground" />}
+                        </span>
+                        <span className="line-clamp-2 text-sm font-medium">{product.node.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 p-3">
+                <span className="text-sm font-medium">
+                  {bulkSelectedIds.size} {bulkSelectedIds.size === 1 ? "produto selecionado" : "produtos selecionados"}
+                </span>
+                <Button onClick={handleApplyProfile} disabled={!selectedProfileId || bulkSelectedIds.size === 0 || applyingProfile}>
+                  {applyingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Aplicar perfil aos selecionados
+                </Button>
+              </div>
             </>
           )}
         </CardContent>
