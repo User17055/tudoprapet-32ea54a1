@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Download, Loader2, Package, Search } from "lucide-react";
+import { AlertTriangle, Check, Download, History, Loader2, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { exceedsShopifyPrice, resolveSyncPrice } from "@/lib/priceCap";
-import { formatPercentage, percentageBelowSale, percentageOverCost } from "@/lib/pricePercentages";
+import { formatPercentage, percentageBelowSale, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, invalidateShopifyCatalogCache, type ShopifyProduct } from "@/lib/shopify";
 
 type CustomerPrice = {
@@ -34,6 +35,38 @@ type FranchisePrice = {
 type CustomerPriceRow = Omit<CustomerPrice, "price" | "previous_price"> & { price: number | string; previous_price: number | string | null };
 type SubscriberPriceRow = Omit<SubscriberPrice, "subscriber_price"> & { subscriber_price: number | string };
 type FranchisePriceRow = Omit<FranchisePrice, "price"> & { price: number | string };
+
+type ProductCost = {
+  shopify_variant_id: string;
+  cost: number;
+  previous_cost: number | null;
+  cost_changed_at: string | null;
+  synced_at: string;
+};
+
+type ProductCostRow = Omit<ProductCost, "cost" | "previous_cost"> & {
+  cost: number | string;
+  previous_cost: number | string | null;
+};
+
+type CostHistoryRow = {
+  id: string;
+  old_cost: number | null;
+  new_cost: number;
+  changed_at: string;
+  source: string;
+};
+
+type PriceDetails = {
+  productTitle: string;
+  variantTitle: string;
+  sku: string | null;
+  shopifyPrice: number;
+  customerPrice: number | null;
+  subscriberPrice: number | null;
+  franchisePrice: number | null;
+  cost: ProductCost | null;
+};
 
 type Draft = { customer?: string; franchise?: string };
 
@@ -70,22 +103,22 @@ function PriceMetrics({
   value,
   cost,
   sale,
-  costBase = false,
 }: {
   value: number | null;
   cost: number | null;
   sale?: number | null;
-  costBase?: boolean;
 }) {
   if (value === null) return <p className="mt-1 text-[11px] text-muted-foreground">Sem valor cadastrado</p>;
-  if (costBase) return <p className="mt-1 text-[11px] font-medium text-sky-700">Custo-base · 0,0%</p>;
   const overCost = percentageOverCost(value, cost);
-  if (overCost === null) return <p className="mt-1 text-[11px] text-muted-foreground">Cadastre o custo da franquia</p>;
+  if (overCost === null) return <p className="mt-1 text-[11px] text-muted-foreground">Custo ainda não importado</p>;
   const belowSale = sale === undefined ? null : percentageBelowSale(value, sale);
-  const tone = overCost < 0 ? "text-red-700" : "text-emerald-700";
+  const risk = priceRisk(value, cost);
+  const tone = risk === "danger" ? "text-red-700" : risk === "warning" ? "text-amber-700" : "text-emerald-700";
+  const warning = overCost < 0 ? " · abaixo do custo" : overCost <= 10 ? " · muito próximo do custo" : "";
   return (
     <p className={`mt-1 text-[11px] font-medium ${tone}`}>
       {overCost >= 0 ? "+" : ""}{formatPercentage(overCost)} sobre o custo
+      {warning}
       {belowSale !== null && belowSale > 0.05 ? ` · ${formatPercentage(belowSale)} abaixo da venda` : ""}
     </p>
   );
@@ -111,12 +144,16 @@ export default function ValuesTab() {
   const [customerPrices, setCustomerPrices] = useState<CustomerPrice[]>([]);
   const [subscriberPrices, setSubscriberPrices] = useState<SubscriberPrice[]>([]);
   const [franchisePrices, setFranchisePrices] = useState<FranchisePrice[]>([]);
+  const [productCosts, setProductCosts] = useState<ProductCost[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncingOlistId, setSyncingOlistId] = useState<string | null>(null);
   const [bulkSyncingOlist, setBulkSyncingOlist] = useState(false);
+  const [details, setDetails] = useState<PriceDetails | null>(null);
+  const [costHistory, setCostHistory] = useState<CostHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -125,7 +162,7 @@ export default function ValuesTab() {
       // linhas e esta tela mostra o campo VAZIO para variantes que tem valor
       // cadastrado -- e quem salvasse por cima apagaria o valor achando que
       // estava preenchendo pela primeira vez.
-      const [shopify, customer, subscriber, franchise] = await Promise.all([
+      const [shopify, customer, subscriber, franchise, costs] = await Promise.all([
         fetchAllShopifyProducts(),
         fetchAllRows<CustomerPriceRow>(
           "customer_prices",
@@ -142,11 +179,21 @@ export default function ValuesTab() {
           "shopify_product_id,shopify_variant_id,price",
           { orderBy: "shopify_variant_id" },
         ),
+        fetchAllRows<ProductCostRow>(
+          "product_costs",
+          "shopify_variant_id,cost,previous_cost,cost_changed_at,synced_at",
+          { orderBy: "shopify_variant_id" },
+        ),
       ]);
       setProducts(shopify);
       setCustomerPrices(customer.map((row) => ({ ...row, price: Number(row.price), previous_price: row.previous_price === null ? null : Number(row.previous_price) })));
       setSubscriberPrices(subscriber.map((row) => ({ ...row, subscriber_price: Number(row.subscriber_price) })));
       setFranchisePrices(franchise.map((row) => ({ ...row, price: Number(row.price) })));
+      setProductCosts(costs.map((row) => ({
+        ...row,
+        cost: Number(row.cost),
+        previous_cost: row.previous_cost === null ? null : Number(row.previous_cost),
+      })));
     } catch (error) {
       console.error(error);
       if (!silent) toast.error("Não foi possível carregar os valores.");
@@ -162,6 +209,7 @@ export default function ValuesTab() {
       .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "subscriber_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_costs" }, () => load(true))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -169,6 +217,30 @@ export default function ValuesTab() {
   const customerMap = useMemo(() => new Map(customerPrices.map((row) => [row.shopify_variant_id, row])), [customerPrices]);
   const subscriberMap = useMemo(() => new Map(subscriberPrices.map((row) => [row.shopify_variant_id, row.subscriber_price])), [subscriberPrices]);
   const franchiseMap = useMemo(() => new Map(franchisePrices.map((row) => [row.shopify_variant_id, row])), [franchisePrices]);
+  const costMap = useMemo(() => new Map(productCosts.map((row) => [row.shopify_variant_id, row])), [productCosts]);
+
+  const openDetails = async (value: PriceDetails & { variantId: string }) => {
+    const { variantId, ...dialogDetails } = value;
+    setDetails(dialogDetails);
+    setCostHistory([]);
+    setHistoryLoading(true);
+    const { data, error } = await supabase
+      .from("product_cost_history")
+      .select("id,old_cost,new_cost,changed_at,source")
+      .eq("shopify_variant_id", variantId)
+      .order("changed_at", { ascending: false })
+      .limit(20);
+    setHistoryLoading(false);
+    if (error) {
+      toast.error("Não foi possível carregar o histórico de custo.");
+      return;
+    }
+    setCostHistory((data || []).map((entry) => ({
+      ...entry,
+      old_cost: entry.old_cost === null ? null : Number(entry.old_cost),
+      new_cost: Number(entry.new_cost),
+    })));
+  };
 
   const rows = useMemo(() => products.flatMap((product) =>
     product.node.variants.edges.map(({ node: variant }) => ({
@@ -376,7 +448,7 @@ export default function ValuesTab() {
       <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
         <p className="font-medium">Como os percentuais são calculados</p>
         <p className="mt-0.5 text-xs text-sky-800">
-          O valor da franquia é o custo-base. Cliente, assinante e Shopify mostram o acréscimo sobre esse custo; o assinante também mostra o desconto em relação ao valor de venda.
+          O custo real vem da Olist e fica separado dos preços. Shopify, cliente, assinante e franquia mostram o percentual sobre esse custo. Até 10% fica vermelho, de 10% a 15% amarelo e acima de 15% verde.
         </p>
       </div>
 
@@ -408,15 +480,18 @@ export default function ValuesTab() {
                 <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
                   <TableHead className="min-w-[260px]">Produto</TableHead>
                   <TableHead className="min-w-[190px]">Shopify</TableHead>
+                  <TableHead className="min-w-[190px]">Custo Olist</TableHead>
                   <TableHead className="min-w-[260px]">Venda ao cliente</TableHead>
                   <TableHead className="min-w-[220px]">Assinante</TableHead>
-                  <TableHead className="min-w-[240px]">Franquia / custo</TableHead>
-                  <TableHead className="min-w-[120px]" />
+                  <TableHead className="min-w-[240px]">Franquia</TableHead>
+                  <TableHead className="min-w-[164px]">Ações</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>{filteredRows.map((row) => {
                   const customer = customerMap.get(row.variant.id);
                   const subscriber = subscriberMap.get(row.variant.id);
                   const franchise = franchiseMap.get(row.variant.id);
+                  const productCost = costMap.get(row.variant.id) ?? null;
+                  const costValue = productCost?.cost ?? null;
                   const shopifyPrice = Number(row.variant.price.amount);
                   const draft = drafts[row.variant.id];
                   const customerValue = effectivePrice(draft?.customer, customer?.price);
@@ -441,7 +516,16 @@ export default function ValuesTab() {
                       </div></TableCell>
                       <TableCell>
                         <Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
-                        <PriceMetrics value={shopifyPrice} cost={franchiseValue} />
+                        <PriceMetrics value={shopifyPrice} cost={costValue} />
+                      </TableCell>
+                      <TableCell>
+                        <Input readOnly value={costValue === null ? "Não importado" : money(costValue)} className="h-10 bg-sky-50 font-semibold tabular-nums" />
+                        {productCost?.previous_cost !== null && productCost?.previous_cost !== undefined ? (
+                          <p className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${productCost.cost > productCost.previous_cost ? "text-red-700" : "text-emerald-700"}`}>
+                            {productCost.cost > productCost.previous_cost ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                            {productCost.cost > productCost.previous_cost ? "Subiu" : "Baixou"} {formatPercentage(Math.abs((productCost.cost / productCost.previous_cost - 1) * 100))}
+                          </p>
+                        ) : <p className="mt-1 text-[11px] text-muted-foreground">Sem alteração registrada</p>}
                       </TableCell>
                       <TableCell>
                         <div className="relative">
@@ -452,17 +536,36 @@ export default function ValuesTab() {
                             ? <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>
                             : changed && <span title={`Alterado recentemente. Preço anterior: ${customer?.previous_price ? money(customer.previous_price) : "não informado"}`} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}
                         </div>
-                        <PriceMetrics value={customerValue} cost={franchiseValue} />
+                        <PriceMetrics value={customerValue} cost={costValue} />
                       </TableCell>
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
-                        <PriceMetrics value={subscriber ?? null} cost={franchiseValue} sale={saleValue} />
+                        <PriceMetrics value={subscriber ?? null} cost={costValue} sale={saleValue} />
                       </TableCell>
                       <TableCell>
-                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o custo" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div>
-                        <PriceMetrics value={franchiseValue} cost={franchiseValue} costBase />
+                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div>
+                        <PriceMetrics value={franchiseValue} cost={costValue} sale={saleValue} />
                       </TableCell>
                       <TableCell><div className="flex gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Ver detalhes e histórico"
+                          aria-label={`Ver detalhes e histórico de ${row.productTitle}`}
+                          onClick={() => openDetails({
+                            variantId: row.variant.id,
+                            productTitle: row.productTitle,
+                            variantTitle: row.variant.title,
+                            sku: row.variant.sku ?? null,
+                            shopifyPrice,
+                            customerPrice: customerValue,
+                            subscriberPrice: subscriber ?? null,
+                            franchisePrice: franchiseValue,
+                            cost: productCost,
+                          })}
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="outline"
@@ -488,6 +591,78 @@ export default function ValuesTab() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={details !== null} onOpenChange={(open) => { if (!open) setDetails(null); }}>
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes dos valores</DialogTitle>
+            <DialogDescription>
+              {details?.productTitle}{details?.variantTitle && details.variantTitle !== "Default Title" ? ` · ${details.variantTitle}` : ""}{details?.sku ? ` · SKU ${details.sku}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {details && (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { label: "Custo Olist", value: details.cost?.cost ?? null },
+                  { label: "Venda ao cliente", value: details.customerPrice },
+                  { label: "Assinante", value: details.subscriberPrice },
+                  { label: "Franquia", value: details.franchisePrice },
+                  { label: "Shopify", value: details.shopifyPrice },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground">{item.label}</p>
+                    <p className="mt-1 text-lg font-bold tabular-nums">{item.value === null ? "Não cadastrado" : money(item.value)}</p>
+                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} sale={item.label === "Assinante" || item.label === "Franquia" ? details.customerPrice ?? details.shopifyPrice : undefined} />}
+                  </div>
+                ))}
+              </div>
+
+              {details.cost?.previous_cost !== null && details.cost?.previous_cost !== undefined && (
+                <div className={`rounded-lg border p-4 ${details.cost.cost > details.cost.previous_cost ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
+                  <div className="flex items-center gap-2 font-medium">
+                    {details.cost.cost > details.cost.previous_cost ? <TrendingUp className="h-4 w-4 text-red-700" /> : <TrendingDown className="h-4 w-4 text-emerald-700" />}
+                    Custo {details.cost.cost > details.cost.previous_cost ? "aumentou" : "diminuiu"}
+                  </div>
+                  <p className="mt-1 text-sm">
+                    De {money(details.cost.previous_cost)} para {money(details.cost.cost)} ({details.cost.cost > details.cost.previous_cost ? "+" : ""}{formatPercentage((details.cost.cost / details.cost.previous_cost - 1) * 100)}).
+                  </p>
+                  {details.cost.cost_changed_at && <p className="mt-1 text-xs text-muted-foreground">Detectado em {new Date(details.cost.cost_changed_at).toLocaleString("pt-BR")}.</p>}
+                </div>
+              )}
+
+              <div>
+                <h3 className="text-sm font-semibold">Histórico do custo</h3>
+                {historyLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+                ) : costHistory.length === 0 ? (
+                  <p className="mt-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nenhuma alteração de custo registrada ainda. O histórico começa na próxima sincronização com a Olist.</p>
+                ) : (
+                  <div className="mt-2 overflow-hidden rounded-lg border">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Anterior</TableHead><TableHead>Novo custo</TableHead><TableHead>Variação</TableHead></TableRow></TableHeader>
+                      <TableBody>{costHistory.map((entry) => {
+                        const change = entry.old_cost && entry.old_cost > 0 ? (entry.new_cost / entry.old_cost - 1) * 100 : null;
+                        return (
+                          <TableRow key={entry.id}>
+                            <TableCell className="whitespace-nowrap text-xs">{new Date(entry.changed_at).toLocaleString("pt-BR")}</TableCell>
+                            <TableCell>{entry.old_cost === null ? "Primeiro registro" : money(entry.old_cost)}</TableCell>
+                            <TableCell className="font-medium">{money(entry.new_cost)}</TableCell>
+                            <TableCell className={change !== null && change > 0 ? "font-medium text-red-700" : "font-medium text-emerald-700"}>
+                              {change === null ? "—" : `${change > 0 ? "+" : ""}${formatPercentage(change)}`}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}</TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

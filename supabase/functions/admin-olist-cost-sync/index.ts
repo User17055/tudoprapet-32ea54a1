@@ -69,6 +69,39 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      const { data: existingCost, error: existingCostError } = await admin
+        .from("product_costs")
+        .select("cost,previous_cost,cost_changed_at")
+        .eq("shopify_variant_id", item.variantId)
+        .maybeSingle();
+      if (existingCostError) throw existingCostError;
+
+      const oldCost = existingCost ? Number(existingCost.cost) : null;
+      const costChanged = oldCost === null || oldCost !== product.cost;
+      const changedAt = new Date().toISOString();
+      const { error: costError } = await admin.from("product_costs").upsert({
+        shopify_product_id: item.productId,
+        shopify_variant_id: item.variantId,
+        sku: item.sku,
+        cost: product.cost,
+        previous_cost: costChanged && oldCost !== null ? oldCost : existingCost?.previous_cost ?? null,
+        cost_changed_at: costChanged && oldCost !== null ? changedAt : existingCost?.cost_changed_at ?? null,
+        source: "olist",
+        synced_at: changedAt,
+      }, { onConflict: "shopify_variant_id" });
+      if (costError) throw costError;
+
+      if (costChanged) {
+        const { error: historyError } = await admin.from("product_cost_history").insert({
+          shopify_variant_id: item.variantId,
+          old_cost: oldCost,
+          new_cost: product.cost,
+          source: "olist",
+          changed_at: changedAt,
+        });
+        if (historyError) throw historyError;
+      }
+
       const franchisePrice = product.cost;
       const customerPrice = item.isFeed ? roundMoney(product.cost * 1.12) : null;
       const { error: franchiseError } = await admin.from("franchise_prices").upsert({
@@ -94,6 +127,9 @@ Deno.serve(async (req) => {
         olistProductId: product.id,
         olistName: product.name,
         cost: product.cost,
+        previousCost: oldCost,
+        costChanged,
+        costIncreased: oldCost !== null && product.cost > oldCost,
         franchisePrice,
         customerPrice,
       });

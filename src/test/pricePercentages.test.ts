@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPercentage, percentageBelowSale, percentageOverCost } from "@/lib/pricePercentages";
+import { formatPercentage, percentageBelowSale, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 
 describe("comparacao percentual de precos", () => {
   it("calcula o acrescimo do cliente sobre o custo", () => {
@@ -14,5 +14,12 @@ describe("comparacao percentual de precos", () => {
   it("nao calcula sem uma base valida", () => {
     expect(percentageOverCost(10, 0)).toBeNull();
     expect(percentageBelowSale(undefined, 10)).toBeNull();
+  });
+
+  it("classifica preco proximo do custo como vermelho", () => {
+    expect(priceRisk(100, 100)).toBe("danger");
+    expect(priceRisk(110, 100)).toBe("danger");
+    expect(priceRisk(112, 100)).toBe("warning");
+    expect(priceRisk(116, 100)).toBe("safe");
   });
 });
