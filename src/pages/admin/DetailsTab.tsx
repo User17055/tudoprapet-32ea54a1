@@ -6,13 +6,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Check, Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks } from "lucide-react";
+import { Check, Trash2, Loader2, Plus, FolderTree, Tag, Package, X, ListChecks, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { fuzzySearch, normalizeText } from "@/lib/fuzzySearch";
+import { suggestProductDetails } from "@/lib/productDetailSuggestions";
 
 interface Category {
   id: string;
@@ -554,6 +555,7 @@ function AssignPanel() {
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
   const [savingProfile, setSavingProfile] = useState(false);
   const [applyingProfile, setApplyingProfile] = useState(false);
+  const [applyingSuggestions, setApplyingSuggestions] = useState(false);
 
   // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
@@ -690,12 +692,18 @@ function AssignPanel() {
           .map((categoryId) => rootCategoryId(categoryId, categories))
           .filter((rootId): rootId is string => Boolean(rootId)),
       );
-      setCategoryRootFilter(selectedRoots.size === 1 ? Array.from(selectedRoots)[0] : "all");
+      const product = products.find((item) => item.node.id === productId);
+      const suggestedRoot = product
+        ? suggestProductDetails(product.node, categories, [], []).rootCategoryId
+        : null;
+      setCategoryRootFilter(
+        selectedRoots.size === 1 ? Array.from(selectedRoots)[0] : suggestedRoot || "all",
+      );
       setAttrs((pa.data || []) as ProductAttribute[]);
       setContentRow((content.data as ProductContentRow) || null);
       setBrandId((content.data as ProductContentRow | null)?.brand_id || "none");
     })();
-  }, [productId, categories]);
+  }, [productId, categories, products]);
 
   const getParentIds = (id: string): string[] => {
     const parents: string[] = [];
@@ -930,11 +938,60 @@ function AssignPanel() {
     }
   };
 
+  const selectedProduct = products.find((product) => product.node.id === productId);
+  const detailSuggestion = selectedProduct
+    ? suggestProductDetails(
+        selectedProduct.node,
+        categories,
+        brands,
+        allValues.map((item) => ({ attr_key: item.attr_key, attr_value: item.attr_value })),
+      )
+    : null;
+  const hasSuggestion = Boolean(detailSuggestion && (
+    detailSuggestion.categoryIds.length > 0
+    || detailSuggestion.brandId
+    || detailSuggestion.attributes.length > 0
+  ));
+
+  const handleApplySuggestions = async () => {
+    if (!productId || !detailSuggestion || !hasSuggestion) return;
+    setApplyingSuggestions(true);
+    try {
+      if (detailSuggestion.categoryIds.length > 0) {
+        setSelectedCats(new Set(detailSuggestion.categoryIds));
+        setCategoryRootFilter(detailSuggestion.rootCategoryId || "all");
+      }
+      if (detailSuggestion.brandId) setBrandId(detailSuggestion.brandId);
+
+      const missingAttributes = detailSuggestion.attributes.filter((suggestion) => !attrs.some(
+        (attribute) => attribute.attr_key === suggestion.attr_key && attribute.attr_value === suggestion.attr_value,
+      ));
+      if (missingAttributes.length > 0) {
+        const { data, error } = await supabase.from("product_attributes").insert(
+          missingAttributes.map((attribute, index) => ({
+            shopify_product_id: productId,
+            attr_key: attribute.attr_key,
+            attr_value: attribute.attr_value,
+            sort_order: attrs.length + index,
+          })),
+        ).select();
+        if (error) throw error;
+        setAttrs((current) => [...current, ...((data || []) as ProductAttribute[])]);
+        await reloadAll();
+      }
+      toast.success("Sugestões preenchidas. Revise e clique em Salvar categorias e marca.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Não foi possível aplicar as sugestões.");
+    } finally {
+      setApplyingSuggestions(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
 
-  const selectedProduct = products.find((p) => p.node.id === productId);
   const rootCats = categories.filter((c) => !c.parent_id);
   const childrenOf = (pid: string) => categories.filter((c) => c.parent_id === pid);
 
@@ -1041,6 +1098,52 @@ function AssignPanel() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-semibold">Sugestão de preenchimento</p>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Analisamos o nome, fornecedor, tipo e tags desse produto na Shopify.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleApplySuggestions}
+                    disabled={!hasSuggestion || applyingSuggestions}
+                  >
+                    {applyingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Preencher com sugestões
+                  </Button>
+                </div>
+                {hasSuggestion && detailSuggestion ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {detailSuggestion.categoryIds.map((categoryId) => {
+                      const category = categories.find((item) => item.id === categoryId);
+                      return category ? (
+                        <Badge key={categoryId} variant="secondary">Categoria: {category.name}</Badge>
+                      ) : null;
+                    })}
+                    {detailSuggestion.brandId && (() => {
+                      const brand = brands.find((item) => item.id === detailSuggestion.brandId);
+                      return brand ? <Badge variant="outline">Marca: {brand.name}</Badge> : null;
+                    })()}
+                    {detailSuggestion.attributes.map((attribute) => (
+                      <Badge key={`${attribute.attr_key}:${attribute.attr_value}`} variant="outline">
+                        {attribute.attr_key}: {attribute.attr_value}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Não encontramos uma sugestão segura. Confira se o nome possui o pet e se a marca está cadastrada.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">

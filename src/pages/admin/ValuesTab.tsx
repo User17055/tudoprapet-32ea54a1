@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
-import { formatPercentage, percentageBelowSale, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
+import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 
 type SubscriberPrice = {
@@ -91,16 +91,13 @@ const effectivePrice = (draft: string | undefined, current: number | undefined):
 function PriceMetrics({
   value,
   cost,
-  sale,
 }: {
   value: number | null;
   cost: number | null;
-  sale?: number | null;
 }) {
   if (value === null) return <p className="mt-1 text-[11px] text-muted-foreground">Sem valor cadastrado</p>;
   const overCost = percentageOverCost(value, cost);
   if (overCost === null) return <p className="mt-1 text-[11px] text-muted-foreground">Custo ainda não importado</p>;
-  const belowSale = sale === undefined ? null : percentageBelowSale(value, sale);
   const risk = priceRisk(value, cost);
   const tone = risk === "danger" ? "text-red-700" : risk === "warning" ? "text-amber-700" : "text-emerald-700";
   const warning = overCost < 0 ? " · abaixo do custo" : overCost <= 10 ? " · muito próximo do custo" : "";
@@ -108,7 +105,6 @@ function PriceMetrics({
     <p className={`mt-1 text-[11px] font-medium ${tone}`}>
       {overCost >= 0 ? "+" : ""}{formatPercentage(overCost)} sobre o custo
       {warning}
-      {belowSale !== null && belowSale > 0.05 ? ` · ${formatPercentage(belowSale)} abaixo da venda` : ""}
     </p>
   );
 }
@@ -418,7 +414,6 @@ export default function ValuesTab() {
                   const shopifyPrice = Number(row.variant.price.amount);
                   const draft = drafts[row.variant.id];
                   const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
-                  const saleValue = shopifyPrice;
                   return (
                     <TableRow key={row.variant.id}>
                       <TableCell><div className="flex items-center gap-3">
@@ -447,11 +442,11 @@ export default function ValuesTab() {
                       </TableCell>
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
-                        <PriceMetrics value={subscriber ?? null} cost={costValue} sale={saleValue} />
+                        <PriceMetrics value={subscriber ?? null} cost={costValue} />
                       </TableCell>
                       <TableCell>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>
-                        <PriceMetrics value={franchiseValue} cost={costValue} sale={saleValue} />
+                        <PriceMetrics value={franchiseValue} cost={costValue} />
                       </TableCell>
                       <TableCell><div className="flex gap-2">
                         <Button
@@ -519,7 +514,7 @@ export default function ValuesTab() {
                   <div key={item.label} className="rounded-lg border bg-muted/20 p-3">
                     <p className="text-xs text-muted-foreground">{item.label}</p>
                     <p className="mt-1 text-lg font-bold tabular-nums">{item.value === null ? "Não cadastrado" : money(item.value)}</p>
-                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} sale={item.label === "Assinante" || item.label === "Franquia" ? details.shopifyPrice : undefined} />}
+                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} />}
                   </div>
                 ))}
               </div>
