@@ -98,6 +98,13 @@ export function resolveUnitPrice(
   return especial < catalogo ? especial : catalogo;
 }
 
+/** Garante que nenhum fluxo de franquia cobre abaixo do custo conhecido. */
+export function applyCostFloor(price: number | undefined, cost: number | undefined): number | undefined {
+  if (price === undefined) return cost;
+  if (cost === undefined || !Number.isFinite(cost) || cost <= 0) return price;
+  return Math.max(price, cost);
+}
+
 export const PRICE_ADJUSTMENT_TITLE = "Ajuste de preço TudoPraPet";
 
 /**

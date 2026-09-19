@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCostFloor,
   belowMinimumChargeMessage,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
@@ -13,6 +14,17 @@ import {
   toGraphqlDraftLineItems,
   type LineItem,
 } from "../../supabase/functions/_shared/pricing.ts";
+
+describe("piso de custo da franquia", () => {
+  it("aceita preco igual ou acima do custo", () => {
+    expect(applyCostFloor(100, 100)).toBe(100);
+    expect(applyCostFloor(120, 100)).toBe(120);
+  });
+
+  it("eleva ao custo quando o preco calculado ficaria abaixo", () => {
+    expect(applyCostFloor(90, 100)).toBe(100);
+  });
+});
 
 describe("checkout sem taxa de serviço", () => {
   it("mantém a taxa operacional zerada para novos pedidos", () => {

@@ -5,6 +5,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "./cors.ts";
 import {
+  applyCostFloor,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
   findUnpricedVariants,
@@ -110,6 +111,24 @@ export async function handleSpecialPriceCheckout(
       }
     }
 
+    const costFloorMap = new Map<string, number>();
+    if (config.priceTable === "franchise_prices") {
+      const { data: costRows } = await adminClient
+        .from("product_costs")
+        .select("shopify_variant_id,cost")
+        .in("shopify_variant_id", variantIds);
+      for (const row of costRows ?? []) {
+        const cost = Number(row.cost);
+        if (!Number.isFinite(cost) || cost <= 0) continue;
+        costFloorMap.set(row.shopify_variant_id, cost);
+        const current = specialPriceMap.get(row.shopify_variant_id)
+          ?? customerPriceMap.get(row.shopify_variant_id);
+        // Quando nao ha nenhum preco local, o piso e aplicado depois de buscar
+        // o valor atual da Shopify, no laco que monta finalPriceMap.
+        if (current !== undefined && current < cost) specialPriceMap.set(row.shopify_variant_id, cost);
+      }
+    }
+
     if (!storefrontToken) return errorResponse("Token Storefront ausente", 500);
 
     const currentPriceMap = await fetchCurrentVariantPrices(variantIds, storefrontToken);
@@ -122,7 +141,16 @@ export async function handleSpecialPriceCheckout(
     const finalPriceMap = new Map<string, number>();
     for (const item of items) {
       const base = customerPriceMap.get(item.variantId) ?? currentPriceMap.get(item.variantId);
-      const final = resolveUnitPrice(base, specialPriceMap.get(item.variantId));
+      let profilePrice = specialPriceMap.get(item.variantId);
+      if (config.priceTable === "franchise_prices") {
+        const cost = costFloorMap.get(item.variantId);
+        if (cost !== undefined && (profilePrice === undefined || profilePrice < cost)) {
+          profilePrice = cost;
+        }
+      }
+      const resolved = resolveUnitPrice(base, profilePrice);
+      const costFloor = config.priceTable === "franchise_prices" ? costFloorMap.get(item.variantId) : undefined;
+      const final = applyCostFloor(resolved, costFloor);
       if (final !== undefined) finalPriceMap.set(item.variantId, final);
     }
 

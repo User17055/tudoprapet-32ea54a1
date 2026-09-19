@@ -5,6 +5,7 @@ import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken }
 import { parseCheckoutPrepareInput, shippingLabel } from "../_shared/checkout-input.ts";
 import {
   belowMinimumChargeMessage,
+  applyCostFloor,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
   buildShippingLine,
@@ -238,6 +239,7 @@ Deno.serve(async (req) => {
     // Este mapa é enviado à Shopify como desconto sobre o preço nativo. Começa
     // com o valor do cliente e recebe o preço de perfil somente quando menor.
     const specialPriceMap = new Map(customerPriceMap);
+    const franchiseCostMap = new Map<string, number>();
     if (customerType === "subscriber") {
       const { data } = await admin.from("subscriber_prices")
         .select("shopify_variant_id,subscriber_price").in("shopify_variant_id", variantIds);
@@ -254,6 +256,21 @@ Deno.serve(async (req) => {
         const base = customerPriceMap.get(row.shopify_variant_id) ?? details.get(row.shopify_variant_id)?.price;
         if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) specialPriceMap.set(row.shopify_variant_id, price);
       }
+
+      // O preco de franquia pode ser igual ou superior ao custo, nunca inferior.
+      // Esta barreira fica no servidor para proteger inclusive carrinhos antigos
+      // e valores gravados antes da validacao existir no administrativo.
+      const { data: costRows } = await admin.from("product_costs")
+        .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
+      for (const row of costRows ?? []) {
+        const cost = Number(row.cost);
+        if (!Number.isFinite(cost) || cost <= 0) continue;
+        franchiseCostMap.set(row.shopify_variant_id, cost);
+        const current = specialPriceMap.get(row.shopify_variant_id)
+          ?? customerPriceMap.get(row.shopify_variant_id)
+          ?? details.get(row.shopify_variant_id)?.price;
+        if (current === undefined || current < cost) specialPriceMap.set(row.shopify_variant_id, cost);
+      }
     }
 
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
@@ -267,7 +284,9 @@ Deno.serve(async (req) => {
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
       const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
-      const unitPrice = resolveUnitPrice(catalogPrice, specialPriceMap.get(item.variantId))!;
+      const resolvedPrice = resolveUnitPrice(catalogPrice, specialPriceMap.get(item.variantId))!;
+      const costFloor = customerType === "franchise" ? franchiseCostMap.get(item.variantId) : undefined;
+      const unitPrice = applyCostFloor(resolvedPrice, costFloor)!;
       finalPriceMap.set(item.variantId, unitPrice);
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;

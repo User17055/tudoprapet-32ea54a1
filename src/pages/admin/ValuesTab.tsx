@@ -8,17 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
-import { exceedsShopifyPrice, resolveSyncPrice } from "@/lib/priceCap";
 import { formatPercentage, percentageBelowSale, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
-import { fetchAllShopifyProducts, invalidateShopifyCatalogCache, type ShopifyProduct } from "@/lib/shopify";
-
-type CustomerPrice = {
-  shopify_product_id: string;
-  shopify_variant_id: string;
-  price: number;
-  previous_price: number | null;
-  price_changed_at: string | null;
-};
+import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 
 type SubscriberPrice = {
   shopify_variant_id: string;
@@ -32,7 +23,6 @@ type FranchisePrice = {
 };
 
 // Formas cruas do PostgREST: `numeric` chega como string, a conversao e nossa.
-type CustomerPriceRow = Omit<CustomerPrice, "price" | "previous_price"> & { price: number | string; previous_price: number | string | null };
 type SubscriberPriceRow = Omit<SubscriberPrice, "subscriber_price"> & { subscriber_price: number | string };
 type FranchisePriceRow = Omit<FranchisePrice, "price"> & { price: number | string };
 
@@ -62,13 +52,12 @@ type PriceDetails = {
   variantTitle: string;
   sku: string | null;
   shopifyPrice: number;
-  customerPrice: number | null;
   subscriberPrice: number | null;
   franchisePrice: number | null;
   cost: ProductCost | null;
 };
 
-type Draft = { customer?: string; franchise?: string };
+type Draft = { franchise?: string };
 
 type OlistSyncItem = {
   productId: string;
@@ -141,7 +130,6 @@ const isFeedProduct = (product: ShopifyProduct) => {
 
 export default function ValuesTab() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
-  const [customerPrices, setCustomerPrices] = useState<CustomerPrice[]>([]);
   const [subscriberPrices, setSubscriberPrices] = useState<SubscriberPrice[]>([]);
   const [franchisePrices, setFranchisePrices] = useState<FranchisePrice[]>([]);
   const [productCosts, setProductCosts] = useState<ProductCost[]>([]);
@@ -162,13 +150,8 @@ export default function ValuesTab() {
       // linhas e esta tela mostra o campo VAZIO para variantes que tem valor
       // cadastrado -- e quem salvasse por cima apagaria o valor achando que
       // estava preenchendo pela primeira vez.
-      const [shopify, customer, subscriber, franchise, costs] = await Promise.all([
+      const [shopify, subscriber, franchise, costs] = await Promise.all([
         fetchAllShopifyProducts(),
-        fetchAllRows<CustomerPriceRow>(
-          "customer_prices",
-          "shopify_product_id,shopify_variant_id,price,previous_price,price_changed_at",
-          { orderBy: "shopify_variant_id" },
-        ),
         fetchAllRows<SubscriberPriceRow>(
           "subscriber_prices",
           "shopify_variant_id,subscriber_price",
@@ -186,7 +169,6 @@ export default function ValuesTab() {
         ),
       ]);
       setProducts(shopify);
-      setCustomerPrices(customer.map((row) => ({ ...row, price: Number(row.price), previous_price: row.previous_price === null ? null : Number(row.previous_price) })));
       setSubscriberPrices(subscriber.map((row) => ({ ...row, subscriber_price: Number(row.subscriber_price) })));
       setFranchisePrices(franchise.map((row) => ({ ...row, price: Number(row.price) })));
       setProductCosts(costs.map((row) => ({
@@ -206,7 +188,6 @@ export default function ValuesTab() {
     load();
     const channel = supabase
       .channel("admin-values")
-      .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "subscriber_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "product_costs" }, () => load(true))
@@ -214,7 +195,6 @@ export default function ValuesTab() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const customerMap = useMemo(() => new Map(customerPrices.map((row) => [row.shopify_variant_id, row])), [customerPrices]);
   const subscriberMap = useMemo(() => new Map(subscriberPrices.map((row) => [row.shopify_variant_id, row.subscriber_price])), [subscriberPrices]);
   const franchiseMap = useMemo(() => new Map(franchisePrices.map((row) => [row.shopify_variant_id, row])), [franchisePrices]);
   const costMap = useMemo(() => new Map(productCosts.map((row) => [row.shopify_variant_id, row])), [productCosts]);
@@ -311,16 +291,11 @@ export default function ValuesTab() {
     isFeed: true,
   })), true);
 
-  // Variantes cujo preço-base ainda precisa ser sincronizado com a Shopify.
-  // Depois da sincronização, o pedido mantém a variante e não precisa exibir
-  // uma linha adicional de ajuste para o cliente.
-  const acimaDaShopify = useMemo(() => rows.filter((row) => {
-    const shopifyPrice = Number(row.variant.price.amount);
-    const customer = customerMap.get(row.variant.id);
-    const franchise = franchiseMap.get(row.variant.id);
-    return (customer !== undefined && exceedsShopifyPrice(customer.price, shopifyPrice))
-      || (franchise !== undefined && exceedsShopifyPrice(franchise.price, shopifyPrice));
-  }), [rows, customerMap, franchiseMap]);
+  const franchiseBelowCost = useMemo(() => rows.filter((row) => {
+    const cost = costMap.get(row.variant.id)?.cost;
+    const franchise = franchiseMap.get(row.variant.id)?.price;
+    return cost !== undefined && franchise !== undefined && franchise < cost;
+  }), [rows, costMap, franchiseMap]);
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
@@ -334,45 +309,22 @@ export default function ValuesTab() {
 
   const saveRow = async (row: (typeof rows)[number]) => {
     const draft = drafts[row.variant.id] || {};
-    const customerExisting = customerMap.get(row.variant.id);
     const franchiseExisting = franchiseMap.get(row.variant.id);
-    const shopifyPrice = Number(row.variant.price.amount);
     const operations: PromiseLike<{ error: { message: string } | null }>[] = [];
-    // Valor que cada tabela vai ter DEPOIS de salvar -- é só isso que pode
-    // entrar na sincronização, porque o destino da escrita é o preço público da
-    // Shopify. Partir do valor atual e nunca descartá-lo fazia com que baixar
-    // um valor de 570 para 200 ainda empurrasse 570 para o catálogo, e apagar o
-    // valor empurrasse o valor apagado. Campo não editado mantém o que existe;
-    // campo esvaziado vira undefined, porque a linha será removida.
-    let customerAfter = customerExisting?.price;
-    let franchiseAfter = franchiseExisting?.price;
-
-    if (draft.customer !== undefined) {
-      const raw = draft.customer.trim();
-      if (!raw) {
-        customerAfter = undefined;
-        if (customerExisting) operations.push(supabase.from("customer_prices").delete().eq("shopify_variant_id", row.variant.id));
-      } else {
-        const price = parsePrice(raw);
-        if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor do Cliente válido.");
-        customerAfter = price;
-        operations.push(supabase.from("customer_prices").upsert({
-          shopify_product_id: row.productId,
-          shopify_variant_id: row.variant.id,
-          price,
-        }, { onConflict: "shopify_variant_id" }));
-      }
-    }
 
     if (draft.franchise !== undefined) {
       const raw = draft.franchise.trim();
       if (!raw) {
-        franchiseAfter = undefined;
         if (franchiseExisting) operations.push(supabase.from("franchise_prices").delete().eq("shopify_variant_id", row.variant.id));
       } else {
         const price = parsePrice(raw);
         if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor da Franquia válido.");
-        franchiseAfter = price;
+        const cost = costMap.get(row.variant.id)?.cost;
+        if (cost !== undefined && price < cost) {
+          return toast.error("O valor da franquia não pode ficar abaixo do custo.", {
+            description: `Custo atual: ${money(cost)}. Informe ${money(cost)} ou mais.`,
+          });
+        }
         operations.push(supabase.from("franchise_prices").upsert({
           shopify_product_id: row.productId,
           shopify_variant_id: row.variant.id,
@@ -381,26 +333,7 @@ export default function ValuesTab() {
       }
     }
 
-    const synchronizedShopifyPrice = resolveSyncPrice(shopifyPrice, customerAfter, franchiseAfter);
-
     setSavingId(row.variant.id);
-    if (exceedsShopifyPrice(synchronizedShopifyPrice, shopifyPrice)) {
-      const { data, error } = await supabase.functions.invoke("admin-variant-price", {
-        body: {
-          productId: row.productId,
-          variantId: row.variant.id,
-          price: synchronizedShopifyPrice,
-        },
-      });
-      const response = data as { ok?: boolean; error?: string } | null;
-      if (error || !response?.ok) {
-        setSavingId(null);
-        return toast.error("Não foi possível sincronizar o preço com a Shopify.", {
-          description: response?.error || error?.message,
-        });
-      }
-      invalidateShopifyCatalogCache();
-    }
     const results = await Promise.all(operations);
     setSavingId(null);
     const error = results.find((result) => result.error)?.error;
@@ -410,36 +343,28 @@ export default function ValuesTab() {
       delete next[row.variant.id];
       return next;
     });
-    toast.success(
-      synchronizedShopifyPrice > shopifyPrice
-        ? "Valor salvo e preço da Shopify sincronizado."
-        : "Valores atualizados.",
-    );
+    toast.success("Valor da franquia atualizado.");
     await load(true);
   };
-
-  const recentlyChanged = (row: CustomerPrice | undefined) => Boolean(
-    row?.price_changed_at && Date.now() - new Date(row.price_changed_at).getTime() <= 30 * 24 * 60 * 60 * 1000,
-  );
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Variantes</p><p className="mt-1 text-2xl font-bold">{rows.length}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Valores personalizados</p><p className="mt-1 text-2xl font-bold">{customerPrices.length}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Alterados nos últimos 30 dias</p><p className="mt-1 text-2xl font-bold text-amber-600">{customerPrices.filter(recentlyChanged).length}</p></CardContent></Card>
-        <Card className={acimaDaShopify.length > 0 ? "border-amber-500/50" : undefined}><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Aguardando sincronização</p><p className={`mt-1 text-2xl font-bold ${acimaDaShopify.length > 0 ? "text-amber-600" : ""}`}>{acimaDaShopify.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Custos importados</p><p className="mt-1 text-2xl font-bold">{productCosts.length}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Preços de assinante</p><p className="mt-1 text-2xl font-bold">{subscriberPrices.length}</p></CardContent></Card>
+        <Card className={franchiseBelowCost.length > 0 ? "border-red-500/50" : undefined}><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground">Franquias abaixo do custo</p><p className={`mt-1 text-2xl font-bold ${franchiseBelowCost.length > 0 ? "text-red-700" : "text-emerald-700"}`}>{franchiseBelowCost.length}</p></CardContent></Card>
       </div>
 
-      {acimaDaShopify.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+      {franchiseBelowCost.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/5 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
           <div>
-            <p className="font-medium text-amber-700">
-              {acimaDaShopify.length === 1 ? "1 variante precisa" : `${acimaDaShopify.length} variantes precisam`} sincronizar com a Shopify.
+            <p className="font-medium text-red-700">
+              {franchiseBelowCost.length === 1 ? "1 franquia está" : `${franchiseBelowCost.length} franquias estão`} com valor abaixo do custo.
             </p>
             <p className="mt-1 text-muted-foreground">
-              Clique no ✓ da linha marcada. O preço-base será atualizado antes de salvar, mantendo o produto e a baixa de estoque sem mostrar uma linha adicional no pedido do cliente.
+              Sincronize novamente com a Olist ou ajuste o valor. O checkout nunca deve cobrar abaixo do custo.
             </p>
           </div>
         </div>
@@ -448,7 +373,7 @@ export default function ValuesTab() {
       <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
         <p className="font-medium">Como os percentuais são calculados</p>
         <p className="mt-0.5 text-xs text-sky-800">
-          O custo real vem da Olist e fica separado dos preços. Shopify, cliente, assinante e franquia mostram o percentual sobre esse custo. Até 10% fica vermelho, de 10% a 15% amarelo e acima de 15% verde.
+          Shopify é a venda normal. Assinante e franquia são preços especiais. Todos mostram o percentual sobre o custo Olist; até 10% fica vermelho, de 10% a 15% amarelo e acima de 15% verde.
         </p>
       </div>
 
@@ -456,7 +381,7 @@ export default function ValuesTab() {
         <CardHeader className="gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Valores por produto</CardTitle>
-            <CardDescription>Compare custo, venda e preços por perfil com os percentuais calculados automaticamente.</CardDescription>
+            <CardDescription>Compare a venda normal da Shopify com os valores de assinante, franquia e o custo real.</CardDescription>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button variant="outline" onClick={syncAllFeedCosts} disabled={bulkSyncingOlist || loading}>
@@ -479,28 +404,21 @@ export default function ValuesTab() {
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
                   <TableHead className="min-w-[260px]">Produto</TableHead>
-                  <TableHead className="min-w-[190px]">Shopify</TableHead>
                   <TableHead className="min-w-[190px]">Custo Olist</TableHead>
-                  <TableHead className="min-w-[260px]">Venda ao cliente</TableHead>
+                  <TableHead className="min-w-[190px]">Venda normal (Shopify)</TableHead>
                   <TableHead className="min-w-[220px]">Assinante</TableHead>
                   <TableHead className="min-w-[240px]">Franquia</TableHead>
                   <TableHead className="min-w-[164px]">Ações</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>{filteredRows.map((row) => {
-                  const customer = customerMap.get(row.variant.id);
                   const subscriber = subscriberMap.get(row.variant.id);
                   const franchise = franchiseMap.get(row.variant.id);
                   const productCost = costMap.get(row.variant.id) ?? null;
                   const costValue = productCost?.cost ?? null;
                   const shopifyPrice = Number(row.variant.price.amount);
                   const draft = drafts[row.variant.id];
-                  const customerValue = effectivePrice(draft?.customer, customer?.price);
                   const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
-                  const saleValue = customerValue ?? shopifyPrice;
-                  const changed = recentlyChanged(customer);
-                  const customerAcima = customer !== undefined && exceedsShopifyPrice(customer.price, shopifyPrice);
-                  const franchiseAcima = franchise !== undefined && exceedsShopifyPrice(franchise.price, shopifyPrice);
-                  const acimaTitle = `Acima do Valor da Shopify (${money(shopifyPrice)}). Clique em salvar para sincronizar o preço-base e evitar uma linha adicional no pedido.`;
+                  const saleValue = shopifyPrice;
                   return (
                     <TableRow key={row.variant.id}>
                       <TableCell><div className="flex items-center gap-3">
@@ -515,10 +433,6 @@ export default function ValuesTab() {
                         </div>
                       </div></TableCell>
                       <TableCell>
-                        <Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
-                        <PriceMetrics value={shopifyPrice} cost={costValue} />
-                      </TableCell>
-                      <TableCell>
                         <Input readOnly value={costValue === null ? "Não importado" : money(costValue)} className="h-10 bg-sky-50 font-semibold tabular-nums" />
                         {productCost?.previous_cost !== null && productCost?.previous_cost !== undefined ? (
                           <p className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${productCost.cost > productCost.previous_cost ? "text-red-700" : "text-emerald-700"}`}>
@@ -528,22 +442,15 @@ export default function ValuesTab() {
                         ) : <p className="mt-1 text-[11px] text-muted-foreground">Sem alteração registrada</p>}
                       </TableCell>
                       <TableCell>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span>
-                          <Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.customer ?? (customer ? decimal(customer.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} />
-                          {/* Um marcador por campo: o valor acima do da Shopify é o mais grave e tem precedência sobre o aviso de alteração recente. */}
-                          {customerAcima
-                            ? <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>
-                            : changed && <span title={`Alterado recentemente. Preço anterior: ${customer?.previous_price ? money(customer.previous_price) : "não informado"}`} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}
-                        </div>
-                        <PriceMetrics value={customerValue} cost={costValue} />
+                        <Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
+                        <PriceMetrics value={shopifyPrice} cost={costValue} />
                       </TableCell>
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
                         <PriceMetrics value={subscriber ?? null} cost={costValue} sale={saleValue} />
                       </TableCell>
                       <TableCell>
-                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div>
+                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>
                         <PriceMetrics value={franchiseValue} cost={costValue} sale={saleValue} />
                       </TableCell>
                       <TableCell><div className="flex gap-2">
@@ -558,7 +465,6 @@ export default function ValuesTab() {
                             variantTitle: row.variant.title,
                             sku: row.variant.sku ?? null,
                             shopifyPrice,
-                            customerPrice: customerValue,
                             subscriberPrice: subscriber ?? null,
                             franchisePrice: franchiseValue,
                             cost: productCost,
@@ -581,7 +487,7 @@ export default function ValuesTab() {
                         >
                           {syncingOlistId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         </Button>
-                        <Button size="icon" onClick={() => saveRow(row)} disabled={(!draft && !customerAcima && !franchiseAcima) || savingId === row.variant.id} aria-label={`Salvar valores de ${row.productTitle}`}>{savingId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button>
+                        <Button size="icon" onClick={() => saveRow(row)} disabled={!draft || savingId === row.variant.id} aria-label={`Salvar valores de ${row.productTitle}`}>{savingId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}</Button>
                       </div></TableCell>
                     </TableRow>
                   );
@@ -606,15 +512,14 @@ export default function ValuesTab() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {[
                   { label: "Custo Olist", value: details.cost?.cost ?? null },
-                  { label: "Venda ao cliente", value: details.customerPrice },
+                  { label: "Venda normal (Shopify)", value: details.shopifyPrice },
                   { label: "Assinante", value: details.subscriberPrice },
                   { label: "Franquia", value: details.franchisePrice },
-                  { label: "Shopify", value: details.shopifyPrice },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg border bg-muted/20 p-3">
                     <p className="text-xs text-muted-foreground">{item.label}</p>
                     <p className="mt-1 text-lg font-bold tabular-nums">{item.value === null ? "Não cadastrado" : money(item.value)}</p>
-                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} sale={item.label === "Assinante" || item.label === "Franquia" ? details.customerPrice ?? details.shopifyPrice : undefined} />}
+                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} sale={item.label === "Assinante" || item.label === "Franquia" ? details.shopifyPrice : undefined} />}
                   </div>
                 ))}
               </div>

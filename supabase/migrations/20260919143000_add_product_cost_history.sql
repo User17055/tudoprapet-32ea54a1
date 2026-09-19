@@ -46,3 +46,27 @@ grant all on public.product_costs, public.product_cost_history to service_role;
 drop trigger if exists product_costs_updated_at on public.product_costs;
 create trigger product_costs_updated_at before update on public.product_costs
   for each row execute function public.update_updated_at_column();
+
+create or replace function public.enforce_franchise_price_cost_floor()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_cost numeric;
+begin
+  select cost into v_cost
+  from public.product_costs
+  where shopify_variant_id = new.shopify_variant_id;
+
+  if v_cost is not null and new.price < v_cost then
+    raise exception 'franchise_price_below_cost';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists franchise_price_cost_floor on public.franchise_prices;
+create trigger franchise_price_cost_floor
+  before insert or update of price, shopify_variant_id on public.franchise_prices
+  for each row execute function public.enforce_franchise_price_cost_floor();
