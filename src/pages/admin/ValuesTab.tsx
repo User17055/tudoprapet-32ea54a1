@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { exceedsShopifyPrice, resolveSyncPrice } from "@/lib/priceCap";
+import { formatPercentage, percentageBelowSale, percentageOverCost } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, invalidateShopifyCatalogCache, type ShopifyProduct } from "@/lib/shopify";
 
 type CustomerPrice = {
@@ -57,6 +58,38 @@ const money = (value: number) =>
 
 const parsePrice = (value: string) => Number(value.replace(",", "."));
 const decimal = (value: number) => value.toFixed(2).replace(".", ",");
+
+const effectivePrice = (draft: string | undefined, current: number | undefined): number | null => {
+  if (draft === undefined) return current ?? null;
+  if (!draft.trim()) return null;
+  const parsed = parsePrice(draft);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+function PriceMetrics({
+  value,
+  cost,
+  sale,
+  costBase = false,
+}: {
+  value: number | null;
+  cost: number | null;
+  sale?: number | null;
+  costBase?: boolean;
+}) {
+  if (value === null) return <p className="mt-1 text-[11px] text-muted-foreground">Sem valor cadastrado</p>;
+  if (costBase) return <p className="mt-1 text-[11px] font-medium text-sky-700">Custo-base · 0,0%</p>;
+  const overCost = percentageOverCost(value, cost);
+  if (overCost === null) return <p className="mt-1 text-[11px] text-muted-foreground">Cadastre o custo da franquia</p>;
+  const belowSale = sale === undefined ? null : percentageBelowSale(value, sale);
+  const tone = overCost < 0 ? "text-red-700" : "text-emerald-700";
+  return (
+    <p className={`mt-1 text-[11px] font-medium ${tone}`}>
+      {overCost >= 0 ? "+" : ""}{formatPercentage(overCost)} sobre o custo
+      {belowSale !== null && belowSale > 0.05 ? ` · ${formatPercentage(belowSale)} abaixo da venda` : ""}
+    </p>
+  );
+}
 
 const normalizedText = (value: string) => value
   .normalize("NFD")
@@ -340,11 +373,18 @@ export default function ValuesTab() {
         </div>
       )}
 
+      <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
+        <p className="font-medium">Como os percentuais são calculados</p>
+        <p className="mt-0.5 text-xs text-sky-800">
+          O valor da franquia é o custo-base. Cliente, assinante e Shopify mostram o acréscimo sobre esse custo; o assinante também mostra o desconto em relação ao valor de venda.
+        </p>
+      </div>
+
       <Card>
         <CardHeader className="gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Valores por produto</CardTitle>
-            <CardDescription>Cadastre os valores específicos de cliente e franquia para cada variante.</CardDescription>
+            <CardDescription>Compare custo, venda e preços por perfil com os percentuais calculados automaticamente.</CardDescription>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button variant="outline" onClick={syncAllFeedCosts} disabled={bulkSyncingOlist || loading}>
@@ -365,12 +405,12 @@ export default function ValuesTab() {
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow>
+                <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
                   <TableHead className="min-w-[260px]">Produto</TableHead>
-                  <TableHead className="min-w-[150px]">Valor da Shopify</TableHead>
-                  <TableHead className="min-w-[250px]">Valor do Cliente</TableHead>
-                  <TableHead className="min-w-[160px]">Valor do Assinante</TableHead>
-                  <TableHead className="min-w-[230px]">Valor da Franquia</TableHead>
+                  <TableHead className="min-w-[190px]">Shopify</TableHead>
+                  <TableHead className="min-w-[260px]">Venda ao cliente</TableHead>
+                  <TableHead className="min-w-[220px]">Assinante</TableHead>
+                  <TableHead className="min-w-[240px]">Franquia / custo</TableHead>
                   <TableHead className="min-w-[120px]" />
                 </TableRow></TableHeader>
                 <TableBody>{filteredRows.map((row) => {
@@ -379,6 +419,9 @@ export default function ValuesTab() {
                   const franchise = franchiseMap.get(row.variant.id);
                   const shopifyPrice = Number(row.variant.price.amount);
                   const draft = drafts[row.variant.id];
+                  const customerValue = effectivePrice(draft?.customer, customer?.price);
+                  const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
+                  const saleValue = customerValue ?? shopifyPrice;
                   const changed = recentlyChanged(customer);
                   const customerAcima = customer !== undefined && exceedsShopifyPrice(customer.price, shopifyPrice);
                   const franchiseAcima = franchise !== undefined && exceedsShopifyPrice(franchise.price, shopifyPrice);
@@ -396,7 +439,10 @@ export default function ValuesTab() {
                           </p>
                         </div>
                       </div></TableCell>
-                      <TableCell><Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" /></TableCell>
+                      <TableCell>
+                        <Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
+                        <PriceMetrics value={shopifyPrice} cost={franchiseValue} />
+                      </TableCell>
                       <TableCell>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span>
@@ -406,9 +452,16 @@ export default function ValuesTab() {
                             ? <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>
                             : changed && <span title={`Alterado recentemente. Preço anterior: ${customer?.previous_price ? money(customer.previous_price) : "não informado"}`} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}
                         </div>
+                        <PriceMetrics value={customerValue} cost={franchiseValue} />
                       </TableCell>
-                      <TableCell>{subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}</TableCell>
-                      <TableCell><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div></TableCell>
+                      <TableCell>
+                        {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
+                        <PriceMetrics value={subscriber ?? null} cost={franchiseValue} sale={saleValue} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o custo" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} />{franchiseAcima && <span title={acimaTitle} className="absolute right-3 top-1/2 -translate-y-1/2"><AlertTriangle className="h-4 w-4 text-amber-600" /></span>}</div>
+                        <PriceMetrics value={franchiseValue} cost={franchiseValue} costBase />
+                      </TableCell>
                       <TableCell><div className="flex gap-2">
                         <Button
                           size="icon"
