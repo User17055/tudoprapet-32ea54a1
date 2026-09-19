@@ -124,18 +124,20 @@ export function suggestProductDetails(
   const attributes = availableAttributes.filter((attribute, index, all) => {
     const key = normalize(attribute.attr_key);
     const value = normalize(attribute.attr_value);
+    const isAgeKey = key === "idade" || key.includes("idade") || key.includes("fase");
+    const isSizeKey = key === "raca" || key === "porte" || key.includes("raca") || key.includes("porte") || key.includes("tamanho");
     if (all.findIndex((item) => item.attr_key === attribute.attr_key && item.attr_value === attribute.attr_value) !== index) return false;
     if (value.length >= 3 && (` ${source} `).includes(` ${value} `)) return true;
     if (petTerms.length && (key === "pet" || key.includes("especie")) && hasTerm(value, petTerms)) return true;
     if (isDry && (key === "tipo" || key === "formato") && hasTerm(value, [...DRY_TERMS, "racao seca"])) return true;
     if (isWet && (key === "tipo" || key === "formato") && hasTerm(value, [...WET_TERMS, "racao umida"])) return true;
-    if ((key === "idade" || key.includes("fase")) && isPuppy && hasTerm(value, PUPPY_TERMS)) return true;
-    if ((key === "idade" || key.includes("fase")) && isAdult && hasTerm(value, ADULT_TERMS)) return true;
-    if ((key === "idade" || key.includes("fase")) && isSenior && hasTerm(value, SENIOR_TERMS)) return true;
-    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isSmall && hasTerm(value, ["pequena", "pequeno", "mini", "small"])) return true;
-    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isMedium && hasTerm(value, ["media", "medio", "medium"])) return true;
-    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isLarge && hasTerm(value, ["grande", "large"])) return true;
-    if ((key === "raca" || key === "porte" || key.includes("tamanho")) && isGiant && hasTerm(value, ["gigante", "giant"])) return true;
+    if (isAgeKey && isPuppy && hasTerm(value, PUPPY_TERMS)) return true;
+    if (isAgeKey && isAdult && hasTerm(value, ADULT_TERMS)) return true;
+    if (isAgeKey && isSenior && hasTerm(value, SENIOR_TERMS)) return true;
+    if (isSizeKey && isSmall && hasTerm(value, ["pequena", "pequeno", "mini", "small"])) return true;
+    if (isSizeKey && isMedium && hasTerm(value, ["media", "medio", "medium"])) return true;
+    if (isSizeKey && isLarge && hasTerm(value, ["grande", "large"])) return true;
+    if (isSizeKey && isGiant && hasTerm(value, ["gigante", "giant"])) return true;
     return false;
   });
 

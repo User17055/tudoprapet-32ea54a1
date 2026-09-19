@@ -71,14 +71,14 @@ it("pode sugerir mais de um porte para rações de raças médias e grandes", ()
     categories,
     [],
     [
-      { attr_key: "Raça", attr_value: "Pequena" },
-      { attr_key: "Raça", attr_value: "Média" },
-      { attr_key: "Raça", attr_value: "Grande" },
+      { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+      { attr_key: "Porte de Raça", attr_value: "Médio" },
+      { attr_key: "Porte de Raça", attr_value: "Grande" },
     ],
   );
   expect(result.attributes).toEqual(expect.arrayContaining([
-    { attr_key: "Raça", attr_value: "Média" },
-    { attr_key: "Raça", attr_value: "Grande" },
+    { attr_key: "Porte de Raça", attr_value: "Médio" },
+    { attr_key: "Porte de Raça", attr_value: "Grande" },
   ]));
-  expect(result.attributes).not.toContainEqual({ attr_key: "Raça", attr_value: "Pequena" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Porte de Raça", attr_value: "Pequeno" });
 });
