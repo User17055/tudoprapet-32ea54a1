@@ -95,12 +95,15 @@ export function suggestProductDetails(
   const isDog = hasTerm(source, DOG_TERMS);
   const isCat = hasTerm(source, CAT_TERMS);
   const hasFeedTerm = hasTerm(source, FEED_TERMS);
-  const isPrescriptionFeed = hasTerm(source, ["dieta veterinaria", "prescription diet", "veterinary diet"])
+  const isNattu = hasTerm(source, ["nattu"]);
+  const isClinicalNutrition = hasTerm(source, ["nutricao clinica"]);
+  const isPrescriptionFeed = isClinicalNutrition
+    || hasTerm(source, ["dieta veterinaria", "prescription diet", "veterinary diet"])
     || (hasFeedTerm && hasTerm(source, PRESCRIPTION_FEED_TERMS));
-  const isFeed = hasFeedTerm || isPrescriptionFeed;
-  const isNaturalFeed = isFeed && hasTerm(source, NATURAL_FEED_TERMS);
+  const isFeed = hasFeedTerm || isNattu || isPrescriptionFeed;
+  const isNaturalFeed = isNattu || (isFeed && hasTerm(source, NATURAL_FEED_TERMS));
   const isWet = hasTerm(source, WET_TERMS);
-  const isDry = isFeed && !isWet;
+  const isDry = isFeed && !isWet && !isNaturalFeed && !isPrescriptionFeed;
   const isPuppy = hasTerm(source, PUPPY_TERMS);
   const isAdult = hasTerm(source, ADULT_TERMS);
   const isSenior = hasTerm(source, SENIOR_TERMS);
@@ -130,6 +133,7 @@ export function suggestProductDetails(
       if (isWet && hasTerm(name, WET_TERMS)) score += 5;
       if (isDry && hasTerm(name, WET_TERMS)) score = -1;
       if (isWet && hasTerm(name, DRY_TERMS)) score = -1;
+      if ((isNaturalFeed || isPrescriptionFeed) && hasTerm(name, DRY_TERMS)) score = -1;
       return { category, score, depth: ancestorsOf(category.id, categories).length };
     })
     .filter((item) => item.score > 0)

@@ -87,6 +87,55 @@ it("reconhece ração prescrita sem confundir com ração seca", () => {
   expect(result.attributes).not.toContainEqual({ attr_key: "Classificação", attr_value: "Natural" });
 });
 
+it("classifica a linha Nattu como natural e nunca como ração seca", () => {
+  const result = suggestProductDetails(
+    { title: "Nattu para Cães Adultos sabor frango 10 kg" },
+    categories,
+    [],
+    [
+      { attr_key: "Tipo", attr_value: "Ração seca" },
+      { attr_key: "Tipo", attr_value: "Natural" },
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["dogs", "dog-food", "dog-natural"]);
+  expect(result.attributes).toContainEqual({ attr_key: "Tipo", attr_value: "Natural" });
+  expect(result.attributes).toContainEqual({ attr_key: "Formato de alimento", attr_value: "Grãos" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Tipo", attr_value: "Ração seca" });
+});
+
+it("não classifica Nattu como seca quando a categoria natural ainda não existe", () => {
+  const categoriesWithoutNatural = categories.filter((category) => category.id !== "dog-natural");
+  const result = suggestProductDetails(
+    { title: "Nattu para Cães Adultos 10 kg" },
+    categoriesWithoutNatural,
+    [],
+    [{ attr_key: "Tipo", attr_value: "Ração seca" }],
+  );
+
+  expect(result.categoryIds).not.toContain("dog-dry");
+  expect(result.attributes).not.toContainEqual({ attr_key: "Tipo", attr_value: "Ração seca" });
+});
+
+it("classifica Nutrição Clínica como ração prescrita", () => {
+  const result = suggestProductDetails(
+    { title: "Nutrição Clínica para Gatos Adultos Renal 2 kg" },
+    categories,
+    [],
+    [
+      { attr_key: "Tipo", attr_value: "Ração seca" },
+      { attr_key: "Tipo", attr_value: "Prescrita" },
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["cats", "cat-prescription"]);
+  expect(result.attributes).toContainEqual({ attr_key: "Tipo", attr_value: "Prescrita" });
+  expect(result.attributes).toContainEqual({ attr_key: "Formato de alimento", attr_value: "Grãos" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Tipo", attr_value: "Ração seca" });
+});
+
 it("reconhece sachê como ração úmida", () => {
   const result = suggestProductDetails(
     { title: "Sachê para Cães sabor carne" },

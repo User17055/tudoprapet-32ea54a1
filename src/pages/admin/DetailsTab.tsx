@@ -1035,7 +1035,48 @@ function AssignPanel() {
           : []
       ));
 
+      // Natural e prescrita são classificações próprias. Ao reaplicar as
+      // sugestões, remova apenas a classificação antiga de ração seca que
+      // possa ter sido criada pela regra anterior, preservando os demais dados.
+      const specializedProductIds = new Set(
+        applicable
+          .filter(({ suggestion }) => (
+            suggestion.categoryIds.some((categoryId) => {
+              const name = normalizeText(categories.find((category) => category.id === categoryId)?.name || "");
+              return name.includes("racao natural") || name.includes("racao prescrita");
+            })
+            || suggestion.attributes.some((attribute) => {
+              const value = normalizeText(attribute.attr_value);
+              return value === "natural" || value === "prescrita";
+            })
+          ))
+          .map(({ productId: suggestedProductId }) => suggestedProductId),
+      );
+      const dryCategoryIds = new Set(
+        categories
+          .filter((category) => normalizeText(category.name).includes("racao seca"))
+          .map((category) => category.id),
+      );
+      const staleCategoryLinkIds = allProductCats
+        .filter((link) => specializedProductIds.has(link.shopify_product_id) && dryCategoryIds.has(link.category_id))
+        .map((link) => link.id);
+      const staleDryAttributeIds = allProductAttrs
+        .filter((attribute) => {
+          if (!specializedProductIds.has(attribute.shopify_product_id)) return false;
+          const key = normalizeText(attribute.attr_key);
+          const value = normalizeText(attribute.attr_value);
+          const isClassification = key.includes("tipo") || key.includes("categoria") || key.includes("classificacao");
+          return isClassification && (value === "seca" || value === "racao seca");
+        })
+        .map((attribute) => attribute.id);
+
       const writes = [];
+      if (staleCategoryLinkIds.length > 0) {
+        writes.push(supabase.from("product_categories").delete().in("id", staleCategoryLinkIds));
+      }
+      if (staleDryAttributeIds.length > 0) {
+        writes.push(supabase.from("product_attributes").delete().in("id", staleDryAttributeIds));
+      }
       if (categoryRows.length > 0) {
         writes.push(supabase.from("product_categories").upsert(categoryRows, {
           onConflict: "shopify_product_id,category_id",
