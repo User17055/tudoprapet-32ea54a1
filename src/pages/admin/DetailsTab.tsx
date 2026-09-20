@@ -989,8 +989,10 @@ function AssignPanel() {
     }
   };
 
-  const handleApplyAllSuggestions = async () => {
-    const pendingProducts = products.filter((product) => !configuredIds.has(product.node.id));
+  const handleApplyAllSuggestions = async (includeConfigured = false) => {
+    const pendingProducts = includeConfigured
+      ? products
+      : products.filter((product) => !configuredIds.has(product.node.id));
     if (pendingProducts.length === 0) return toast.info("Todos os produtos já estão cadastrados.");
 
     const availableAttributes = allValues.map((item) => ({
@@ -1024,8 +1026,11 @@ function AssignPanel() {
           sort_order: index,
         }))
       ));
+      const existingBrandIds = new Set(
+        allProductContent.filter((content) => content.brand_id).map((content) => content.shopify_product_id),
+      );
       const brandRows = applicable.flatMap(({ productId: shopifyProductId, suggestion }) => (
-        suggestion.brandId
+        suggestion.brandId && !existingBrandIds.has(shopifyProductId)
           ? [{ shopify_product_id: shopifyProductId, brand_id: suggestion.brandId }]
           : []
       ));
@@ -1057,15 +1062,22 @@ function AssignPanel() {
 
       const current = applicable.find((item) => item.productId === productId);
       if (current) {
-        setSelectedCats(new Set(current.suggestion.categoryIds));
-        setCategoryRootFilter(current.suggestion.rootCategoryId || "all");
-        setBrandId(current.suggestion.brandId || "none");
-        const [{ data: currentAttrs }, { data: currentContent }] = await Promise.all([
+        const [{ data: currentCats }, { data: currentAttrs }, { data: currentContent }] = await Promise.all([
+          supabase.from("product_categories").select("*").eq("shopify_product_id", productId),
           supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
           supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
         ]);
+        const currentCategoryIds = ((currentCats || []) as ProductCategoryLink[]).map((item) => item.category_id);
+        setSelectedCats(new Set(currentCategoryIds));
+        const currentRoots = new Set(
+          currentCategoryIds
+            .map((categoryId) => rootCategoryId(categoryId, categories))
+            .filter((rootId): rootId is string => Boolean(rootId)),
+        );
+        setCategoryRootFilter(currentRoots.size === 1 ? Array.from(currentRoots)[0] : current.suggestion.rootCategoryId || "all");
         setAttrs((currentAttrs || []) as ProductAttribute[]);
         setContentRow((currentContent as ProductContentRow | null) || null);
+        setBrandId((currentContent as ProductContentRow | null)?.brand_id || "none");
       }
 
       const skipped = pendingProducts.length - applicable.length;
@@ -1075,7 +1087,7 @@ function AssignPanel() {
       );
     } catch (error) {
       console.error(error);
-      toast.error("Não foi possível preencher todos os produtos não cadastrados.");
+      toast.error("Não foi possível preencher os produtos com as novas sugestões.");
     } finally {
       setApplyingAllSuggestions(false);
     }
@@ -1552,11 +1564,20 @@ function AssignPanel() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={handleApplyAllSuggestions}
+                onClick={() => handleApplyAllSuggestions(false)}
                 disabled={unregisteredProducts.length === 0 || applyingAllSuggestions}
               >
                 {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Preencher não cadastrados ({unregisteredProducts.length})
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleApplyAllSuggestions(true)}
+                disabled={products.length === 0 || applyingAllSuggestions}
+              >
+                {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Repreencher todos
               </Button>
               <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[260px_190px]">
                 <Input

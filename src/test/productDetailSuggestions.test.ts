@@ -172,3 +172,46 @@ it("pode sugerir mais de um porte para rações de raças médias e grandes", ()
   ]));
   expect(result.attributes).not.toContainEqual({ attr_key: "Porte de Raça", attr_value: "Pequeno" });
 });
+
+it("aplica todas as idades e todos os portes quando a ração não os especifica", () => {
+  const availableAttributes = [
+    { attr_key: "Idade", attr_value: "Filhote" },
+    { attr_key: "Idade", attr_value: "Adulto" },
+    { attr_key: "Idade", attr_value: "Sênior" },
+    { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+    { attr_key: "Porte de Raça", attr_value: "Médio" },
+    { attr_key: "Porte de Raça", attr_value: "Grande" },
+    { attr_key: "Porte de Raça", attr_value: "Gigante" },
+  ];
+  const result = suggestProductDetails(
+    { title: "Ração para Cães sabor frango 10 kg" },
+    categories,
+    [],
+    availableAttributes,
+  );
+
+  expect(result.attributes).toEqual(expect.arrayContaining(availableAttributes));
+});
+
+it("mantém somente a idade e o porte informados no produto", () => {
+  const result = suggestProductDetails(
+    { title: "Ração para Cães Adultos de Porte Pequeno" },
+    categories,
+    [],
+    [
+      { attr_key: "Idade", attr_value: "Filhote" },
+      { attr_key: "Idade", attr_value: "Adulto" },
+      { attr_key: "Idade", attr_value: "Sênior" },
+      { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+      { attr_key: "Porte de Raça", attr_value: "Médio" },
+      { attr_key: "Porte de Raça", attr_value: "Grande" },
+    ],
+  );
+
+  expect(result.attributes.filter((attribute) => attribute.attr_key === "Idade")).toEqual([
+    { attr_key: "Idade", attr_value: "Adulto" },
+  ]);
+  expect(result.attributes.filter((attribute) => attribute.attr_key === "Porte de Raça")).toEqual([
+    { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+  ]);
+});

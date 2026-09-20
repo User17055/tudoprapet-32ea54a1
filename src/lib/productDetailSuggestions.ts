@@ -55,6 +55,15 @@ const SMALL_TERMS = ["raca pequena", "racas pequenas", "porte pequeno", "portes 
 const MEDIUM_TERMS = ["raca media", "racas medias", "porte medio", "portes medios", "media", "medias", "medio", "medios", "medium"];
 const LARGE_TERMS = ["raca grande", "racas grandes", "porte grande", "portes grandes", "grande", "grandes", "large"];
 const GIANT_TERMS = ["raca gigante", "racas gigantes", "porte gigante", "portes gigantes", "gigante", "gigantes", "giant"];
+const ALL_SIZE_TERMS = [
+  ...SMALL_TERMS,
+  ...MEDIUM_TERMS,
+  ...LARGE_TERMS,
+  ...GIANT_TERMS,
+  "todos",
+  "todos os portes",
+  "todos os tamanhos",
+];
 
 const ancestorsOf = (categoryId: string, categories: SuggestionCategory[]) => {
   const result: string[] = [];
@@ -164,10 +173,12 @@ export function suggestProductDetails(
     if (isAgeKey && isPuppy && hasTerm(value, PUPPY_TERMS)) return true;
     if (isAgeKey && isAdult && hasTerm(value, ADULT_TERMS)) return true;
     if (isAgeKey && isSenior && hasTerm(value, SENIOR_TERMS)) return true;
+    if (isFeed && isAgeKey && !isPuppy && !isAdult && !isSenior) return true;
     if (isSizeKey && isSmall && hasTerm(value, ["pequena", "pequeno", "mini", "small"])) return true;
     if (isSizeKey && isMedium && hasTerm(value, ["media", "medio", "medium"])) return true;
     if (isSizeKey && isLarge && hasTerm(value, ["grande", "large"])) return true;
     if (isSizeKey && isGiant && hasTerm(value, ["gigante", "giant"])) return true;
+    if (isFeed && isSizeKey && !isSmall && !isMedium && !isLarge && !isGiant && hasTerm(value, ALL_SIZE_TERMS)) return true;
     return false;
   });
 
