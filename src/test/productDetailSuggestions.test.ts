@@ -55,6 +55,53 @@ it("reconhece sachê como ração úmida", () => {
   expect(result.attributes).toContainEqual({ attr_key: "Tipo", attr_value: "Ração úmida" });
 });
 
+it("preenche Formato de alimento com Grãos para qualquer ração não úmida", () => {
+  const result = suggestProductDetails(
+    { title: "Ração para Cães Adultos sabor frango" },
+    categories,
+    [],
+    [
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+      { attr_key: "Formato de alimento", attr_value: "Sachê" },
+    ],
+  );
+
+  expect(result.attributes).toContainEqual({ attr_key: "Formato de alimento", attr_value: "Grãos" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Formato de alimento", attr_value: "Sachê" });
+});
+
+it("não força Grãos no formato de uma ração úmida", () => {
+  const result = suggestProductDetails(
+    { title: "Ração úmida em sachê para Gatos" },
+    categories,
+    [],
+    [
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+      { attr_key: "Formato de alimento", attr_value: "Sachê" },
+      { attr_key: "Formato de alimento", attr_value: "Patê" },
+    ],
+  );
+
+  expect(result.attributes).toContainEqual({ attr_key: "Formato de alimento", attr_value: "Sachê" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Formato de alimento", attr_value: "Grãos" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Formato de alimento", attr_value: "Patê" });
+});
+
+it("deixa o formato em aberto quando a ração é úmida mas não informa a embalagem", () => {
+  const result = suggestProductDetails(
+    { title: "Ração úmida para Gatos sabor frango" },
+    categories,
+    [],
+    [
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+      { attr_key: "Formato de alimento", attr_value: "Sachê" },
+      { attr_key: "Formato de alimento", attr_value: "Lata" },
+    ],
+  );
+
+  expect(result.attributes.filter((attribute) => attribute.attr_key === "Formato de alimento")).toEqual([]);
+});
+
 it("reconhece filhotes mesmo quando o valor cadastrado está no singular", () => {
   const result = suggestProductDetails(
     { title: "Ração para Cães Filhotes" },

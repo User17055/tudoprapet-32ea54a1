@@ -126,11 +126,21 @@ export function suggestProductDetails(
     const value = normalize(attribute.attr_value);
     const isAgeKey = key === "idade" || key.includes("idade") || key.includes("fase");
     const isSizeKey = key === "raca" || key === "porte" || key.includes("raca") || key.includes("porte") || key.includes("tamanho");
+    const isTypeKey = key === "tipo" || key.includes("tipo");
+    const isFoodFormatKey = key === "formato" || key.includes("formato");
     if (all.findIndex((item) => item.attr_key === attribute.attr_key && item.attr_value === attribute.attr_value) !== index) return false;
+    // Toda ração que não for úmida usa o formato Grãos, mesmo quando o título
+    // não diz explicitamente "seca" ou "grãos". Para ração úmida, nunca force
+    // Grãos; use somente um formato úmido que esteja cadastrado.
+    if (isFoodFormatKey && isFeed) {
+      return isWet
+        ? WET_TERMS.some((term) => hasTerm(source, [term]) && hasTerm(value, [term]))
+        : hasTerm(value, ["grao", "graos"]);
+    }
     if (value.length >= 3 && (` ${source} `).includes(` ${value} `)) return true;
     if (petTerms.length && (key === "pet" || key.includes("especie")) && hasTerm(value, petTerms)) return true;
-    if (isDry && (key === "tipo" || key === "formato") && hasTerm(value, [...DRY_TERMS, "racao seca"])) return true;
-    if (isWet && (key === "tipo" || key === "formato") && hasTerm(value, [...WET_TERMS, "racao umida"])) return true;
+    if (isDry && isTypeKey && hasTerm(value, [...DRY_TERMS, "racao seca"])) return true;
+    if (isWet && (isTypeKey || isFoodFormatKey) && hasTerm(value, [...WET_TERMS, "racao umida"])) return true;
     if (isAgeKey && isPuppy && hasTerm(value, PUPPY_TERMS)) return true;
     if (isAgeKey && isAdult && hasTerm(value, ADULT_TERMS)) return true;
     if (isAgeKey && isSenior && hasTerm(value, SENIOR_TERMS)) return true;

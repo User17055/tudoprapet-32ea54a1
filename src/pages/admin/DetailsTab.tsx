@@ -556,6 +556,7 @@ function AssignPanel() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [applyingProfile, setApplyingProfile] = useState(false);
   const [applyingSuggestions, setApplyingSuggestions] = useState(false);
+  const [applyingAllSuggestions, setApplyingAllSuggestions] = useState(false);
 
   // registered titles + values
   const [allValues, setAllValues] = useState<AttrValue[]>([]);
@@ -988,6 +989,98 @@ function AssignPanel() {
     }
   };
 
+  const handleApplyAllSuggestions = async () => {
+    const pendingProducts = products.filter((product) => !configuredIds.has(product.node.id));
+    if (pendingProducts.length === 0) return toast.info("Todos os produtos já estão cadastrados.");
+
+    const availableAttributes = allValues.map((item) => ({
+      attr_key: item.attr_key,
+      attr_value: item.attr_value,
+    }));
+    const suggestions = pendingProducts.map((product) => ({
+      productId: product.node.id,
+      suggestion: suggestProductDetails(product.node, categories, brands, availableAttributes),
+    }));
+    const applicable = suggestions.filter(({ suggestion }) => (
+      suggestion.categoryIds.length > 0
+      || suggestion.brandId
+      || suggestion.attributes.length > 0
+    ));
+
+    if (applicable.length === 0) {
+      return toast.info("Não encontramos sugestões seguras para os produtos não cadastrados.");
+    }
+
+    setApplyingAllSuggestions(true);
+    try {
+      const categoryRows = applicable.flatMap(({ productId: shopifyProductId, suggestion }) => (
+        suggestion.categoryIds.map((categoryId) => ({ shopify_product_id: shopifyProductId, category_id: categoryId }))
+      ));
+      const attributeRows = applicable.flatMap(({ productId: shopifyProductId, suggestion }) => (
+        suggestion.attributes.map((attribute, index) => ({
+          shopify_product_id: shopifyProductId,
+          attr_key: attribute.attr_key,
+          attr_value: attribute.attr_value,
+          sort_order: index,
+        }))
+      ));
+      const brandRows = applicable.flatMap(({ productId: shopifyProductId, suggestion }) => (
+        suggestion.brandId
+          ? [{ shopify_product_id: shopifyProductId, brand_id: suggestion.brandId }]
+          : []
+      ));
+
+      const writes = [];
+      if (categoryRows.length > 0) {
+        writes.push(supabase.from("product_categories").upsert(categoryRows, {
+          onConflict: "shopify_product_id,category_id",
+          ignoreDuplicates: true,
+        }));
+      }
+      if (attributeRows.length > 0) {
+        writes.push(supabase.from("product_attributes").upsert(attributeRows, {
+          onConflict: "shopify_product_id,attr_key,attr_value",
+          ignoreDuplicates: true,
+        }));
+      }
+      if (brandRows.length > 0) {
+        writes.push(supabase.from("product_content").upsert(brandRows, {
+          onConflict: "shopify_product_id",
+        }));
+      }
+
+      const results = await Promise.all(writes);
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+
+      await reloadAll();
+
+      const current = applicable.find((item) => item.productId === productId);
+      if (current) {
+        setSelectedCats(new Set(current.suggestion.categoryIds));
+        setCategoryRootFilter(current.suggestion.rootCategoryId || "all");
+        setBrandId(current.suggestion.brandId || "none");
+        const [{ data: currentAttrs }, { data: currentContent }] = await Promise.all([
+          supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
+          supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
+        ]);
+        setAttrs((currentAttrs || []) as ProductAttribute[]);
+        setContentRow((currentContent as ProductContentRow | null) || null);
+      }
+
+      const skipped = pendingProducts.length - applicable.length;
+      toast.success(
+        `${applicable.length} ${applicable.length === 1 ? "produto preenchido" : "produtos preenchidos"}`
+        + (skipped > 0 ? `; ${skipped} sem sugestão segura.` : "."),
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error("Não foi possível preencher todos os produtos não cadastrados.");
+    } finally {
+      setApplyingAllSuggestions(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
@@ -1017,6 +1110,7 @@ function AssignPanel() {
 
   // Build summary of configured products
   const configuredProducts = products.filter((p) => configuredIds.has(p.node.id));
+  const unregisteredProducts = products.filter((product) => !configuredIds.has(product.node.id));
   const brandById = new Map(brands.map((b) => [b.id, b]));
   const catById = new Map(categories.map((c) => [c.id, c]));
   const summaryFor = (pid: string) => {
@@ -1453,24 +1547,36 @@ function AssignPanel() {
                 {configuredProducts.length} cadastrados de {products.length} produtos carregados.
               </p>
             </div>
-            <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[260px_190px]">
-              <Input
-                placeholder="Filtrar por nome, marca ou variação..."
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                className="h-9"
-              />
-              <Select
-                value={registrationFilter}
-                onValueChange={(value) => setRegistrationFilter(value as "all" | "registered" | "unregistered")}
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleApplyAllSuggestions}
+                disabled={unregisteredProducts.length === 0 || applyingAllSuggestions}
               >
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="registered">Cadastrados</SelectItem>
-                  <SelectItem value="unregistered">Não cadastrados</SelectItem>
-                </SelectContent>
-              </Select>
+                {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Preencher não cadastrados ({unregisteredProducts.length})
+              </Button>
+              <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[260px_190px]">
+                <Input
+                  placeholder="Filtrar por nome, marca ou variação..."
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  className="h-9"
+                />
+                <Select
+                  value={registrationFilter}
+                  onValueChange={(value) => setRegistrationFilter(value as "all" | "registered" | "unregistered")}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="registered">Cadastrados</SelectItem>
+                    <SelectItem value="unregistered">Não cadastrados</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardHeader>
