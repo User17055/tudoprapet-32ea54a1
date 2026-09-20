@@ -37,6 +37,17 @@ const CAT_TERMS = ["gato", "gatos", "felino", "felinos", "cat", "cats"];
 const FEED_TERMS = ["racao", "racoes", "alimento completo"];
 const WET_TERMS = ["umida", "umido", "sache", "pate", "lata"];
 const DRY_TERMS = ["seca", "seco", "grao", "graos"];
+const NATURAL_FEED_TERMS = ["natural", "naturais", "alimentacao natural", "comida natural"];
+const PRESCRIPTION_FEED_TERMS = [
+  "prescrita",
+  "prescrito",
+  "prescricao",
+  "terapeutica",
+  "terapeutico",
+  "dieta veterinaria",
+  "prescription diet",
+  "veterinary diet",
+];
 const PUPPY_TERMS = ["filhote", "filhotes", "puppy", "puppies", "junior"];
 const ADULT_TERMS = ["adulto", "adultos", "adult"];
 const SENIOR_TERMS = ["senior", "idoso", "idosos", "maduro", "maduros"];
@@ -74,7 +85,11 @@ export function suggestProductDetails(
   const brandSource = normalize(`${product.vendor || ""} ${product.title}`);
   const isDog = hasTerm(source, DOG_TERMS);
   const isCat = hasTerm(source, CAT_TERMS);
-  const isFeed = hasTerm(source, FEED_TERMS);
+  const hasFeedTerm = hasTerm(source, FEED_TERMS);
+  const isPrescriptionFeed = hasTerm(source, ["dieta veterinaria", "prescription diet", "veterinary diet"])
+    || (hasFeedTerm && hasTerm(source, PRESCRIPTION_FEED_TERMS));
+  const isFeed = hasFeedTerm || isPrescriptionFeed;
+  const isNaturalFeed = isFeed && hasTerm(source, NATURAL_FEED_TERMS);
   const isWet = hasTerm(source, WET_TERMS);
   const isDry = isFeed && !isWet;
   const isPuppy = hasTerm(source, PUPPY_TERMS);
@@ -100,6 +115,8 @@ export function suggestProductDetails(
       const name = normalize(category.name);
       let score = source.includes(name) && name.length >= 3 ? 5 : 0;
       if (isFeed && hasTerm(name, FEED_TERMS)) score += 3;
+      if (isNaturalFeed && hasTerm(name, NATURAL_FEED_TERMS)) score += 8;
+      if (isPrescriptionFeed && hasTerm(name, PRESCRIPTION_FEED_TERMS)) score += 8;
       if (isDry && hasTerm(name, DRY_TERMS)) score += 5;
       if (isWet && hasTerm(name, WET_TERMS)) score += 5;
       if (isDry && hasTerm(name, WET_TERMS)) score = -1;
@@ -127,6 +144,7 @@ export function suggestProductDetails(
     const isAgeKey = key === "idade" || key.includes("idade") || key.includes("fase");
     const isSizeKey = key === "raca" || key === "porte" || key.includes("raca") || key.includes("porte") || key.includes("tamanho");
     const isTypeKey = key === "tipo" || key.includes("tipo");
+    const isFoodClassificationKey = isTypeKey || key.includes("categoria") || key.includes("classificacao");
     const isFoodFormatKey = key === "formato" || key.includes("formato");
     if (all.findIndex((item) => item.attr_key === attribute.attr_key && item.attr_value === attribute.attr_value) !== index) return false;
     // Toda ração que não for úmida usa o formato Grãos, mesmo quando o título
@@ -139,6 +157,8 @@ export function suggestProductDetails(
     }
     if (value.length >= 3 && (` ${source} `).includes(` ${value} `)) return true;
     if (petTerms.length && (key === "pet" || key.includes("especie")) && hasTerm(value, petTerms)) return true;
+    if (isNaturalFeed && isFoodClassificationKey && hasTerm(value, NATURAL_FEED_TERMS)) return true;
+    if (isPrescriptionFeed && isFoodClassificationKey && hasTerm(value, PRESCRIPTION_FEED_TERMS)) return true;
     if (isDry && isTypeKey && hasTerm(value, [...DRY_TERMS, "racao seca"])) return true;
     if (isWet && (isTypeKey || isFoodFormatKey) && hasTerm(value, [...WET_TERMS, "racao umida"])) return true;
     if (isAgeKey && isPuppy && hasTerm(value, PUPPY_TERMS)) return true;

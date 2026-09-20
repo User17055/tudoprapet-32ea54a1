@@ -6,8 +6,11 @@ const categories = [
   { id: "dog-food", name: "Alimentação", parent_id: "dogs" },
   { id: "dog-dry", name: "Ração seca", parent_id: "dog-food" },
   { id: "dog-wet", name: "Ração úmida", parent_id: "dog-food" },
+  { id: "dog-natural", name: "Ração natural", parent_id: "dog-food" },
+  { id: "dog-prescription", name: "Ração prescrita", parent_id: "dog-food" },
   { id: "cats", name: "Gatos", parent_id: null },
   { id: "cat-dry", name: "Ração seca", parent_id: "cats" },
+  { id: "cat-prescription", name: "Ração prescrita", parent_id: "cats" },
 ];
 
 it("sugere cães, ração seca, grãos e a marca encontrada", () => {
@@ -42,6 +45,46 @@ it("não mistura categorias de gatos e cães", () => {
   );
   expect(result.categoryIds).toEqual(["cats", "cat-dry"]);
   expect(result.categoryIds).not.toContain("dog-dry");
+});
+
+it("reconhece ração natural como categoria e tipo de alimento", () => {
+  const result = suggestProductDetails(
+    { title: "Ração Natural para Cães Adultos 10 kg" },
+    categories,
+    [],
+    [
+      { attr_key: "Tipo de alimento", attr_value: "Natural" },
+      { attr_key: "Tipo de alimento", attr_value: "Prescrita" },
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["dogs", "dog-food", "dog-natural"]);
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Tipo de alimento", attr_value: "Natural" },
+    { attr_key: "Formato de alimento", attr_value: "Grãos" },
+  ]));
+  expect(result.attributes).not.toContainEqual({ attr_key: "Tipo de alimento", attr_value: "Prescrita" });
+});
+
+it("reconhece ração prescrita sem confundir com ração seca", () => {
+  const result = suggestProductDetails(
+    { title: "Ração Prescrita para Gatos Adultos 2 kg" },
+    categories,
+    [],
+    [
+      { attr_key: "Classificação", attr_value: "Natural" },
+      { attr_key: "Classificação", attr_value: "Prescrita" },
+      { attr_key: "Formato de alimento", attr_value: "Grãos" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["cats", "cat-prescription"]);
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Classificação", attr_value: "Prescrita" },
+    { attr_key: "Formato de alimento", attr_value: "Grãos" },
+  ]));
+  expect(result.attributes).not.toContainEqual({ attr_key: "Classificação", attr_value: "Natural" });
 });
 
 it("reconhece sachê como ração úmida", () => {
