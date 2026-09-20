@@ -210,7 +210,7 @@ export const Header = () => {
                 const price = variant ? String(getCustomerPrice(variant.id) ?? Number(shopifyPrice)) : shopifyPrice;
                 const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
                 const hasSubscriberPrice =
-                  subscriberPrice !== null && subscriberPrice < Number(price);
+                  subscriberPrice !== null && Number.isFinite(subscriberPrice) && subscriberPrice > 0;
 
                 return (
                   <Link

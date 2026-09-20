@@ -295,11 +295,12 @@ const ProductDetail = () => {
     : 0;
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
   const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
-  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null && franchisePrice < price;
-  const hasSubscriberDiscount =
+  const hasSubscriberPrice =
     !isFranchisee &&
     subscriberPrice !== null &&
-    subscriberPrice < price;
+    Number.isFinite(subscriberPrice) &&
+    subscriberPrice > 0;
+  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null && franchisePrice < price;
   const installment = (price / 2).toFixed(2).replace(".", ",");
 
   
@@ -640,7 +641,7 @@ const ProductDetail = () => {
                   <span className="text-xs text-emerald-600/80 font-medium">preço franquia</span>
                 </div>
               )}
-              {hasSubscriberDiscount && (
+              {hasSubscriberPrice && (
                 <div className="flex flex-col items-start gap-1 pt-1">
                   <span className="font-display font-900 text-xl text-sky-500 tabular-nums">
                     R$ {subscriberPrice.toFixed(2).replace(".", ",")}
