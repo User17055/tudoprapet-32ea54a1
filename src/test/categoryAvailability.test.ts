@@ -11,14 +11,16 @@ const categories = [
 ];
 
 describe("categorias disponíveis no catálogo", () => {
-  it("mantém somente a categoria vinculada e os pais necessários", () => {
+  it("mantém somente a categoria ligada diretamente ao produto", () => {
     expect(categoriesWithLinkedProducts(categories, [{ category_id: "natural" }]).map((item) => item.id))
-      .toEqual(["dogs", "food", "natural"]);
+      .toEqual(["natural"]);
   });
 
-  it("oculta todo um ramo quando ele não possui produto vinculado", () => {
+  it("não mostra pais ou categorias irmãs sem vínculo direto", () => {
     const result = categoriesWithLinkedProducts(categories, [{ category_id: "dry" }]);
-    expect(result.map((item) => item.id)).toEqual(["dogs", "food", "dry"]);
+    expect(result.map((item) => item.id)).toEqual(["dry"]);
+    expect(result.map((item) => item.id)).not.toContain("dogs");
+    expect(result.map((item) => item.id)).not.toContain("food");
     expect(result.map((item) => item.id)).not.toContain("cats");
     expect(result.map((item) => item.id)).not.toContain("toys");
   });
