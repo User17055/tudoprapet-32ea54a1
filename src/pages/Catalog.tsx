@@ -106,7 +106,11 @@ const Catalog = () => {
         ]);
         setProducts(shop);
         setBestSellingProducts(bestSelling?.data?.products?.edges || []);
-        setCategories(categoriesWithLinkedProducts((cats.data || []) as Category[], pc.data || []));
+        setCategories(categoriesWithLinkedProducts(
+          (cats.data || []) as Category[],
+          pc.data || [],
+          new Set(shop.map((product) => product.node.id)),
+        ));
         setBrands((brs.data || []) as Brand[]);
         setProductCats(pc.data || []);
         setProductBrands(pcontent.data || []);
@@ -246,11 +250,12 @@ const Catalog = () => {
   const valuesByKey = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const a of productAttrs) {
+      if (!discoverableIds.has(a.shopify_product_id)) continue;
       if (!map.has(a.attr_key)) map.set(a.attr_key, new Set());
       map.get(a.attr_key)!.add(a.attr_value);
     }
     return map;
-  }, [productAttrs]);
+  }, [discoverableIds, productAttrs]);
 
   const customKeys = useMemo(() => {
     const keys: string[] = [];

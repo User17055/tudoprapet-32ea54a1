@@ -28,4 +28,17 @@ describe("categorias disponíveis no catálogo", () => {
   it("não exibe categorias quando não há vínculos", () => {
     expect(categoriesWithLinkedProducts(categories, [])).toEqual([]);
   });
+
+  it("ignora vínculos antigos de produtos que não existem mais no catálogo", () => {
+    const result = categoriesWithLinkedProducts(
+      categories,
+      [
+        { category_id: "dry", shopify_product_id: "current" },
+        { category_id: "toys", shopify_product_id: "removed" },
+      ],
+      new Set(["current"]),
+    );
+
+    expect(result.map((item) => item.id)).toEqual(["dry"]);
+  });
 });

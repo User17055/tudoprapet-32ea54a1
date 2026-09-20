@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
+import { fetchAllShopifyProducts } from "@/lib/shopify";
 
 export interface Category {
   id: string;
@@ -18,14 +19,19 @@ export function useCategoryTree() {
     let active = true;
     Promise.all([
       supabase.from("categories").select("*").order("sort_order").order("name"),
-      supabase.from("product_categories").select("category_id"),
-    ]).then(([categoryResult, linkResult]) => {
+      supabase.from("product_categories").select("shopify_product_id, category_id"),
+      fetchAllShopifyProducts(),
+    ]).then(([categoryResult, linkResult, products]) => {
         if (!active) return;
         setCategories(categoriesWithLinkedProducts(
           (categoryResult.data || []) as Category[],
           linkResult.data || [],
+          new Set(products.map((product) => product.node.id)),
         ));
         setLoading(false);
+      }).catch((error) => {
+        console.error("Não foi possível carregar as categorias disponíveis:", error);
+        if (active) setLoading(false);
       });
     return () => {
       active = false;
