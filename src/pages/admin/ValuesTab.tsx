@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Download, History, Loader2, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Download, History, Loader2, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { isMissingValue, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
 
 type SubscriberPrice = {
   shopify_variant_id: string;
@@ -51,7 +53,7 @@ type PriceDetails = {
   productTitle: string;
   variantTitle: string;
   sku: string | null;
-  shopifyPrice: number;
+  shopifyPrice: number | null;
   subscriberPrice: number | null;
   franchisePrice: number | null;
   cost: ProductCost | null;
@@ -80,6 +82,7 @@ const money = (value: number) =>
 
 const parsePrice = (value: string) => Number(value.replace(",", "."));
 const decimal = (value: number) => value.toFixed(2).replace(".", ",");
+const VALUES_PER_PAGE = 25;
 
 const effectivePrice = (draft: string | undefined, current: number | undefined): number | null => {
   if (draft === undefined) return current ?? null;
@@ -132,6 +135,8 @@ export default function ValuesTab() {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [valueFilter, setValueFilter] = useState<MissingValueFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [syncingOlistId, setSyncingOlistId] = useState<string | null>(null);
   const [bulkSyncingOlist, setBulkSyncingOlist] = useState(false);
@@ -293,11 +298,47 @@ export default function ValuesTab() {
     return cost !== undefined && franchise !== undefined && franchise < cost;
   }), [rows, costMap, franchiseMap]);
 
+  const missingCounts = useMemo(() => rows.reduce((counts, row) => {
+    const values = {
+      cost: costMap.get(row.variant.id)?.cost,
+      shopify: Number(row.variant.price.amount),
+      subscriber: subscriberMap.get(row.variant.id),
+      franchise: franchiseMap.get(row.variant.id)?.price,
+    };
+    if (isMissingValue(values.cost)) counts.cost += 1;
+    if (isMissingValue(values.shopify)) counts.shopify += 1;
+    if (isMissingValue(values.subscriber)) counts.subscriber += 1;
+    if (isMissingValue(values.franchise)) counts.franchise += 1;
+    if (Object.values(values).some(isMissingValue)) counts.any += 1;
+    return counts;
+  }, { any: 0, cost: 0, shopify: 0, subscriber: 0, franchise: 0 }), [rows, costMap, franchiseMap, subscriberMap]);
+
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
-    if (!normalized) return rows;
-    return rows.filter((row) => `${row.productTitle} ${row.variant.title} ${row.variant.sku || ""}`.toLocaleLowerCase("pt-BR").includes(normalized));
-  }, [query, rows]);
+    return rows.filter((row) => {
+      const matchesQuery = !normalized || `${row.productTitle} ${row.variant.title} ${row.variant.sku || ""}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(normalized);
+      if (!matchesQuery) return false;
+      return matchesMissingValueFilter({
+        cost: costMap.get(row.variant.id)?.cost,
+        shopify: Number(row.variant.price.amount),
+        subscriber: subscriberMap.get(row.variant.id),
+        franchise: franchiseMap.get(row.variant.id)?.price,
+      }, valueFilter);
+    });
+  }, [query, rows, valueFilter, costMap, franchiseMap, subscriberMap]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / VALUES_PER_PAGE));
+  const paginatedRows = useMemo(
+    () => filteredRows.slice((currentPage - 1) * VALUES_PER_PAGE, currentPage * VALUES_PER_PAGE),
+    [currentPage, filteredRows],
+  );
+
+  useEffect(() => { setCurrentPage(1); }, [query, valueFilter]);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const setDraft = (variantId: string, field: keyof Draft, value: string) => {
     setDrafts((current) => ({ ...current, [variantId]: { ...current[variantId], [field]: value } }));
@@ -377,13 +418,28 @@ export default function ValuesTab() {
         <CardHeader className="gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Valores por produto</CardTitle>
-            <CardDescription>Compare a venda normal da Shopify com os valores de assinante, franquia e o custo real.</CardDescription>
+            <CardDescription>
+              {filteredRows.length} de {rows.length} variantes · compare Shopify, assinante, franquia e custo real.
+            </CardDescription>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button variant="outline" onClick={syncAllFeedCosts} disabled={bulkSyncingOlist || loading}>
               {bulkSyncingOlist ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Atualizar rações pela Olist ({feedRowsWithSku.length})
             </Button>
+            <Select value={valueFilter} onValueChange={(value) => setValueFilter(value as MissingValueFilter)}>
+              <SelectTrigger className="w-full sm:w-56" aria-label="Filtrar pendências de valores">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos ({rows.length})</SelectItem>
+                <SelectItem value="missing_any">Com alguma pendência ({missingCounts.any})</SelectItem>
+                <SelectItem value="missing_cost">Sem custo Olist ({missingCounts.cost})</SelectItem>
+                <SelectItem value="missing_shopify">Sem preço Shopify ({missingCounts.shopify})</SelectItem>
+                <SelectItem value="missing_subscriber">Sem preço assinante ({missingCounts.subscriber})</SelectItem>
+                <SelectItem value="missing_franchise">Sem preço franquia ({missingCounts.franchise})</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto, variante ou SKU" className="pl-9" />
@@ -396,7 +452,8 @@ export default function ValuesTab() {
           ) : filteredRows.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted-foreground">Nenhum produto encontrado.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
                   <TableHead className="min-w-[260px]">Produto</TableHead>
@@ -406,12 +463,14 @@ export default function ValuesTab() {
                   <TableHead className="min-w-[240px]">Franquia</TableHead>
                   <TableHead className="min-w-[164px]">Ações</TableHead>
                 </TableRow></TableHeader>
-                <TableBody>{filteredRows.map((row) => {
+                <TableBody>{paginatedRows.map((row) => {
                   const subscriber = subscriberMap.get(row.variant.id);
                   const franchise = franchiseMap.get(row.variant.id);
                   const productCost = costMap.get(row.variant.id) ?? null;
                   const costValue = productCost?.cost ?? null;
                   const shopifyPrice = Number(row.variant.price.amount);
+                  const displayedCost = isMissingValue(costValue) ? null : costValue;
+                  const displayedShopifyPrice = isMissingValue(shopifyPrice) ? null : shopifyPrice;
                   const draft = drafts[row.variant.id];
                   const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
                   return (
@@ -428,7 +487,7 @@ export default function ValuesTab() {
                         </div>
                       </div></TableCell>
                       <TableCell>
-                        <Input readOnly value={costValue === null ? "Não importado" : money(costValue)} className="h-10 bg-sky-50 font-semibold tabular-nums" />
+                        <Input readOnly value={displayedCost === null ? "Não importado" : money(displayedCost)} className="h-10 bg-sky-50 font-semibold tabular-nums" />
                         {productCost?.previous_cost !== null && productCost?.previous_cost !== undefined ? (
                           <p className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${productCost.cost > productCost.previous_cost ? "text-red-700" : "text-emerald-700"}`}>
                             {productCost.cost > productCost.previous_cost ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -437,16 +496,16 @@ export default function ValuesTab() {
                         ) : <p className="mt-1 text-[11px] text-muted-foreground">Sem alteração registrada</p>}
                       </TableCell>
                       <TableCell>
-                        <Input readOnly value={money(shopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
-                        <PriceMetrics value={shopifyPrice} cost={costValue} />
+                        <Input readOnly value={displayedShopifyPrice === null ? "Não cadastrado" : money(displayedShopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
+                        <PriceMetrics value={displayedShopifyPrice} cost={displayedCost} />
                       </TableCell>
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
-                        <PriceMetrics value={subscriber ?? null} cost={costValue} />
+                        <PriceMetrics value={subscriber ?? null} cost={displayedCost} />
                       </TableCell>
                       <TableCell>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>
-                        <PriceMetrics value={franchiseValue} cost={costValue} />
+                        <PriceMetrics value={franchiseValue} cost={displayedCost} />
                       </TableCell>
                       <TableCell><div className="flex gap-2">
                         <Button
@@ -459,7 +518,7 @@ export default function ValuesTab() {
                             productTitle: row.productTitle,
                             variantTitle: row.variant.title,
                             sku: row.variant.sku ?? null,
-                            shopifyPrice,
+                            shopifyPrice: displayedShopifyPrice,
                             subscriberPrice: subscriber ?? null,
                             franchisePrice: franchiseValue,
                             cost: productCost,
@@ -488,7 +547,35 @@ export default function ValuesTab() {
                   );
                 })}</TableBody>
               </Table>
-            </div>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Página {currentPage} de {totalPages} · {filteredRows.length} variantes
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="mr-1 h-4 w-4" />Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próxima<ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
