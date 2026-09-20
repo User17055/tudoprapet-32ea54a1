@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import pet1 from "@/assets/pet-1.svg.asset.json";
 import pet2 from "@/assets/pet-2.svg.asset.json";
+import { useCategoryTree } from "@/hooks/useCategoryTree";
 
 const pets = [
   { label: "Cachorro", slug: "cachorro", img: pet2.url },
@@ -9,12 +10,16 @@ const pets = [
 
 export const Categories = () => {
   const navigate = useNavigate();
+  const { rootCats } = useCategoryTree();
+  const visiblePets = pets.filter((pet) => rootCats.some((category) => category.slug === pet.slug));
+
+  if (visiblePets.length === 0) return null;
 
   return (
     <section className="py-1 md:hidden">
       <div className="max-w-[220px] md:max-w-[280px] mx-auto px-3">
         <div className="grid grid-cols-2 gap-2 mx-auto">
-          {pets.map((p) => (
+          {visiblePets.map((p) => (
             <button
               key={p.slug}
               onClick={() => navigate(`/catalogo?categoria=${p.slug}`)}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
 
 export interface Category {
   id: string;
@@ -15,14 +16,15 @@ export function useCategoryTree() {
 
   useEffect(() => {
     let active = true;
-    supabase
-      .from("categories")
-      .select("*")
-      .order("sort_order")
-      .order("name")
-      .then(({ data }) => {
+    Promise.all([
+      supabase.from("categories").select("*").order("sort_order").order("name"),
+      supabase.from("product_categories").select("category_id"),
+    ]).then(([categoryResult, linkResult]) => {
         if (!active) return;
-        setCategories((data || []) as Category[]);
+        setCategories(categoriesWithLinkedProducts(
+          (categoryResult.data || []) as Category[],
+          linkResult.data || [],
+        ));
         setLoading(false);
       });
     return () => {

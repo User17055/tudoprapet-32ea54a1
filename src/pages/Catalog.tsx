@@ -27,6 +27,7 @@ import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { fuzzySearch } from "@/lib/fuzzySearch";
 import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
+import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -57,8 +58,6 @@ const normalizeSlug = (value: string) =>
 
 interface Category { id: string; name: string; slug: string; parent_id: string | null; sort_order: number; }
 interface Brand { id: string; name: string; slug: string; }
-interface AttrValue { id: string; attr_key: string; attr_value: string; sort_order: number; }
-
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSearch = searchParams.get("busca") || "";
@@ -80,7 +79,6 @@ const Catalog = () => {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [presetValues, setPresetValues] = useState<AttrValue[]>([]);
   const [productCats, setProductCats] = useState<{ shopify_product_id: string; category_id: string }[]>([]);
   const [productBrands, setProductBrands] = useState<{ shopify_product_id: string; brand_id: string | null }[]>([]);
   const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
@@ -97,21 +95,19 @@ const Catalog = () => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [shop, bestSelling, cats, brs, pv, pc, pcontent, pa] = await Promise.all([
+        const [shop, bestSelling, cats, brs, pc, pcontent, pa] = await Promise.all([
           fetchAllShopifyProducts(),
           cachedStorefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
           supabase.from("categories").select("*").order("sort_order").order("name"),
           supabase.from("brands").select("*").order("name"),
-          supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
           supabase.from("product_categories").select("shopify_product_id, category_id"),
           supabase.from("product_content").select("shopify_product_id, brand_id"),
           supabase.from("product_attributes").select("shopify_product_id, attr_key, attr_value"),
         ]);
         setProducts(shop);
         setBestSellingProducts(bestSelling?.data?.products?.edges || []);
-        setCategories((cats.data || []) as Category[]);
+        setCategories(categoriesWithLinkedProducts((cats.data || []) as Category[], pc.data || []));
         setBrands((brs.data || []) as Brand[]);
-        setPresetValues((pv.data || []) as AttrValue[]);
         setProductCats(pc.data || []);
         setProductBrands(pcontent.data || []);
         setProductAttrs(pa.data || []);
@@ -246,19 +242,15 @@ const Catalog = () => {
     [discoverableProducts],
   );
 
-  // Build per-key value list (union of preset values + values used on products)
+  // Só valores realmente vinculados a produtos aparecem como filtros.
   const valuesByKey = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const a of productAttrs) {
       if (!map.has(a.attr_key)) map.set(a.attr_key, new Set());
       map.get(a.attr_key)!.add(a.attr_value);
     }
-    for (const v of presetValues) {
-      if (!map.has(v.attr_key)) map.set(v.attr_key, new Set());
-      map.get(v.attr_key)!.add(v.attr_value);
-    }
     return map;
-  }, [productAttrs, presetValues]);
+  }, [productAttrs]);
 
   const customKeys = useMemo(() => {
     const keys: string[] = [];
@@ -280,6 +272,10 @@ const Catalog = () => {
     }
     return m;
   }, [brands, productBrands, discoverableProducts]);
+  const visibleBrands = useMemo(
+    () => brands.filter((brand) => (brandCount.get(brand.slug) || 0) > 0),
+    [brands, brandCount],
+  );
 
   const priceCount = useMemo(() => {
     return PRICE_RANGES.map((r) => discoverableProducts.filter((p) => {
@@ -597,8 +593,8 @@ const Catalog = () => {
           <AccordionTrigger className="font-display font-bold text-sm">Marca</AccordionTrigger>
           <AccordionContent>
             <div className="space-y-0.5 overflow-x-hidden">
-              {brands.length === 0 && <p className="text-xs text-muted-foreground py-2">Nenhuma marca.</p>}
-              {brands.map((b) => (
+              {visibleBrands.length === 0 && <p className="text-xs text-muted-foreground py-2">Nenhuma marca.</p>}
+              {visibleBrands.map((b) => (
                 <CheckRow
                   key={b.id}
                   checked={brandSlugs.has(b.slug)}
