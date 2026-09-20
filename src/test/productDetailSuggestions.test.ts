@@ -136,6 +136,56 @@ it("classifica Nutrição Clínica como ração prescrita", () => {
   expect(result.attributes).not.toContainEqual({ attr_key: "Tipo", attr_value: "Ração seca" });
 });
 
+it("reconhece o título completo da Premier Nutrição Clínica", () => {
+  const result = suggestProductDetails(
+    { title: "Ração Premier Nutrição Clínica Renal para Cães Adultos de Porte Médio e Grande 10.1 Kg" },
+    categories,
+    [{ id: "premier", name: "Premier" }],
+    [
+      { attr_key: "Tipo", attr_value: "Ração seca" },
+      { attr_key: "Tipo", attr_value: "Prescrita" },
+      { attr_key: "Idade", attr_value: "Adulto" },
+      { attr_key: "Porte de Raça", attr_value: "Médio" },
+      { attr_key: "Porte de Raça", attr_value: "Grande" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["dogs", "dog-food", "dog-prescription"]);
+  expect(result.brandId).toBe("premier");
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Tipo", attr_value: "Prescrita" },
+    { attr_key: "Idade", attr_value: "Adulto" },
+    { attr_key: "Porte de Raça", attr_value: "Médio" },
+    { attr_key: "Porte de Raça", attr_value: "Grande" },
+  ]));
+  expect(result.attributes).not.toContainEqual({ attr_key: "Tipo", attr_value: "Ração seca" });
+});
+
+it("reconhece o título completo da Premier Nattu", () => {
+  const result = suggestProductDetails(
+    { title: "Ração Premier Nattu para Cães Adultos de Raças Pequenas Sabor Mandioca 1 Kg" },
+    categories,
+    [{ id: "premier", name: "Premier" }],
+    [
+      { attr_key: "Tipo", attr_value: "Ração seca" },
+      { attr_key: "Tipo", attr_value: "Natural" },
+      { attr_key: "Idade", attr_value: "Adulto" },
+      { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+      { attr_key: "Sabor", attr_value: "Mandioca" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["dogs", "dog-food", "dog-natural"]);
+  expect(result.brandId).toBe("premier");
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Tipo", attr_value: "Natural" },
+    { attr_key: "Idade", attr_value: "Adulto" },
+    { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+    { attr_key: "Sabor", attr_value: "Mandioca" },
+  ]));
+  expect(result.attributes).not.toContainEqual({ attr_key: "Tipo", attr_value: "Ração seca" });
+});
+
 it("reconhece sachê como ração úmida", () => {
   const result = suggestProductDetails(
     { title: "Sachê para Cães sabor carne" },

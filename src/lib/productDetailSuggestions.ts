@@ -40,11 +40,14 @@ const DRY_TERMS = ["seca", "seco", "grao", "graos"];
 const NATURAL_FEED_TERMS = ["natural", "naturais", "alimentacao natural", "comida natural"];
 const PRESCRIPTION_FEED_TERMS = [
   "prescrita",
+  "prescritas",
   "prescrito",
+  "prescritos",
   "prescricao",
   "terapeutica",
   "terapeutico",
   "dieta veterinaria",
+  "nutricao clinica",
   "prescription diet",
   "veterinary diet",
 ];

@@ -958,29 +958,91 @@ function AssignPanel() {
     if (!productId || !detailSuggestion || !hasSuggestion) return;
     setApplyingSuggestions(true);
     try {
-      if (detailSuggestion.categoryIds.length > 0) {
-        setSelectedCats(new Set(detailSuggestion.categoryIds));
-        setCategoryRootFilter(detailSuggestion.rootCategoryId || "all");
-      }
-      if (detailSuggestion.brandId) setBrandId(detailSuggestion.brandId);
-
+      const specialized = detailSuggestion.categoryIds.some((categoryId) => {
+        const name = normalizeText(categories.find((category) => category.id === categoryId)?.name || "");
+        return name.includes("natural") || name.includes("prescrit") || name.includes("nutricao clinica");
+      }) || detailSuggestion.attributes.some((attribute) => {
+        const value = normalizeText(attribute.attr_value);
+        return value === "natural" || value === "prescrita";
+      });
+      const staleCategoryLinkIds = specialized
+        ? allProductCats
+            .filter((link) => (
+              link.shopify_product_id === productId
+              && normalizeText(categories.find((category) => category.id === link.category_id)?.name || "").includes("racao seca")
+            ))
+            .map((link) => link.id)
+        : [];
+      const staleDryAttributeIds = specialized
+        ? attrs
+            .filter((attribute) => {
+              const key = normalizeText(attribute.attr_key);
+              const value = normalizeText(attribute.attr_value);
+              return (key.includes("tipo") || key.includes("categoria") || key.includes("classificacao"))
+                && (value === "seca" || value === "racao seca");
+            })
+            .map((attribute) => attribute.id)
+        : [];
       const missingAttributes = detailSuggestion.attributes.filter((suggestion) => !attrs.some(
         (attribute) => attribute.attr_key === suggestion.attr_key && attribute.attr_value === suggestion.attr_value,
       ));
+
+      const writes = [];
+      if (staleCategoryLinkIds.length > 0) {
+        writes.push(supabase.from("product_categories").delete().in("id", staleCategoryLinkIds));
+      }
+      if (staleDryAttributeIds.length > 0) {
+        writes.push(supabase.from("product_attributes").delete().in("id", staleDryAttributeIds));
+      }
+      if (detailSuggestion.categoryIds.length > 0) {
+        writes.push(supabase.from("product_categories").upsert(
+          detailSuggestion.categoryIds.map((categoryId) => ({
+            shopify_product_id: productId,
+            category_id: categoryId,
+          })),
+          { onConflict: "shopify_product_id,category_id", ignoreDuplicates: true },
+        ));
+      }
       if (missingAttributes.length > 0) {
-        const { data, error } = await supabase.from("product_attributes").insert(
+        writes.push(supabase.from("product_attributes").upsert(
           missingAttributes.map((attribute, index) => ({
             shopify_product_id: productId,
             attr_key: attribute.attr_key,
             attr_value: attribute.attr_value,
             sort_order: attrs.length + index,
           })),
-        ).select();
-        if (error) throw error;
-        setAttrs((current) => [...current, ...((data || []) as ProductAttribute[])]);
-        await reloadAll();
+          { onConflict: "shopify_product_id,attr_key,attr_value", ignoreDuplicates: true },
+        ));
       }
-      toast.success("Sugestões preenchidas. Revise e clique em Salvar categorias e marca.");
+      if (detailSuggestion.brandId) {
+        writes.push(supabase.from("product_content").upsert({
+          shopify_product_id: productId,
+          brand_id: detailSuggestion.brandId,
+        }, { onConflict: "shopify_product_id" }));
+      }
+
+      const results = await Promise.all(writes);
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+
+      await reloadAll();
+      const [{ data: currentCats }, { data: currentAttrs }, { data: currentContent }] = await Promise.all([
+        supabase.from("product_categories").select("*").eq("shopify_product_id", productId),
+        supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
+        supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
+      ]);
+      const currentCategoryIds = ((currentCats || []) as ProductCategoryLink[]).map((item) => item.category_id);
+      setSelectedCats(new Set(currentCategoryIds));
+      const currentRoots = new Set(
+        currentCategoryIds
+          .map((categoryId) => rootCategoryId(categoryId, categories))
+          .filter((rootId): rootId is string => Boolean(rootId)),
+      );
+      setCategoryRootFilter(currentRoots.size === 1 ? Array.from(currentRoots)[0] : detailSuggestion.rootCategoryId || "all");
+      setAttrs((currentAttrs || []) as ProductAttribute[]);
+      setContentRow((currentContent as ProductContentRow | null) || null);
+      setBrandId((currentContent as ProductContentRow | null)?.brand_id || "none");
+      toast.success("Sugestões preenchidas e salvas.");
     } catch (error) {
       console.error(error);
       toast.error("Não foi possível aplicar as sugestões.");
@@ -1010,7 +1072,7 @@ function AssignPanel() {
     ));
 
     if (applicable.length === 0) {
-      return toast.info("Não encontramos sugestões seguras para os produtos não cadastrados.");
+      return toast.info("Não encontramos sugestões seguras para preencher os produtos.");
     }
 
     setApplyingAllSuggestions(true);
@@ -1043,7 +1105,7 @@ function AssignPanel() {
           .filter(({ suggestion }) => (
             suggestion.categoryIds.some((categoryId) => {
               const name = normalizeText(categories.find((category) => category.id === categoryId)?.name || "");
-              return name.includes("racao natural") || name.includes("racao prescrita");
+              return name.includes("natural") || name.includes("prescrit") || name.includes("nutricao clinica");
             })
             || suggestion.attributes.some((attribute) => {
               const value = normalizeText(attribute.attr_value);
