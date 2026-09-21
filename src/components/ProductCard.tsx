@@ -13,6 +13,7 @@ import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifica
 import { isProductAvailable } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
+import { productPackageLabel } from "@/lib/productPackageLabel";
 
 interface Props {
   product: ShopifyProduct;
@@ -94,9 +95,17 @@ export const ProductCard = ({
   const variationItems = getVariations(node.id).filter((item) =>
     isVisibleTo(item.shopify_product_id, isFranchisee),
   );
-  const displayTitle = getVariationGroupName(node.id) || node.title;
+  const groupTitle = getVariationGroupName(node.id);
   const variant = node.variants.edges.find(({ node: item }) =>
     isFranchisee || (blockedVariantIds && !blockedVariantIds.has(item.id)))?.node;
+  const activeVariationLabel = variationItems.find((item) => item.shopify_product_id === node.id)?.label;
+  const packageLabel = productPackageLabel(activeVariationLabel, variant?.title, node.title);
+  const baseTitle = groupTitle || node.title;
+  const displayTitle = packageLabel && !productPackageLabel(baseTitle)
+    ? `${baseTitle} ${packageLabel}`
+    : baseTitle;
+  const showGroupVariations = !hideVariations && variationItems.length > 1;
+  const showPackageChip = !showGroupVariations && Boolean(packageLabel);
   const image = node.images.edges[0]?.node;
   const shopifyPrice = parseFloat(variant?.price?.amount || "0");
   const price = variant ? getCustomerPrice(variant.id) ?? shopifyPrice : shopifyPrice;
@@ -203,7 +212,7 @@ export const ProductCard = ({
       <div className={`${compact ? "mt-2.5" : "mt-4"} flex min-h-[2.9em] flex-col`}>
         <h3
           className={`line-clamp-2 ${compact ? "text-[13px]" : "text-[15px]"} font-normal leading-[1.35] text-[#202633] ${
-            variationItems.length > 1 && !hideVariations
+            showGroupVariations || showPackageChip
               ? "order-2 hoverable:group-hover:hidden"
               : ""
           }`}
@@ -214,7 +223,7 @@ export const ProductCard = ({
         {/* No toque nao existe hover, entao as variacoes ficam sempre visiveis acima
             do titulo. Onde ha mouse, o comportamento continua sendo o de sempre:
             escondidas ate o hover, quando entao substituem o titulo. */}
-        {!hideVariations && variationItems.length > 1 && (
+        {showGroupVariations && (
           <div className="order-1 flex h-[2.9em] items-center gap-2 overflow-x-auto pr-1 hoverable:hidden hoverable:group-hover:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {variationItems.map((item) => {
               const active = item.shopify_product_id === node.id;
@@ -252,6 +261,13 @@ export const ProductCard = ({
                 </button>
               );
             })}
+          </div>
+        )}
+        {showPackageChip && (
+          <div className="order-1 flex h-[2.9em] items-center pr-1 hoverable:hidden hoverable:group-hover:flex">
+            <span className="inline-flex h-10 items-center rounded-xl border border-[#171717] bg-[#171717] px-3.5 text-[15px] font-bold uppercase leading-none text-white">
+              {packageLabel}
+            </span>
           </div>
         )}
       </div>
