@@ -5,6 +5,7 @@ export interface DuplicateCandidate {
   title: string;
   handle: string;
   sku?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface DuplicatePair {

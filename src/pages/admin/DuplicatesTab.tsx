@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, Search } from "lucide-react";
+import { ExternalLink, Loader2, Package, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ export default function DuplicatesTab() {
     title: node.title,
     handle: node.handle,
     sku: node.variants.edges[0]?.node.sku,
+    imageUrl: node.images.edges[0]?.node.url,
   }))), [products]);
   const filtered = useMemo(() => {
     const term = normalizeText(query);
@@ -72,12 +73,19 @@ export default function DuplicatesTab() {
                 {pair.reason === "sku" ? "Mesmo SKU e apresentação" : pair.reason === "same_name" ? "Nome e apresentação equivalentes" : "Nome muito parecido e mesma apresentação"}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
-                {[pair.first, pair.second].map((product) => <div key={product.id} className="min-w-0 rounded-md bg-muted/50 p-3">
-                  <p className="font-medium">{product.title}</p>
-                  {product.sku && <p className="mt-1 text-xs text-muted-foreground">SKU {product.sku}</p>}
-                  <a href={`/product/${product.handle}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline">
-                    Ver produto <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                {[pair.first, pair.second].map((product) => <div key={product.id} className="flex min-w-0 gap-3 rounded-md bg-muted/50 p-3">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white text-muted-foreground">
+                    {product.imageUrl
+                      ? <img src={product.imageUrl} alt={product.title} loading="lazy" className="h-full w-full object-contain" />
+                      : <Package className="h-7 w-7" aria-label="Produto sem foto" />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium">{product.title}</p>
+                    {product.sku && <p className="mt-1 text-xs text-muted-foreground">SKU {product.sku}</p>}
+                    <a href={`/product/${product.handle}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                      Ver produto <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
                 </div>)}
               </div>
             </div>)}
