@@ -28,6 +28,7 @@ import {
   Menu,
   ExternalLink,
   Boxes,
+  CopyCheck,
   Receipt,
   GitBranch,
   Wrench,
@@ -60,6 +61,7 @@ import ConferenceTab from "./admin/ConferenceTab";
 import OverviewTab from "./admin/OverviewTab";
 import AdministratorsTab from "./admin/AdministratorsTab";
 import ValuesTab from "./admin/ValuesTab";
+import DuplicatesTab from "./admin/DuplicatesTab";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 
 interface SubPrice {
@@ -91,6 +93,7 @@ type SectionId =
   | "content"
   | "details"
   | "variations"
+  | "duplicates"
   | "categories"
   | "banners"
   | "featured"
@@ -134,6 +137,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "content", label: "Conteúdo", description: "Descrições personalizadas dos produtos", icon: FileText, component: ContentTab },
       { id: "details", label: "Detalhes", description: "Categorias, marcas e atributos dos produtos", icon: Layers, component: DetailsTab },
       { id: "variations", label: "Variações", description: "Agrupe tamanhos e pesos do mesmo produto", icon: Boxes, component: VariationsTab },
+      { id: "duplicates", label: "Duplicados", description: "Confira produtos com nomes e apresentações parecidos", icon: CopyCheck, component: DuplicatesTab },
       { id: "categories", label: "Ordem do Menu", description: "Ordem das categorias no menu do site", icon: ListTree, component: CategoriesTab },
       { id: "franquia", label: "Franquia", description: "Visibilidade e preços exclusivos para franqueados", icon: Store, component: FranquiaTab },
       { id: "conference", label: "Relatório", description: "Todos os produtos, preços, visibilidade e impressão", icon: FileText, component: ConferenceTab },
