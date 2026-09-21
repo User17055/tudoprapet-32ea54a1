@@ -108,19 +108,13 @@ export const ProductCard = ({
 
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
   const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
-  const hasSubscriberPrice =
-    !isFranchisee &&
-    subscriberPrice !== null &&
-    Number.isFinite(subscriberPrice) &&
-    subscriberPrice > 0;
   const hasFranchiseDiscount =
     isFranchisee && franchisePrice !== null && franchisePrice < price;
   const franchiseDiscountPercent = hasFranchiseDiscount && franchisePrice !== null
     ? Math.round(((price - franchisePrice) / price) * 100)
     : 0;
   const hasSubscriberDiscount =
-    hasSubscriberPrice &&
-    subscriberPrice < price;
+    !isFranchisee && subscriberPrice !== null && subscriberPrice < price;
   const subscriberDiscountPercent = hasSubscriberDiscount
     ? Math.round(((price - subscriberPrice) / price) * 100)
     : 0;
@@ -283,7 +277,7 @@ export const ProductCard = ({
               preço franquia
             </span>
           </div>
-        ) : hasSubscriberPrice ? (
+        ) : hasSubscriberDiscount ? (
           <div className="mt-1.5 flex flex-col items-start gap-1">
             <span className="text-[18px] font-extrabold leading-none text-[#0054a6] tabular-nums">
               {formatPrice(subscriberPrice)}

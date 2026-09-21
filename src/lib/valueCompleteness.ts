@@ -4,7 +4,8 @@ export type MissingValueFilter =
   | "missing_cost"
   | "missing_shopify"
   | "missing_subscriber"
-  | "missing_franchise";
+  | "missing_franchise"
+  | "subscriber_not_visible";
 
 export type VariantValues = {
   cost: number | null | undefined;
@@ -17,8 +18,16 @@ export const isMissingValue = (value: number | null | undefined) => (
   value === null || value === undefined || !Number.isFinite(value) || value <= 0
 );
 
+export const isSubscriberPriceNotVisible = (
+  subscriber: number | null | undefined,
+  shopify: number | null | undefined,
+) => !isMissingValue(subscriber) && !isMissingValue(shopify) && subscriber >= shopify;
+
 export function matchesMissingValueFilter(values: VariantValues, filter: MissingValueFilter) {
   if (filter === "all") return true;
+  if (filter === "subscriber_not_visible") {
+    return isSubscriberPriceNotVisible(values.subscriber, values.shopify);
+  }
   const missing = {
     missing_cost: isMissingValue(values.cost),
     missing_shopify: isMissingValue(values.shopify),

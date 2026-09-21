@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
-import { isMissingValue, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
+import { isMissingValue, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
 
 type SubscriberPrice = {
   shopify_variant_id: string;
@@ -309,9 +309,10 @@ export default function ValuesTab() {
     if (isMissingValue(values.shopify)) counts.shopify += 1;
     if (isMissingValue(values.subscriber)) counts.subscriber += 1;
     if (isMissingValue(values.franchise)) counts.franchise += 1;
+    if (isSubscriberPriceNotVisible(values.subscriber, values.shopify)) counts.subscriberNotVisible += 1;
     if (Object.values(values).some(isMissingValue)) counts.any += 1;
     return counts;
-  }, { any: 0, cost: 0, shopify: 0, subscriber: 0, franchise: 0 }), [rows, costMap, franchiseMap, subscriberMap]);
+  }, { any: 0, cost: 0, shopify: 0, subscriber: 0, franchise: 0, subscriberNotVisible: 0 }), [rows, costMap, franchiseMap, subscriberMap]);
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
@@ -437,6 +438,7 @@ export default function ValuesTab() {
                 <SelectItem value="missing_cost">Sem custo Olist ({missingCounts.cost})</SelectItem>
                 <SelectItem value="missing_shopify">Sem preço Shopify ({missingCounts.shopify})</SelectItem>
                 <SelectItem value="missing_subscriber">Sem preço assinante ({missingCounts.subscriber})</SelectItem>
+                <SelectItem value="subscriber_not_visible">Assinante não exibido ({missingCounts.subscriberNotVisible})</SelectItem>
                 <SelectItem value="missing_franchise">Sem preço franquia ({missingCounts.franchise})</SelectItem>
               </SelectContent>
             </Select>

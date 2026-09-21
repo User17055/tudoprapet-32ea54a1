@@ -3275,7 +3275,7 @@ function RecommendedCard({
           </p>
         )}
         <p className="text-sm font-bold text-slate-950">{money(price)}</p>
-        {subscriberPrice !== null && Number.isFinite(subscriberPrice) && subscriberPrice > 0 && (
+        {subscriberPrice !== null && subscriberPrice < price && (
           <p className="mt-1 text-xs font-bold text-blue-700">
             {money(subscriberPrice)} para assinantes
           </p>
