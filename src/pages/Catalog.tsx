@@ -28,6 +28,8 @@ import { useProductVariations } from "@/hooks/useProductVariations";
 import { fuzzySearch } from "@/lib/fuzzySearch";
 import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
 import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 
 const SORT_OPTIONS = [
   { value: "relevance", label: "Mais relevantes" },
@@ -84,12 +86,13 @@ const Catalog = () => {
   const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
+  const { blockedVariantIds, loading: saleVisibilityLoading } = useClientSaleVisibility();
   const {
     getVariations,
     getVariationGroupName,
     loading: variationsLoading,
   } = useProductVariations();
-  const catalogLoading = loading || audienceLoading || franchiseeLoading || variationsLoading;
+  const catalogLoading = loading || audienceLoading || franchiseeLoading || variationsLoading || saleVisibilityLoading;
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -217,7 +220,8 @@ const Catalog = () => {
   const productById = useMemo(() => new Map(products.map((p) => [p.node.id, p])), [products]);
   const audienceVisibleProducts = useMemo(() => {
     if (audienceLoading || franchiseeLoading || variationsLoading) return [];
-    const visible = products.filter((product) => isVisibleTo(product.node.id, isFranchisee));
+    const visible = products.filter((product) => isVisibleTo(product.node.id, isFranchisee)
+      && isClientProductVisible(product, blockedVariantIds, isFranchisee));
     const visibleIds = new Set(visible.map((product) => product.node.id));
     return visible.filter((product) => {
       const group = getVariations(product.node.id);
@@ -233,6 +237,7 @@ const Catalog = () => {
     getVariations,
     isVisibleTo,
     productById,
+    blockedVariantIds,
   ]);
   const hasRequestedSearch = requestedSearch.trim().length > 0;
   const discoverableProducts = useMemo(

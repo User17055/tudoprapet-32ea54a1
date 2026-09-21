@@ -275,6 +275,17 @@ Deno.serve(async (req) => {
 
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
 
+    if (customerType !== "franchise") {
+      const { data: costRows, error: costError } = await admin.from("product_costs")
+        .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
+      if (costError) throw costError;
+      const blocked = (costRows ?? []).some((row) => {
+        const sale = customerPriceMap.get(row.shopify_variant_id) ?? currentPriceMap.get(row.shopify_variant_id);
+        return sale !== undefined && Number(row.cost) >= sale;
+      });
+      if (blocked) return errorResponse("Um produto da sacola está indisponível para clientes. Remova-o e tente novamente.", 409);
+    }
+
     let subtotal = 0;
     let total = 0;
     // Preço efetivamente cobrado por unidade. É o que precisa chegar ao pedido

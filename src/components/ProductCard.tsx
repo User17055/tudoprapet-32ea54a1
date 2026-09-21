@@ -11,6 +11,8 @@ import { useEffect, useState } from "react";
 import { ProductImage } from "@/components/ProductImage";
 import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
 import { isProductAvailable } from "@/lib/productAvailability";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 
 interface Props {
   product: ShopifyProduct;
@@ -53,12 +55,13 @@ export const ProductCard = ({
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice, isFranchisee } = useFranchisePrices();
   const { getCustomerPrice } = useCustomerPrices();
+  const { blockedVariantIds } = useClientSaleVisibility();
   const { isVisibleTo } = useProductAudience();
   const { getVariations, getVariationGroupName } = useProductVariations();
   const variationIsAvailable = (productId: string) => {
     const candidate = products.find((item) => item.node.id === productId);
-    if (candidate) return isProductAvailable(candidate);
-    if (product.node.id === productId) return isProductAvailable(product);
+    if (candidate) return isProductAvailable(candidate) && isClientProductVisible(candidate, blockedVariantIds, isFranchisee);
+    if (product.node.id === productId) return isProductAvailable(product) && isClientProductVisible(product, blockedVariantIds, isFranchisee);
     // Alguns cards de relacionados não recebem o catálogo completo. Nesse
     // caso, o clique navega para a página e ela confirma o estoque novamente.
     return true;
@@ -92,7 +95,8 @@ export const ProductCard = ({
     isVisibleTo(item.shopify_product_id, isFranchisee),
   );
   const displayTitle = getVariationGroupName(node.id) || node.title;
-  const variant = node.variants.edges[0]?.node;
+  const variant = node.variants.edges.find(({ node: item }) =>
+    isFranchisee || (blockedVariantIds && !blockedVariantIds.has(item.id)))?.node;
   const image = node.images.edges[0]?.node;
   const shopifyPrice = parseFloat(variant?.price?.amount || "0");
   const price = variant ? getCustomerPrice(variant.id) ?? shopifyPrice : shopifyPrice;
@@ -132,7 +136,7 @@ export const ProductCard = ({
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!variant) return;
+    if (!variant || !isClientProductVisible(selectedProduct, blockedVariantIds, isFranchisee)) return;
 
     const added = await addItem({
       product: selectedProduct,
@@ -145,6 +149,8 @@ export const ProductCard = ({
     if (added) notifyCartItemAdded();
     else notifyCartItemAddFailed();
   };
+
+  if (!isClientProductVisible(selectedProduct, blockedVariantIds, isFranchisee)) return null;
 
   return (
     <Link

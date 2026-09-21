@@ -9,6 +9,8 @@ import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { isProductAvailable } from "@/lib/productAvailability";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 
 interface FeaturedProduct {
   shopify_product_id: string;
@@ -20,6 +22,7 @@ export const ProductGrid = () => {
   const [loading, setLoading] = useState(true);
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
+  const { blockedVariantIds, loading: saleVisibilityLoading } = useClientSaleVisibility();
   const {
     getVariations,
     loading: variationsLoading,
@@ -92,7 +95,7 @@ export const ProductGrid = () => {
           </p>
         </div>
 
-        {loading || audienceLoading || franchiseeLoading || variationsLoading ? (
+        {loading || audienceLoading || franchiseeLoading || variationsLoading || saleVisibilityLoading ? (
           <div className="overflow-hidden" aria-label="Carregando produtos">
             <div className="flex gap-2 md:gap-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -106,7 +109,8 @@ export const ProductGrid = () => {
             </div>
           </div>
         ) : (() => {
-          const audienceVisible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee));
+          const audienceVisible = products.filter((p) => isVisibleTo(p.node.id, isFranchisee)
+            && isClientProductVisible(p, blockedVariantIds, isFranchisee));
           const available = audienceVisible.filter(isProductAvailable);
           const visibleIds = new Set(available.map((product) => product.node.id));
           const visible = available.filter((product) => {

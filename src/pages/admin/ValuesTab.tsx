@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
-import { isMissingValue, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
+import { isMissingValue, isSaleAtOrBelowCost, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
 
 type SubscriberPrice = {
   shopify_variant_id: string;
@@ -94,9 +94,11 @@ const effectivePrice = (draft: string | undefined, current: number | undefined):
 function PriceMetrics({
   value,
   cost,
+  normalSale = false,
 }: {
   value: number | null;
   cost: number | null;
+  normalSale?: boolean;
 }) {
   if (value === null) return <p className="mt-1 text-[11px] text-muted-foreground">Sem valor cadastrado</p>;
   const overCost = percentageOverCost(value, cost);
@@ -104,6 +106,9 @@ function PriceMetrics({
   const risk = priceRisk(value, cost);
   const tone = risk === "danger" ? "text-red-700" : risk === "warning" ? "text-amber-700" : "text-emerald-700";
   const warning = overCost < 0 ? " · abaixo do custo" : overCost <= 10 ? " · muito próximo do custo" : "";
+  if (normalSale && isSaleAtOrBelowCost(value, cost)) {
+    return <p className="mt-1 text-[11px] font-semibold text-red-700">{formatPercentage(overCost)} sobre o custo · bloqueado para clientes</p>;
+  }
   return (
     <p className={`mt-1 text-[11px] font-medium ${tone}`}>
       {overCost >= 0 ? "+" : ""}{formatPercentage(overCost)} sobre o custo
@@ -136,6 +141,9 @@ export default function ValuesTab() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [valueFilter, setValueFilter] = useState<MissingValueFilter>("all");
+  const [marginSource, setMarginSource] = useState<"all" | "shopify" | "subscriber" | "franchise">("all");
+  const [minMargin, setMinMargin] = useState("");
+  const [maxMargin, setMaxMargin] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [syncingOlistId, setSyncingOlistId] = useState<string | null>(null);
@@ -310,9 +318,10 @@ export default function ValuesTab() {
     if (isMissingValue(values.subscriber)) counts.subscriber += 1;
     if (isMissingValue(values.franchise)) counts.franchise += 1;
     if (isSubscriberPriceNotVisible(values.subscriber, values.shopify)) counts.subscriberNotVisible += 1;
+    if (isSaleAtOrBelowCost(values.shopify, values.cost)) counts.saleAtCost += 1;
     if (Object.values(values).some(isMissingValue)) counts.any += 1;
     return counts;
-  }, { any: 0, cost: 0, shopify: 0, subscriber: 0, franchise: 0, subscriberNotVisible: 0 }), [rows, costMap, franchiseMap, subscriberMap]);
+  }, { any: 0, cost: 0, shopify: 0, subscriber: 0, franchise: 0, subscriberNotVisible: 0, saleAtCost: 0 }), [rows, costMap, franchiseMap, subscriberMap]);
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
@@ -321,14 +330,22 @@ export default function ValuesTab() {
         .toLocaleLowerCase("pt-BR")
         .includes(normalized);
       if (!matchesQuery) return false;
-      return matchesMissingValueFilter({
+      const values = {
         cost: costMap.get(row.variant.id)?.cost,
         shopify: Number(row.variant.price.amount),
         subscriber: subscriberMap.get(row.variant.id),
         franchise: franchiseMap.get(row.variant.id)?.price,
-      }, valueFilter);
+      };
+      if (!matchesMissingValueFilter(values, valueFilter)) return false;
+      if (marginSource === "all") return true;
+      const margin = percentageOverCost(values[marginSource], values.cost);
+      if (margin === null) return false;
+      const minimum = minMargin.trim() === "" ? null : Number(minMargin.replace(",", "."));
+      const maximum = maxMargin.trim() === "" ? null : Number(maxMargin.replace(",", "."));
+      return (minimum === null || !Number.isFinite(minimum) || margin >= minimum)
+        && (maximum === null || !Number.isFinite(maximum) || margin <= maximum);
     });
-  }, [query, rows, valueFilter, costMap, franchiseMap, subscriberMap]);
+  }, [query, rows, valueFilter, marginSource, minMargin, maxMargin, costMap, franchiseMap, subscriberMap]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / VALUES_PER_PAGE));
   const paginatedRows = useMemo(
@@ -336,7 +353,7 @@ export default function ValuesTab() {
     [currentPage, filteredRows],
   );
 
-  useEffect(() => { setCurrentPage(1); }, [query, valueFilter]);
+  useEffect(() => { setCurrentPage(1); }, [query, valueFilter, marginSource, minMargin, maxMargin]);
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
@@ -411,7 +428,7 @@ export default function ValuesTab() {
       <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm text-sky-950">
         <p className="font-medium">Como os percentuais são calculados</p>
         <p className="mt-0.5 text-xs text-sky-800">
-          Shopify é a venda normal. Assinante e franquia são preços especiais. Todos mostram o percentual sobre o custo Olist; até 10% fica vermelho, de 10% a 15% amarelo e acima de 15% verde.
+          Shopify é a venda normal. Assinante e franquia são preços especiais. Todos mostram o percentual sobre o custo Olist; até 10% fica vermelho, de 10% a 15% amarelo e acima de 15% verde. Venda normal igual ou abaixo do custo é bloqueada para clientes.
         </p>
       </div>
 
@@ -439,9 +456,23 @@ export default function ValuesTab() {
                 <SelectItem value="missing_shopify">Sem preço Shopify ({missingCounts.shopify})</SelectItem>
                 <SelectItem value="missing_subscriber">Sem preço assinante ({missingCounts.subscriber})</SelectItem>
                 <SelectItem value="subscriber_not_visible">Assinante não exibido ({missingCounts.subscriberNotVisible})</SelectItem>
+                <SelectItem value="sale_at_cost">Venda igual/abaixo do custo ({missingCounts.saleAtCost})</SelectItem>
                 <SelectItem value="missing_franchise">Sem preço franquia ({missingCounts.franchise})</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={marginSource} onValueChange={(value) => setMarginSource(value as typeof marginSource)}>
+              <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar percentual sobre o custo"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as margens</SelectItem>
+                <SelectItem value="shopify">% venda normal</SelectItem>
+                <SelectItem value="subscriber">% assinante</SelectItem>
+                <SelectItem value="franchise">% franquia</SelectItem>
+              </SelectContent>
+            </Select>
+            {marginSource !== "all" && <div className="flex gap-2">
+              <Input value={minMargin} onChange={(event) => setMinMargin(event.target.value)} type="number" step="0.1" placeholder="Mín. %" aria-label="Percentual mínimo sobre o custo" className="w-24" />
+              <Input value={maxMargin} onChange={(event) => setMaxMargin(event.target.value)} type="number" step="0.1" placeholder="Máx. %" aria-label="Percentual máximo sobre o custo" className="w-24" />
+            </div>}
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar produto, variante ou SKU" className="pl-9" />
@@ -499,7 +530,7 @@ export default function ValuesTab() {
                       </TableCell>
                       <TableCell>
                         <Input readOnly value={displayedShopifyPrice === null ? "Não cadastrado" : money(displayedShopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
-                        <PriceMetrics value={displayedShopifyPrice} cost={displayedCost} />
+                        <PriceMetrics value={displayedShopifyPrice} cost={displayedCost} normalSale />
                       </TableCell>
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
@@ -603,7 +634,7 @@ export default function ValuesTab() {
                   <div key={item.label} className="rounded-lg border bg-muted/20 p-3">
                     <p className="text-xs text-muted-foreground">{item.label}</p>
                     <p className="mt-1 text-lg font-bold tabular-nums">{item.value === null ? "Não cadastrado" : money(item.value)}</p>
-                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} />}
+                    {item.label !== "Custo Olist" && <PriceMetrics value={item.value} cost={details.cost?.cost ?? null} normalSale={item.label === "Venda normal (Shopify)"} />}
                   </div>
                 ))}
               </div>

@@ -7,6 +7,9 @@ import type { Category } from "@/hooks/useCategoryTree";
 import type { MegaMenuItem } from "@/components/MegaMenu";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { isProductAvailable } from "@/lib/productAvailability";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { useIsFranchisee } from "@/hooks/useIsFranchisee";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 import { supabase } from "@/integrations/supabase/client";
 
 const catalogHref = (slug: string, id: string) => `/catalogo?categoria=${slug}&categoria_id=${id}`;
@@ -36,6 +39,8 @@ export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate, foo
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [productCategories, setProductCategories] = useState<ProductCategoryLink[]>([]);
+  const { blockedVariantIds } = useClientSaleVisibility();
+  const { isFranchisee } = useIsFranchisee();
 
   useEffect(() => {
     if (!selectedRootId && items[0]) setSelectedRootId(items[0].id);
@@ -87,8 +92,8 @@ export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate, foo
       .map((link) => link.shopify_product_id);
     return linkedIds
       .map((productId) => productById.get(productId))
-      .find((product): product is ShopifyProduct => Boolean(product && isProductAvailable(product)))
-      || linkedIds.map((productId) => productById.get(productId)).find(Boolean);
+      .find((product): product is ShopifyProduct => Boolean(product && isProductAvailable(product)
+        && isClientProductVisible(product, blockedVariantIds, isFranchisee)));
   };
 
   const productsForCategory = (categoryId: string) => {
@@ -99,7 +104,8 @@ export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate, foo
         .map((link) => link.shopify_product_id),
     );
     return products
-      .filter((product) => linkedIds.has(product.node.id) && isProductAvailable(product))
+      .filter((product) => linkedIds.has(product.node.id) && isProductAvailable(product)
+        && isClientProductVisible(product, blockedVariantIds, isFranchisee))
       .slice(0, 10);
   };
 

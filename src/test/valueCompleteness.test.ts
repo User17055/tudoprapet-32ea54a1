@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMissingValue, isSubscriberPriceNotVisible, matchesMissingValueFilter } from "@/lib/valueCompleteness";
+import { isMissingValue, isSaleAtOrBelowCost, isSubscriberPriceNotVisible, matchesMissingValueFilter } from "@/lib/valueCompleteness";
 
 const complete = { cost: 10, shopify: 20, subscriber: 18, franchise: 15 };
 
@@ -32,5 +32,13 @@ describe("pendências de valores", () => {
     expect(isSubscriberPriceNotVisible(null, 20)).toBe(false);
     expect(matchesMissingValueFilter({ ...complete, subscriber: 21 }, "subscriber_not_visible")).toBe(true);
     expect(matchesMissingValueFilter(complete, "subscriber_not_visible")).toBe(false);
+  });
+
+  it("bloqueia venda normal sem margem e permite filtrar os casos", () => {
+    expect(isSaleAtOrBelowCost(283.39, 283.39)).toBe(true);
+    expect(isSaleAtOrBelowCost(280, 283.39)).toBe(true);
+    expect(isSaleAtOrBelowCost(300, 283.39)).toBe(false);
+    expect(isSaleAtOrBelowCost(300, null)).toBe(false);
+    expect(matchesMissingValueFilter({ ...complete, shopify: 10 }, "sale_at_cost")).toBe(true);
   });
 });

@@ -16,6 +16,8 @@ import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { isProductAvailable } from "@/lib/productAvailability";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 import logo from "@/assets/tpp-logo.svg";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
@@ -61,6 +63,7 @@ export const Header = () => {
   const { user } = useAuth();
   const { rows: audienceRows, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
+  const { blockedVariantIds } = useClientSaleVisibility();
   const { getSubscriberPrice, loading: subscriberPricesLoading } = useSubscriberPrices();
   const { getCustomerPrice } = useCustomerPrices();
   const navigate = useNavigate();
@@ -130,6 +133,7 @@ export const Header = () => {
             ),
           )
           .filter(isProductAvailable)
+          .filter((product) => isClientProductVisible(product, blockedVariantIds, isFranchisee))
           .slice(0, 6);
 
         setSearchResults(matchingProducts);
@@ -147,7 +151,7 @@ export const Header = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [search, audienceMap, isFranchisee]);
+  }, [search, audienceMap, isFranchisee, blockedVariantIds]);
 
   const handleSearch = () => {
     if (search.trim()) {

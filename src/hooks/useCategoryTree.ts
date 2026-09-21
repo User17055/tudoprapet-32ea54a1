@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { useIsFranchisee } from "@/hooks/useIsFranchisee";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 
 export interface Category {
   id: string;
@@ -14,8 +17,11 @@ export interface Category {
 export function useCategoryTree() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const { blockedVariantIds, loading: saleLoading } = useClientSaleVisibility();
+  const { isFranchisee, loading: franchiseLoading } = useIsFranchisee();
 
   useEffect(() => {
+    if (saleLoading || franchiseLoading) return;
     let active = true;
     Promise.all([
       supabase.from("categories").select("*").order("sort_order").order("name"),
@@ -26,7 +32,9 @@ export function useCategoryTree() {
         setCategories(categoriesWithLinkedProducts(
           (categoryResult.data || []) as Category[],
           linkResult.data || [],
-          new Set(products.map((product) => product.node.id)),
+          new Set(products
+            .filter((product) => isClientProductVisible(product, blockedVariantIds, isFranchisee))
+            .map((product) => product.node.id)),
         ));
         setLoading(false);
       }).catch((error) => {
@@ -36,7 +44,7 @@ export function useCategoryTree() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [blockedVariantIds, isFranchisee, saleLoading, franchiseLoading]);
 
   const rootCats = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
 

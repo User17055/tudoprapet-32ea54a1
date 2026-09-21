@@ -8,6 +8,8 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { useCustomerPrices } from "@/hooks/useCustomerPrices";
+import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
+import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { Header } from "@/components/Header";
@@ -56,6 +58,7 @@ const ProductDetail = () => {
   const { isSubscribed, loading: subscriptionLoading } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getCustomerPrice } = useCustomerPrices();
+  const { blockedVariantIds, loading: saleVisibilityLoading } = useClientSaleVisibility();
   const {
     getFranchisePrice,
     isFranchisee,
@@ -67,6 +70,13 @@ const ProductDetail = () => {
   const [buyingNow, setBuyingNow] = useState(false);
   const thumbsRef = useRef<HTMLDivElement>(null);
   const [thumbsOverflow, setThumbsOverflow] = useState(false);
+  useEffect(() => {
+    if (!product || isFranchisee || !blockedVariantIds) return;
+    const selected = product.node.variants.edges[selectedVariantIdx]?.node;
+    if (selected && !blockedVariantIds.has(selected.id)) return;
+    const next = product.node.variants.edges.findIndex(({ node }) => !blockedVariantIds.has(node.id));
+    if (next >= 0) setSelectedVariantIdx(next);
+  }, [product, selectedVariantIdx, blockedVariantIds, isFranchisee]);
   const visibleVariationItems = product
     ? getVariations(product.node.id).filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
     : [];
@@ -223,7 +233,7 @@ const ProductDetail = () => {
     fetchCustomContent();
   }, [product?.node?.id]);
 
-  if (loading || audienceLoading || franchiseAccessLoading) {
+  if (loading || audienceLoading || franchiseAccessLoading || saleVisibilityLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -252,7 +262,8 @@ const ProductDetail = () => {
   }
 
   // Block access if product audience doesn't match viewer
-  const productAllowed = isVisibleTo(product.node.id, isFranchisee);
+  const productAllowed = isVisibleTo(product.node.id, isFranchisee)
+    && isClientProductVisible(product, blockedVariantIds, isFranchisee);
   if (!productAllowed) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -280,10 +291,14 @@ const ProductDetail = () => {
 
   const { node } = product;
   const productVariations = visibleVariationItems;
-  const variant = node.variants.edges[selectedVariantIdx]?.node;
+  const selectedVariant = node.variants.edges[selectedVariantIdx]?.node;
+  const variant = selectedVariant && (isFranchisee || (blockedVariantIds && !blockedVariantIds.has(selectedVariant.id)))
+    ? selectedVariant
+    : node.variants.edges.find(({ node: item }) => isFranchisee || (blockedVariantIds && !blockedVariantIds.has(item.id)))?.node;
   const images = node.images.edges;
   const visibleRecommended = recommended.filter(
-    (item) => isProductAvailable(item) && isVisibleTo(item.node.id, isFranchisee),
+    (item) => isProductAvailable(item) && isVisibleTo(item.node.id, isFranchisee)
+      && isClientProductVisible(item, blockedVariantIds, isFranchisee),
   );
   const mainImage = images[selectedImageIdx]?.node || images[0]?.node;
   const shopifyPrice = parseFloat(variant?.price?.amount || "0");
@@ -303,7 +318,7 @@ const ProductDetail = () => {
   
 
   const handleAdd = async () => {
-    if (!variant) return;
+    if (!variant || (!isFranchisee && (!blockedVariantIds || blockedVariantIds.has(variant.id)))) return;
     const added = await addItem({
       product,
       variantId: variant.id,
@@ -317,7 +332,7 @@ const ProductDetail = () => {
   };
 
   const handleBuyNow = async () => {
-    if (!variant) return;
+    if (!variant || (!isFranchisee && (!blockedVariantIds || blockedVariantIds.has(variant.id)))) return;
     setBuyingNow(true);
 
     if (customCheckoutEnabled) {
@@ -698,7 +713,7 @@ const ProductDetail = () => {
               <div className="space-y-2">
                 <p className="font-medium text-sm text-foreground">Opção:</p>
                 <div className="flex flex-wrap gap-2">
-                  {node.variants.edges.map((v, i) => (
+                  {node.variants.edges.map((v, i) => (isFranchisee || (blockedVariantIds && !blockedVariantIds.has(v.node.id))) && (
                     <button
                       key={v.node.id}
                       type="button"

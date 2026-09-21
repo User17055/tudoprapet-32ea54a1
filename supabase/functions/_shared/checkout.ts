@@ -133,6 +133,17 @@ export async function handleSpecialPriceCheckout(
 
     const currentPriceMap = await fetchCurrentVariantPrices(variantIds, storefrontToken);
 
+    if (config.priceTable !== "franchise_prices") {
+      const { data: costRows, error: costError } = await adminClient.from("product_costs")
+        .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
+      if (costError) throw costError;
+      const blocked = (costRows ?? []).some((row) => {
+        const sale = customerPriceMap.get(row.shopify_variant_id) ?? currentPriceMap.get(row.shopify_variant_id);
+        return sale !== undefined && Number(row.cost) >= sale;
+      });
+      if (blocked) return errorResponse("Um produto da sacola está indisponível para clientes. Remova-o e tente novamente.", 409);
+    }
+
     const customerId = await findOrCreateCustomer(normalizedEmail, shopifyToken);
     if (!customerId) return errorResponse("Falha ao identificar cliente", 500);
 
