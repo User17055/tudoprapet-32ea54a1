@@ -357,6 +357,7 @@ export type Database = {
           created_at: string
           id: string
           percent: number
+          referral_code_id: string
           scope: string
           shopify_product_id: string | null
           updated_at: string
@@ -366,6 +367,7 @@ export type Database = {
           created_at?: string
           id?: string
           percent: number
+          referral_code_id: string
           scope: string
           shopify_product_id?: string | null
           updated_at?: string
@@ -375,6 +377,7 @@ export type Database = {
           created_at?: string
           id?: string
           percent?: number
+          referral_code_id?: string
           scope?: string
           shopify_product_id?: string | null
           updated_at?: string
@@ -387,52 +390,14 @@ export type Database = {
             referencedRelation: "categories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "commission_rules_referral_code_id_fkey"
+            columns: ["referral_code_id"]
+            isOneToOne: false
+            referencedRelation: "employee_referral_codes"
+            referencedColumns: ["id"]
+          },
         ]
-      }
-      commission_settings: {
-        Row: {
-          id: boolean
-          store_percent: number
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          id?: boolean
-          store_percent?: number
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          id?: boolean
-          store_percent?: number
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: []
-      }
-      commission_blocked_customers: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          email: string
-          id: string
-          reason: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          email: string
-          id?: string
-          reason?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          email?: string
-          id?: string
-          reason?: string | null
-        }
-        Relationships: []
       }
       customer_addresses: {
         Row: {
@@ -573,6 +538,7 @@ export type Database = {
         Row: {
           active: boolean
           code: string
+          commission_percent: number
           created_at: string
           employee_name: string | null
           id: string
@@ -581,6 +547,7 @@ export type Database = {
         Insert: {
           active?: boolean
           code: string
+          commission_percent?: number
           created_at?: string
           employee_name?: string | null
           id?: string
@@ -589,6 +556,7 @@ export type Database = {
         Update: {
           active?: boolean
           code?: string
+          commission_percent?: number
           created_at?: string
           employee_name?: string | null
           id?: string
