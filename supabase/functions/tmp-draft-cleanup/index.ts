@@ -9,9 +9,9 @@ Deno.serve(async (req) => {
   if (!auth.ok) return auth.response;
   const body = await req.json().catch(() => ({})) as { sessionIds?: string[] };
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const shop = Deno.env.get("SHOPIFY_SHOP_DOMAIN") || Deno.env.get("SHOPIFY_STORE_DOMAIN");
-  const token = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
-  if (!shop || !token) return errorResponse("Credenciais ausentes", 500);
+  const shop = SHOP_DOMAIN;
+  const token = shopifyAdminToken();
+  if (!token) return errorResponse("Credenciais ausentes", 500);
   const results: Array<Record<string, unknown>> = [];
   for (const sessionId of body.sessionIds || []) {
     const { data: session } = await admin.from("checkout_sessions")
