@@ -44,6 +44,10 @@ interface Category { id: string; name: string; parent_id: string | null }
 
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const PAGE_SIZE = 20;
+const pad2 = (value: number) => String(value).padStart(2, "0");
+const localDateValue = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const localMonthValue = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+const parseDateParts = (value: string): [number, number, number] => value.split("-").map(Number) as [number, number, number];
 
 export default function CommissionsTab() {
   const [codes, setCodes] = useState<CommissionCode[]>([]);
@@ -65,6 +69,11 @@ export default function CommissionsTab() {
   const [status, setStatus] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [period, setPeriod] = useState<"all" | "month" | "day" | "custom">("all");
+  const [monthValue, setMonthValue] = useState(() => localMonthValue(new Date()));
+  const [dayValue, setDayValue] = useState(() => localDateValue(new Date()));
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -201,13 +210,34 @@ export default function CommissionsTab() {
     sales.forEach((sale) => { if (!map.has(sale.code)) map.set(sale.code, sale.employeeName); });
     return [...map].sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
   }, [codes, sales]);
+  // Fim é sempre exclusivo (início do próximo dia/mês), pra pegar o dia/mês inteiro
+  // sem depender do horário exato de cada venda.
+  const periodRange = useMemo<{ start: Date | null; end: Date | null }>(() => {
+    if (period === "month" && monthValue) {
+      const [year, month] = parseDateParts(monthValue);
+      return { start: new Date(year, month - 1, 1), end: new Date(year, month, 1) };
+    }
+    if (period === "day" && dayValue) {
+      const [year, month, day] = parseDateParts(dayValue);
+      return { start: new Date(year, month - 1, day), end: new Date(year, month - 1, day + 1) };
+    }
+    if (period === "custom" && (customFrom || customTo)) {
+      const start = customFrom ? (([year, month, day]) => new Date(year, month - 1, day))(parseDateParts(customFrom)) : null;
+      const end = customTo ? (([year, month, day]) => new Date(year, month - 1, day + 1))(parseDateParts(customTo)) : null;
+      return { start, end };
+    }
+    return { start: null, end: null };
+  }, [period, monthValue, dayValue, customFrom, customTo]);
   const filtered = useMemo(() => sales.filter((sale) => {
     if (person !== "all" && sale.code !== person) return false;
     if (status !== "all" && sale.status !== status) return false;
+    const createdAt = new Date(sale.createdAt);
+    if (periodRange.start && createdAt < periodRange.start) return false;
+    if (periodRange.end && createdAt >= periodRange.end) return false;
     const term = query.trim().toLocaleLowerCase("pt-BR");
     return !term || [sale.customerName, sale.customerEmail, sale.employeeName, sale.code,
       ...sale.products.map((product) => product.name)].join(" ").toLocaleLowerCase("pt-BR").includes(term);
-  }), [sales, person, status, query]);
+  }), [sales, person, status, query, periodRange]);
   const paid = filtered.filter((sale) => sale.status === "paid");
   const totalSold = paid.reduce((sum, sale) => sum + sale.productsTotal, 0);
   const totalCommission = paid.reduce((sum, sale) => sum + sale.commissionAmount, 0);
@@ -300,6 +330,18 @@ export default function CommissionsTab() {
           <div className="relative flex-1 sm:min-w-60"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Buscar cliente, pessoa, código ou produto" className="pl-9" />
           </div>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <Select value={period} onValueChange={(value: "all" | "month" | "day" | "custom") => { setPeriod(value); setPage(1); }}><SelectTrigger className="w-full sm:w-44" aria-label="Filtrar período"><SelectValue /></SelectTrigger><SelectContent>
+            <SelectItem value="all">Todo o período</SelectItem><SelectItem value="month">Mês</SelectItem><SelectItem value="day">Dia</SelectItem><SelectItem value="custom">Personalizado</SelectItem>
+          </SelectContent></Select>
+          {period === "month" && <Input aria-label="Mês da comissão" type="month" value={monthValue} onChange={(event) => { setMonthValue(event.target.value); setPage(1); }} className="w-full sm:w-44" />}
+          {period === "day" && <Input aria-label="Dia da comissão" type="date" value={dayValue} onChange={(event) => { setDayValue(event.target.value); setPage(1); }} className="w-full sm:w-44" />}
+          {period === "custom" && <>
+            <Input aria-label="De" type="date" value={customFrom} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); }} className="w-full sm:w-40" />
+            <span className="text-sm text-muted-foreground">até</span>
+            <Input aria-label="Até" type="date" value={customTo} onChange={(event) => { setCustomTo(event.target.value); setPage(1); }} className="w-full sm:w-40" />
+          </>}
         </div>
         {loading ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></div>
           : visible.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">Nenhuma venda encontrada.</p>
