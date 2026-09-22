@@ -238,6 +238,7 @@ export type Database = {
           anonymous_access_token_hash: string | null
           billing_address_snapshot: Json
           checkout_version: string
+          commission_percent: number
           created_at: string
           currency: string
           customer_snapshot: Json
@@ -247,6 +248,8 @@ export type Database = {
           inventory_reserved_until: string | null
           items_snapshot: Json
           pricing_snapshot: Json
+          referral_code: string | null
+          referral_employee_name: string | null
           service_fee: number
           session_expires_at: string | null
           shipping_amount: number
@@ -266,6 +269,7 @@ export type Database = {
           anonymous_access_token_hash?: string | null
           billing_address_snapshot?: Json
           checkout_version?: string
+          commission_percent?: number
           created_at?: string
           currency?: string
           customer_snapshot?: Json
@@ -275,6 +279,8 @@ export type Database = {
           inventory_reserved_until?: string | null
           items_snapshot?: Json
           pricing_snapshot?: Json
+          referral_code?: string | null
+          referral_employee_name?: string | null
           service_fee?: number
           session_expires_at?: string | null
           shipping_amount?: number
@@ -294,6 +300,7 @@ export type Database = {
           anonymous_access_token_hash?: string | null
           billing_address_snapshot?: Json
           checkout_version?: string
+          commission_percent?: number
           created_at?: string
           currency?: string
           customer_snapshot?: Json
@@ -303,6 +310,8 @@ export type Database = {
           inventory_reserved_until?: string | null
           items_snapshot?: Json
           pricing_snapshot?: Json
+          referral_code?: string | null
+          referral_employee_name?: string | null
           service_fee?: number
           session_expires_at?: string | null
           shipping_amount?: number
@@ -341,6 +350,54 @@ export type Database = {
           name?: string | null
         }
         Relationships: []
+      }
+      commission_rules: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          id: string
+          percent: number
+          referral_code_id: string
+          scope: string
+          shopify_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          percent: number
+          referral_code_id: string
+          scope: string
+          shopify_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          percent?: number
+          referral_code_id?: string
+          scope?: string
+          shopify_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_rules_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_rules_referral_code_id_fkey"
+            columns: ["referral_code_id"]
+            isOneToOne: false
+            referencedRelation: "employee_referral_codes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       customer_addresses: {
         Row: {
@@ -481,6 +538,7 @@ export type Database = {
         Row: {
           active: boolean
           code: string
+          commission_percent: number
           created_at: string
           employee_name: string | null
           id: string
@@ -489,6 +547,7 @@ export type Database = {
         Insert: {
           active?: boolean
           code: string
+          commission_percent?: number
           created_at?: string
           employee_name?: string | null
           id?: string
@@ -497,6 +556,7 @@ export type Database = {
         Update: {
           active?: boolean
           code?: string
+          commission_percent?: number
           created_at?: string
           employee_name?: string | null
           id?: string

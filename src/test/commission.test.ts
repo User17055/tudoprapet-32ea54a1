@@ -19,6 +19,19 @@ describe("comissões sobre vendas", () => {
     expect(selectCommissionRule("outro", [], categories, rules, 1).percent).toBe(1);
     expect(commissionForLine(99.9, 5)).toBe(5);
   });
+
+  it("subgrupo vence a categoria pai quando o produto está nas duas", () => {
+    const categories = [
+      { id: "racao", parent_id: null },
+      { id: "seca", parent_id: "racao" },
+    ];
+    const rules = [
+      { id: "zz-racao", scope: "category" as const, category_id: "racao", shopify_product_id: null, percent: 3 },
+      { id: "aa-seca", scope: "category" as const, category_id: "seca", shopify_product_id: null, percent: 5 },
+    ];
+    expect(selectCommissionRule("item", ["racao", "seca"], categories, rules, 1).percent).toBe(5);
+    expect(selectCommissionRule("item", ["seca", "racao"], categories, rules, 1).percent).toBe(5);
+  });
   it("só calcula comissão depois do pagamento confirmado", () => {
     const items = [{ lineTotal: 100 }, { lineTotal: 50 }];
     expect(commissionOnProducts(items, 5, "pending")).toEqual({ productsTotal: 150, commissionAmount: 0 });
