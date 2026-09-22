@@ -35,6 +35,7 @@ import {
   LayoutDashboard,
   ShieldCheck,
   CircleDollarSign,
+  BadgePercent,
 
   type LucideIcon,
 } from "lucide-react";
@@ -61,6 +62,7 @@ import ConferenceTab from "./admin/ConferenceTab";
 import OverviewTab from "./admin/OverviewTab";
 import AdministratorsTab from "./admin/AdministratorsTab";
 import ValuesTab from "./admin/ValuesTab";
+import CommissionsTab from "./admin/CommissionsTab";
 import DuplicatesTab from "./admin/DuplicatesTab";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 
@@ -98,6 +100,7 @@ type SectionId =
   | "banners"
   | "featured"
   | "referrals"
+  | "commissions"
   | "retirada"
   | "orders"
   | "sync"
@@ -127,7 +130,8 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
       { id: "users", label: "Usuários", description: "Contas cadastradas na loja e seus planos", icon: Users, component: UsersTab },
       { id: "members", label: "Membros", description: "Membros do clube com benefícios ativos", icon: Crown, component: MembersTab },
       { id: "prices", label: "Preços do Clube", description: "Preços exclusivos para assinantes", icon: Package, component: PricesTab },
-      { id: "referrals", label: "Indicações", description: "Códigos de funcionários e usos por cliente", icon: Ticket, component: ReferralCodesTab },
+      { id: "referrals", label: "Indicações", description: "Códigos de funcionários para cadastro e compras", icon: Ticket, component: ReferralCodesTab },
+      { id: "commissions", label: "Comissões", description: "Vendas atribuídas, produtos e comissão por pessoa", icon: BadgePercent, component: CommissionsTab },
     ],
   },
   {
@@ -1573,7 +1577,7 @@ function ReferralCodesTab() {
         <CardHeader>
           <CardTitle className="text-base">Cadastrar código de funcionário</CardTitle>
           <CardDescription>
-            Use este código quando o cliente escolher Recomendação no cadastro.
+            Use este código no cadastro por recomendação ou no final da compra para atribuir a venda.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1fr_220px_auto]">

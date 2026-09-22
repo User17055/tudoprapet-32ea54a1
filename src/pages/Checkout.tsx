@@ -304,6 +304,7 @@ export default function Checkout() {
       ? launch.items
       : cartItems.map(({ variantId, quantity }) => ({ variantId, quantity }));
   const [step, setStep] = useState(0);
+  const [referralCode, setReferralCode] = useState("");
   const [customer, setCustomer] = useState<Customer>(
     previewMode
       ? PREVIEW_CUSTOMER
@@ -1097,7 +1098,7 @@ export default function Checkout() {
             };
       const { data: prepared, error: prepareError } =
         await supabase.functions.invoke("checkout-prepare", {
-          body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod },
+          body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase() },
           headers: sessionClaimHeaders(Boolean(user)),
         });
       if (prepareError || prepared?.error) {
@@ -1379,6 +1380,8 @@ export default function Checkout() {
           setPaymentMethod("debit_card");
         }}
         message={message}
+        referralCode={referralCode}
+        onReferralCodeChange={setReferralCode}
         submitLabel={
           isFranchisee
             ? "Finalizar pedido"
@@ -2154,6 +2157,8 @@ function PaymentCheckoutScreen({
   onChoosePixAfterFailure,
   onChooseDebitAfterFailure,
   message,
+  referralCode,
+  onReferralCodeChange,
   submitLabel,
   onBack,
   onNext,
@@ -2174,6 +2179,8 @@ function PaymentCheckoutScreen({
   onChoosePixAfterFailure: () => void;
   onChooseDebitAfterFailure: () => void;
   message: string;
+  referralCode: string;
+  onReferralCodeChange: (value: string) => void;
   submitLabel: string;
   onBack: () => void;
   onNext: () => void;
@@ -2212,6 +2219,22 @@ function PaymentCheckoutScreen({
                 {children}
               </div>
               {message && <InlineFormError message={message} />}
+            </section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+              <Label htmlFor="checkout-referral-code" className="font-bold text-slate-900">
+                Cupom de quem te ajudou ou indicou (opcional)
+              </Label>
+              <p className="mt-1 text-sm text-slate-500">Se alguém ajudou na escolha ou recomendou a loja, informe o código dessa pessoa. Não altera o valor do pedido.</p>
+              <Input
+                id="checkout-referral-code"
+                value={referralCode}
+                onChange={(event) => onReferralCodeChange(event.target.value.toUpperCase())}
+                maxLength={40}
+                autoCapitalize="characters"
+                autoComplete="off"
+                placeholder="Ex.: MARIA10"
+                className="mt-3 max-w-sm uppercase"
+              />
             </section>
             <CheckoutBag
               summary={summary}

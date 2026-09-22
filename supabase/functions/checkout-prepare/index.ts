@@ -26,6 +26,7 @@ import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
 import { hasSufficientInventory } from "../_shared/inventory.ts";
+import { commissionForLine, selectCommissionRule, type CommissionRule } from "../_shared/commission.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -84,6 +85,7 @@ Deno.serve(async (req) => {
     const parsed = parseCheckoutPrepareInput(rawBody);
     if (!parsed.ok) return errorResponse(parsed.message, 400);
     const input = parsed.value;
+    let referral: { id: string; code: string; employee_name: string; commission_percent: number } | null = null;
 
     // Entrega será ligada depois que o spike confirmar as tarifas da loja. Até
     // lá, o checkout existente continua sendo o fallback seguro para envio.
@@ -99,6 +101,21 @@ Deno.serve(async (req) => {
         return errorResponse("Muitas tentativas de checkout. Aguarde alguns minutos.", 429);
       }
       throw rateError;
+    }
+    if (input.referralCode) {
+      const { data, error } = await admin.from("employee_referral_codes")
+        .select("id,code,employee_name,commission_percent")
+        .eq("code", input.referralCode)
+        .eq("active", true)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return errorResponse("Código de indicação não encontrado ou inativo", 400);
+      referral = {
+        id: data.id,
+        code: data.code,
+        employee_name: data.employee_name,
+        commission_percent: Number(data.commission_percent),
+      };
     }
     const storefrontToken = readFirstEnv(["SHOPIFY_STOREFRONT_ACCESS_TOKEN", "SHOPIFY_STOREFRONT_TOKEN"]);
     const shopifyToken = readFirstEnv([
@@ -292,6 +309,28 @@ Deno.serve(async (req) => {
     // da Shopify, seja como desconto (quando menor) ou como linha de ajuste
     // (quando maior que o preço nativo da variante).
     const finalPriceMap = new Map<string, number>();
+    const commissionRules: CommissionRule[] = [];
+    const commissionCategories: Array<{ id: string; parent_id: string | null }> = [];
+    const categoriesByProduct = new Map<string, string[]>();
+    if (referral) {
+      const productIds = [...new Set(input.items.map((item) => details.get(item.variantId)!.productId))];
+      const [rulesResult, linksResult, categoriesResult] = await Promise.all([
+        admin.from("commission_rules").select("id,scope,category_id,shopify_product_id,percent").eq("referral_code_id", referral.id),
+        admin.from("product_categories").select("shopify_product_id,category_id").in("shopify_product_id", productIds),
+        admin.from("categories").select("id,parent_id").limit(1000),
+      ]);
+      if (rulesResult.error) throw rulesResult.error;
+      if (linksResult.error) throw linksResult.error;
+      if (categoriesResult.error) throw categoriesResult.error;
+      if (categoriesResult.data?.length === 1000) throw new Error("Limite de categorias para comissões atingido");
+      commissionRules.push(...(rulesResult.data as CommissionRule[] || []));
+      commissionCategories.push(...(categoriesResult.data || []));
+      for (const link of linksResult.data || []) {
+        const assigned = categoriesByProduct.get(link.shopify_product_id) || [];
+        assigned.push(link.category_id);
+        categoriesByProduct.set(link.shopify_product_id, assigned);
+      }
+    }
     const itemsSnapshot = input.items.map((item) => {
       const detail = details.get(item.variantId)!;
       const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
@@ -301,6 +340,10 @@ Deno.serve(async (req) => {
       finalPriceMap.set(item.variantId, unitPrice);
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
+      const lineTotal = money(unitPrice * item.quantity);
+      const appliedRule = referral
+        ? selectCommissionRule(detail.productId, categoriesByProduct.get(detail.productId) || [], commissionCategories, commissionRules, referral.commission_percent)
+        : null;
       return {
         variantId: item.variantId,
         productId: detail.productId,
@@ -311,7 +354,14 @@ Deno.serve(async (req) => {
         quantity: item.quantity,
         catalogUnitPrice: money(catalogPrice),
         unitPrice: money(unitPrice),
-        lineTotal: money(unitPrice * item.quantity),
+        lineTotal,
+        ...(appliedRule ? {
+          commissionPercent: appliedRule.percent,
+          commissionScope: appliedRule.scope,
+          commissionRuleId: appliedRule.ruleId,
+          commissionCategoryId: appliedRule.categoryId,
+          commissionAmount: commissionForLine(lineTotal, appliedRule.percent),
+        } : {}),
       };
     });
     subtotal = money(subtotal);
@@ -396,6 +446,9 @@ Deno.serve(async (req) => {
       address_snapshot: input.delivery.address ?? {},
       billing_address_snapshot: input.billingAddress ?? input.delivery.address ?? {},
       items_snapshot: itemsSnapshot,
+      referral_code: referral?.code ?? null,
+      referral_employee_name: referral?.employee_name ?? null,
+      commission_percent: referral?.commission_percent ?? 0,
       pricing_snapshot: {
         customerType,
         serviceFee: CHECKOUT_SERVICE_FEE,
@@ -444,10 +497,12 @@ Deno.serve(async (req) => {
         "asaas",
         customerType,
         ...(shippingCode === "pick_up" ? ["retirada", "pick_up"] : []),
+        ...(referral ? [`indicacao:${referral.code}`] : []),
       ],
       note: `Checkout TudoPraPet ${session.id}`,
       customAttributes: [
         { key: "checkout_session_id", value: session.id },
+        ...(referral ? [{ key: "codigo_indicacao", value: referral.code }] : []),
         { key: "shipping_code", value: shippingCode },
         { key: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
         { key: "shipping_option_handle", value: shippingRateHandle || input.delivery.optionHandle || shippingCode },

@@ -83,4 +83,14 @@ describe("entrada do checkout próprio", () => {
     });
     expect(result).toEqual({ ok: false, message: "Escolha uma modalidade de frete" });
   });
+
+  it("aceita código de indicação opcional e o normaliza", () => {
+    const withoutCode = parseCheckoutPrepareInput(valid);
+    expect(withoutCode.ok && withoutCode.value.referralCode).toBeUndefined();
+    const withCode = parseCheckoutPrepareInput({ ...valid, referralCode: "  maria10  " });
+    expect(withCode.ok && withCode.value.referralCode).toBe("MARIA10");
+    expect(parseCheckoutPrepareInput({ ...valid, referralCode: "cupom\ninválido" })).toEqual({
+      ok: false, message: "Informe um código de indicação válido",
+    });
+  });
 });

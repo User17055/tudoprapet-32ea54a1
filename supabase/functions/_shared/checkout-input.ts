@@ -19,6 +19,7 @@ export interface CheckoutAddressInput {
 }
 
 export interface CheckoutPrepareInput {
+  referralCode?: string;
   items: Array<{ variantId: string; quantity: number }>;
   customer: CheckoutCustomerInput;
   delivery: {
@@ -130,6 +131,10 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
     return { ok: false, message: "Dados do checkout inválidos" };
   }
   const body = raw as Record<string, unknown>;
+  const referralCode = clean(body.referralCode, 40).toUpperCase();
+  if (referralCode && /[\u0000-\u001f\u007f]/.test(referralCode)) {
+    return { ok: false, message: "Informe um código de indicação válido" };
+  }
   const parsedItems = parseCheckoutItems(body.items);
   if (!parsedItems.ok) return { ok: false, message: (parsedItems as { message: string }).message };
 
@@ -168,7 +173,7 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
 
   return {
     ok: true,
-    value: { items: parsedItems.value, customer, delivery: { code, optionHandle, address }, billingAddress },
+    value: { items: parsedItems.value, customer, delivery: { code, optionHandle, address }, billingAddress, referralCode: referralCode || undefined },
   };
 }
 
