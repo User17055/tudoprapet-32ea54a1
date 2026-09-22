@@ -35,32 +35,28 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    if (body.action === "update_rate") {
+    if (body.action === "update_store_rate") {
       const percent = Number(body.percent);
-      if (typeof body.codeId !== "string" || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
         return errorResponse("Percentual inválido", 400);
       }
-      const { error } = await admin.from("employee_referral_codes")
-        .update({ commission_percent: Math.round(percent * 100) / 100 })
-        .eq("id", body.codeId);
+      const { error } = await admin.from("commission_settings")
+        .update({ store_percent: Math.round(percent * 100) / 100 })
+        .eq("id", true);
       if (error) throw error;
       return jsonResponse({ ok: true });
     }
 
     if (body.action === "save_rule") {
       const percent = Number(body.percent);
-      const codeId = String(body.codeId || "");
       const scope = body.scope;
       const targetId = String(body.targetId || "");
-      if (!/^[0-9a-f-]{36}$/i.test(codeId) || !Number.isFinite(percent) || percent < 0 || percent > 100
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100
         || (scope !== "category" && scope !== "product")
         || (scope === "category" && !/^[0-9a-f-]{36}$/i.test(targetId))
         || (scope === "product" && !/^gid:\/\/shopify\/Product\/\d+$/.test(targetId))) {
         return errorResponse("Regra de comissão inválida", 400);
       }
-      const { data: code, error: codeError } = await admin.from("employee_referral_codes").select("id").eq("id", codeId).maybeSingle();
-      if (codeError) throw codeError;
-      if (!code) return errorResponse("Código não encontrado", 404);
       if (scope === "category") {
         const { data: category, error: categoryError } = await admin.from("categories").select("id").eq("id", targetId).maybeSingle();
         if (categoryError) throw categoryError;
@@ -68,12 +64,12 @@ Deno.serve(async (req) => {
       }
       const targetColumn = scope === "category" ? "category_id" : "shopify_product_id";
       const { data: existing, error: lookupError } = await admin.from("commission_rules")
-        .select("id").eq("referral_code_id", codeId).eq("scope", scope).eq(targetColumn, targetId).maybeSingle();
+        .select("id").eq("scope", scope).eq(targetColumn, targetId).maybeSingle();
       if (lookupError) throw lookupError;
       const value = Math.round(percent * 100) / 100;
       const { error } = existing
         ? await admin.from("commission_rules").update({ percent: value }).eq("id", existing.id)
-        : await admin.from("commission_rules").insert({ referral_code_id: codeId, scope, [targetColumn]: targetId, percent: value });
+        : await admin.from("commission_rules").insert({ scope, [targetColumn]: targetId, percent: value });
       if (error) throw error;
       return jsonResponse({ ok: true });
     }
@@ -85,18 +81,41 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    const [codes, sessions, rules] = await Promise.all([
+    if (body.action === "block_customer") {
+      const email = String(body.email || "").trim().toLowerCase();
+      const reason = body.reason ? String(body.reason).trim().slice(0, 200) : null;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return errorResponse("E-mail inválido", 400);
+      const { error } = await admin.from("commission_blocked_customers")
+        .upsert({ email, reason }, { onConflict: "email" });
+      if (error) throw error;
+      return jsonResponse({ ok: true });
+    }
+
+    if (body.action === "unblock_customer") {
+      if (typeof body.id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.id)) return errorResponse("Registro inválido", 400);
+      const { error } = await admin.from("commission_blocked_customers").delete().eq("id", body.id);
+      if (error) throw error;
+      return jsonResponse({ ok: true });
+    }
+
+    const [codes, sessions, rules, settings, blockedCustomers] = await Promise.all([
       allRows((from, to) => admin.from("employee_referral_codes")
-        .select("id,code,employee_name,active,commission_percent")
+        .select("id,code,employee_name,active")
         .order("code").range(from, to)),
       allRows((from, to) => admin.from("checkout_sessions")
         .select("id,created_at,referral_code,referral_employee_name,commission_percent,customer_snapshot,items_snapshot,shopify_order_id,status")
         .not("referral_code", "is", null)
         .order("created_at", { ascending: false }).range(from, to)),
       allRows((from, to) => admin.from("commission_rules")
-        .select("id,referral_code_id,scope,category_id,shopify_product_id,percent")
+        .select("id,scope,category_id,shopify_product_id,percent")
         .order("created_at").range(from, to)),
+      admin.from("commission_settings").select("store_percent").eq("id", true).maybeSingle(),
+      allRows((from, to) => admin.from("commission_blocked_customers")
+        .select("id,email,reason,created_at")
+        .order("created_at", { ascending: false }).range(from, to)),
     ]);
+    if (settings.error) throw settings.error;
+    const storePercent = Number(settings.data?.store_percent) || 0;
 
     const sessionIds = sessions.map((session) => session.id);
     const payments = [] as Array<{ checkout_session_id: string; status: string; created_at: string }>;
@@ -146,7 +165,7 @@ Deno.serve(async (req) => {
         commissionAmount,
       };
     });
-    return jsonResponse({ codes, rules, sales });
+    return jsonResponse({ codes, rules, sales, storePercent, blockedCustomers });
   } catch (error) {
     console.error("[admin-commissions]", error);
     return errorResponse("Não foi possível carregar as comissões", 500);

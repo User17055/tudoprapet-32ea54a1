@@ -2220,11 +2220,19 @@ function PaymentCheckoutScreen({
               </div>
               {message && <InlineFormError message={message} />}
             </section>
+            <CheckoutBag
+              summary={summary}
+              cartItems={cartItems}
+              editable={false}
+              busy={false}
+              onQuantity={() => undefined}
+              onRemove={() => undefined}
+            />
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
               <Label htmlFor="checkout-referral-code" className="font-bold text-slate-900">
                 Cupom de quem te ajudou ou indicou (opcional)
               </Label>
-              <p className="mt-1 text-sm text-slate-500">Se alguém ajudou na escolha ou recomendou a loja, informe o código dessa pessoa. Não altera o valor do pedido.</p>
+              <p className="mt-1 text-sm text-slate-500">Se alguém ajudou na escolha ou recomendou a loja, informe o código dessa pessoa antes de fechar o pedido. Não altera o valor do pedido.</p>
               <Input
                 id="checkout-referral-code"
                 value={referralCode}
@@ -2236,14 +2244,6 @@ function PaymentCheckoutScreen({
                 className="mt-3 max-w-sm uppercase"
               />
             </section>
-            <CheckoutBag
-              summary={summary}
-              cartItems={cartItems}
-              editable={false}
-              busy={false}
-              onQuantity={() => undefined}
-              onRemove={() => undefined}
-            />
           </div>
           <aside className="space-y-4 lg:sticky lg:top-6">
             <div className="rounded-xl border border-slate-200 p-4">

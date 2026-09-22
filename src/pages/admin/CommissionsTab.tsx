@@ -15,7 +15,6 @@ interface CommissionCode {
   code: string;
   employee_name: string;
   active: boolean;
-  commission_percent: number;
 }
 
 interface CommissionSale {
@@ -35,12 +34,12 @@ interface CommissionSale {
 
 interface CommissionRule {
   id: string;
-  referral_code_id: string;
   scope: "category" | "product";
   category_id: string | null;
   shopify_product_id: string | null;
   percent: number;
 }
+interface BlockedCustomer { id: string; email: string; reason: string | null; created_at: string }
 interface Category { id: string; name: string; parent_id: string | null }
 
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -50,15 +49,18 @@ export default function CommissionsTab() {
   const [codes, setCodes] = useState<CommissionCode[]>([]);
   const [sales, setSales] = useState<CommissionSale[]>([]);
   const [rules, setRules] = useState<CommissionRule[]>([]);
+  const [blockedCustomers, setBlockedCustomers] = useState<BlockedCustomer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
-  const [ruleCodeId, setRuleCodeId] = useState("");
   const [ruleScope, setRuleScope] = useState<"category" | "product">("category");
   const [ruleTarget, setRuleTarget] = useState("");
   const [rulePercent, setRulePercent] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [rates, setRates] = useState<Record<string, string>>({});
+  const [storeRate, setStoreRate] = useState("");
+  const [storeRateSaved, setStoreRateSaved] = useState("");
+  const [blockEmail, setBlockEmail] = useState("");
+  const [blockReason, setBlockReason] = useState("");
   const [person, setPerson] = useState("all");
   const [status, setStatus] = useState("all");
   const [query, setQuery] = useState("");
@@ -77,10 +79,12 @@ export default function CommissionsTab() {
       setCodes(data.codes);
       setSales(data.sales);
       setRules(data.rules);
+      setBlockedCustomers(Array.isArray(data.blockedCustomers) ? data.blockedCustomers : []);
       setCategories(categoryResult.data || []);
       setProducts(catalog);
-      setRuleCodeId((current) => current || data.codes[0]?.id || "");
-      setRates(Object.fromEntries((data.codes as CommissionCode[]).map((code) => [code.id, String(code.commission_percent)])));
+      const rate = String(data.storePercent ?? 0);
+      setStoreRate(rate);
+      setStoreRateSaved(rate);
     } catch (error) {
       toast.error("Não foi possível carregar as comissões", { description: error instanceof Error ? error.message : undefined });
     } finally {
@@ -90,19 +94,19 @@ export default function CommissionsTab() {
 
   useEffect(() => { void load(); }, []);
 
-  const saveRate = async (code: CommissionCode) => {
-    const percent = Number((rates[code.id] || "").replace(",", "."));
+  const saveStoreRate = async () => {
+    const percent = Number(storeRate.replace(",", "."));
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
       toast.error("Informe uma comissão entre 0% e 100%.");
       return;
     }
-    setSavingId(code.id);
+    setSavingId("store-rate");
     try {
       const { data, error } = await supabase.functions.invoke("admin-commissions", {
-        body: { action: "update_rate", codeId: code.id, percent },
+        body: { action: "update_store_rate", percent },
       });
       if (error || !data?.ok) throw error || new Error("Não foi possível salvar a taxa");
-      toast.success("Taxa atualizada para as próximas vendas.");
+      toast.success("Taxa padrão atualizada para as próximas vendas.");
       await load();
     } catch (error) {
       toast.error("Não foi possível salvar a comissão", { description: error instanceof Error ? error.message : undefined });
@@ -113,14 +117,14 @@ export default function CommissionsTab() {
 
   const saveRule = async () => {
     const percent = Number(rulePercent.replace(",", "."));
-    if (!ruleCodeId || !ruleTarget || !Number.isFinite(percent) || percent < 0 || percent > 100) {
-      toast.error("Selecione a pessoa, o alcance e uma porcentagem de 0% a 100%.");
+    if (!ruleTarget || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+      toast.error("Selecione o alcance e uma porcentagem de 0% a 100%.");
       return;
     }
     setSavingId("rule");
     try {
       const { data, error } = await supabase.functions.invoke("admin-commissions", { body: {
-        action: "save_rule", codeId: ruleCodeId, scope: ruleScope, targetId: ruleTarget, percent,
+        action: "save_rule", scope: ruleScope, targetId: ruleTarget, percent,
       } });
       if (error || !data?.ok) throw error || new Error("Não foi possível salvar a regra");
       toast.success("Regra salva para as próximas compras.");
@@ -141,6 +145,39 @@ export default function CommissionsTab() {
       await load();
     } catch (error) {
       toast.error("Não foi possível remover a regra", { description: error instanceof Error ? error.message : undefined });
+    } finally { setSavingId(null); }
+  };
+
+  const blockCustomer = async () => {
+    const email = blockEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Informe um e-mail válido.");
+      return;
+    }
+    setSavingId("block-customer");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-commissions", {
+        body: { action: "block_customer", email, reason: blockReason.trim() || undefined },
+      });
+      if (error || !data?.ok) throw error || new Error("Não foi possível bloquear o cliente");
+      toast.success("Cliente não vai mais gerar comissão.");
+      setBlockEmail("");
+      setBlockReason("");
+      await load();
+    } catch (error) {
+      toast.error("Não foi possível bloquear o cliente", { description: error instanceof Error ? error.message : undefined });
+    } finally { setSavingId(null); }
+  };
+
+  const unblockCustomer = async (id: string) => {
+    setSavingId(id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-commissions", { body: { action: "unblock_customer", id } });
+      if (error || !data?.ok) throw error || new Error("Não foi possível remover o bloqueio");
+      toast.success("Cliente volta a poder gerar comissão.");
+      await load();
+    } catch (error) {
+      toast.error("Não foi possível remover o bloqueio", { description: error instanceof Error ? error.message : undefined });
     } finally { setSavingId(null); }
   };
 
@@ -192,50 +229,58 @@ export default function CommissionsTab() {
 
     <Card>
       <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div><CardTitle className="text-base">Comissão por pessoa</CardTitle>
-          <CardDescription>Taxa da loja toda: usada quando não há regra de produto ou categoria. Alterações valem apenas para novas compras.</CardDescription>
+        <div><CardTitle className="text-base">Taxa padrão da loja</CardTitle>
+          <CardDescription>Vale para qualquer pessoa, em qualquer venda, quando não há regra de categoria ou produto. Alterações valem apenas para novas compras.</CardDescription>
         </div>
         <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {codes.length === 0 && <p className="text-sm text-muted-foreground">Nenhum código cadastrado. Crie um na aba Indicações.</p>}
-        {codes.map((code) => {
-          const ownPaid = sales.filter((sale) => sale.code === code.code && sale.status === "paid");
-          return <div key={code.id} className="rounded-lg border p-4">
-            <p className="font-semibold">{code.employee_name} <span className="text-xs font-normal text-muted-foreground">· {code.code}{!code.active ? " · inativo" : ""}</span></p>
-            <p className="mt-1 text-sm text-muted-foreground">{ownPaid.length} vendas pagas · {money(ownPaid.reduce((sum, sale) => sum + sale.productsTotal, 0))} vendidos</p>
-            <p className="mt-2 text-xs text-muted-foreground">Loja toda (padrão)</p>
-            <div className="mt-1 flex items-center gap-2">
-              <Input aria-label={`Comissão de ${code.employee_name} em percentual`} type="number" min="0" max="100" step="0.01" value={rates[code.id] ?? ""} onChange={(event) => setRates((current) => ({ ...current, [code.id]: event.target.value }))} className="w-24" />
-              <span className="text-sm">%</span>
-              <Button size="sm" variant="outline" onClick={() => void saveRate(code)} disabled={savingId === code.id || rates[code.id] === String(code.commission_percent)}>
-                {savingId === code.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
-              </Button>
-            </div>
-          </div>;
-        })}
+      <CardContent>
+        <div className="flex items-center gap-2">
+          <Input aria-label="Comissão padrão da loja em percentual" type="number" min="0" max="100" step="0.01" value={storeRate} onChange={(event) => setStoreRate(event.target.value)} className="w-24" />
+          <span className="text-sm">%</span>
+          <Button size="sm" variant="outline" onClick={() => void saveStoreRate()} disabled={savingId === "store-rate" || storeRate === storeRateSaved}>
+            {savingId === "store-rate" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
 
     <Card>
       <CardHeader><CardTitle className="text-base">Regras por categoria ou produto</CardTitle>
-        <CardDescription>Produto prevalece sobre subgrupo; o subgrupo mais próximo prevalece sobre o grupo geral. Sem regra específica, vale a taxa da loja toda. Frete não gera comissão.</CardDescription>
+        <CardDescription>Vale igual para qualquer pessoa que indicar. Produto prevalece sobre subgrupo; o subgrupo mais próximo prevalece sobre o grupo geral. Sem regra específica, vale a taxa padrão da loja. Frete não gera comissão.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_minmax(0,2fr)_120px_auto] md:items-end">
-          <div><p className="mb-1 text-xs">Pessoa</p><Select value={ruleCodeId} onValueChange={setRuleCodeId}><SelectTrigger aria-label="Pessoa da regra"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{codes.map((code) => <SelectItem key={code.id} value={code.id}>{code.employee_name} · {code.code}</SelectItem>)}</SelectContent></Select></div>
+        <div className="grid gap-3 md:grid-cols-[160px_minmax(0,2fr)_120px_auto] md:items-end">
           <div><p className="mb-1 text-xs">Alcance</p><Select value={ruleScope} onValueChange={(value: "category" | "product") => { setRuleScope(value); setRuleTarget(""); }}><SelectTrigger aria-label="Alcance da regra"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="category">Categoria / subgrupo</SelectItem><SelectItem value="product">Produto</SelectItem></SelectContent></Select></div>
           <div><p className="mb-1 text-xs">{ruleScope === "category" ? "Grupo ou subgrupo" : "Produto"}</p>{ruleScope === "category"
             ? <Select value={ruleTarget} onValueChange={setRuleTarget}><SelectTrigger aria-label="Categoria da regra"><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger><SelectContent>{categories.map((category) => <SelectItem key={category.id} value={category.id}>{categoryPath(category.id)}</SelectItem>)}</SelectContent></Select>
             : <ProductPicker products={products} value={ruleTarget} onChange={setRuleTarget} />}</div>
           <div><p className="mb-1 text-xs">Comissão %</p><Input aria-label="Percentual da regra" type="number" min="0" max="100" step="0.01" value={rulePercent} onChange={(event) => setRulePercent(event.target.value)} /></div>
-          <Button onClick={() => void saveRule()} disabled={savingId === "rule" || !codes.length}>{savingId === "rule" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar regra"}</Button>
+          <Button onClick={() => void saveRule()} disabled={savingId === "rule"}>{savingId === "rule" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar regra"}</Button>
         </div>
         <div className="space-y-2">{rules.map((rule) => {
-          const code = codes.find((item) => item.id === rule.referral_code_id);
           const target = rule.scope === "category" ? categoryPath(rule.category_id || "") : products.find((item) => item.node.id === rule.shopify_product_id)?.node.title || rule.shopify_product_id;
-          return <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><span><b>{code?.employee_name || "Pessoa removida"}</b> · {rule.scope === "category" ? "Categoria" : "Produto"}: {target} · <b>{rule.percent}%</b></span><Button size="sm" variant="outline" onClick={() => void deleteRule(rule.id)} disabled={savingId === rule.id}>Remover</Button></div>;
-        })}{!rules.length && <p className="text-sm text-muted-foreground">Nenhuma regra específica. Vale a taxa da loja toda.</p>}</div>
+          return <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><span>{rule.scope === "category" ? "Categoria" : "Produto"}: <b>{target}</b> · <b>{rule.percent}%</b></span><Button size="sm" variant="outline" onClick={() => void deleteRule(rule.id)} disabled={savingId === rule.id}>Remover</Button></div>;
+        })}{!rules.length && <p className="text-sm text-muted-foreground">Nenhuma regra específica. Vale a taxa padrão da loja.</p>}</div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader><CardTitle className="text-base">Clientes sem comissão</CardTitle>
+        <CardDescription>Pessoas nesta lista nunca geram comissão, mesmo comprando com um código de indicação válido — por exemplo, quem compra sozinho todo dia.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <div><p className="mb-1 text-xs">E-mail do cliente</p><Input aria-label="E-mail do cliente bloqueado" type="email" value={blockEmail} onChange={(event) => setBlockEmail(event.target.value)} placeholder="cliente@exemplo.com" /></div>
+          <div><p className="mb-1 text-xs">Motivo (opcional)</p><Input aria-label="Motivo do bloqueio" value={blockReason} onChange={(event) => setBlockReason(event.target.value)} placeholder="Ex.: compra todo dia" /></div>
+          <Button onClick={() => void blockCustomer()} disabled={savingId === "block-customer"}>{savingId === "block-customer" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Bloquear"}</Button>
+        </div>
+        <div className="space-y-2">{blockedCustomers.map((customer) => (
+          <div key={customer.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+            <span><b>{customer.email}</b>{customer.reason ? ` · ${customer.reason}` : ""}</span>
+            <Button size="sm" variant="outline" onClick={() => void unblockCustomer(customer.id)} disabled={savingId === customer.id}>Remover</Button>
+          </div>
+        ))}{!blockedCustomers.length && <p className="text-sm text-muted-foreground">Nenhum cliente bloqueado.</p>}</div>
       </CardContent>
     </Card>
 

@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
     const parsed = parseCheckoutPrepareInput(rawBody);
     if (!parsed.ok) return errorResponse(parsed.message, 400);
     const input = parsed.value;
-    let referral: { id: string; code: string; employee_name: string; commission_percent: number } | null = null;
+    let referral: { id: string; code: string; employee_name: string } | null = null;
 
     // Entrega será ligada depois que o spike confirmar as tarifas da loja. Até
     // lá, o checkout existente continua sendo o fallback seguro para envio.
@@ -104,18 +104,23 @@ Deno.serve(async (req) => {
     }
     if (input.referralCode) {
       const { data, error } = await admin.from("employee_referral_codes")
-        .select("id,code,employee_name,commission_percent")
+        .select("id,code,employee_name")
         .eq("code", input.referralCode)
         .eq("active", true)
         .maybeSingle();
       if (error) throw error;
       if (!data) return errorResponse("Código de indicação não encontrado ou inativo", 400);
-      referral = {
-        id: data.id,
-        code: data.code,
-        employee_name: data.employee_name,
-        commission_percent: Number(data.commission_percent),
-      };
+      referral = { id: data.id, code: data.code, employee_name: data.employee_name };
+    }
+    // Cliente na lista de bloqueio nunca gera comissão, mesmo com código válido
+    // (ex.: compra recorrente da própria pessoa). O código continua salvo na
+    // venda só para atribuição; o cálculo de comissão fica de fora.
+    let commissionBlocked = false;
+    if (referral) {
+      const { data: blockedRow, error: blockedError } = await admin.from("commission_blocked_customers")
+        .select("id").eq("email", input.customer.email.trim().toLowerCase()).maybeSingle();
+      if (blockedError) throw blockedError;
+      commissionBlocked = Boolean(blockedRow);
     }
     const storefrontToken = readFirstEnv(["SHOPIFY_STOREFRONT_ACCESS_TOKEN", "SHOPIFY_STOREFRONT_TOKEN"]);
     const shopifyToken = readFirstEnv([
@@ -312,19 +317,24 @@ Deno.serve(async (req) => {
     const commissionRules: CommissionRule[] = [];
     const commissionCategories: Array<{ id: string; parent_id: string | null }> = [];
     const categoriesByProduct = new Map<string, string[]>();
-    if (referral) {
+    let storeCommissionPercent = 0;
+    const commissionEligible = Boolean(referral) && !commissionBlocked;
+    if (commissionEligible) {
       const productIds = [...new Set(input.items.map((item) => details.get(item.variantId)!.productId))];
-      const [rulesResult, linksResult, categoriesResult] = await Promise.all([
-        admin.from("commission_rules").select("id,scope,category_id,shopify_product_id,percent").eq("referral_code_id", referral.id),
+      const [rulesResult, linksResult, categoriesResult, settingsResult] = await Promise.all([
+        admin.from("commission_rules").select("id,scope,category_id,shopify_product_id,percent"),
         admin.from("product_categories").select("shopify_product_id,category_id").in("shopify_product_id", productIds),
         admin.from("categories").select("id,parent_id").limit(1000),
+        admin.from("commission_settings").select("store_percent").eq("id", true).maybeSingle(),
       ]);
       if (rulesResult.error) throw rulesResult.error;
       if (linksResult.error) throw linksResult.error;
       if (categoriesResult.error) throw categoriesResult.error;
+      if (settingsResult.error) throw settingsResult.error;
       if (categoriesResult.data?.length === 1000) throw new Error("Limite de categorias para comissões atingido");
       commissionRules.push(...(rulesResult.data as CommissionRule[] || []));
       commissionCategories.push(...(categoriesResult.data || []));
+      storeCommissionPercent = Number(settingsResult.data?.store_percent) || 0;
       for (const link of linksResult.data || []) {
         const assigned = categoriesByProduct.get(link.shopify_product_id) || [];
         assigned.push(link.category_id);
@@ -341,8 +351,8 @@ Deno.serve(async (req) => {
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
       const lineTotal = money(unitPrice * item.quantity);
-      const appliedRule = referral
-        ? selectCommissionRule(detail.productId, categoriesByProduct.get(detail.productId) || [], commissionCategories, commissionRules, referral.commission_percent)
+      const appliedRule = commissionEligible
+        ? selectCommissionRule(detail.productId, categoriesByProduct.get(detail.productId) || [], commissionCategories, commissionRules, storeCommissionPercent)
         : null;
       return {
         variantId: item.variantId,
@@ -448,7 +458,7 @@ Deno.serve(async (req) => {
       items_snapshot: itemsSnapshot,
       referral_code: referral?.code ?? null,
       referral_employee_name: referral?.employee_name ?? null,
-      commission_percent: referral?.commission_percent ?? 0,
+      commission_percent: commissionEligible ? storeCommissionPercent : 0,
       pricing_snapshot: {
         customerType,
         serviceFee: CHECKOUT_SERVICE_FEE,
