@@ -21,8 +21,19 @@ export function selectCommissionRule(
   if (productRule) return { percent: Number(productRule.percent), scope: "product", ruleId: productRule.id, categoryId: null };
 
   const parents = new Map(categories.map((category) => [category.id, category.parent_id]));
+  const depthOf = (categoryId: string): number => {
+    let id: string | null = categoryId;
+    const visited = new Set<string>();
+    let depth = 0;
+    while (id && !visited.has(id)) {
+      visited.add(id);
+      id = parents.get(id) ?? null;
+      if (id) depth++;
+    }
+    return depth;
+  };
   const categoryRules = new Map(rules.filter((rule) => rule.scope === "category").map((rule) => [rule.category_id, rule]));
-  const matches: Array<{ rule: CommissionRule; distance: number }> = [];
+  const matches: Array<{ rule: CommissionRule; distance: number; depth: number }> = [];
   for (const assignedId of categoryIds) {
     let id: string | null = assignedId;
     const visited = new Set<string>();
@@ -30,12 +41,14 @@ export function selectCommissionRule(
     while (id && !visited.has(id)) {
       visited.add(id);
       const rule = categoryRules.get(id);
-      if (rule) matches.push({ rule, distance });
+      if (rule) matches.push({ rule, distance, depth: depthOf(id) });
       id = parents.get(id) ?? null;
       distance++;
     }
   }
-  matches.sort((a, b) => a.distance - b.distance || a.rule.id.localeCompare(b.rule.id));
+  // Subgrupo vence a categoria pai: primeiro o mais próximo do item, e em empate
+  // (produto ligado à categoria e ao subgrupo) o mais específico da árvore.
+  matches.sort((a, b) => a.distance - b.distance || b.depth - a.depth || a.rule.id.localeCompare(b.rule.id));
   const match = matches[0]?.rule;
   return match
     ? { percent: Number(match.percent), scope: "category", ruleId: match.id, categoryId: match.category_id }
