@@ -1544,6 +1544,7 @@ export type Database = {
         Returns: boolean
       }
       invoke_payment_reconciliation: { Args: never; Returns: undefined }
+      is_cpf_available: { Args: { _cpf: string }; Returns: boolean }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
       save_customer_address: {
