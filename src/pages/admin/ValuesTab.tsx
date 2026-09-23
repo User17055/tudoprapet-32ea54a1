@@ -518,6 +518,7 @@ export default function ValuesTab() {
                   <TableHead className="min-w-[190px]">Custo Olist</TableHead>
                   <TableHead className="min-w-[190px]">Venda normal (Shopify)</TableHead>
                   <TableHead className="min-w-[220px]">Assinante</TableHead>
+                  <TableHead className="min-w-[240px]">Valor do Cliente</TableHead>
                   <TableHead className="min-w-[240px]">Franquia</TableHead>
                   <TableHead className="min-w-[164px]">Ações</TableHead>
                 </TableRow></TableHeader>
@@ -531,6 +532,8 @@ export default function ValuesTab() {
                   const displayedShopifyPrice = isMissingValue(shopifyPrice) ? null : shopifyPrice;
                   const draft = drafts[row.variant.id];
                   const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
+                  const customerSaved = customerMap.get(row.variant.id);
+                  const customerValue = effectivePrice(draft?.customer, customerSaved);
                   return (
                     <TableRow key={row.variant.id}>
                       <TableCell><div className="flex items-center gap-3">
