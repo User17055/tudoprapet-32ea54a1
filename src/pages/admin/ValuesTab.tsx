@@ -137,6 +137,7 @@ export default function ValuesTab() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [subscriberPrices, setSubscriberPrices] = useState<SubscriberPrice[]>([]);
   const [franchisePrices, setFranchisePrices] = useState<FranchisePrice[]>([]);
+  const [customerPrices, setCustomerPrices] = useState<{ shopify_variant_id: string; price: number }[]>([]);
   const [productCosts, setProductCosts] = useState<ProductCost[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
