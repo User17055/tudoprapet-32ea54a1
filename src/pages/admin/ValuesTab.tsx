@@ -423,7 +423,7 @@ export default function ValuesTab() {
       delete next[row.variant.id];
       return next;
     });
-    toast.success("Valor da franquia atualizado.");
+    toast.success("Valores atualizados.");
     await load(true);
   };
 
