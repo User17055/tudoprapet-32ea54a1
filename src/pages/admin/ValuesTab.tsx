@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
+import { fetchAllCustomerPrices } from "@/hooks/useCustomerPrices";
 import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { isMissingValue, isSaleAtOrBelowCost, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
@@ -59,7 +60,7 @@ type PriceDetails = {
   cost: ProductCost | null;
 };
 
-type Draft = { franchise?: string };
+type Draft = { franchise?: string; customer?: string };
 
 type OlistSyncItem = {
   productId: string;
