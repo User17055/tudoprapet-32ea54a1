@@ -394,6 +394,25 @@ export default function ValuesTab() {
       }
     }
 
+    if (draft.customer !== undefined) {
+      const raw = draft.customer.trim();
+      if (!raw) {
+        if (customerMap.has(row.variant.id)) {
+          operations.push(supabase.from("customer_prices").delete().eq("shopify_variant_id", row.variant.id));
+        }
+      } else {
+        const price = parsePrice(raw);
+        if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor do Cliente válido.");
+        operations.push(supabase.from("customer_prices").upsert({
+          shopify_product_id: row.productId,
+          shopify_variant_id: row.variant.id,
+          price,
+        }, { onConflict: "shopify_variant_id" }));
+      }
+    }
+
+    if (operations.length === 0) return;
+
     setSavingId(row.variant.id);
     const results = await Promise.all(operations);
     setSavingId(null);
