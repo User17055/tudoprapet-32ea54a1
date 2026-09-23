@@ -204,6 +204,7 @@ export default function ValuesTab() {
       .on("postgres_changes", { event: "*", schema: "public", table: "subscriber_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "product_costs" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, () => load(true))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -211,6 +212,7 @@ export default function ValuesTab() {
   const subscriberMap = useMemo(() => new Map(subscriberPrices.map((row) => [row.shopify_variant_id, row.subscriber_price])), [subscriberPrices]);
   const franchiseMap = useMemo(() => new Map(franchisePrices.map((row) => [row.shopify_variant_id, row])), [franchisePrices]);
   const costMap = useMemo(() => new Map(productCosts.map((row) => [row.shopify_variant_id, row])), [productCosts]);
+  const customerMap = useMemo(() => new Map(customerPrices.map((row) => [row.shopify_variant_id, row.price])), [customerPrices]);
 
   const openDetails = async (value: PriceDetails & { variantId: string }) => {
     const { variantId, ...dialogDetails } = value;
