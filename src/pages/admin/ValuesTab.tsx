@@ -161,7 +161,7 @@ export default function ValuesTab() {
       // linhas e esta tela mostra o campo VAZIO para variantes que tem valor
       // cadastrado -- e quem salvasse por cima apagaria o valor achando que
       // estava preenchendo pela primeira vez.
-      const [shopify, subscriber, franchise, costs] = await Promise.all([
+      const [shopify, subscriber, franchise, costs, customer] = await Promise.all([
         fetchAllShopifyProducts(),
         fetchAllRows<SubscriberPriceRow>(
           "subscriber_prices",
@@ -178,10 +178,12 @@ export default function ValuesTab() {
           "shopify_variant_id,cost,previous_cost,cost_changed_at,synced_at",
           { orderBy: "shopify_variant_id" },
         ),
+        fetchAllCustomerPrices(),
       ]);
       setProducts(shopify);
       setSubscriberPrices(subscriber.map((row) => ({ ...row, subscriber_price: Number(row.subscriber_price) })));
       setFranchisePrices(franchise.map((row) => ({ ...row, price: Number(row.price) })));
+      setCustomerPrices(customer);
       setProductCosts(costs.map((row) => ({
         ...row,
         cost: Number(row.cost),
