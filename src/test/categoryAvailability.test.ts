@@ -11,18 +11,17 @@ const categories = [
 ];
 
 describe("categorias disponíveis no catálogo", () => {
-  it("mantém somente a categoria ligada diretamente ao produto", () => {
+  it("mantém a categoria ligada ao produto e toda a cadeia de mães", () => {
     expect(categoriesWithLinkedProducts(categories, [{ category_id: "natural" }]).map((item) => item.id))
-      .toEqual(["natural"]);
+      .toEqual(["dogs", "food", "natural"]);
   });
 
-  it("não mostra pais ou categorias irmãs sem vínculo direto", () => {
+  it("não mostra categorias irmãs sem vínculo", () => {
     const result = categoriesWithLinkedProducts(categories, [{ category_id: "dry" }]);
-    expect(result.map((item) => item.id)).toEqual(["dry"]);
-    expect(result.map((item) => item.id)).not.toContain("dogs");
-    expect(result.map((item) => item.id)).not.toContain("food");
-    expect(result.map((item) => item.id)).not.toContain("cats");
+    expect(result.map((item) => item.id)).toEqual(["dogs", "food", "dry"]);
+    expect(result.map((item) => item.id)).not.toContain("natural");
     expect(result.map((item) => item.id)).not.toContain("toys");
+    expect(result.map((item) => item.id)).not.toContain("cats");
   });
 
   it("não exibe categorias quando não há vínculos", () => {
@@ -39,6 +38,6 @@ describe("categorias disponíveis no catálogo", () => {
       new Set(["current"]),
     );
 
-    expect(result.map((item) => item.id)).toEqual(["dry"]);
+    expect(result.map((item) => item.id)).toEqual(["dogs", "food", "dry"]);
   });
 });
