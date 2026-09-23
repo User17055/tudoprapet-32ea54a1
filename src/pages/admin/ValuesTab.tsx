@@ -565,6 +565,11 @@ export default function ValuesTab() {
                         <PriceMetrics value={subscriber ?? null} cost={displayedCost} />
                       </TableCell>
                       <TableCell>
+                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Usa o preço da Shopify" value={draft?.customer ?? (customerSaved !== undefined ? decimal(customerSaved) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} /></div>
+                        <PriceMetrics value={customerValue} cost={displayedCost} />
+                        {customerSaved !== undefined && <p className="mt-1 text-[11px] text-muted-foreground">Substitui o preço da Shopify. Apague o campo para voltar ao preço da loja.</p>}
+                      </TableCell>
+                      <TableCell>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>
                         <PriceMetrics value={franchiseValue} cost={displayedCost} />
                       </TableCell>
