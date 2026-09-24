@@ -13,7 +13,7 @@ import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { fuzzySearch, normalizeText } from "@/lib/fuzzySearch";
-import { suggestProductDetails } from "@/lib/productDetailSuggestions";
+import { suggestProductDetails, type ProductDetailSuggestion } from "@/lib/productDetailSuggestions";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 
 interface Category {
@@ -67,6 +67,18 @@ interface DetailProfileAttribute {
   attr_value: string;
   sort_order: number;
 }
+
+type AiProductSuggestion = ProductDetailSuggestion & {
+  productId: string;
+  confidence: number;
+};
+
+type AiFillResponse = {
+  ok?: boolean;
+  error?: string;
+  model?: string;
+  suggestions?: AiProductSuggestion[];
+};
 
 const slugify = (s: string) =>
   s
@@ -969,13 +981,39 @@ function AssignPanel() {
   ));
 
   const handleApplySuggestions = async () => {
-    if (!productId || !detailSuggestion || !hasSuggestion) return;
+    if (!productId || !selectedProduct) return;
     setApplyingSuggestions(true);
     try {
-      const specialized = detailSuggestion.categoryIds.some((categoryId) => {
+      let appliedSuggestion = detailSuggestion;
+      try {
+        const { data, error } = await supabase.functions.invoke("admin-product-ai-fill", {
+          body: { products: [{
+            id: selectedProduct.node.id,
+            title: selectedProduct.node.title,
+            vendor: selectedProduct.node.vendor || "",
+            productType: selectedProduct.node.productType || "",
+            tags: selectedProduct.node.tags || [],
+          }] },
+        });
+        const response = data as AiFillResponse | null;
+        const aiSuggestion = response?.suggestions?.find((item) => item.productId === productId);
+        if (error || !response?.ok || !aiSuggestion) {
+          throw new Error(response?.error || error?.message || "A IA não classificou este produto.");
+        }
+        appliedSuggestion = aiSuggestion;
+      } catch (aiError) {
+        console.error("[product-ai-fill]", aiError);
+        if (!appliedSuggestion || !hasSuggestion) throw aiError;
+        toast.warning("A IA não respondeu; aplicando a sugestão local.", {
+          description: aiError instanceof Error ? aiError.message : undefined,
+        });
+      }
+
+      if (!appliedSuggestion) throw new Error("Nenhuma classificação disponível para este produto.");
+      const specialized = appliedSuggestion.categoryIds.some((categoryId) => {
         const name = normalizeText(categories.find((category) => category.id === categoryId)?.name || "");
         return name.includes("natural") || name.includes("prescrit") || name.includes("nutricao clinica");
-      }) || detailSuggestion.attributes.some((attribute) => {
+      }) || appliedSuggestion.attributes.some((attribute) => {
         const value = normalizeText(attribute.attr_value);
         return value === "natural" || value === "prescrita";
       });
@@ -997,7 +1035,7 @@ function AssignPanel() {
             })
             .map((attribute) => attribute.id)
         : [];
-      const missingAttributes = detailSuggestion.attributes.filter((suggestion) => !attrs.some(
+      const missingAttributes = appliedSuggestion.attributes.filter((suggestion) => !attrs.some(
         (attribute) => attribute.attr_key === suggestion.attr_key && attribute.attr_value === suggestion.attr_value,
       ));
 
@@ -1008,9 +1046,9 @@ function AssignPanel() {
       if (staleDryAttributeIds.length > 0) {
         writes.push(supabase.from("product_attributes").delete().in("id", staleDryAttributeIds));
       }
-      if (detailSuggestion.categoryIds.length > 0) {
+      if (appliedSuggestion.categoryIds.length > 0) {
         writes.push(supabase.from("product_categories").upsert(
-          detailSuggestion.categoryIds.map((categoryId) => ({
+          appliedSuggestion.categoryIds.map((categoryId) => ({
             shopify_product_id: productId,
             category_id: categoryId,
           })),
@@ -1028,10 +1066,10 @@ function AssignPanel() {
           { onConflict: "shopify_product_id,attr_key,attr_value", ignoreDuplicates: true },
         ));
       }
-      if (detailSuggestion.brandId) {
+      if (appliedSuggestion.brandId) {
         writes.push(supabase.from("product_content").upsert({
           shopify_product_id: productId,
-          brand_id: detailSuggestion.brandId,
+          brand_id: appliedSuggestion.brandId,
         }, { onConflict: "shopify_product_id" }));
       }
 
@@ -1052,11 +1090,11 @@ function AssignPanel() {
           .map((categoryId) => rootCategoryId(categoryId, categories))
           .filter((rootId): rootId is string => Boolean(rootId)),
       );
-      setCategoryRootFilter(currentRoots.size === 1 ? Array.from(currentRoots)[0] : detailSuggestion.rootCategoryId || "all");
+      setCategoryRootFilter(currentRoots.size === 1 ? Array.from(currentRoots)[0] : appliedSuggestion.rootCategoryId || "all");
       setAttrs((currentAttrs || []) as ProductAttribute[]);
       setContentRow((currentContent as ProductContentRow | null) || null);
       setBrandId((currentContent as ProductContentRow | null)?.brand_id || "none");
-      toast.success("Sugestões preenchidas e salvas.");
+      toast.success("Produto preenchido com IA e salvo.");
     } catch (error) {
       console.error(error);
       toast.error("Não foi possível aplicar as sugestões.");
@@ -1071,26 +1109,63 @@ function AssignPanel() {
       : products.filter((product) => !configuredIds.has(product.node.id));
     if (pendingProducts.length === 0) return toast.info("Todos os produtos já estão cadastrados.");
 
-    const availableAttributes = allValues.map((item) => ({
-      attr_key: item.attr_key,
-      attr_value: item.attr_value,
-    }));
-    const suggestions = pendingProducts.map((product) => ({
-      productId: product.node.id,
-      suggestion: suggestProductDetails(product.node, categories, brands, availableAttributes),
-    }));
-    const applicable = suggestions.filter(({ suggestion }) => (
-      suggestion.categoryIds.length > 0
-      || suggestion.brandId
-      || suggestion.attributes.length > 0
-    ));
-
-    if (applicable.length === 0) {
-      return toast.info("Não encontramos sugestões seguras para preencher os produtos.");
-    }
-
     setApplyingAllSuggestions(true);
     try {
+      const availableAttributes = allValues.map((item) => ({
+        attr_key: item.attr_key,
+        attr_value: item.attr_value,
+      }));
+      let usedAi = true;
+      let suggestions: Array<{ productId: string; suggestion: ProductDetailSuggestion }> = [];
+
+      try {
+        const aiSuggestions: AiProductSuggestion[] = [];
+        for (let index = 0; index < pendingProducts.length; index += 15) {
+          const batch = pendingProducts.slice(index, index + 15);
+          const { data, error } = await supabase.functions.invoke("admin-product-ai-fill", {
+            body: {
+              products: batch.map((product) => ({
+                id: product.node.id,
+                title: product.node.title,
+                vendor: product.node.vendor || "",
+                productType: product.node.productType || "",
+                tags: product.node.tags || [],
+              })),
+            },
+          });
+          const response = data as AiFillResponse | null;
+          if (error || !response?.ok) {
+            throw new Error(response?.error || error?.message || "A IA recusou a classificação.");
+          }
+          aiSuggestions.push(...(response.suggestions || []));
+        }
+        const aiByProduct = new Map(aiSuggestions.map((suggestion) => [suggestion.productId, suggestion]));
+        suggestions = pendingProducts.map((product) => ({
+          productId: product.node.id,
+          suggestion: aiByProduct.get(product.node.id)
+            || suggestProductDetails(product.node, categories, brands, availableAttributes),
+        }));
+      } catch (aiError) {
+        usedAi = false;
+        console.error("[product-ai-fill]", aiError);
+        toast.warning("A IA não respondeu; aplicando as regras locais como contingência.", {
+          description: aiError instanceof Error ? aiError.message : undefined,
+        });
+        suggestions = pendingProducts.map((product) => ({
+          productId: product.node.id,
+          suggestion: suggestProductDetails(product.node, categories, brands, availableAttributes),
+        }));
+      }
+
+      const applicable = suggestions.filter(({ suggestion }) => (
+        suggestion.categoryIds.length > 0
+        || suggestion.brandId
+        || suggestion.attributes.length > 0
+      ));
+      if (applicable.length === 0) {
+        return toast.info("Não encontramos sugestões seguras para preencher os produtos.");
+      }
+
       const categoryRows = applicable.flatMap(({ productId: shopifyProductId, suggestion }) => (
         suggestion.categoryIds.map((categoryId) => ({ shopify_product_id: shopifyProductId, category_id: categoryId }))
       ));
@@ -1197,6 +1272,7 @@ function AssignPanel() {
       const skipped = pendingProducts.length - applicable.length;
       toast.success(
         `${applicable.length} ${applicable.length === 1 ? "produto preenchido" : "produtos preenchidos"}`
+        + (usedAi ? " com IA" : " pelas regras locais")
         + (skipped > 0 ? `; ${skipped} sem sugestão segura.` : "."),
       );
     } catch (error) {
@@ -1335,10 +1411,10 @@ function AssignPanel() {
                     type="button"
                     size="sm"
                     onClick={handleApplySuggestions}
-                    disabled={!hasSuggestion || applyingSuggestions}
+                    disabled={applyingSuggestions}
                   >
                     {applyingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                    Preencher com sugestões
+                    Preencher com IA
                   </Button>
                 </div>
                 {hasSuggestion && detailSuggestion ? (
@@ -1682,7 +1758,7 @@ function AssignPanel() {
                 disabled={unregisteredProducts.length === 0 || applyingAllSuggestions}
               >
                 {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Preencher não cadastrados ({unregisteredProducts.length})
+                Preencher com IA ({unregisteredProducts.length})
               </Button>
               <Button
                 type="button"
@@ -1691,7 +1767,7 @@ function AssignPanel() {
                 disabled={products.length === 0 || applyingAllSuggestions}
               >
                 {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Repreencher todos
+                Repreencher todos com IA
               </Button>
               <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[260px_190px]">
                 <Input
