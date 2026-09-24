@@ -99,13 +99,12 @@ Deno.serve(async (req) => {
   const allowedAttributePairs = new Set(attributes.map((attribute) => `${attribute.attr_key}\u0000${attribute.attr_value}`));
 
   const prompt = `
-Voce e um catalogador especialista em pet shop brasileiro. Antes de classificar CADA produto, pesquise-o na web e confira especie, indicacao e apresentacao em fonte confiavel.
+Voce e um catalogador especialista em pet shop brasileiro. Classifique CADA produto usando o titulo, fornecedor, tipo, tags e seu conhecimento, sem consultar ferramentas externas.
 
 Regras obrigatorias:
-- Priorize pagina oficial do fabricante, bula e catalogo oficial. Use lojas apenas como confirmacao secundaria.
 - Nao deduza especie, idade ou porte apenas pela marca ou por outro produto da mesma linha. Cada apresentacao deve ser verificada separadamente.
-- Se o titulo da loja contradizer fabricante ou bula, siga a fonte oficial. Exemplo: WellPet da Ourofino e canino; nao o classifique para gatos sem uma fonte oficial especifica da apresentacao.
-- Se nao encontrar confirmacao suficiente, deixe os campos duvidosos vazios e use confianca abaixo de 0,65. E melhor deixar pendente do que cadastrar algo incorreto.
+- WellPet da Ourofino e canino; nunca o classifique para gatos.
+- Se os dados recebidos e seu conhecimento nao forem suficientes, deixe os campos duvidosos vazios e use confianca abaixo de 0,80. E melhor deixar pendente do que cadastrar algo incorreto.
 - Use exclusivamente IDs e pares de atributos fornecidos abaixo. Nunca invente valores.
 - Escolha as categorias folha mais especificas aplicaveis. O sistema adicionara os pais.
 - Produtos para caes e gatos devem receber categorias e atributos das duas especies quando aplicavel.
@@ -150,9 +149,8 @@ ${JSON.stringify(products)}
               },
             },
             confidence: { type: "number", minimum: 0, maximum: 1 },
-            evidenceUrl: { type: ["string", "null"], description: "Melhor fonte consultada, preferencialmente fabricante ou bula" },
           },
-    required: ["productId", "categoryIds", "brandId", "attributes", "confidence", "evidenceUrl"],
+          required: ["productId", "categoryIds", "brandId", "attributes", "confidence"],
         },
       },
     },
@@ -166,7 +164,7 @@ ${JSON.stringify(products)}
         : value,
     ),
   );
-  for (const field of [geminiSchema.properties.suggestions.items.properties.brandId, geminiSchema.properties.suggestions.items.properties.evidenceUrl]) {
+  for (const field of [geminiSchema.properties.suggestions.items.properties.brandId]) {
     if (Array.isArray(field.type) || field.type === "object") continue;
     field.nullable = true;
   }
@@ -187,7 +185,6 @@ ${JSON.stringify(products)}
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }],
           generationConfig: {
             temperature: 0.1,
             responseMimeType: "application/json",
@@ -229,7 +226,7 @@ ${JSON.stringify(products)}
     .filter((suggestion) => requestedIds.has(String(suggestion.productId || "")))
     .map((suggestion) => {
       const confidence = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
-      const trusted = confidence >= 0.65;
+      const trusted = confidence >= 0.8;
       const leafCategoryIds = trusted && Array.isArray(suggestion.categoryIds)
         ? suggestion.categoryIds.map(String).filter((id) => allowedCategoryIds.has(id))
         : [];
@@ -258,9 +255,8 @@ ${JSON.stringify(products)}
         brandId,
         attributes: cleanAttributes,
         confidence,
-        evidenceUrl: typeof suggestion.evidenceUrl === "string" ? suggestion.evidenceUrl.slice(0, 1000) : null,
       };
     });
 
-  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, model: lastModel, suggestions });
+  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, model: lastModel, mode: "free_no_web", suggestions });
 });
