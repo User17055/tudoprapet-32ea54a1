@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { findExactOlistCost, normalizeSku, roundMoney } from "./olist.ts";
+import { findExactOlistCost, normalizeSku, roundMoney, subscriberPriceFromCost } from "./olist.ts";
 
 Deno.test("normaliza SKU sem remover pontuacao significativa", () => {
   assertEquals(normalizeSku("  ab-12.3 "), "AB-12.3");
@@ -18,4 +18,9 @@ Deno.test("ignora produto sem custo positivo", () => {
   assertEquals(findExactOlistCost({ retorno: { produtos: [
     { produto: { id: 1, codigo: "123", preco_custo: "0" } },
   ] } }, "123"), null);
+});
+
+Deno.test("calcula preco de assinante com 12,5% sobre o custo", () => {
+  assertEquals(subscriberPriceFromCost(100), 112.5);
+  assertEquals(subscriberPriceFromCost(100.55), 113.12);
 });

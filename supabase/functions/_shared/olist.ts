@@ -31,6 +31,10 @@ export function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export function subscriberPriceFromCost(cost: number): number {
+  return roundMoney(cost * 1.125);
+}
+
 export function findExactOlistCost(payload: OlistSearchResponse, requestedSku: string): OlistCost | null {
   const sku = normalizeSku(requestedSku);
   const products = payload.retorno?.produtos ?? [];

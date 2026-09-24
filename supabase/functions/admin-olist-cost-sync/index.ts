@@ -1,11 +1,12 @@
 // Importa o custo do ERP Olist pelo SKU e atualiza as tabelas de precos locais.
-// Regra comercial: Shopify e a venda normal; assinante paga custo + 12% em
-// racoes; franquia pode pagar o custo ou mais, mas nunca menos que o custo.
+// Regra comercial: Shopify e a venda normal; assinante paga custo + 12,5% em
+// todos os produtos; franquia pode pagar o custo ou mais, mas nunca menos que
+// o custo.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
-import { fetchOlistCostBySku, normalizeSku, roundMoney } from "../_shared/olist.ts";
+import { fetchOlistCostBySku, normalizeSku, subscriberPriceFromCost } from "../_shared/olist.ts";
 
 type SyncItem = {
   productId?: string;
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
       const franchisePrice = currentFranchisePrice !== null && currentFranchisePrice >= product.cost
         ? currentFranchisePrice
         : product.cost;
-      const subscriberPrice = item.isFeed ? roundMoney(product.cost * 1.12) : null;
+      const subscriberPrice = subscriberPriceFromCost(product.cost);
       const { error: franchiseError } = await admin.from("franchise_prices").upsert({
         shopify_product_id: item.productId,
         shopify_variant_id: item.variantId,
@@ -124,22 +125,20 @@ Deno.serve(async (req) => {
       }, { onConflict: "shopify_variant_id" });
       if (franchiseError) throw franchiseError;
 
-      if (subscriberPrice !== null) {
-        const { error: subscriberError } = await admin.from("subscriber_prices").upsert({
-          shopify_product_id: item.productId,
-          shopify_variant_id: item.variantId,
-          subscriber_price: subscriberPrice,
-        }, { onConflict: "shopify_variant_id" });
-        if (subscriberError) throw subscriberError;
+      const { error: subscriberError } = await admin.from("subscriber_prices").upsert({
+        shopify_product_id: item.productId,
+        shopify_variant_id: item.variantId,
+        subscriber_price: subscriberPrice,
+      }, { onConflict: "shopify_variant_id" });
+      if (subscriberError) throw subscriberError;
 
-        // Versoes anteriores da integracao gravavam custo + 12% como preco
-        // regular. Remover esse override devolve a venda normal para a Shopify.
-        const { error: legacyCustomerPriceError } = await admin
-          .from("customer_prices")
-          .delete()
-          .eq("shopify_variant_id", item.variantId);
-        if (legacyCustomerPriceError) throw legacyCustomerPriceError;
-      }
+      // Versoes anteriores da integracao gravavam o preco calculado como preco
+      // regular. Remover esse override devolve a venda normal para a Shopify.
+      const { error: legacyCustomerPriceError } = await admin
+        .from("customer_prices")
+        .delete()
+        .eq("shopify_variant_id", item.variantId);
+      if (legacyCustomerPriceError) throw legacyCustomerPriceError;
 
       results.push({
         sku: item.sku,
