@@ -262,5 +262,5 @@ ${JSON.stringify(products)}
       };
     });
 
-  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, model, suggestions });
+  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, model: lastModel, suggestions });
 });
