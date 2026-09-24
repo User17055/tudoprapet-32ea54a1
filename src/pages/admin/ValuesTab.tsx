@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
+import { fetchAllCustomerPrices } from "@/hooks/useCustomerPrices";
 import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { isMissingValue, isSaleAtOrBelowCost, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
@@ -59,7 +60,7 @@ type PriceDetails = {
   cost: ProductCost | null;
 };
 
-type Draft = { franchise?: string };
+type Draft = { franchise?: string; customer?: string };
 
 type OlistSyncItem = {
   productId: string;
@@ -136,6 +137,7 @@ export default function ValuesTab() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [subscriberPrices, setSubscriberPrices] = useState<SubscriberPrice[]>([]);
   const [franchisePrices, setFranchisePrices] = useState<FranchisePrice[]>([]);
+  const [customerPrices, setCustomerPrices] = useState<{ shopify_variant_id: string; price: number }[]>([]);
   const [productCosts, setProductCosts] = useState<ProductCost[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -159,7 +161,7 @@ export default function ValuesTab() {
       // linhas e esta tela mostra o campo VAZIO para variantes que tem valor
       // cadastrado -- e quem salvasse por cima apagaria o valor achando que
       // estava preenchendo pela primeira vez.
-      const [shopify, subscriber, franchise, costs] = await Promise.all([
+      const [shopify, subscriber, franchise, costs, customer] = await Promise.all([
         fetchAllShopifyProducts(),
         fetchAllRows<SubscriberPriceRow>(
           "subscriber_prices",
@@ -176,10 +178,12 @@ export default function ValuesTab() {
           "shopify_variant_id,cost,previous_cost,cost_changed_at,synced_at",
           { orderBy: "shopify_variant_id" },
         ),
+        fetchAllCustomerPrices(),
       ]);
       setProducts(shopify);
       setSubscriberPrices(subscriber.map((row) => ({ ...row, subscriber_price: Number(row.subscriber_price) })));
       setFranchisePrices(franchise.map((row) => ({ ...row, price: Number(row.price) })));
+      setCustomerPrices(customer);
       setProductCosts(costs.map((row) => ({
         ...row,
         cost: Number(row.cost),
@@ -200,6 +204,7 @@ export default function ValuesTab() {
       .on("postgres_changes", { event: "*", schema: "public", table: "subscriber_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, () => load(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "product_costs" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, () => load(true))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -207,6 +212,7 @@ export default function ValuesTab() {
   const subscriberMap = useMemo(() => new Map(subscriberPrices.map((row) => [row.shopify_variant_id, row.subscriber_price])), [subscriberPrices]);
   const franchiseMap = useMemo(() => new Map(franchisePrices.map((row) => [row.shopify_variant_id, row])), [franchisePrices]);
   const costMap = useMemo(() => new Map(productCosts.map((row) => [row.shopify_variant_id, row])), [productCosts]);
+  const customerMap = useMemo(() => new Map(customerPrices.map((row) => [row.shopify_variant_id, row.price])), [customerPrices]);
 
   const openDetails = async (value: PriceDetails & { variantId: string }) => {
     const { variantId, ...dialogDetails } = value;
@@ -388,6 +394,25 @@ export default function ValuesTab() {
       }
     }
 
+    if (draft.customer !== undefined) {
+      const raw = draft.customer.trim();
+      if (!raw) {
+        if (customerMap.has(row.variant.id)) {
+          operations.push(supabase.from("customer_prices").delete().eq("shopify_variant_id", row.variant.id));
+        }
+      } else {
+        const price = parsePrice(raw);
+        if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor do Cliente válido.");
+        operations.push(supabase.from("customer_prices").upsert({
+          shopify_product_id: row.productId,
+          shopify_variant_id: row.variant.id,
+          price,
+        }, { onConflict: "shopify_variant_id" }));
+      }
+    }
+
+    if (operations.length === 0) return;
+
     setSavingId(row.variant.id);
     const results = await Promise.all(operations);
     setSavingId(null);
@@ -398,7 +423,7 @@ export default function ValuesTab() {
       delete next[row.variant.id];
       return next;
     });
-    toast.success("Valor da franquia atualizado.");
+    toast.success("Valores atualizados.");
     await load(true);
   };
 
@@ -493,6 +518,7 @@ export default function ValuesTab() {
                   <TableHead className="min-w-[190px]">Custo Olist</TableHead>
                   <TableHead className="min-w-[190px]">Venda normal (Shopify)</TableHead>
                   <TableHead className="min-w-[220px]">Assinante</TableHead>
+                  <TableHead className="min-w-[240px]">Valor do Cliente</TableHead>
                   <TableHead className="min-w-[240px]">Franquia</TableHead>
                   <TableHead className="min-w-[164px]">Ações</TableHead>
                 </TableRow></TableHeader>
@@ -506,6 +532,8 @@ export default function ValuesTab() {
                   const displayedShopifyPrice = isMissingValue(shopifyPrice) ? null : shopifyPrice;
                   const draft = drafts[row.variant.id];
                   const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
+                  const customerSaved = customerMap.get(row.variant.id);
+                  const customerValue = effectivePrice(draft?.customer, customerSaved);
                   return (
                     <TableRow key={row.variant.id}>
                       <TableCell><div className="flex items-center gap-3">
@@ -535,6 +563,11 @@ export default function ValuesTab() {
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
                         <PriceMetrics value={subscriber ?? null} cost={displayedCost} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Usa o preço da Shopify" value={draft?.customer ?? (customerSaved !== undefined ? decimal(customerSaved) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} /></div>
+                        <PriceMetrics value={customerValue} cost={displayedCost} />
+                        {customerSaved !== undefined && <p className="mt-1 text-[11px] text-muted-foreground">Substitui o preço da Shopify. Apague o campo para voltar ao preço da loja.</p>}
                       </TableCell>
                       <TableCell>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>

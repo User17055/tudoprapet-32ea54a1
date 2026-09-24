@@ -63,6 +63,20 @@ const Register = () => {
       toast.error('Informe o codigo de quem indicou voce.');
       return;
     }
+    // O CPF e unico por conta. Sem esta checagem o banco recusa o cadastro e a
+    // Supabase devolve um erro generico de servidor, sem dizer o motivo.
+    const { data: cpfDisponivel, error: cpfError } = await supabase.rpc('is_cpf_available', {
+      _cpf: cpfDigits(cpf),
+    });
+    if (cpfError) {
+      toast.error('Nao foi possivel validar o CPF agora. Tente novamente em instantes.');
+      return;
+    }
+    if (!cpfDisponivel) {
+      toast.error('Este CPF ja esta cadastrado. Entre com o e-mail usado antes ou recupere a senha.');
+      return;
+    }
+
     const normalizedReferralCode = referralCode.trim().toUpperCase();
     if (acquisitionSource === 'recomendacao') {
       const { data, error } = await supabase.rpc('validate_referral_code', {
