@@ -152,37 +152,68 @@ ${JSON.stringify(products)}
             confidence: { type: "number", minimum: 0, maximum: 1 },
             evidenceUrl: { type: ["string", "null"], description: "Melhor fonte consultada, preferencialmente fabricante ou bula" },
           },
-          required: ["productId", "categoryIds", "brandId", "attributes", "confidence", "evidenceUrl"],
+    required: ["productId", "categoryIds", "brandId", "attributes", "confidence", "evidenceUrl"],
         },
       },
     },
     required: ["suggestions"],
   };
-
-  const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const geminiResponse = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} }],
-      generationConfig: {
-        temperature: 0.1,
-        responseFormat: { text: { mimeType: "application/json", schema } },
-      },
-    }),
-  });
-  const geminiPayload = await geminiResponse.json().catch(() => ({}));
-  if (!geminiResponse.ok) {
-    console.error("[admin-product-ai-fill] Gemini", geminiResponse.status, geminiPayload);
-    return errorResponse(`Gemini recusou a consulta (HTTP ${geminiResponse.status})`, 502);
+  // O schema do Gemini (subset OpenAPI) nao aceita "type": ["string","null"]; usa "nullable": true.
+  const geminiSchema = JSON.parse(
+    JSON.stringify(schema, (key, value) =>
+      key === "type" && Array.isArray(value) && value.includes("null")
+        ? value.filter((t) => t !== "null")[0]
+        : value,
+    ),
+  );
+  for (const field of [geminiSchema.properties.suggestions.items.properties.brandId, geminiSchema.properties.suggestions.items.properties.evidenceUrl]) {
+    if (Array.isArray(field.type) || field.type === "object") continue;
+    field.nullable = true;
   }
 
-  const text = geminiPayload?.candidates?.[0]?.content?.parts
-    ?.map((part: { text?: string }) => part.text || "")
-    .join("")
-    .trim();
+  const primaryModel = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
+  const fallbackModels = unique([primaryModel, "gemini-3.5-flash", "gemini-3-flash-preview"]).filter(Boolean);
+
+  let text = "";
+  let lastStatus = 0;
+  let lastModel = primaryModel;
+  for (const model of fallbackModels) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    // Transitorios (429/503) merecem uma segunda tentativa com espera curta antes de trocar de modelo.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 5000));
+      const geminiResponse = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [{ googleSearch: {} }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: geminiSchema,
+          },
+        }),
+      });
+      lastStatus = geminiResponse.status;
+      lastModel = model;
+      const geminiPayload = await geminiResponse.json().catch(() => ({}));
+      if (geminiResponse.ok) {
+        text = geminiPayload?.candidates?.[0]?.content?.parts
+          ?.map((part: { text?: string }) => part.text || "")
+          .join("")
+          .trim();
+        if (text) break;
+        continue;
+      }
+      if (geminiResponse.status === 400 || geminiResponse.status === 401 || geminiResponse.status === 403) {
+        console.error("[admin-product-ai-fill] Gemini", geminiResponse.status, JSON.stringify(geminiPayload).slice(0, 800));
+        return errorResponse(`Gemini recusou a consulta (HTTP ${geminiResponse.status})`, 502);
+      }
+    }
+    if (text) break;
+    console.error("[admin-product-ai-fill] modelo indisponivel", lastModel, lastStatus);
+  }
   if (!text) return errorResponse("Gemini nao devolveu classificacao", 502);
 
   let decoded: { suggestions?: Array<Record<string, unknown>> };
@@ -231,5 +262,5 @@ ${JSON.stringify(products)}
       };
     });
 
-  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, model, suggestions });
+  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, model: lastModel, suggestions });
 });
