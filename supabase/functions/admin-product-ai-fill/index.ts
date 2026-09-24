@@ -171,30 +171,49 @@ ${JSON.stringify(products)}
     field.nullable = true;
   }
 
-  const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const geminiResponse = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} }],
-      generationConfig: {
-        temperature: 0.1,
-        responseFormat: { text: { mimeType: "application/json", schema } },
-      },
-    }),
-  });
-  const geminiPayload = await geminiResponse.json().catch(() => ({}));
-  if (!geminiResponse.ok) {
-    console.error("[admin-product-ai-fill] Gemini", geminiResponse.status, geminiPayload);
-    return errorResponse(`Gemini recusou a consulta (HTTP ${geminiResponse.status})`, 502);
-  }
+  const primaryModel = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
+  const fallbackModels = unique([primaryModel, "gemini-3.5-flash", "gemini-3-flash-preview"]).filter(Boolean);
 
-  const text = geminiPayload?.candidates?.[0]?.content?.parts
-    ?.map((part: { text?: string }) => part.text || "")
-    .join("")
-    .trim();
+  let text = "";
+  let lastStatus = 0;
+  let lastModel = primaryModel;
+  for (const model of fallbackModels) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    // Transitorios (429/503) merecem uma segunda tentativa com espera curta antes de trocar de modelo.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 5000));
+      const geminiResponse = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          tools: [{ googleSearch: {} }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: geminiSchema,
+          },
+        }),
+      });
+      lastStatus = geminiResponse.status;
+      lastModel = model;
+      const geminiPayload = await geminiResponse.json().catch(() => ({}));
+      if (geminiResponse.ok) {
+        text = geminiPayload?.candidates?.[0]?.content?.parts
+          ?.map((part: { text?: string }) => part.text || "")
+          .join("")
+          .trim();
+        if (text) break;
+        continue;
+      }
+      if (geminiResponse.status === 400 || geminiResponse.status === 401 || geminiResponse.status === 403) {
+        console.error("[admin-product-ai-fill] Gemini", geminiResponse.status, JSON.stringify(geminiPayload).slice(0, 800));
+        return errorResponse(`Gemini recusou a consulta (HTTP ${geminiResponse.status})`, 502);
+      }
+    }
+    if (text) break;
+    console.error("[admin-product-ai-fill] modelo indisponivel", lastModel, lastStatus);
+  }
   if (!text) return errorResponse("Gemini nao devolveu classificacao", 502);
 
   let decoded: { suggestions?: Array<Record<string, unknown>> };
