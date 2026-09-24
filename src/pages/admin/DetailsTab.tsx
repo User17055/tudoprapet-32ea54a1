@@ -14,6 +14,7 @@ import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { fuzzySearch, normalizeText } from "@/lib/fuzzySearch";
 import { suggestProductDetails } from "@/lib/productDetailSuggestions";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 
 interface Category {
   id: string;
@@ -590,13 +591,11 @@ function AssignPanel() {
       .sort((a, b) => a.key.localeCompare(b.key, "pt-BR"));
   }, [allValues, attributeFilter, attrs, registeredKeys]);
   const configuredIds = useMemo(
-    () =>
-      new Set<string>([
-        ...allProductCats.map((x) => x.shopify_product_id),
-        ...allProductContent.filter((x) => x.brand_id).map((x) => x.shopify_product_id),
-        ...allProductAttrs.map((x) => x.shopify_product_id),
-      ]),
-    [allProductAttrs, allProductCats, allProductContent],
+    // Marca ou atributo isolado nao tornam o cadastro suficiente para a loja:
+    // sem categoria o produto continua fora da navegacao correta. Antes, itens
+    // como os Cookies Premier apareciam como "Cadastrado" apenas por terem marca.
+    () => new Set<string>(allProductCats.map((item) => item.shopify_product_id)),
+    [allProductCats],
   );
   const listedProducts = useMemo(() => {
     let result = products.filter((product) => {
@@ -628,14 +627,29 @@ function AssignPanel() {
   }, [configuredIds, filter, products, registrationFilter]);
 
   const reloadAll = async () => {
-    const [pc, pcontent, pa] = await Promise.all([
-      supabase.from("product_categories").select("*"),
-      supabase.from("product_content").select("id, shopify_product_id, brand_id"),
-      supabase.from("product_attributes").select("*"),
+    // Essas tabelas ultrapassam o limite padrao de 1.000 linhas do PostgREST.
+    // Sem paginacao, os dados eram salvos pelo autopreenchimento, mas sumiam da
+    // tela logo depois porque apenas a primeira pagina voltava para o resumo.
+    const [productCategories, productContent, productAttributes] = await Promise.all([
+      fetchAllRows<ProductCategoryLink>(
+        "product_categories",
+        "id,shopify_product_id,category_id",
+        { orderBy: "id" },
+      ),
+      fetchAllRows<ProductContentRow>(
+        "product_content",
+        "id,shopify_product_id,brand_id",
+        { orderBy: "id" },
+      ),
+      fetchAllRows<ProductAttribute>(
+        "product_attributes",
+        "id,shopify_product_id,attr_key,attr_value",
+        { orderBy: "id" },
+      ),
     ]);
-    setAllProductCats((pc.data || []) as ProductCategoryLink[]);
-    setAllProductContent((pcontent.data || []) as ProductContentRow[]);
-    setAllProductAttrs((pa.data || []) as ProductAttribute[]);
+    setAllProductCats(productCategories);
+    setAllProductContent(productContent);
+    setAllProductAttrs(productAttributes);
   };
 
   const reloadProfiles = async () => {
@@ -1088,11 +1102,8 @@ function AssignPanel() {
           sort_order: index,
         }))
       ));
-      const existingBrandIds = new Set(
-        allProductContent.filter((content) => content.brand_id).map((content) => content.shopify_product_id),
-      );
       const brandRows = applicable.flatMap(({ productId: shopifyProductId, suggestion }) => (
-        suggestion.brandId && !existingBrandIds.has(shopifyProductId)
+        suggestion.brandId
           ? [{ shopify_product_id: shopifyProductId, brand_id: suggestion.brandId }]
           : []
       ));

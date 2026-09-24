@@ -51,13 +51,15 @@ const PRESCRIPTION_FEED_TERMS = [
   "prescription diet",
   "veterinary diet",
 ];
-const PUPPY_TERMS = ["filhote", "filhotes", "puppy", "puppies", "junior"];
-const ADULT_TERMS = ["adulto", "adultos", "adult"];
+const PUPPY_TERMS = ["filhote", "filhotes", "filh", "puppy", "puppies", "junior"];
+const ADULT_TERMS = ["adulto", "adultos", "adult", "ad"];
 const SENIOR_TERMS = ["senior", "idoso", "idosos", "maduro", "maduros"];
-const SMALL_TERMS = ["raca pequena", "racas pequenas", "porte pequeno", "portes pequenos", "pequena", "pequenas", "pequeno", "pequenos", "mini", "small"];
+const SMALL_TERMS = ["raca pequena", "racas pequenas", "porte pequeno", "portes pequenos", "pequena", "pequenas", "pequeno", "pequenos", "peq", "mini", "small"];
 const MEDIUM_TERMS = ["raca media", "racas medias", "porte medio", "portes medios", "media", "medias", "medio", "medios", "medium"];
 const LARGE_TERMS = ["raca grande", "racas grandes", "porte grande", "portes grandes", "grande", "grandes", "large"];
 const GIANT_TERMS = ["raca gigante", "racas gigantes", "porte gigante", "portes gigantes", "gigante", "gigantes", "giant"];
+const TREAT_TERMS = ["cookie", "cookies", "biscoito", "biscoitos", "petisco", "petiscos", "snack", "snacks"];
+const SUPPLEMENT_TERMS = ["probiotico", "prebiotico", "suplemento", "suplementos", "vitamina", "vitaminas"];
 const ALL_SIZE_TERMS = [
   ...SMALL_TERMS,
   ...MEDIUM_TERMS,
@@ -95,7 +97,10 @@ export function suggestProductDetails(
     ...(product.tags || []),
   ].join(" "));
   const brandSource = normalize(`${product.vendor || ""} ${product.title}`);
-  const isDog = hasTerm(source, DOG_TERMS);
+  // Cookies da linha pet sao produtos caninos. Os titulos abreviados vindos do
+  // ERP (ex.: "COOKIE AD RC PEQ") nao trazem a palavra "caes".
+  const isTreat = hasTerm(source, TREAT_TERMS);
+  const isDog = hasTerm(source, DOG_TERMS) || hasTerm(source, ["cookie", "cookies"]);
   const isCat = hasTerm(source, CAT_TERMS);
   const hasFeedTerm = hasTerm(source, FEED_TERMS);
   const isNattu = hasTerm(source, ["nattu"]);
@@ -114,22 +119,19 @@ export function suggestProductDetails(
   const isMedium = hasTerm(source, MEDIUM_TERMS);
   const isLarge = hasTerm(source, LARGE_TERMS);
   const isGiant = hasTerm(source, GIANT_TERMS);
-  const petTerms = isDog && !isCat ? DOG_TERMS : isCat && !isDog ? CAT_TERMS : [];
+  const isSupplement = hasTerm(source, SUPPLEMENT_TERMS);
 
   const roots = categories.filter((category) => !category.parent_id);
-  const root = petTerms.length
-    ? roots.find((category) => hasTerm(normalize(category.name), petTerms)) || null
-    : null;
-
-  const belongsToRoot = (category: SuggestionCategory) => (
-    !root || ancestorsOf(category.id, categories).includes(root.id)
-  );
-  const candidates = categories
-    .filter((category) => category.id !== root?.id && (root ? belongsToRoot(category) : !category.parent_id))
-    .map((category) => {
+  const matchingRoots = roots.filter((category) => {
+    const name = normalize(category.name);
+    return (isDog && hasTerm(name, DOG_TERMS)) || (isCat && hasTerm(name, CAT_TERMS));
+  });
+  const scoreCategory = (category: SuggestionCategory) => {
       const name = normalize(category.name);
       let score = source.includes(name) && name.length >= 3 ? 5 : 0;
       if (isFeed && hasTerm(name, FEED_TERMS)) score += 3;
+      if (isTreat && hasTerm(name, ["petisco", "petiscos"])) score += 8;
+      if (isSupplement && hasTerm(name, ["suplemento", "suplementos", "vitamina", "vitaminas"])) score += 8;
       if (isNaturalFeed && hasTerm(name, NATURAL_FEED_TERMS)) score += 8;
       if (isPrescriptionFeed && hasTerm(name, PRESCRIPTION_FEED_TERMS)) score += 8;
       if (isDry && hasTerm(name, DRY_TERMS)) score += 5;
@@ -138,14 +140,17 @@ export function suggestProductDetails(
       if (isWet && hasTerm(name, DRY_TERMS)) score = -1;
       if ((isNaturalFeed || isPrescriptionFeed) && hasTerm(name, DRY_TERMS)) score = -1;
       return { category, score, depth: ancestorsOf(category.id, categories).length };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || b.depth - a.depth);
-
-  const bestCategory = candidates[0]?.category;
-  const categoryIds = bestCategory
-    ? ancestorsOf(bestCategory.id, categories)
-    : root ? [root.id] : [];
+  };
+  const bestPathForRoot = (root: SuggestionCategory) => {
+    const bestCategory = categories
+      .filter((category) => category.id !== root.id && ancestorsOf(category.id, categories).includes(root.id))
+      .map(scoreCategory)
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || b.depth - a.depth)[0]?.category;
+    return bestCategory ? ancestorsOf(bestCategory.id, categories) : [root.id];
+  };
+  const categoryIds = Array.from(new Set(matchingRoots.flatMap(bestPathForRoot)));
+  const root = matchingRoots.length === 1 ? matchingRoots[0] : null;
 
   const brand = [...brands]
     .sort((a, b) => normalize(b.name).length - normalize(a.name).length)
@@ -171,8 +176,15 @@ export function suggestProductDetails(
         ? WET_TERMS.some((term) => hasTerm(source, [term]) && hasTerm(value, [term]))
         : hasTerm(value, ["grao", "graos"]);
     }
+    if (isFoodFormatKey && isTreat) {
+      if (hasTerm(source, ["cookie", "cookies", "biscoito", "biscoitos"])) {
+        return hasTerm(value, ["biscoito", "biscoitos"]);
+      }
+    }
     if (value.length >= 3 && (` ${source} `).includes(` ${value} `)) return true;
-    if (petTerms.length && (key === "pet" || key.includes("especie")) && hasTerm(value, petTerms)) return true;
+    if (key === "pet" || key.includes("especie")) {
+      return (isDog && hasTerm(value, DOG_TERMS)) || (isCat && hasTerm(value, CAT_TERMS));
+    }
     if (isNaturalFeed && isFoodClassificationKey && hasTerm(value, NATURAL_FEED_TERMS)) return true;
     if (isPrescriptionFeed && isFoodClassificationKey && hasTerm(value, PRESCRIPTION_FEED_TERMS)) return true;
     if (isDry && isTypeKey && hasTerm(value, [...DRY_TERMS, "racao seca"])) return true;

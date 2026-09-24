@@ -8,9 +8,14 @@ const categories = [
   { id: "dog-wet", name: "Ração úmida", parent_id: "dog-food" },
   { id: "dog-natural", name: "Ração natural", parent_id: "dog-food" },
   { id: "dog-prescription", name: "Ração prescrita", parent_id: "dog-food" },
+  { id: "dog-treats", name: "Petiscos", parent_id: "dogs" },
+  { id: "dog-pharmacy", name: "Farmácia", parent_id: "dogs" },
+  { id: "dog-supplements", name: "Suplementos e Vitaminas", parent_id: "dog-pharmacy" },
   { id: "cats", name: "Gatos", parent_id: null },
   { id: "cat-dry", name: "Ração seca", parent_id: "cats" },
   { id: "cat-prescription", name: "Ração prescrita", parent_id: "cats" },
+  { id: "cat-pharmacy", name: "Farmácia", parent_id: "cats" },
+  { id: "cat-supplements", name: "Suplementos e Vitaminas", parent_id: "cat-pharmacy" },
 ];
 
 it("sugere cães, ração seca, grãos e a marca encontrada", () => {
@@ -313,4 +318,69 @@ it("mantém somente a idade e o porte informados no produto", () => {
   expect(result.attributes.filter((attribute) => attribute.attr_key === "Porte de Raça")).toEqual([
     { attr_key: "Porte de Raça", attr_value: "Pequeno" },
   ]);
+});
+
+it("entende abreviacoes dos Cookies Premier sem confundir RC com racao", () => {
+  const result = suggestProductDetails(
+    { title: "PREMIER COOKIE AD. RC PEQ FRUT VERM 250GR" },
+    categories,
+    [{ id: "premier", name: "Premier" }],
+    [
+      { attr_key: "Pet", attr_value: "Cachorros" },
+      { attr_key: "Idade", attr_value: "Adulto" },
+      { attr_key: "Idade", attr_value: "Filhote" },
+      { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+      { attr_key: "Formato Do Alimento", attr_value: "Grãos" },
+      { attr_key: "Formato Do Alimento", attr_value: "Biscoito" },
+    ],
+  );
+
+  expect(result.categoryIds).toEqual(["dogs", "dog-treats"]);
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Pet", attr_value: "Cachorros" },
+    { attr_key: "Idade", attr_value: "Adulto" },
+    { attr_key: "Porte de Raça", attr_value: "Pequeno" },
+    { attr_key: "Formato Do Alimento", attr_value: "Biscoito" },
+  ]));
+  expect(result.attributes).not.toContainEqual({ attr_key: "Idade", attr_value: "Filhote" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Formato Do Alimento", attr_value: "Grãos" });
+});
+
+it("entende FILH e preenche o Cookie para filhote", () => {
+  const result = suggestProductDetails(
+    { title: "PREMIER COOKIE FILH COCO E AVEIA 250GR" },
+    categories,
+    [],
+    [
+      { attr_key: "Idade", attr_value: "Adulto" },
+      { attr_key: "Idade", attr_value: "Filhote" },
+    ],
+  );
+
+  expect(result.attributes).toContainEqual({ attr_key: "Idade", attr_value: "Filhote" });
+  expect(result.attributes).not.toContainEqual({ attr_key: "Idade", attr_value: "Adulto" });
+});
+
+it("preenche as duas especies e categorias de um suplemento para caes e gatos", () => {
+  const result = suggestProductDetails(
+    { title: "Probiótico Franpet Bio Pasta Intestinal Cães Gatos 14g" },
+    categories,
+    [{ id: "franpet", name: "Franpet" }],
+    [
+      { attr_key: "Pet", attr_value: "Cachorros" },
+      { attr_key: "Pet", attr_value: "Gatos" },
+      { attr_key: "Aplicação", attr_value: "Pasta" },
+    ],
+  );
+
+  expect(result.rootCategoryId).toBeNull();
+  expect(result.categoryIds).toEqual([
+    "dogs", "dog-pharmacy", "dog-supplements",
+    "cats", "cat-pharmacy", "cat-supplements",
+  ]);
+  expect(result.attributes).toEqual(expect.arrayContaining([
+    { attr_key: "Pet", attr_value: "Cachorros" },
+    { attr_key: "Pet", attr_value: "Gatos" },
+    { attr_key: "Aplicação", attr_value: "Pasta" },
+  ]));
 });
