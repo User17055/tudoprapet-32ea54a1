@@ -1010,6 +1010,13 @@ function AssignPanel() {
       }
 
       if (!appliedSuggestion) throw new Error("Nenhuma classificação disponível para este produto.");
+      if (
+        appliedSuggestion.categoryIds.length === 0
+        && !appliedSuggestion.brandId
+        && appliedSuggestion.attributes.length === 0
+      ) {
+        throw new Error("A IA não encontrou uma fonte segura para classificar este produto.");
+      }
       const specialized = appliedSuggestion.categoryIds.some((categoryId) => {
         const name = normalizeText(categories.find((category) => category.id === categoryId)?.name || "");
         return name.includes("natural") || name.includes("prescrit") || name.includes("nutricao clinica");

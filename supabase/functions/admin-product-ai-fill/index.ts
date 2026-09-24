@@ -99,9 +99,13 @@ Deno.serve(async (req) => {
   const allowedAttributePairs = new Set(attributes.map((attribute) => `${attribute.attr_key}\u0000${attribute.attr_value}`));
 
   const prompt = `
-Voce e um catalogador especialista em pet shop brasileiro. Pesquise na web quando o nome abreviado nao for suficiente e classifique TODOS os produtos recebidos.
+Voce e um catalogador especialista em pet shop brasileiro. Antes de classificar CADA produto, pesquise-o na web e confira especie, indicacao e apresentacao em fonte confiavel.
 
 Regras obrigatorias:
+- Priorize pagina oficial do fabricante, bula e catalogo oficial. Use lojas apenas como confirmacao secundaria.
+- Nao deduza especie, idade ou porte apenas pela marca ou por outro produto da mesma linha. Cada apresentacao deve ser verificada separadamente.
+- Se o titulo da loja contradizer fabricante ou bula, siga a fonte oficial. Exemplo: WellPet da Ourofino e canino; nao o classifique para gatos sem uma fonte oficial especifica da apresentacao.
+- Se nao encontrar confirmacao suficiente, deixe os campos duvidosos vazios e use confianca abaixo de 0,65. E melhor deixar pendente do que cadastrar algo incorreto.
 - Use exclusivamente IDs e pares de atributos fornecidos abaixo. Nunca invente valores.
 - Escolha as categorias folha mais especificas aplicaveis. O sistema adicionara os pais.
 - Produtos para caes e gatos devem receber categorias e atributos das duas especies quando aplicavel.
@@ -146,8 +150,9 @@ ${JSON.stringify(products)}
               },
             },
             confidence: { type: "number", minimum: 0, maximum: 1 },
+            evidenceUrl: { type: ["string", "null"], description: "Melhor fonte consultada, preferencialmente fabricante ou bula" },
           },
-          required: ["productId", "categoryIds", "brandId", "attributes", "confidence"],
+          required: ["productId", "categoryIds", "brandId", "attributes", "confidence", "evidenceUrl"],
         },
       },
     },
@@ -161,7 +166,7 @@ ${JSON.stringify(products)}
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
+      tools: [{ googleSearch: {} }],
       generationConfig: {
         temperature: 0.1,
         responseFormat: { text: { mimeType: "application/json", schema } },
@@ -192,14 +197,16 @@ ${JSON.stringify(products)}
   const suggestions = (decoded.suggestions || [])
     .filter((suggestion) => requestedIds.has(String(suggestion.productId || "")))
     .map((suggestion) => {
-      const leafCategoryIds = Array.isArray(suggestion.categoryIds)
+      const confidence = Math.max(0, Math.min(1, Number(suggestion.confidence) || 0));
+      const trusted = confidence >= 0.65;
+      const leafCategoryIds = trusted && Array.isArray(suggestion.categoryIds)
         ? suggestion.categoryIds.map(String).filter((id) => allowedCategoryIds.has(id))
         : [];
       const categoryIds = unique(leafCategoryIds.flatMap((id) => categoryAncestors(id, categoryById)));
-      const brandId = suggestion.brandId && allowedBrandIds.has(String(suggestion.brandId))
+      const brandId = trusted && suggestion.brandId && allowedBrandIds.has(String(suggestion.brandId))
         ? String(suggestion.brandId)
         : null;
-      const validAttributes = Array.isArray(suggestion.attributes)
+      const validAttributes = trusted && Array.isArray(suggestion.attributes)
         ? suggestion.attributes.filter((attribute: unknown): attribute is { attr_key: string; attr_value: string } => {
             if (!attribute || typeof attribute !== "object") return false;
             const item = attribute as Record<string, unknown>;
@@ -219,7 +226,8 @@ ${JSON.stringify(products)}
         rootCategoryId: null,
         brandId,
         attributes: cleanAttributes,
-        confidence: Math.max(0, Math.min(1, Number(suggestion.confidence) || 0)),
+        confidence,
+        evidenceUrl: typeof suggestion.evidenceUrl === "string" ? suggestion.evidenceUrl.slice(0, 1000) : null,
       };
     });
 
