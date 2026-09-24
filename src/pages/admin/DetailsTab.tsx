@@ -80,6 +80,29 @@ type AiFillResponse = {
   suggestions?: AiProductSuggestion[];
 };
 
+const getAiFillErrorMessage = async (
+  error: unknown,
+  response: AiFillResponse | null,
+  fallback: string,
+) => {
+  if (response?.error) return response.error;
+
+  if (error && typeof error === "object" && "context" in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const payload = await context.clone().json() as { error?: unknown; message?: unknown };
+        const detail = payload.error || payload.message;
+        if (typeof detail === "string" && detail.trim()) return detail;
+      } catch {
+        // A resposta pode nao ser JSON; nesse caso usamos a mensagem do SDK abaixo.
+      }
+    }
+  }
+
+  return error instanceof Error && error.message ? error.message : fallback;
+};
+
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -998,7 +1021,7 @@ function AssignPanel() {
         const response = data as AiFillResponse | null;
         const aiSuggestion = response?.suggestions?.find((item) => item.productId === productId);
         if (error || !response?.ok || !aiSuggestion) {
-          throw new Error(response?.error || error?.message || "A IA não classificou este produto.");
+          throw new Error(await getAiFillErrorMessage(error, response, "A IA não classificou este produto."));
         }
         appliedSuggestion = aiSuggestion;
       } catch (aiError) {
@@ -1142,7 +1165,7 @@ function AssignPanel() {
           });
           const response = data as AiFillResponse | null;
           if (error || !response?.ok) {
-            throw new Error(response?.error || error?.message || "A IA recusou a classificação.");
+            throw new Error(await getAiFillErrorMessage(error, response, "A IA recusou a classificação."));
           }
           aiSuggestions.push(...(response.suggestions || []));
         }
