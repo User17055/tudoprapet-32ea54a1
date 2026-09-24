@@ -152,12 +152,24 @@ ${JSON.stringify(products)}
             confidence: { type: "number", minimum: 0, maximum: 1 },
             evidenceUrl: { type: ["string", "null"], description: "Melhor fonte consultada, preferencialmente fabricante ou bula" },
           },
-          required: ["productId", "categoryIds", "brandId", "attributes", "confidence", "evidenceUrl"],
+    required: ["productId", "categoryIds", "brandId", "attributes", "confidence", "evidenceUrl"],
         },
       },
     },
     required: ["suggestions"],
   };
+  // O schema do Gemini (subset OpenAPI) nao aceita "type": ["string","null"]; usa "nullable": true.
+  const geminiSchema = JSON.parse(
+    JSON.stringify(schema, (key, value) =>
+      key === "type" && Array.isArray(value) && value.includes("null")
+        ? value.filter((t) => t !== "null")[0]
+        : value,
+    ),
+  );
+  for (const field of [geminiSchema.properties.suggestions.items.properties.brandId, geminiSchema.properties.suggestions.items.properties.evidenceUrl]) {
+    if (Array.isArray(field.type) || field.type === "object") continue;
+    field.nullable = true;
+  }
 
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
