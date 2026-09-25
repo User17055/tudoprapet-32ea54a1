@@ -2624,7 +2624,7 @@ function PaymentStep(props: {
           onClick={() => {}}
           icon={<CreditCard className="h-5 w-5" />}
           title="Prazo da franquia"
-          text="Cobrança com vencimento conforme sua condição comercial"
+          text="Boleto gerado pela Olist, com vencimento em 7 dias"
         />
         <Nav
           back={props.onBack}

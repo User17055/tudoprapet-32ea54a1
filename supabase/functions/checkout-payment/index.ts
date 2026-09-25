@@ -472,7 +472,9 @@ Deno.serve(async (req) => {
         total: Number(session.total),
         dueDate,
         shippingMethod: String(session.shipping_method || ""),
-        paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || ""),
+        paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || "boleto")
+          .trim()
+          .toLowerCase(),
       };
 
       let order = session.olist_order_id

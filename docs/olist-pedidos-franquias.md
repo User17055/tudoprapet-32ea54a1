@@ -17,10 +17,10 @@ Defina os segredos das Edge Functions:
 
 ```powershell
 npx supabase secrets set OLIST_API_TOKEN="token-da-api-v2"
-npx supabase secrets set OLIST_FRANCHISE_PAYMENT_METHOD="nome-exato-da-forma-na-olist"
+npx supabase secrets set OLIST_FRANCHISE_PAYMENT_METHOD="boleto"
 ```
 
-`OLIST_FRANCHISE_PAYMENT_METHOD` é opcional. Quando preenchido, deve corresponder ao nome cadastrado na Olist.
+`OLIST_FRANCHISE_PAYMENT_METHOD` usa `boleto` por padrão. O valor é normalizado para minúsculas antes de ser enviado à Olist.
 
 No painel da Olist, confirme antes da publicação:
 
