@@ -470,7 +470,8 @@ Deno.serve(async (req) => {
         shippingAmount: Number(session.shipping_amount),
         serviceFee: Number(session.service_fee),
         total: Number(session.total),
-        dueDate,
+        // Nova tentativa reaproveita o vencimento original (7 dias da confirmação).
+        dueDate: String(paymentAttempt.due_date || dueDate),
         shippingMethod: String(session.shipping_method || ""),
         paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || "boleto")
           .trim()
@@ -505,7 +506,8 @@ Deno.serve(async (req) => {
         provider: "olist",
         provider_customer_id: order.id,
         provider_payment_id: receivable.id,
-        provider_payment_url: receivable.boletoUrl || null,
+        // Nunca apaga um link já salvo quando a Olist ainda não devolveu o boleto.
+        ...(receivable.boletoUrl ? { provider_payment_url: receivable.boletoUrl } : {}),
         raw_status: receivable.status,
         status: receivable.status === "pago" ? "received" : "pending",
         ...(receivable.status === "pago"
@@ -571,7 +573,7 @@ Deno.serve(async (req) => {
         paymentAttempt.id,
         "credit_approved",
         null,
-        receivable.boletoUrl || null,
+        receivable.boletoUrl || paymentAttempt.provider_payment_url || null,
       ));
     }
 
