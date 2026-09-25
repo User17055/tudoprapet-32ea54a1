@@ -247,6 +247,11 @@ export type Database = {
           id: string
           inventory_reserved_until: string | null
           items_snapshot: Json
+          olist_invoice_id: string | null
+          olist_invoice_number: string | null
+          olist_order_id: string | null
+          olist_order_number: string | null
+          olist_receivable_id: string | null
           pricing_snapshot: Json
           referral_code: string | null
           referral_employee_name: string | null
@@ -278,6 +283,11 @@ export type Database = {
           id?: string
           inventory_reserved_until?: string | null
           items_snapshot?: Json
+          olist_invoice_id?: string | null
+          olist_invoice_number?: string | null
+          olist_order_id?: string | null
+          olist_order_number?: string | null
+          olist_receivable_id?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
           referral_employee_name?: string | null
@@ -309,6 +319,11 @@ export type Database = {
           id?: string
           inventory_reserved_until?: string | null
           items_snapshot?: Json
+          olist_invoice_id?: string | null
+          olist_invoice_number?: string | null
+          olist_order_id?: string | null
+          olist_order_number?: string | null
+          olist_receivable_id?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
           referral_employee_name?: string | null
@@ -1543,6 +1558,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      invoke_olist_franchise_reconciliation: { Args: never; Returns: undefined }
       invoke_payment_reconciliation: { Args: never; Returns: undefined }
       is_cpf_available: { Args: { _cpf: string }; Returns: boolean }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
