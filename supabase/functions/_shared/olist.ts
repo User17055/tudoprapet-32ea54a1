@@ -107,6 +107,11 @@ export function subscriberPriceFromCost(cost: number): number {
   return roundMoney(cost * 1.125);
 }
 
+export function normalizeOlistId(value: unknown): string | null {
+  const id = String(value ?? "").trim();
+  return !id || /^0+$/.test(id) ? null : id;
+}
+
 function truncate(value: unknown, max: number): string {
   return String(value ?? "").trim().slice(0, max);
 }
@@ -383,7 +388,7 @@ export async function getOlistOrderInvoiceId(
 ): Promise<string | null> {
   const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id: orderId });
   const invoiceId = payload?.retorno?.pedido?.id_nota_fiscal;
-  return invoiceId ? String(invoiceId) : null;
+  return normalizeOlistId(invoiceId);
 }
 
 export async function getOlistInvoice(id: string, token: string): Promise<OlistInvoice> {

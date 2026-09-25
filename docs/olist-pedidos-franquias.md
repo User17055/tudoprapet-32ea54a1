@@ -9,6 +9,8 @@ O checkout de franquia usa a Olist como origem financeira. Depois da confirmaç�
 5. conclui o rascunho do pedido na Shopify como pagamento pendente;
 6. consulta a Olist a cada 10 minutos e dá baixa local quando a conta estiver paga.
 
+O boleto usa a mesma conta a receber e pode oferecer Pix por QR Code ou copia e cola. Não devem ser criadas duas cobranças separadas.
+
 A data de vencimento é contada desde o dia do pedido.
 
 ## Configuração
@@ -29,6 +31,12 @@ No painel da Olist, confirme antes da publicação:
 - produtos com SKU igual ao código usado na Shopify;
 - lançamento financeiro pelo pedido, evitando uma segunda conta automática na autorização da nota;
 - permissão do token para pedidos, contas a receber e notas fiscais.
+
+### Envio do Pix por e-mail
+
+No painel da Olist, acesse **Configurações > Finanças > Configurações do envio de documentos**. Na área de Pix, inclua a variável `[LINK_PIX]` no modelo do e-mail de cobrança.
+
+Se o e-mail enviado for o da venda completa, faça a mesma configuração em **Configurações > Vendas > Configurações do envio de documentos**. A conta bancária/Conta Digital precisa estar configurada para recebimento por Pix. O sistema já envia a NF-e ao e-mail do cliente e mantém o vencimento da conta em 7 dias.
 
 ## Publicação
 

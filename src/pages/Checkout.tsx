@@ -1469,7 +1469,7 @@ export default function Checkout() {
             ))}
           </div>
           <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-            A cobrança ficará em aberto na Olist, com vencimento em 7 dias, e inclui a taxa operacional de R$ 2,00.
+            A Olist enviará por e-mail o boleto com opção de pagamento por Pix. O vencimento será em 7 dias e o pedido inclui a taxa operacional de R$ 2,00.
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setFranchiseConfirmationOpen(false)}>
@@ -2624,7 +2624,7 @@ function PaymentStep(props: {
           onClick={() => {}}
           icon={<CreditCard className="h-5 w-5" />}
           title="Prazo da franquia"
-          text="Boleto gerado pela Olist, com vencimento em 7 dias"
+          text="Boleto com opção Pix enviado por e-mail, com vencimento em 7 dias"
         />
         <Nav
           back={props.onBack}
@@ -3592,7 +3592,7 @@ function Success({
         <h1 className="text-3xl font-bold">Pedido recebido!</h1>
         <p className="mt-3 text-slate-600">
           {payment?.status === "credit_approved"
-            ? "Nota fiscal emitida. A cobrança ficou em aberto na Olist e vence em 7 dias."
+            ? "Nota fiscal emitida. A Olist enviará por e-mail o boleto com opção Pix, com vencimento em 7 dias."
             : "Pagamento confirmado e pedido em preparação."}
         </p>
         {pickup && (
@@ -3641,7 +3641,7 @@ function Success({
         {payment?.invoiceUrl && (
           <Button className="mt-6" asChild>
             <a href={payment.invoiceUrl} target="_blank" rel="noreferrer">
-              Ver cobrança
+              Pagar por boleto ou Pix
             </a>
           </Button>
         )}

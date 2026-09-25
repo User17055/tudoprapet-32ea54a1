@@ -3,6 +3,7 @@ import {
   buildOlistFranchiseOrder,
   buildOlistReceivable,
   findExactOlistCost,
+  normalizeOlistId,
   normalizeSku,
   roundMoney,
   subscriberPriceFromCost,
@@ -10,6 +11,13 @@ import {
 
 Deno.test("normaliza SKU sem remover pontuacao significativa", () => {
   assertEquals(normalizeSku("  ab-12.3 "), "AB-12.3");
+});
+
+Deno.test("nao trata o identificador zero da Olist como nota fiscal existente", () => {
+  assertEquals(normalizeOlistId("0"), null);
+  assertEquals(normalizeOlistId(0), null);
+  assertEquals(normalizeOlistId("000"), null);
+  assertEquals(normalizeOlistId(" 123 "), "123");
 });
 
 Deno.test("seleciona somente o codigo exato e calcula centavos", () => {
