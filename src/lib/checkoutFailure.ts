@@ -2,6 +2,11 @@
 // Cobre também os registros antigos, cujo error_message veio cru da Shopify.
 
 const PATTERNS: Array<[RegExp, string]> = [
+  [/OLIST_API_TOKEN|Olist n[aã]o configurada/i, "Integração da Olist sem token configurado no Supabase"],
+  [/schema cache|olist_(order|receivable|invoice)|provider_payment_url/i, "Migration da integração Olist ainda não aplicada"],
+  [/nota fiscal|SEFAZ|certificado/i, "A Olist não conseguiu autorizar a nota fiscal"],
+  [/conta a receber|cobrança/i, "A Olist não conseguiu gerar a conta a receber"],
+  [/Olist/i, "A Olist recusou ou não concluiu a operação"],
   // Casos específicos primeiro: eles ficariam escondidos atrás de "cliente".
   [
     /ja pertence a um cadastro|has already been taken|already exists/i,

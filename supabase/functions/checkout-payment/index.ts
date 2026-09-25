@@ -155,6 +155,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
   let requestedAction = "";
+  let olistStage = "";
   let logAdmin: any = null;
   let logContext: {
     sessionId?: string;
@@ -445,6 +446,7 @@ Deno.serve(async (req) => {
     if (!paymentAttempt?.id) throw new Error("Falha ao criar tentativa financeira");
 
     if (session.customer_type === "franchise") {
+      olistStage = "configuration";
       const olistToken = Deno.env.get("OLIST_API_TOKEN") || Deno.env.get("TINY_API_TOKEN") || "";
       if (!olistToken) throw new Error("Olist não configurada para pedidos de franquia");
       const billing = olistCustomer(customer, customerAddress);
@@ -480,6 +482,7 @@ Deno.serve(async (req) => {
         }
         : null;
       if (!order) {
+        olistStage = "order";
         order = await createOlistFranchiseOrder(olistInput, olistToken);
         const { error: orderSaveError } = await admin.from("checkout_sessions").update({
           olist_order_id: order.id,
@@ -488,9 +491,11 @@ Deno.serve(async (req) => {
         if (orderSaveError) throw orderSaveError;
       }
 
-      const receivable = session.olist_receivable_id
+      olistStage = "receivable";
+      const receivableReference = session.olist_receivable_id
         ? await getOlistReceivable(String(session.olist_receivable_id), olistToken)
         : await ensureOlistOrderReceivable(order.id, olistToken);
+      const receivable = await getOlistReceivable(receivableReference.id, olistToken);
       const { error: receivableSaveError } = await admin.from("checkout_sessions")
         .update({ olist_receivable_id: receivable.id }).eq("id", sessionId);
       if (receivableSaveError) throw receivableSaveError;
@@ -498,6 +503,7 @@ Deno.serve(async (req) => {
         provider: "olist",
         provider_customer_id: order.id,
         provider_payment_id: receivable.id,
+        provider_payment_url: receivable.boletoUrl || null,
         raw_status: receivable.status,
         status: receivable.status === "pago" ? "received" : "pending",
         ...(receivable.status === "pago"
@@ -506,6 +512,7 @@ Deno.serve(async (req) => {
       }).eq("id", paymentAttempt.id);
       if (paymentSaveError) throw paymentSaveError;
 
+      olistStage = "invoice";
       let invoice = session.olist_invoice_id
         ? {
           id: String(session.olist_invoice_id),
@@ -520,6 +527,7 @@ Deno.serve(async (req) => {
       if (invoiceSaveError) throw invoiceSaveError;
       invoice = await issueOlistInvoice(invoice, olistToken);
 
+      olistStage = "shopify";
       const shopifyToken = shopifyAdminToken();
       if (!shopifyToken || !session.shopify_draft_order_id) {
         throw new Error("Shopify não configurada para concluir pedido da franquia");
@@ -555,6 +563,7 @@ Deno.serve(async (req) => {
           dueDate,
         },
       });
+      olistStage = "complete";
       return jsonResponse(safePaymentResponse(
         sessionId,
         paymentAttempt.id,
@@ -891,6 +900,7 @@ Deno.serve(async (req) => {
         stage: "payment",
         success: false,
         errorMessage: message || "Falha desconhecida ao iniciar pagamento.",
+        metadata: logContext.method === "terms" ? { provider: "olist", olistStage } : {},
       });
     }
     if ((error as Error & { status?: number }).status === 429) {
@@ -902,6 +912,31 @@ Deno.serve(async (req) => {
     if (requestedAction === "cancel_pix") {
       return errorResponse(
         "Não foi possível confirmar o cancelamento do Pix. Tente novamente.",
+        502,
+      );
+    }
+    if (logContext.method === "terms") {
+      if (/Olist n.o configurada/i.test(message)) {
+        return errorResponse(
+          "A integração com a Olist ainda não está configurada. Cadastre OLIST_API_TOKEN no Supabase.",
+          503,
+        );
+      }
+      if (/olist_(order|receivable|invoice)|schema cache|column .* does not exist/i.test(message)) {
+        return errorResponse(
+          "A atualização do banco da Olist ainda não foi aplicada. Publique as migrations e tente novamente.",
+          503,
+        );
+      }
+      const stageMessage: Record<string, string> = {
+        configuration: "validar a configuração da Olist",
+        order: "criar o pedido na Olist",
+        receivable: "gerar a cobrança na Olist",
+        invoice: "emitir a nota fiscal na Olist",
+        shopify: "concluir o pedido na loja",
+      };
+      return errorResponse(
+        `Não foi possível ${stageMessage[olistStage] || "concluir o pedido da franquia"}. Nenhum pagamento foi confirmado.`,
         502,
       );
     }

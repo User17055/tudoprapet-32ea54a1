@@ -727,6 +727,7 @@ export default function Checkout() {
                     ...current,
                     status: data.payment.status || current.status,
                     expiresAt: data.payment.expiresAt || current.expiresAt,
+                    invoiceUrl: data.payment.invoiceUrl || current.invoiceUrl,
                   }
                 : current,
             );

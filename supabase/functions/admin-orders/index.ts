@@ -591,7 +591,7 @@ Deno.serve(async (req) => {
     if (loggedSessionIds.length) {
       const { data: generatedPayments, error: generatedPaymentsError } = await adminDb
         .from("payments")
-        .select("checkout_session_id,method,amount,status,provider_payment_id,created_at")
+        .select("checkout_session_id,provider,method,amount,status,provider_payment_id,provider_payment_url,created_at")
         .in("checkout_session_id", loggedSessionIds)
         .order("created_at", { ascending: false });
       if (generatedPaymentsError) {
@@ -619,6 +619,8 @@ Deno.serve(async (req) => {
           ? Number(payment.amount)
           : (Number.isFinite(metadataAmount) ? metadataAmount : null),
         generated_payment_status: payment?.status || null,
+        generated_payment_provider: payment?.provider || null,
+        generated_payment_url: payment?.provider_payment_url || null,
         provider_payment_id: payment?.provider_payment_id || entry.provider_payment_id,
       };
     });

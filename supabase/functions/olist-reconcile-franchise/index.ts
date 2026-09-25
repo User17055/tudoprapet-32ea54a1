@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
           const result = await admin.from("payments").update({
             status: "received",
             raw_status: status,
+            provider_payment_url: account.boletoUrl || null,
             received_at: new Date().toISOString(),
             is_active: false,
           }).eq("id", row.id);
@@ -49,6 +50,7 @@ Deno.serve(async (req) => {
           const result = await admin.from("payments").update({
             status: "cancelled",
             raw_status: status,
+            provider_payment_url: account.boletoUrl || null,
             is_active: false,
           }).eq("id", row.id);
           updateError = result.error;
@@ -56,6 +58,7 @@ Deno.serve(async (req) => {
           const result = await admin.from("payments").update({
             status: "processing",
             raw_status: status,
+            provider_payment_url: account.boletoUrl || null,
           }).eq("id", row.id);
           updateError = result.error;
           pending++;
@@ -66,6 +69,7 @@ Deno.serve(async (req) => {
           const result = await admin.from("payments").update({
             status: nextStatus,
             raw_status: status,
+            provider_payment_url: account.boletoUrl || null,
           }).eq("id", row.id);
           updateError = result.error;
           if (nextStatus === "overdue") overdue++;

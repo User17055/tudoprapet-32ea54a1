@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, Clipboard, Cloud, Code2, FileText, Loader2, Printer, RefreshCw, Search, Truck } from "lucide-react";
+import { Check, Clipboard, Cloud, Code2, ExternalLink, FileText, Loader2, Printer, RefreshCw, Search, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 interface PendingSyncSale {
@@ -35,6 +35,8 @@ interface CheckoutAttemptLog {
   generated_payment_method?: "pix" | "credit_card" | "debit_card" | "terms" | "unknown";
   generated_amount?: number | null;
   generated_payment_status?: string | null;
+  generated_payment_provider?: string | null;
+  generated_payment_url?: string | null;
 }
 
 interface OrdersResponse {
@@ -334,7 +336,18 @@ export default function OrdersTab() {
                   })()}</TableCell>
                   <TableCell className="max-w-md text-xs text-muted-foreground">{(() => {
                     if (entry.success) {
-                      return entry.provider_payment_id ? `Asaas: ${entry.provider_payment_id}` : "Concluído sem erro";
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span>{entry.provider_payment_id ? `${entry.generated_payment_provider === "olist" ? "Olist" : "Asaas"}: ${entry.provider_payment_id}` : "Concluído sem erro"}</span>
+                          {entry.generated_payment_url && (
+                            <Button size="sm" variant="outline" asChild>
+                              <a href={entry.generated_payment_url} target="_blank" rel="noreferrer">
+                                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />Ver pagamento
+                              </a>
+                            </Button>
+                          )}
+                        </div>
+                      );
                     }
                     const explanation = describeCheckoutFailure(entry);
                     if (!explanation) return "Falha sem detalhe registrado";

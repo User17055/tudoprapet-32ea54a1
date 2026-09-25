@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: payment } = await admin.from("payments")
-      .select("id,attempt_number,method,status,amount,due_date,provider_expires_at,pix_expires_at,created_at")
+      .select("id,attempt_number,method,status,amount,due_date,provider_payment_url,provider_expires_at,pix_expires_at,created_at")
       .eq("checkout_session_id", sessionId)
       .order("attempt_number", { ascending: false })
       .limit(1).maybeSingle();
@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
         status: payment.status,
         amount: payment.amount,
         dueDate: payment.due_date,
+        invoiceUrl: payment.provider_payment_url,
         expiresAt: payment.pix_expires_at,
         providerExpiresAt: payment.provider_expires_at,
       } : null,

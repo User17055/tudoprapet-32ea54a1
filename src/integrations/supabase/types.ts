@@ -838,6 +838,7 @@ export type Database = {
           provider_deleted_at: string | null
           provider_expires_at: string | null
           provider_payment_id: string | null
+          provider_payment_url: string | null
           raw_status: string | null
           received_at: string | null
           status: string
@@ -860,6 +861,7 @@ export type Database = {
           provider_deleted_at?: string | null
           provider_expires_at?: string | null
           provider_payment_id?: string | null
+          provider_payment_url?: string | null
           raw_status?: string | null
           received_at?: string | null
           status?: string
@@ -882,6 +884,7 @@ export type Database = {
           provider_deleted_at?: string | null
           provider_expires_at?: string | null
           provider_payment_id?: string | null
+          provider_payment_url?: string | null
           raw_status?: string | null
           received_at?: string | null
           status?: string
