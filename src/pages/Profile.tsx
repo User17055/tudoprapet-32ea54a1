@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Trash2,
+  WalletCards,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import { Header } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -110,6 +112,7 @@ const Profile = () => {
   const { user, loading, logout } = useAuth();
   const { isSubscribed } = useSubscription();
   const { isAdmin } = useIsAdmin();
+  const { isFranchisee } = useIsFranchisee();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnToCheckout = searchParams.get("retorno") === "checkout";
@@ -279,7 +282,11 @@ const Profile = () => {
                     <h1 className="truncate font-display font-900 text-xl text-foreground sm:text-2xl md:text-3xl">
                       Olá, {firstName || fullName}
                     </h1>
-                    {isSubscribed ? (
+                    {isFranchisee ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-800">
+                        Franquia
+                      </span>
+                    ) : isSubscribed ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary">
                         <Crown className="h-3.5 w-3.5" /> Assinante
                       </span>
@@ -310,6 +317,7 @@ const Profile = () => {
         <div className="container mx-auto py-5 sm:py-8">
           <nav className="mb-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Atalhos da conta">
             <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/meus-pedidos"><Package className="mr-1.5 h-4 w-4" />Meus pedidos</Link></Button>
+            {isFranchisee && <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/pagamentos-franquia"><WalletCards className="mr-1.5 h-4 w-4" />Pagamentos</Link></Button>}
             <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/carrinho"><ShoppingBag className="mr-1.5 h-4 w-4" />Carrinho</Link></Button>
             <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/catalogo">Comprar novamente</Link></Button>
             {isAdmin && <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/admin"><ShieldCheck className="mr-1.5 h-4 w-4" />Painel admin</Link></Button>}

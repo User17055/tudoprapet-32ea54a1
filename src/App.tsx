@@ -26,6 +26,7 @@ const Checkout = lazy(() => import("./pages/Checkout.tsx"));
 
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const MeusPedidos = lazy(() => import("./pages/MeusPedidos.tsx"));
+const FranchisePayments = lazy(() => import("./pages/FranchisePayments.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const OAuthConsent = lazy(() => import("./pages/OAuthConsent.tsx"));
 
@@ -66,6 +67,7 @@ const AppContent = () => {
             <Route path="/perfil" element={<Profile />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/meus-pedidos" element={<MeusPedidos />} />
+            <Route path="/pagamentos-franquia" element={<FranchisePayments />} />
             <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

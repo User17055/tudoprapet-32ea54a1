@@ -549,6 +549,7 @@ Deno.serve(async (req) => {
         status: "credit_approved",
         shopify_order_id: completed.orderId,
         olist_invoice_number: invoice.number,
+        olist_invoice_url: invoice.accessUrl || null,
       }).eq("id", sessionId);
       if (completedSaveError) throw completedSaveError;
       await writeCheckoutAttemptLog(admin, {

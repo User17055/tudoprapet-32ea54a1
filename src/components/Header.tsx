@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader2, Menu, MessageCircle, Package, Search, User, X } from "lucide-react";
+import { Loader2, Menu, MessageCircle, Package, Search, User, WalletCards, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
@@ -307,6 +307,16 @@ export const Header = () => {
         <Package className="h-4 w-4" />
         Meus Pedidos
       </Link>
+      {isFranchisee && (
+        <Link
+          to="/pagamentos-franquia"
+          onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-2 py-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
+        >
+          <WalletCards className="h-4 w-4" />
+          Pagamentos da franquia
+        </Link>
+      )}
       <a
         href={WHATSAPP_URL}
         target="_blank"
