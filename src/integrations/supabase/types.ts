@@ -1558,6 +1558,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      invoke_olist_franchise_reconciliation: { Args: never; Returns: undefined }
       invoke_payment_reconciliation: { Args: never; Returns: undefined }
       is_cpf_available: { Args: { _cpf: string }; Returns: boolean }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
