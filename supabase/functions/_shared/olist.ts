@@ -9,6 +9,7 @@ export const OLIST_ORDER_GET_URL = "https://api.tiny.com.br/api2/pedido.obter.ph
 export const OLIST_INVOICE_GENERATE_URL =
   "https://api.tiny.com.br/api2/gerar.nota.fiscal.pedido.php";
 export const OLIST_INVOICE_GET_URL = "https://api.tiny.com.br/api2/nota.fiscal.obter.php";
+export const OLIST_INVOICE_LINK_URL = "https://api.tiny.com.br/api2/nota.fiscal.obter.link.php";
 export const OLIST_INVOICE_ISSUE_URL = "https://api.tiny.com.br/api2/nota.fiscal.emitir.php";
 export const OLIST_ORDER_LAUNCH_RECEIVABLES_URL =
   "https://api.tiny.com.br/api2/pedido.lancar.contas.php";
@@ -397,13 +398,25 @@ export async function getOlistInvoice(id: string, token: string): Promise<OlistI
   const invoice = payload?.retorno?.nota_fiscal;
   if (!invoice?.id) throw new Error(responseErrors(payload));
   const accessKey = invoice.chave_acesso ? String(invoice.chave_acesso) : null;
+  const issued = Boolean(accessKey) || /autorizad|emitid/i.test(String(invoice.situacao || ""));
+  let accessUrl = invoice.link_acesso ? String(invoice.link_acesso) : null;
+  if (!accessUrl && issued) {
+    // nota.fiscal.obter nao traz o link; a API tem um endpoint proprio para ele.
+    try {
+      const linkPayload = await olistPost(OLIST_INVOICE_LINK_URL, token, { id: String(invoice.id) });
+      const link = linkPayload?.retorno?.link_nfe;
+      if (typeof link === "string" && /^https?:\/\//.test(link)) accessUrl = link;
+    } catch (error) {
+      console.error("olist invoice link:", error);
+    }
+  }
   return {
     id: String(invoice.id),
     number: String(invoice.numero ?? ""),
     series: invoice.serie !== undefined ? String(invoice.serie) : undefined,
-    issued: Boolean(accessKey) || /autorizad|emitid/i.test(String(invoice.situacao || "")),
+    issued,
     accessKey,
-    accessUrl: invoice.link_acesso ? String(invoice.link_acesso) : null,
+    accessUrl,
   };
 }
 
