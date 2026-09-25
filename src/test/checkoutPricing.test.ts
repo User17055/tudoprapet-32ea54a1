@@ -4,8 +4,11 @@ import {
   belowMinimumChargeMessage,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
+  buildServiceFeeLine,
   buildShippingLine,
   CHECKOUT_SERVICE_FEE,
+  checkoutServiceFee,
+  FRANCHISE_ORDER_FEE,
   findUnpricedVariants,
   isBelowMinimumChargeError,
   MIN_CHARGE_VALUE,
@@ -43,6 +46,25 @@ describe("checkout sem taxa de serviço", () => {
   });
 });
 
+
+describe("taxa operacional da franquia", () => {
+  it("cobra R$ 2 somente do franqueado", () => {
+    expect(FRANCHISE_ORDER_FEE).toBe(2);
+    expect(checkoutServiceFee("franchise")).toBe(2);
+    expect(checkoutServiceFee("common")).toBe(0);
+    expect(checkoutServiceFee("subscriber")).toBe(0);
+  });
+
+  it("registra a taxa como linha sem frete no pedido Shopify", () => {
+    expect(buildServiceFeeLine(2)).toEqual({
+      title: "Taxa operacional da franquia",
+      price: "2.00",
+      quantity: 1,
+      requires_shipping: false,
+      taxable: false,
+    });
+  });
+});
 
 const VARIANT_A = "gid://shopify/ProductVariant/111";
 const VARIANT_B = "gid://shopify/ProductVariant/222";

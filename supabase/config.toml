@@ -11,6 +11,10 @@ verify_jwt = false
 [functions.asaas-process-events]
 verify_jwt = false
 
+# Concilia contas a receber dos franqueados diretamente com o ERP Olist.
+[functions.olist-reconcile-franchise]
+verify_jwt = false
+
 # Diagnóstico protegido por x-payment-worker-token.
 [functions.shopify-draft-diag]
 verify_jwt = false

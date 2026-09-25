@@ -157,6 +157,7 @@ type PaymentResult = {
 
 const ACTIVE_KEY = "tpp_checkout_active";
 const SERVICE_FEE = 0;
+const FRANCHISE_ORDER_FEE = 2;
 const PICKUP_STORE_ADDRESS = String(
   import.meta.env.VITE_PICKUP_STORE_ADDRESS || "",
 ).trim();
@@ -355,7 +356,12 @@ export default function Checkout() {
   });
   const [cardErrors, setCardErrors] = useState<CardErrors>({});
   const [isFranchisee, setIsFranchisee] = useState(false);
+  const [franchiseConfirmationOpen, setFranchiseConfirmationOpen] = useState(false);
   const [credentials, setCredentials] = useState<{
+    sessionId: string;
+    accessToken: string;
+  } | null>(null);
+  const [preparedFranchiseCredentials, setPreparedFranchiseCredentials] = useState<{
     sessionId: string;
     accessToken: string;
   } | null>(null);
@@ -393,7 +399,7 @@ export default function Checkout() {
         ? 0
         : (shippingOptions.find((option) => option.handle === shippingHandle)
             ?.amount ?? summary?.shippingAmount ?? 0)) +
-      (summary?.serviceFee ?? SERVICE_FEE),
+      (summary?.serviceFee ?? (pricingIsFranchisee ? FRANCHISE_ORDER_FEE : SERVICE_FEE)),
   );
   const cardPlans = installmentOptions(cardBaseTotal);
   const selectedInstallments = Math.min(
@@ -1076,6 +1082,14 @@ export default function Checkout() {
     void confirmOrder();
   };
 
+  const requestFinalConfirmation = () => {
+    if (isFranchisee) {
+      setFranchiseConfirmationOpen(true);
+      return;
+    }
+    nextPayment();
+  };
+
   async function confirmOrder() {
     if (previewMode)
       return setMessage(
@@ -1085,49 +1099,63 @@ export default function Checkout() {
     setMessage("");
     if (paymentMethod === "credit_card") setCardFailure(null);
     try {
-      const selectedShipping = shippingOptions.find(
-        (option) => option.handle === shippingHandle,
-      );
-      const delivery =
-        deliveryMode === "pick_up"
-          ? { code: "pick_up" }
-          : {
-              code: "shipping",
-              address,
-              optionHandle: selectedShipping?.handle,
-            };
-      const { data: prepared, error: prepareError } =
-        await supabase.functions.invoke("checkout-prepare", {
-          body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase() },
-          headers: sessionClaimHeaders(Boolean(user)),
-        });
-      if (prepareError || prepared?.error) {
-        const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
-        throw new Error(detail);
-      }
-      const ignoredItems = Array.isArray(prepared.unavailableItems)
-        ? prepared.unavailableItems as Array<{ variantId?: string; productTitle?: string }>
-        : [];
-      if (ignoredItems.length) {
-        if (launch?.source === "cart") {
-          for (const ignored of ignoredItems) {
-            if (ignored.variantId) await removeItem(ignored.variantId);
-          }
+      let active = preparedFranchiseCredentials;
+      let activeSummary = summary;
+      if (active) {
+        if (!activeSummary) throw new Error("Resumo do pedido indisponível. Volte à sacola e tente novamente.");
+        setPreparedFranchiseCredentials(null);
+      } else {
+        const selectedShipping = shippingOptions.find(
+          (option) => option.handle === shippingHandle,
+        );
+        const delivery =
+          deliveryMode === "pick_up"
+            ? { code: "pick_up" }
+            : {
+                code: "shipping",
+                address,
+                optionHandle: selectedShipping?.handle,
+              };
+        const { data: prepared, error: prepareError } =
+          await supabase.functions.invoke("checkout-prepare", {
+            body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase() },
+            headers: sessionClaimHeaders(Boolean(user)),
+          });
+        if (prepareError || prepared?.error) {
+          const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
+          throw new Error(detail);
         }
-        const titles = ignoredItems
-          .map((item) => item.productTitle)
-          .filter((title): title is string => Boolean(title));
-        toast.warning(`${ignoredItems.length} produto(s) indisponível(is) foram retirados da compra.`, {
-          description: titles.slice(0, 3).join(", ") || undefined,
-        });
+        const ignoredItems = Array.isArray(prepared.unavailableItems)
+          ? prepared.unavailableItems as Array<{ variantId?: string; productTitle?: string }>
+          : [];
+        if (ignoredItems.length) {
+          if (launch?.source === "cart") {
+            for (const ignored of ignoredItems) {
+              if (ignored.variantId) await removeItem(ignored.variantId);
+            }
+          }
+          const titles = ignoredItems
+            .map((item) => item.productTitle)
+            .filter((title): title is string => Boolean(title));
+          toast.warning(`${ignoredItems.length} produto(s) indisponível(is) foram retirados da compra.`, {
+            description: titles.slice(0, 3).join(", ") || undefined,
+          });
+        }
+        active = {
+          sessionId: prepared.sessionId,
+          accessToken: prepared.accessToken,
+        };
+        setCredentials(active);
+        setSummary(prepared.summary);
+        activeSummary = prepared.summary;
+        storeActive(active, prepared.summary);
+        if (isFranchisee && ignoredItems.length) {
+          setPreparedFranchiseCredentials(active);
+          setMessage("A lista mudou por falta de estoque. Confira os produtos e confirme novamente para emitir a nota.");
+          return;
+        }
       }
-      const active = {
-        sessionId: prepared.sessionId,
-        accessToken: prepared.accessToken,
-      };
-      setCredentials(active);
-      setSummary(prepared.summary);
-      storeActive(active, prepared.summary);
+      if (!activeSummary) throw new Error("Resumo do pedido indisponível. Volte à sacola e tente novamente.");
       const paymentBody: Record<string, unknown> = {
         ...active,
         method: isFranchisee ? "terms" : paymentMethod,
@@ -1161,7 +1189,7 @@ export default function Checkout() {
         }
       }
       setPayment(paymentData);
-      storeActive(active, prepared.summary, paymentData);
+      storeActive(active, activeSummary, paymentData);
       setStep(4);
       if (paymentData.status === "credit_approved") finishSuccess();
     } catch (error) {
@@ -1355,6 +1383,7 @@ export default function Checkout() {
   );
   if (step === 1)
     return (
+      <>
       <PaymentCheckoutScreen
         cardPlan={selectedCardPlan}
         summary={summary}
@@ -1384,7 +1413,7 @@ export default function Checkout() {
         onReferralCodeChange={setReferralCode}
         submitLabel={
           isFranchisee
-            ? "Finalizar pedido"
+            ? "Revisar e confirmar"
             : paymentMethod === "pix"
               ? "Gerar Pix e finalizar"
               : paymentMethod === "debit_card"
@@ -1395,7 +1424,7 @@ export default function Checkout() {
           setMessage("");
           setStep(0);
         }}
-        onNext={nextPayment}
+        onNext={requestFinalConfirmation}
       >
         <PaymentStep
           franchise={isFranchisee}
@@ -1419,9 +1448,47 @@ export default function Checkout() {
           setSaveCard={setSaveCard}
           loggedIn={Boolean(user)}
           onBack={() => setStep(0)}
-          onNext={nextPayment}
+          onNext={requestFinalConfirmation}
         />
       </PaymentCheckoutScreen>
+      <Dialog open={franchiseConfirmationOpen} onOpenChange={setFranchiseConfirmationOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirme os produtos do pedido</DialogTitle>
+            <DialogDescription>
+              Confira com atenção. Depois da confirmação, o pedido e a Nota Fiscal serão emitidos na Olist.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-4">
+            {cartItems.map((item) => (
+              <div key={item.variantId} className="flex justify-between gap-4 text-sm">
+                <span className="text-slate-700">{item.product.node.title}{item.variantTitle && item.variantTitle !== "Default Title" ? ` — ${item.variantTitle}` : ""}</span>
+                <span className="shrink-0 font-semibold text-slate-950">{item.quantity} un.</span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+            A cobrança ficará em aberto na Olist, com vencimento em 7 dias, e inclui a taxa operacional de R$ 2,00.
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setFranchiseConfirmationOpen(false)}>
+              Voltar e conferir
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setFranchiseConfirmationOpen(false);
+                nextPayment();
+              }}
+            >
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+              Confirmar e emitir nota
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      </>
     );
   return (
     <main
@@ -2561,7 +2628,7 @@ function PaymentStep(props: {
         <Nav
           back={props.onBack}
           next={props.onNext}
-          nextLabel="Finalizar pedido"
+          nextLabel="Revisar e confirmar"
         />
       </div>
     );
@@ -3324,7 +3391,7 @@ function SummaryTotals({
   cardPlan?: InstallmentPlan | null;
 }) {
   const { getSubscriberPrice } = useSubscriberPrices();
-  const { getFranchisePrice } = useFranchisePrices();
+  const { getFranchisePrice, isFranchisee } = useFranchisePrices();
   const { getCustomerPrice } = useCustomerPrices();
   const cartSubtotal = cartItems.reduce(
     (total, item) => total + (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
@@ -3341,7 +3408,7 @@ function SummaryTotals({
   }, 0);
   const subtotal = summary?.subtotal ?? cartSubtotal;
   const discount = summary?.discount ?? cartDiscount;
-  const serviceFee = summary?.serviceFee ?? SERVICE_FEE;
+  const serviceFee = summary?.serviceFee ?? (isFranchisee ? FRANCHISE_ORDER_FEE : SERVICE_FEE);
   const appliedFee = showServiceFee ? serviceFee : 0;
   const shippingAmount = shippingOverride?.amount ?? summary?.shippingAmount ?? 0;
   const shippingMethod = shippingOverride?.title ?? summary?.shippingMethod;
@@ -3378,7 +3445,7 @@ function SummaryTotals({
       {showServiceFee && serviceFee > 0 && (
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5">
-          Taxa de serviço
+          {isFranchisee ? "Taxa operacional da franquia" : "Taxa de serviço"}
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -3458,10 +3525,12 @@ function MobileOrderSummary({
   cardPlan?: InstallmentPlan | null;
 }) {
   const { getCustomerPrice } = useCustomerPrices();
+  const { isFranchisee } = useFranchisePrices();
   const itemCount =
     summary?.items.reduce((total, item) => total + item.quantity, 0) ??
     cartItems.reduce((total, item) => total + item.quantity, 0);
-  const fee = showServiceFee ? SERVICE_FEE : 0;
+  const fallbackFee = isFranchisee ? FRANCHISE_ORDER_FEE : SERVICE_FEE;
+  const fee = showServiceFee ? fallbackFee : 0;
   const cartTotal = cartItems.reduce(
     (total, item) => total + (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
     0,
@@ -3470,13 +3539,13 @@ function MobileOrderSummary({
     ? Math.max(
         0,
         (summary
-          ? summary.subtotal - summary.discount + (showServiceFee ? summary.serviceFee ?? SERVICE_FEE : 0)
+          ? summary.subtotal - summary.discount + (showServiceFee ? summary.serviceFee ?? fallbackFee : 0)
           : cartTotal) + shippingOverride.amount,
       )
     : Math.max(
         0,
         (summary?.total ?? cartTotal) -
-          (showServiceFee ? 0 : summary?.serviceFee ?? SERVICE_FEE),
+          (showServiceFee ? 0 : summary?.serviceFee ?? fallbackFee),
       );
   const headerDisplayTotal =
     cardPlan && headerTotal > 0
@@ -3522,7 +3591,7 @@ function Success({
         <h1 className="text-3xl font-bold">Pedido recebido!</h1>
         <p className="mt-3 text-slate-600">
           {payment?.status === "credit_approved"
-            ? "Pedido aprovado no prazo da franquia."
+            ? "Nota fiscal emitida. A cobrança ficou em aberto na Olist e vence em 7 dias."
             : "Pagamento confirmado e pedido em preparação."}
         </p>
         {pickup && (

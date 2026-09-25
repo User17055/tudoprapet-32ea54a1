@@ -1,15 +1,20 @@
 // force redeploy 2026-08-17
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { optionalCheckoutUser, newCheckoutAccessToken, hashCheckoutAccessToken } from "../_shared/checkout-access.ts";
+import {
+  hashCheckoutAccessToken,
+  newCheckoutAccessToken,
+  optionalCheckoutUser,
+} from "../_shared/checkout-access.ts";
 import { parseCheckoutPrepareInput, shippingLabel } from "../_shared/checkout-input.ts";
 import {
-  belowMinimumChargeMessage,
   applyCostFloor,
+  belowMinimumChargeMessage,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
+  buildServiceFeeLine,
   buildShippingLine,
-  CHECKOUT_SERVICE_FEE,
+  checkoutServiceFee,
   MIN_CHARGE_VALUE,
   resolveUnitPrice,
 } from "../_shared/pricing.ts";
@@ -26,7 +31,11 @@ import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
 import { hasSufficientInventory } from "../_shared/inventory.ts";
-import { commissionForLine, selectCommissionRule, type CommissionRule } from "../_shared/commission.ts";
+import {
+  commissionForLine,
+  type CommissionRule,
+  selectCommissionRule,
+} from "../_shared/commission.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -47,8 +56,12 @@ function money(value: number): number {
  * no máximo uma dica genérica de qual dado revisar.
  */
 function customerFacingDraftError(errors: ShopifyUserError[], _detail?: string | null): string {
-  if (hasFieldError(errors, /phone/i)) return "Não conseguimos concluir seu pedido. Revise o telefone informado e tente novamente.";
-  if (hasFieldError(errors, /email/i)) return "Não conseguimos concluir seu pedido. Revise o e-mail informado e tente novamente.";
+  if (hasFieldError(errors, /phone/i)) {
+    return "Não conseguimos concluir seu pedido. Revise o telefone informado e tente novamente.";
+  }
+  if (hasFieldError(errors, /email/i)) {
+    return "Não conseguimos concluir seu pedido. Revise o e-mail informado e tente novamente.";
+  }
   if (hasFieldError(errors, /(zip|postal|province|address)/i)) {
     return "Não conseguimos concluir seu pedido. Revise o endereço informado e tente novamente.";
   }
@@ -58,16 +71,20 @@ function customerFacingDraftError(errors: ShopifyUserError[], _detail?: string |
   if (hasFieldError(errors, /(lineitem|variant)/i)) {
     return "Um dos produtos da sacola ficou indisponível. Revise a sacola e tente de novo.";
   }
-  if (hasFieldError(errors, /shipping/i)) return "Escolha novamente a forma de entrega e tente de novo.";
+  if (hasFieldError(errors, /shipping/i)) {
+    return "Escolha novamente a forma de entrega e tente de novo.";
+  }
   return "Não conseguimos concluir seu pedido agora. Tente novamente em alguns instantes ou fale com o atendimento.";
 }
 
-
 async function requestKey(req: Request, userId: string | null): Promise<string> {
-  const forwarded = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
+  const forwarded = req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
   const source = userId ? `user:${userId}` : `ip:${forwarded.trim()}`;
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 Deno.serve(async (req) => {
@@ -79,9 +96,13 @@ Deno.serve(async (req) => {
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
 
     const rawBody = await req.json() as Record<string, unknown>;
-    const intendedMethod = rawBody.paymentMethod === "credit_card" ? "credit_card"
-      : rawBody.paymentMethod === "debit_card" ? "debit_card"
-      : rawBody.paymentMethod === "pix" ? "pix" : "unknown";
+    const intendedMethod = rawBody.paymentMethod === "credit_card"
+      ? "credit_card"
+      : rawBody.paymentMethod === "debit_card"
+      ? "debit_card"
+      : rawBody.paymentMethod === "pix"
+      ? "pix"
+      : "unknown";
     const parsed = parseCheckoutPrepareInput(rawBody);
     if (!parsed.ok) return errorResponse(parsed.message, 400);
     const input = parsed.value;
@@ -117,17 +138,24 @@ Deno.serve(async (req) => {
     // venda só para atribuição; o cálculo de comissão fica de fora.
     let commissionBlocked = false;
     if (referral) {
-      const { data: blockedRow, error: blockedError } = await admin.from("commission_blocked_customers")
+      const { data: blockedRow, error: blockedError } = await admin.from(
+        "commission_blocked_customers",
+      )
         .select("id").eq("email", input.customer.email.trim().toLowerCase()).maybeSingle();
       if (blockedError) throw blockedError;
       commissionBlocked = Boolean(blockedRow);
     }
-    const storefrontToken = readFirstEnv(["SHOPIFY_STOREFRONT_ACCESS_TOKEN", "SHOPIFY_STOREFRONT_TOKEN"]);
+    const storefrontToken = readFirstEnv([
+      "SHOPIFY_STOREFRONT_ACCESS_TOKEN",
+      "SHOPIFY_STOREFRONT_TOKEN",
+    ]);
     const shopifyToken = readFirstEnv([
       "SHOPIFY_ACCESS_TOKEN",
       "SHOPIFY_ONLINE_ACCESS_TOKEN:user:4HrJkQRl3KUXTrTOAgUkwQSkHWo2",
     ]);
-    if (!storefrontToken || !shopifyToken) return errorResponse("Loja temporariamente indisponível. Tente novamente em instantes.", 500);
+    if (!storefrontToken || !shopifyToken) {
+      return errorResponse("Loja temporariamente indisponível. Tente novamente em instantes.", 500);
+    }
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
     if (auth.user) {
@@ -146,7 +174,9 @@ Deno.serve(async (req) => {
         .select("manually_blocked,blocked_reason,block_on_any_open_invoice")
         .eq("user_id", auth.user!.id).maybeSingle();
       if (credit?.manually_blocked) {
-        return jsonResponse({ error: credit.blocked_reason || "Franquia bloqueada para novos pedidos" }, 403);
+        return jsonResponse({
+          error: credit.blocked_reason || "Franquia bloqueada para novos pedidos",
+        }, 403);
       }
       const { data: financialSessions } = await admin.from("checkout_sessions")
         .select("id").eq("user_id", auth.user!.id).eq("customer_type", "franchise");
@@ -158,7 +188,12 @@ Deno.serve(async (req) => {
           ? overdueQuery.in("status", ["pending", "processing", "confirmed", "overdue"])
           : overdueQuery.eq("status", "overdue");
         const { count } = await overdueQuery;
-        if ((count ?? 0) > 0) return jsonResponse({ error: "Existe uma cobrança pendente que bloqueia novos pedidos" }, 403);
+        if ((count ?? 0) > 0) {
+          return jsonResponse(
+            { error: "Existe uma cobrança pendente que bloqueia novos pedidos" },
+            403,
+          );
+        }
       }
     }
 
@@ -166,7 +201,11 @@ Deno.serve(async (req) => {
     const requestedVariantIds = requestedItems.map((item) => item.variantId);
     let details: Awaited<ReturnType<typeof fetchVariantCheckoutDetails>>;
     try {
-      details = await fetchVariantCheckoutDetails(requestedVariantIds, storefrontToken, shopifyToken);
+      details = await fetchVariantCheckoutDetails(
+        requestedVariantIds,
+        storefrontToken,
+        shopifyToken,
+      );
     } catch (error) {
       const inventoryError = error instanceof ShopifyInventoryVerificationError ? error : null;
       const technicalMessage = error instanceof Error ? error.message : String(error);
@@ -203,7 +242,9 @@ Deno.serve(async (req) => {
       if (audienceResult.error) throw audienceResult.error;
       audienceRows = audienceResult.data ?? [];
     }
-    const audienceByProduct = new Map(audienceRows.map((row) => [row.shopify_product_id, row.audience]));
+    const audienceByProduct = new Map(
+      audienceRows.map((row) => [row.shopify_product_id, row.audience]),
+    );
     const availableItems = requestedItems.filter((item) => {
       const detail = details.get(item.variantId);
       if (!detail) {
@@ -267,16 +308,22 @@ Deno.serve(async (req) => {
         .select("shopify_variant_id,subscriber_price").in("shopify_variant_id", variantIds);
       for (const row of data ?? []) {
         const price = Number(row.subscriber_price);
-        const base = customerPriceMap.get(row.shopify_variant_id) ?? details.get(row.shopify_variant_id)?.price;
-        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) specialPriceMap.set(row.shopify_variant_id, price);
+        const base = customerPriceMap.get(row.shopify_variant_id) ??
+          details.get(row.shopify_variant_id)?.price;
+        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) {
+          specialPriceMap.set(row.shopify_variant_id, price);
+        }
       }
     } else if (customerType === "franchise") {
       const { data } = await admin.from("franchise_prices")
         .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
       for (const row of data ?? []) {
         const price = Number(row.price);
-        const base = customerPriceMap.get(row.shopify_variant_id) ?? details.get(row.shopify_variant_id)?.price;
-        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) specialPriceMap.set(row.shopify_variant_id, price);
+        const base = customerPriceMap.get(row.shopify_variant_id) ??
+          details.get(row.shopify_variant_id)?.price;
+        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) {
+          specialPriceMap.set(row.shopify_variant_id, price);
+        }
       }
 
       // O preco de franquia pode ser igual ou superior ao custo, nunca inferior.
@@ -288,10 +335,12 @@ Deno.serve(async (req) => {
         const cost = Number(row.cost);
         if (!Number.isFinite(cost) || cost <= 0) continue;
         franchiseCostMap.set(row.shopify_variant_id, cost);
-        const current = specialPriceMap.get(row.shopify_variant_id)
-          ?? customerPriceMap.get(row.shopify_variant_id)
-          ?? details.get(row.shopify_variant_id)?.price;
-        if (current === undefined || current < cost) specialPriceMap.set(row.shopify_variant_id, cost);
+        const current = specialPriceMap.get(row.shopify_variant_id) ??
+          customerPriceMap.get(row.shopify_variant_id) ??
+          details.get(row.shopify_variant_id)?.price;
+        if (current === undefined || current < cost) {
+          specialPriceMap.set(row.shopify_variant_id, cost);
+        }
       }
     }
 
@@ -302,10 +351,16 @@ Deno.serve(async (req) => {
         .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
       if (costError) throw costError;
       const blocked = (costRows ?? []).some((row) => {
-        const sale = customerPriceMap.get(row.shopify_variant_id) ?? currentPriceMap.get(row.shopify_variant_id);
+        const sale = customerPriceMap.get(row.shopify_variant_id) ??
+          currentPriceMap.get(row.shopify_variant_id);
         return sale !== undefined && Number(row.cost) >= sale;
       });
-      if (blocked) return errorResponse("Um produto da sacola está indisponível para clientes. Remova-o e tente novamente.", 409);
+      if (blocked) {
+        return errorResponse(
+          "Um produto da sacola está indisponível para clientes. Remova-o e tente novamente.",
+          409,
+        );
+      }
     }
 
     let subtotal = 0;
@@ -320,10 +375,15 @@ Deno.serve(async (req) => {
     let storeCommissionPercent = 0;
     const commissionEligible = Boolean(referral) && !commissionBlocked;
     if (commissionEligible) {
-      const productIds = [...new Set(input.items.map((item) => details.get(item.variantId)!.productId))];
+      const productIds = [
+        ...new Set(input.items.map((item) => details.get(item.variantId)!.productId)),
+      ];
       const [rulesResult, linksResult, categoriesResult, settingsResult] = await Promise.all([
         admin.from("commission_rules").select("id,scope,category_id,shopify_product_id,percent"),
-        admin.from("product_categories").select("shopify_product_id,category_id").in("shopify_product_id", productIds),
+        admin.from("product_categories").select("shopify_product_id,category_id").in(
+          "shopify_product_id",
+          productIds,
+        ),
         admin.from("categories").select("id,parent_id").limit(1000),
         admin.from("commission_settings").select("store_percent").eq("id", true).maybeSingle(),
       ]);
@@ -331,7 +391,9 @@ Deno.serve(async (req) => {
       if (linksResult.error) throw linksResult.error;
       if (categoriesResult.error) throw categoriesResult.error;
       if (settingsResult.error) throw settingsResult.error;
-      if (categoriesResult.data?.length === 1000) throw new Error("Limite de categorias para comissões atingido");
+      if (categoriesResult.data?.length === 1000) {
+        throw new Error("Limite de categorias para comissões atingido");
+      }
       commissionRules.push(...(rulesResult.data as CommissionRule[] || []));
       commissionCategories.push(...(categoriesResult.data || []));
       storeCommissionPercent = Number(settingsResult.data?.store_percent) || 0;
@@ -345,14 +407,22 @@ Deno.serve(async (req) => {
       const detail = details.get(item.variantId)!;
       const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
       const resolvedPrice = resolveUnitPrice(catalogPrice, specialPriceMap.get(item.variantId))!;
-      const costFloor = customerType === "franchise" ? franchiseCostMap.get(item.variantId) : undefined;
+      const costFloor = customerType === "franchise"
+        ? franchiseCostMap.get(item.variantId)
+        : undefined;
       const unitPrice = applyCostFloor(resolvedPrice, costFloor)!;
       finalPriceMap.set(item.variantId, unitPrice);
       subtotal += catalogPrice * item.quantity;
       total += unitPrice * item.quantity;
       const lineTotal = money(unitPrice * item.quantity);
       const appliedRule = commissionEligible
-        ? selectCommissionRule(detail.productId, categoriesByProduct.get(detail.productId) || [], commissionCategories, commissionRules, storeCommissionPercent)
+        ? selectCommissionRule(
+          detail.productId,
+          categoriesByProduct.get(detail.productId) || [],
+          commissionCategories,
+          commissionRules,
+          storeCommissionPercent,
+        )
         : null;
       return {
         variantId: item.variantId,
@@ -360,18 +430,21 @@ Deno.serve(async (req) => {
         numericVariantId: detail.numericId,
         productTitle: detail.productTitle,
         variantTitle: detail.title,
+        sku: detail.sku,
         imageUrl: detail.imageUrl,
         quantity: item.quantity,
         catalogUnitPrice: money(catalogPrice),
         unitPrice: money(unitPrice),
         lineTotal,
-        ...(appliedRule ? {
-          commissionPercent: appliedRule.percent,
-          commissionScope: appliedRule.scope,
-          commissionRuleId: appliedRule.ruleId,
-          commissionCategoryId: appliedRule.categoryId,
-          commissionAmount: commissionForLine(lineTotal, appliedRule.percent),
-        } : {}),
+        ...(appliedRule
+          ? {
+            commissionPercent: appliedRule.percent,
+            commissionScope: appliedRule.scope,
+            commissionRuleId: appliedRule.ruleId,
+            commissionCategoryId: appliedRule.categoryId,
+            commissionAmount: commissionForLine(lineTotal, appliedRule.percent),
+          }
+          : {}),
       };
     });
     subtotal = money(subtotal);
@@ -380,7 +453,8 @@ Deno.serve(async (req) => {
 
     let shippingAmount = 0;
     let shippingMethod = shippingLabel(input.delivery.code);
-    let shippingCode: "pick_up" | "pac" | "sedex" | "local_delivery" | "shipping" = input.delivery.code;
+    let shippingCode: "pick_up" | "pac" | "sedex" | "local_delivery" | "shipping" =
+      input.delivery.code;
     let shippingRateHandle: string | undefined;
     let pickupLocation: {
       name: string;
@@ -400,7 +474,10 @@ Deno.serve(async (req) => {
         ? pickupOptions.find((option) => option.handle === input.delivery.optionHandle)
         : pickupOptions[0];
       if (!selectedPickup) {
-        return errorResponse("A retirada na loja está indisponível no momento. Tente novamente em instantes.", 409);
+        return errorResponse(
+          "A retirada na loja está indisponível no momento. Tente novamente em instantes.",
+          409,
+        );
       }
       shippingMethod = selectedPickup.title;
       shippingRateHandle = selectedPickup.handle;
@@ -423,12 +500,17 @@ Deno.serve(async (req) => {
       shippingAmount = money(selected.amount);
       shippingMethod = selected.title;
       const normalized = `${selected.code || ""} ${selected.title}`.toLowerCase();
-      shippingCode = normalized.includes("sedex") ? "sedex"
-        : normalized.includes("pac") ? "pac"
-        : normalized.includes("moto") || normalized.includes("local") ? "local_delivery"
+      shippingCode = normalized.includes("sedex")
+        ? "sedex"
+        : normalized.includes("pac")
+        ? "pac"
+        : normalized.includes("moto") || normalized.includes("local")
+        ? "local_delivery"
         : "shipping";
       total = money(total + shippingAmount);
     }
+    const serviceFee = checkoutServiceFee(customerType);
+    total = money(total + serviceFee);
     // Barra antes de existir sessão e rascunho. O Asaas recusa cobrança abaixo
     // do piso de qualquer jeito; sem esta guarda o pedido chegava a nascer na
     // Shopify para só então falhar no pagamento, e o rascunho ficava pendurado.
@@ -447,7 +529,7 @@ Deno.serve(async (req) => {
       status: "awaiting_payment",
       subtotal,
       discount,
-      service_fee: CHECKOUT_SERVICE_FEE,
+      service_fee: serviceFee,
       shipping_amount: shippingAmount,
       total,
       shipping_method: shippingMethod,
@@ -461,7 +543,7 @@ Deno.serve(async (req) => {
       commission_percent: commissionEligible ? storeCommissionPercent : 0,
       pricing_snapshot: {
         customerType,
-        serviceFee: CHECKOUT_SERVICE_FEE,
+        serviceFee,
         calculatedAt: new Date().toISOString(),
         ...(pickupLocation ? { pickupLocation } : {}),
       },
@@ -474,14 +556,23 @@ Deno.serve(async (req) => {
 
     const discountTitle = customerType === "franchise"
       ? "Franquia TudoPraPet"
-      : customerType === "subscriber" ? "Clube TudoPraPet" : "TudoPraPet";
-    const lineItems = buildDraftLineItems(input.items, finalPriceMap, currentPriceMap, discountTitle);
+      : customerType === "subscriber"
+      ? "Clube TudoPraPet"
+      : "TudoPraPet";
+    const lineItems = buildDraftLineItems(
+      input.items,
+      finalPriceMap,
+      currentPriceMap,
+      discountTitle,
+    );
     // Sem checagem de variante sem preço aqui, ao contrário de _shared/checkout.ts:
     // input.items já foi reduzido a availableItems (linha 186), e todo item que
     // sobrou tem detail -- logo, tem entrada em currentPriceMap. Quem não tinha
     // saiu antes, como "Produto removido".
     const adjustmentLine = buildPriceAdjustmentLine(input.items, finalPriceMap, currentPriceMap);
     if (adjustmentLine) lineItems.push(adjustmentLine);
+    const serviceFeeLine = buildServiceFeeLine(serviceFee);
+    if (serviceFeeLine) lineItems.push(serviceFeeLine);
 
     const draft = await createFiscalDraftOrder({
       lineItems,
@@ -497,14 +588,24 @@ Deno.serve(async (req) => {
       // cadastrado de cobranca tambem identifica o cliente/destinatario; quem
       // define PICK_UP e o handle nativo da shippingLine, nao a ausencia de CEP.
       shippingAddress: (input.delivery.address || input.billingAddress)
-        ? shopifyAddress(input.delivery.address || input.billingAddress!, input.customer.name, input.customer.mobilePhone, input.customer.cpfCnpj)
+        ? shopifyAddress(
+          input.delivery.address || input.billingAddress!,
+          input.customer.name,
+          input.customer.mobilePhone,
+          input.customer.cpfCnpj,
+        )
         : undefined,
       billingAddress: (input.billingAddress || input.delivery.address)
-        ? shopifyAddress(input.billingAddress || input.delivery.address!, input.customer.name, input.customer.mobilePhone, input.customer.cpfCnpj)
+        ? shopifyAddress(
+          input.billingAddress || input.delivery.address!,
+          input.customer.name,
+          input.customer.mobilePhone,
+          input.customer.cpfCnpj,
+        )
         : undefined,
       tags: [
         "checkout-proprio",
-        "asaas",
+        customerType === "franchise" ? "olist" : "asaas",
         customerType,
         ...(shippingCode === "pick_up" ? ["retirada", "pick_up"] : []),
         ...(referral ? [`indicacao:${referral.code}`] : []),
@@ -515,7 +616,10 @@ Deno.serve(async (req) => {
         ...(referral ? [{ key: "codigo_indicacao", value: referral.code }] : []),
         { key: "shipping_code", value: shippingCode },
         { key: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
-        { key: "shipping_option_handle", value: shippingRateHandle || input.delivery.optionHandle || shippingCode },
+        {
+          key: "shipping_option_handle",
+          value: shippingRateHandle || input.delivery.optionHandle || shippingCode,
+        },
       ],
       reserveInventoryUntil: inventoryReservedUntil,
       // Produtos com estoque sem rastreamento nao geram reserva na Shopify;
@@ -585,10 +689,12 @@ Deno.serve(async (req) => {
         },
       });
       return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
-
     }
     if (!draft.taxCredentialStored) {
-      console.warn(`Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`, draft.error);
+      console.warn(
+        `Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`,
+        draft.error,
+      );
     }
     await writeCheckoutAttemptLog(admin, {
       checkoutSessionId: session.id,
@@ -615,7 +721,7 @@ Deno.serve(async (req) => {
       summary: {
         subtotal,
         discount,
-        serviceFee: CHECKOUT_SERVICE_FEE,
+        serviceFee,
         shippingAmount,
         total,
         shippingMethod,

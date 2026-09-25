@@ -2,6 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { canAccessCheckout, optionalCheckoutUser } from "../_shared/checkout-access.ts";
 import {
+  type AsaasPayment,
+  type AsaasPaymentInput,
   createAsaasPayment,
   CUSTOMER_FACING,
   deleteAsaasPayment,
@@ -10,22 +12,31 @@ import {
   getAsaasPayment,
   getAsaasPixQrCode,
   tokenizeAsaasCreditCard,
-  type AsaasPayment, type AsaasPaymentInput,
 } from "../_shared/asaas.ts";
 import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 import {
   belowMinimumChargeMessage,
+  type InstallmentPlan,
   installmentPlan,
   isBelowMinimumChargeError,
   MAX_INSTALLMENTS,
   maxInstallmentsFor,
   MIN_CHARGE_VALUE,
   MIN_INSTALLMENT_VALUE,
-  type InstallmentPlan,
 } from "../_shared/pricing.ts";
 import { taxCredentialGapMessage, writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
+import {
+  createOlistFranchiseOrder,
+  ensureOlistOrderReceivable,
+  generateOlistInvoice,
+  getOlistReceivable,
+  issueOlistInvoice,
+  type OlistFranchiseOrderInput,
+} from "../_shared/olist.ts";
+
+const FRANCHISE_PAYMENT_TERM_DAYS = 7;
 
 function dateInSaoPaulo(addDays = 0): string {
   const date = new Date(Date.now() + addDays * 86_400_000);
@@ -37,6 +48,25 @@ function dateInSaoPaulo(addDays = 0): string {
   }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${value.year}-${value.month}-${value.day}`;
+}
+
+function olistCustomer(
+  customer: { name: string; email: string; cpfCnpj: string; mobilePhone: string },
+  address: Record<string, string>,
+) {
+  return {
+    name: customer.name,
+    cpfCnpj: customer.cpfCnpj,
+    email: customer.email,
+    phone: customer.mobilePhone,
+    address: String(address?.address1 || ""),
+    number: String(address?.number || ""),
+    complement: String(address?.address2 || ""),
+    neighborhood: String(address?.neighborhood || ""),
+    postalCode: String(address?.postalCode || ""),
+    city: String(address?.city || ""),
+    state: String(address?.provinceCode || ""),
+  };
 }
 
 function safePaymentResponse(
@@ -60,11 +90,14 @@ function safePaymentResponse(
 }
 
 function clientIp(req: Request): string {
-  return (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim();
+  return (req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim();
 }
 
 function parseCard(raw: unknown) {
-  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const value = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
   const number = String(value.number || "").replace(/\D/g, "");
   const holderName = String(value.holderName || "").trim().slice(0, 120);
   const expiryMonth = String(value.expiryMonth || "").replace(/\D/g, "").padStart(2, "0").slice(-2);
@@ -73,8 +106,11 @@ function parseCard(raw: unknown) {
   const ccv = String(value.ccv || "").replace(/\D/g, "").slice(0, 4);
   const expiryDate = Number(`${expiryYear}${expiryMonth}`);
   const now = new Date();
-  const currentMonth = Number(`${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`);
-  const validName = holderName.length >= 3 && (holderName.match(/\p{L}/gu)?.length ?? 0) >= 2 && /^[\p{L}\s.'-]+$/u.test(holderName);
+  const currentMonth = Number(
+    `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
+  );
+  const validName = holderName.length >= 3 && (holderName.match(/\p{L}/gu)?.length ?? 0) >= 2 &&
+    /^[\p{L}\s.'-]+$/u.test(holderName);
   let luhnSum = 0;
   let doubleDigit = false;
   for (let index = number.length - 1; index >= 0; index--) {
@@ -89,9 +125,11 @@ function parseCard(raw: unknown) {
   const validNumber = number.length >= 13 && number.length <= 19 &&
     !/^(\d)\1+$/.test(number) && luhnSum % 10 === 0;
   const validCcv = /^3[47]/.test(number) ? /^\d{4}$/.test(ccv) : /^\d{3}$/.test(ccv);
-  if (!validNumber || !validName ||
+  if (
+    !validNumber || !validName ||
     !/^(0[1-9]|1[0-2])$/.test(expiryMonth) || !/^20\d{2}$/.test(expiryYear) ||
-    expiryDate < currentMonth || !validCcv) {
+    expiryDate < currentMonth || !validCcv
+  ) {
     throw new Error("Dados do cartão inválidos");
   }
   return { number, holderName, expiryMonth, expiryYear, ccv };
@@ -106,7 +144,9 @@ function wakeWorker(): void {
     headers: { "content-type": "application/json", "x-payment-worker-token": token },
     body: JSON.stringify({ source: "checkout-payment" }),
   }).catch((error) => console.error("Falha ao acordar worker:", error));
-  const runtime = (globalThis as unknown as { EdgeRuntime?: { waitUntil(value: Promise<unknown>): void } }).EdgeRuntime;
+  const runtime =
+    (globalThis as unknown as { EdgeRuntime?: { waitUntil(value: Promise<unknown>): void } })
+      .EdgeRuntime;
   runtime?.waitUntil(task);
 }
 
@@ -128,9 +168,13 @@ Deno.serve(async (req) => {
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
     const body = await req.json() as Record<string, unknown>;
     requestedAction = typeof body.action === "string" ? body.action : "";
-    logContext.method = body.method === "credit_card" ? "credit_card"
-      : body.method === "debit_card" ? "debit_card"
-      : body.method === "pix" ? "pix" : "unknown";
+    logContext.method = body.method === "credit_card"
+      ? "credit_card"
+      : body.method === "debit_card"
+      ? "debit_card"
+      : body.method === "pix"
+      ? "pix"
+      : "unknown";
     const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
     const accessToken = typeof body.accessToken === "string" ? body.accessToken : null;
     if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return errorResponse("Checkout inválido", 400);
@@ -154,7 +198,10 @@ Deno.serve(async (req) => {
     // Aceita a taxa gravada na própria sessão para não quebrar checkouts antigos
     // que já foram preparados com R$ 3. Novas sessões são criadas com taxa zero.
     if (body.action !== "cancel_pix" && Number(session.total) !== expectedTotal) {
-      return errorResponse("O total deste checkout está desatualizado. Volte à sacola e tente novamente.", 409);
+      return errorResponse(
+        "O total deste checkout está desatualizado. Volte à sacola e tente novamente.",
+        409,
+      );
     }
     const logCustomer = session.customer_snapshot as { name?: string; email?: string } | null;
     logContext = {
@@ -168,19 +215,28 @@ Deno.serve(async (req) => {
       return jsonResponse({ sessionId, cancelled: true });
     }
     const cancellingExpiredPix = body.action === "cancel_pix" && session.status === "expired";
-    if (!cancellingExpiredPix && ["paid", "paid_pending_shopify", "shopify_created", "cancelled", "expired"].includes(session.status)) {
+    if (
+      !cancellingExpiredPix &&
+      ["paid", "paid_pending_shopify", "shopify_created", "credit_approved", "cancelled", "expired"]
+        .includes(session.status)
+    ) {
       return jsonResponse({ sessionId, status: session.status, orderId: session.shopify_order_id });
     }
     // Sem rascunho na Shopify nao existe pedido para vincular ao pagamento.
     // Cobrar aqui criaria dinheiro sem venda: barre antes de tocar no Asaas.
-    if (body.action !== "cancel_pix" && (!session.shopify_draft_order_id || session.status === "failed")) {
+    if (
+      body.action !== "cancel_pix" &&
+      (!session.shopify_draft_order_id || session.status === "failed")
+    ) {
       return errorResponse(
         "Este checkout não foi concluído na loja. Volte à sacola e refaça o pedido — nada foi cobrado.",
         409,
       );
     }
-    const requestedMethod = body.method === "credit_card" ? "credit_card"
-      : body.method === "debit_card" ? "debit_card"
+    const requestedMethod = body.method === "credit_card"
+      ? "credit_card"
+      : body.method === "debit_card"
+      ? "debit_card"
       : "pix";
     const method = session.customer_type === "franchise" ? "terms" : requestedMethod;
     const { data: active } = await admin.from("payments").select("*")
@@ -229,7 +285,10 @@ Deno.serve(async (req) => {
             },
           }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
           wakeWorker();
-          return errorResponse("Este Pix acabou de ser confirmado e não pode mais ser cancelado", 409);
+          return errorResponse(
+            "Este Pix acabou de ser confirmado e não pode mais ser cancelado",
+            409,
+          );
         };
 
         const remote = await getAsaasPayment(providerPaymentId, CUSTOMER_FACING);
@@ -300,7 +359,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ sessionId, paymentId: active.id, cancelled: true });
     }
 
-    if (active) {
+    if (active && method !== "terms") {
       if (active.status === "cancellation_requested") {
         return jsonResponse({
           sessionId,
@@ -310,15 +369,21 @@ Deno.serve(async (req) => {
         }, 409);
       }
       if (active.method !== method) {
-        return jsonResponse({ error: "Já existe uma cobrança ativa em outra forma de pagamento" }, 409);
+        return jsonResponse(
+          { error: "Já existe uma cobrança ativa em outra forma de pagamento" },
+          409,
+        );
       }
       if (active.provider_payment_id && method === "pix" && active.status !== "confirmed") {
         const qr = await getAsaasPixQrCode(active.provider_payment_id, CUSTOMER_FACING);
-        const pixExpiresAt = active.pix_expires_at || new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        const pixExpiresAt = active.pix_expires_at ||
+          new Date(Date.now() + 15 * 60 * 1000).toISOString();
         if (!active.pix_expires_at) {
           await admin.from("payments").update({ pix_expires_at: pixExpiresAt }).eq("id", active.id);
         }
-        return jsonResponse(safePaymentResponse(sessionId, active.id, active.status, qr, null, pixExpiresAt));
+        return jsonResponse(
+          safePaymentResponse(sessionId, active.id, active.status, qr, null, pixExpiresAt),
+        );
       }
       if (active.provider_payment_id && method === "debit_card" && active.status !== "confirmed") {
         const remote = await getAsaasPayment(active.provider_payment_id, CUSTOMER_FACING);
@@ -334,33 +399,24 @@ Deno.serve(async (req) => {
     }
 
     const customer = session.customer_snapshot as {
-      name: string; email: string; cpfCnpj: string; mobilePhone: string;
+      name: string;
+      email: string;
+      cpfCnpj: string;
+      mobilePhone: string;
     };
-    const customerAddress = (session.billing_address_snapshot && Object.keys(session.billing_address_snapshot).length
-      ? session.billing_address_snapshot
-      : session.address_snapshot) as Record<string, string>;
-    const providerCustomerId = await findOrCreateAsaasCustomer({
-      externalReference: auth.user?.id ? `tpp-user:${auth.user.id}` : `tpp-checkout:${sessionId}`,
-      name: customer.name,
-      cpfCnpj: customer.cpfCnpj,
-      email: customer.email,
-      mobilePhone: customer.mobilePhone,
-      ...(customerAddress?.postalCode ? {
-        address: customerAddress.address1,
-        addressNumber: customerAddress.number,
-        complement: customerAddress.address2 || undefined,
-        province: customerAddress.neighborhood,
-        postalCode: customerAddress.postalCode,
-      } : {}),
-    }, CUSTOMER_FACING);
-
+    const customerAddress =
+      (session.billing_address_snapshot && Object.keys(session.billing_address_snapshot).length
+        ? session.billing_address_snapshot
+        : session.address_snapshot) as Record<string, string>;
     let termDays = 0;
     if (session.customer_type === "franchise" && session.user_id) {
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("payment_term_days,manually_blocked,blocked_reason")
+        .select("manually_blocked,blocked_reason")
         .eq("user_id", session.user_id).maybeSingle();
-      if (credit?.manually_blocked) return jsonResponse({ error: credit.blocked_reason || "Franquia bloqueada" }, 403);
-      termDays = credit?.payment_term_days ?? 7;
+      if (credit?.manually_blocked) {
+        return jsonResponse({ error: credit.blocked_reason || "Franquia bloqueada" }, 403);
+      }
+      termDays = FRANCHISE_PAYMENT_TERM_DAYS;
     }
     const dueDate = dateInSaoPaulo(termDays);
     // `checkout-prepare` já barra o carrinho abaixo do piso, mas uma sessão
@@ -369,28 +425,171 @@ Deno.serve(async (req) => {
     if (Number(session.total) < MIN_CHARGE_VALUE) {
       return errorResponse(belowMinimumChargeMessage(Number(session.total)), 422);
     }
-    const { data: attempt, error: attemptError } = await admin.rpc("create_payment_attempt", {
-      p_checkout_session_id: sessionId,
-      p_provider: "asaas",
-      p_method: method,
-      p_amount: session.total,
-      p_due_date: dueDate,
-    });
-    if (attemptError) {
-      if (attemptError.message?.includes("active_payment_attempt_exists")) {
-        return jsonResponse({ error: "Já existe uma tentativa ativa; atualize a página" }, 409);
+    let paymentAttempt = active;
+    if (!paymentAttempt) {
+      const { data: attempt, error: attemptError } = await admin.rpc("create_payment_attempt", {
+        p_checkout_session_id: sessionId,
+        p_provider: session.customer_type === "franchise" ? "olist" : "asaas",
+        p_method: method,
+        p_amount: session.total,
+        p_due_date: dueDate,
+      });
+      if (attemptError) {
+        if (attemptError.message?.includes("active_payment_attempt_exists")) {
+          return jsonResponse({ error: "Já existe uma tentativa ativa; atualize a página" }, 409);
+        }
+        throw attemptError;
       }
-      throw attemptError;
+      paymentAttempt = Array.isArray(attempt) ? attempt[0] : attempt;
     }
-    const paymentAttempt = Array.isArray(attempt) ? attempt[0] : attempt;
     if (!paymentAttempt?.id) throw new Error("Falha ao criar tentativa financeira");
+
+    if (session.customer_type === "franchise") {
+      const olistToken = Deno.env.get("OLIST_API_TOKEN") || Deno.env.get("TINY_API_TOKEN") || "";
+      if (!olistToken) throw new Error("Olist não configurada para pedidos de franquia");
+      const billing = olistCustomer(customer, customerAddress);
+      const deliveryAddress =
+        session.address_snapshot && Object.keys(session.address_snapshot).length
+          ? olistCustomer(customer, session.address_snapshot as Record<string, string>)
+          : undefined;
+      const items = (Array.isArray(session.items_snapshot) ? session.items_snapshot : []) as Array<
+        Record<string, unknown>
+      >;
+      const olistInput: OlistFranchiseOrderInput = {
+        externalReference: sessionId,
+        customer: billing,
+        deliveryAddress,
+        items: items.map((item) => ({
+          sku: String(item.sku || ""),
+          description: [item.productTitle, item.variantTitle].filter(Boolean).join(" - "),
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+        })),
+        shippingAmount: Number(session.shipping_amount),
+        serviceFee: Number(session.service_fee),
+        total: Number(session.total),
+        dueDate,
+        shippingMethod: String(session.shipping_method || ""),
+        paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || ""),
+      };
+
+      let order = session.olist_order_id
+        ? {
+          id: String(session.olist_order_id),
+          number: String(session.olist_order_number || session.olist_order_id),
+        }
+        : null;
+      if (!order) {
+        order = await createOlistFranchiseOrder(olistInput, olistToken);
+        const { error: orderSaveError } = await admin.from("checkout_sessions").update({
+          olist_order_id: order.id,
+          olist_order_number: order.number,
+        }).eq("id", sessionId);
+        if (orderSaveError) throw orderSaveError;
+      }
+
+      const receivable = session.olist_receivable_id
+        ? await getOlistReceivable(String(session.olist_receivable_id), olistToken)
+        : await ensureOlistOrderReceivable(order.id, olistToken);
+      const { error: receivableSaveError } = await admin.from("checkout_sessions")
+        .update({ olist_receivable_id: receivable.id }).eq("id", sessionId);
+      if (receivableSaveError) throw receivableSaveError;
+      const { error: paymentSaveError } = await admin.from("payments").update({
+        provider: "olist",
+        provider_customer_id: order.id,
+        provider_payment_id: receivable.id,
+        raw_status: receivable.status,
+        status: receivable.status === "pago" ? "received" : "pending",
+        ...(receivable.status === "pago"
+          ? { received_at: new Date().toISOString(), is_active: false }
+          : {}),
+      }).eq("id", paymentAttempt.id);
+      if (paymentSaveError) throw paymentSaveError;
+
+      let invoice = session.olist_invoice_id
+        ? {
+          id: String(session.olist_invoice_id),
+          number: String(session.olist_invoice_number || ""),
+          issued: false,
+        }
+        : await generateOlistInvoice(order.id, olistToken);
+      const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
+        olist_invoice_id: invoice.id,
+        olist_invoice_number: invoice.number,
+      }).eq("id", sessionId);
+      if (invoiceSaveError) throw invoiceSaveError;
+      invoice = await issueOlistInvoice(invoice, olistToken);
+
+      const shopifyToken = shopifyAdminToken();
+      if (!shopifyToken || !session.shopify_draft_order_id) {
+        throw new Error("Shopify não configurada para concluir pedido da franquia");
+      }
+      const completed = await completeDraftOrder(
+        session.shopify_draft_order_id,
+        shopifyToken,
+        true,
+        customer.cpfCnpj,
+      );
+      if (!completed.requestOk || !completed.orderId) {
+        throw new Error("Falha ao concluir pedido com prazo na Shopify");
+      }
+      const { error: completedSaveError } = await admin.from("checkout_sessions").update({
+        status: "credit_approved",
+        shopify_order_id: completed.orderId,
+        olist_invoice_number: invoice.number,
+      }).eq("id", sessionId);
+      if (completedSaveError) throw completedSaveError;
+      await writeCheckoutAttemptLog(admin, {
+        checkoutSessionId: sessionId,
+        userId: logContext.userId,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        paymentMethod: "terms",
+        stage: "payment",
+        success: true,
+        providerPaymentId: receivable.id,
+        metadata: {
+          provider: "olist",
+          olistOrderId: order.id,
+          olistInvoiceId: invoice.id,
+          dueDate,
+        },
+      });
+      return jsonResponse(safePaymentResponse(
+        sessionId,
+        paymentAttempt.id,
+        "credit_approved",
+        null,
+        receivable.boletoUrl || null,
+      ));
+    }
+
+    const providerCustomerId = await findOrCreateAsaasCustomer({
+      externalReference: auth.user?.id ? `tpp-user:${auth.user.id}` : `tpp-checkout:${sessionId}`,
+      name: customer.name,
+      cpfCnpj: customer.cpfCnpj,
+      email: customer.email,
+      mobilePhone: customer.mobilePhone,
+      ...(customerAddress?.postalCode
+        ? {
+          address: customerAddress.address1,
+          addressNumber: customerAddress.number,
+          complement: customerAddress.address2 || undefined,
+          province: customerAddress.neighborhood,
+          postalCode: customerAddress.postalCode,
+        }
+        : {}),
+    }, CUSTOMER_FACING);
 
     const createInput: AsaasPaymentInput = {
       customer: providerCustomerId,
       billingType: session.customer_type === "franchise"
         ? "UNDEFINED"
-        : method === "debit_card" ? "CREDIT_CARD"
-        : method === "credit_card" ? "CREDIT_CARD" : "PIX",
+        : method === "debit_card"
+        ? "CREDIT_CARD"
+        : method === "credit_card"
+        ? "CREDIT_CARD"
+        : "PIX",
       value: Number(session.total),
       dueDate,
       description: `Pedido TudoPraPet ${sessionId.slice(0, 8)}`,
@@ -405,7 +604,10 @@ Deno.serve(async (req) => {
         return errorResponse(`Parcelamento inválido: escolha de 1x a ${MAX_INSTALLMENTS}x`, 400);
       }
       if (requested > maxInstallmentsFor(Number(session.total))) {
-        return errorResponse(`Cada parcela precisa ser de no mínimo R$ ${MIN_INSTALLMENT_VALUE},00`, 400);
+        return errorResponse(
+          `Cada parcela precisa ser de no mínimo R$ ${MIN_INSTALLMENT_VALUE},00`,
+          400,
+        );
       }
       // Juros do parcelamento são do cliente: o valor cobrado é recalculado
       // aqui no servidor, nunca aceito do navegador.
@@ -418,7 +620,9 @@ Deno.serve(async (req) => {
       const ip = clientIp(req);
       if (!ip) throw new Error("Não foi possível identificar a origem do pagamento");
       createInput.remoteIp = ip;
-      const savedMethodId = typeof body.savedPaymentMethodId === "string" ? body.savedPaymentMethodId : "";
+      const savedMethodId = typeof body.savedPaymentMethodId === "string"
+        ? body.savedPaymentMethodId
+        : "";
       if (savedMethodId) {
         if (!auth.user) return errorResponse("Entre na conta para usar um cartão salvo", 401);
         const { data: saved } = await admin.from("customer_payment_methods")
@@ -427,11 +631,16 @@ Deno.serve(async (req) => {
         if (!saved || saved.provider_customer_id !== providerCustomerId) {
           return errorResponse("Cartão salvo não está disponível", 409);
         }
-        createInput.creditCardToken = await decryptPaymentToken(saved.token_ciphertext, saved.token_iv);
+        createInput.creditCardToken = await decryptPaymentToken(
+          saved.token_ciphertext,
+          saved.token_iv,
+        );
       } else {
         submittedCard = parseCard(body.card);
         const billing = session.billing_address_snapshot as Record<string, string>;
-        if (!billing?.postalCode || !billing?.number) return errorResponse("Informe o endereço de cobrança", 400);
+        if (!billing?.postalCode || !billing?.number) {
+          return errorResponse("Informe o endereço de cobrança", 400);
+        }
         createInput.creditCard = submittedCard;
         createInput.creditCardHolderInfo = {
           name: customer.name,
@@ -475,7 +684,9 @@ Deno.serve(async (req) => {
       status: directStatus,
       ...(cardPlan ? { amount: cardPlan.chargedTotal } : {}),
       ...(directStatus === "confirmed" ? { confirmed_at: new Date().toISOString() } : {}),
-      ...(directStatus === "received" ? { received_at: new Date().toISOString(), is_active: false } : {}),
+      ...(directStatus === "received"
+        ? { received_at: new Date().toISOString(), is_active: false }
+        : {}),
     }).eq("id", paymentAttempt.id);
     if (paymentUpdateError) throw paymentUpdateError;
     await writeCheckoutAttemptLog(admin, {
@@ -494,55 +705,21 @@ Deno.serve(async (req) => {
       },
     });
 
-    if (session.customer_type === "franchise") {
-      const shopifyToken = shopifyAdminToken();
-      if (!shopifyToken || !session.shopify_draft_order_id) {
-        throw new Error("Shopify não configurada para concluir pedido da franquia");
-      }
-      const completed = await completeDraftOrder(session.shopify_draft_order_id, shopifyToken, true, customer.cpfCnpj);
-      if (!completed.requestOk || !completed.orderId) {
-        await writeCheckoutAttemptLog(admin, {
-          checkoutSessionId: sessionId, userId: logContext.userId,
-          customerName: customer.name, customerEmail: customer.email,
-          paymentMethod: "terms", stage: "shopify_completion", success: false,
-          errorMessage: completed.error || "Shopify nao concluiu o pedido com prazo.",
-          providerPaymentId: providerPayment.id,
-        });
-        throw new Error("Falha ao concluir pedido com prazo na Shopify");
-      }
-      await writeCheckoutAttemptLog(admin, {
-        checkoutSessionId: sessionId, userId: logContext.userId,
-        customerName: customer.name, customerEmail: customer.email,
-        paymentMethod: "terms", stage: "shopify_completion", success: true,
-        errorMessage: completed.taxCredentialStored === false
-          ? taxCredentialGapMessage(completed.taxCredentialError)
-          : null,
-        providerPaymentId: providerPayment.id,
-        metadata: {
-          shopifyOrderId: completed.orderId,
-          taxCredentialStored: completed.taxCredentialStored ?? null,
-        },
-      });
-      await admin.from("checkout_sessions").update({
-        status: "credit_approved",
-        shopify_order_id: completed.orderId,
-      }).eq("id", sessionId);
-      return jsonResponse(safePaymentResponse(
-        sessionId,
-        paymentAttempt.id,
-        "credit_approved",
-        null,
-        typeof providerPayment.invoiceUrl === "string" ? providerPayment.invoiceUrl : null,
-      ));
-    }
-
     if (method === "credit_card") {
       let cardSaved = false;
-      let providerToken = typeof providerPayment.creditCardToken === "string" ? providerPayment.creditCardToken : "";
-      let tokenCardNumber = typeof providerPayment.creditCardNumber === "string" ? providerPayment.creditCardNumber : "";
-      let tokenCardBrand = typeof providerPayment.creditCardBrand === "string" ? providerPayment.creditCardBrand : "";
-      if (body.saveCard === true && auth.user && !providerToken && submittedCard &&
-        createInput.creditCardHolderInfo && createInput.remoteIp) {
+      let providerToken = typeof providerPayment.creditCardToken === "string"
+        ? providerPayment.creditCardToken
+        : "";
+      let tokenCardNumber = typeof providerPayment.creditCardNumber === "string"
+        ? providerPayment.creditCardNumber
+        : "";
+      let tokenCardBrand = typeof providerPayment.creditCardBrand === "string"
+        ? providerPayment.creditCardBrand
+        : "";
+      if (
+        body.saveCard === true && auth.user && !providerToken && submittedCard &&
+        createInput.creditCardHolderInfo && createInput.remoteIp
+      ) {
         try {
           const tokenized = await tokenizeAsaasCreditCard({
             customer: providerCustomerId,
@@ -550,7 +727,9 @@ Deno.serve(async (req) => {
             creditCardHolderInfo: createInput.creditCardHolderInfo,
             remoteIp: createInput.remoteIp,
           }, CUSTOMER_FACING);
-          providerToken = typeof tokenized.creditCardToken === "string" ? tokenized.creditCardToken : "";
+          providerToken = typeof tokenized.creditCardToken === "string"
+            ? tokenized.creditCardToken
+            : "";
           tokenCardNumber = tokenized.creditCardNumber || tokenCardNumber;
           tokenCardBrand = tokenized.creditCardBrand || tokenCardBrand;
         } catch (tokenError) {
@@ -560,7 +739,10 @@ Deno.serve(async (req) => {
       if (body.saveCard === true && auth.user && providerToken) {
         try {
           const encrypted = await encryptPaymentToken(providerToken);
-          const returnedDigits = String(tokenCardNumber || submittedCard?.number || "").replace(/\D/g, "");
+          const returnedDigits = String(tokenCardNumber || submittedCard?.number || "").replace(
+            /\D/g,
+            "",
+          );
           const lastFour = returnedDigits.slice(-4);
           if (/^\d{4}$/.test(lastFour)) {
             await admin.from("customer_payment_methods").update({ is_default: false })
@@ -584,7 +766,10 @@ Deno.serve(async (req) => {
           console.error("Pagamento aprovado, mas o token do cartão não foi salvo:", saveError);
         }
       }
-      await admin.from("checkout_sessions").update({ status: "payment_processing" }).eq("id", sessionId);
+      await admin.from("checkout_sessions").update({ status: "payment_processing" }).eq(
+        "id",
+        sessionId,
+      );
       if (["confirmed", "received"].includes(directStatus)) {
         await admin.from("payment_events").upsert({
           provider: "asaas",
@@ -597,7 +782,8 @@ Deno.serve(async (req) => {
             payment: {
               id: providerPayment.id,
               status: providerPayment.status,
-              externalReference: providerPayment.externalReference || paymentAttempt.external_reference,
+              externalReference: providerPayment.externalReference ||
+                paymentAttempt.external_reference,
             },
           },
         }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
@@ -614,9 +800,12 @@ Deno.serve(async (req) => {
             customer.cpfCnpj,
           );
           await writeCheckoutAttemptLog(admin, {
-            checkoutSessionId: sessionId, userId: logContext.userId,
-            customerName: customer.name, customerEmail: customer.email,
-            paymentMethod: "credit_card", stage: "shopify_completion",
+            checkoutSessionId: sessionId,
+            userId: logContext.userId,
+            customerName: customer.name,
+            customerEmail: customer.email,
+            paymentMethod: "credit_card",
+            stage: "shopify_completion",
             success: completed.requestOk && Boolean(completed.orderId),
             errorMessage: completed.requestOk
               ? (completed.taxCredentialStored === false
@@ -650,7 +839,9 @@ Deno.serve(async (req) => {
         cardSaved,
         cardSaveRequested: body.saveCard === true && Boolean(auth.user) && Boolean(submittedCard),
         cardBrand: providerPayment.creditCardBrand || null,
-        cardLastFour: String(providerPayment.creditCardNumber || submittedCard?.number || "").replace(/\D/g, "").slice(-4) || null,
+        cardLastFour:
+          String(providerPayment.creditCardNumber || submittedCard?.number || "").replace(/\D/g, "")
+            .slice(-4) || null,
       });
     }
     if (method === "debit_card") {
@@ -662,7 +853,10 @@ Deno.serve(async (req) => {
           .eq("id", paymentAttempt.id);
         throw new Error("Asaas não devolveu a página segura para pagamento no débito");
       }
-      await admin.from("checkout_sessions").update({ status: "payment_processing" }).eq("id", sessionId);
+      await admin.from("checkout_sessions").update({ status: "payment_processing" }).eq(
+        "id",
+        sessionId,
+      );
       return jsonResponse(safePaymentResponse(
         sessionId,
         paymentAttempt.id,
@@ -681,7 +875,9 @@ Deno.serve(async (req) => {
       }).eq("id", paymentAttempt.id),
       admin.from("checkout_sessions").update({ status: "payment_processing" }).eq("id", sessionId),
     ]);
-    return jsonResponse(safePaymentResponse(sessionId, paymentAttempt.id, "pending", qr, null, pixExpiresAt));
+    return jsonResponse(
+      safePaymentResponse(sessionId, paymentAttempt.id, "pending", qr, null, pixExpiresAt),
+    );
   } catch (error) {
     console.error("checkout-payment:", error);
     const message = error instanceof Error ? error.message : "";
@@ -698,17 +894,29 @@ Deno.serve(async (req) => {
       });
     }
     if ((error as Error & { status?: number }).status === 429) {
-      return errorResponse("Pagamentos temporariamente indisponíveis. Aguarde alguns minutos e tente novamente.", 503);
+      return errorResponse(
+        "Pagamentos temporariamente indisponíveis. Aguarde alguns minutos e tente novamente.",
+        503,
+      );
     }
     if (requestedAction === "cancel_pix") {
-      return errorResponse("Não foi possível confirmar o cancelamento do Pix. Tente novamente.", 502);
+      return errorResponse(
+        "Não foi possível confirmar o cancelamento do Pix. Tente novamente.",
+        502,
+      );
     }
     if (message.includes("Dados do cartão inválidos")) return errorResponse(message, 400);
     if (/Asaas 400:.*invalid_billingType/i.test(message)) {
-      return errorResponse("O pagamento por cartão ainda não está habilitado nesta conta. Use Pix ou fale com o atendimento.", 503);
+      return errorResponse(
+        "O pagamento por cartão ainda não está habilitado nesta conta. Use Pix ou fale com o atendimento.",
+        503,
+      );
     }
     if (/Asaas 400:.*invalid_creditCard/i.test(message)) {
-      return errorResponse("O banco não autorizou esta compra. Confira os dados, tente outro cartão ou escolha Pix ou débito.", 402);
+      return errorResponse(
+        "O banco não autorizou esta compra. Confira os dados, tente outro cartão ou escolha Pix ou débito.",
+        402,
+      );
     }
     // Sessão criada antes da guarda de piso, ou piso do Asaas alterado sem
     // aviso: o motivo é legítimo e o cliente consegue agir sobre ele.
@@ -731,9 +939,17 @@ Deno.serve(async (req) => {
       );
     }
     if (/Asaas 401:/.test(message)) {
-      return errorResponse("Pagamento temporariamente indisponível. Tente novamente mais tarde.", 503);
+      return errorResponse(
+        "Pagamento temporariamente indisponível. Tente novamente mais tarde.",
+        503,
+      );
     }
-    if (/Asaas 4\d\d:/.test(message)) return errorResponse("Pagamento recusado. Confira os dados ou use outra forma de pagamento.", 402);
+    if (/Asaas 4\d\d:/.test(message)) {
+      return errorResponse(
+        "Pagamento recusado. Confira os dados ou use outra forma de pagamento.",
+        402,
+      );
+    }
     return errorResponse("Não foi possível iniciar o pagamento", 500);
   }
 });

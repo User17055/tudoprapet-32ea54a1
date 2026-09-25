@@ -9,6 +9,25 @@ export interface LineItem {
 // Mantido no snapshot e no banco para compatibilidade com pedidos antigos.
 // Novos checkouts não cobram taxa operacional.
 export const CHECKOUT_SERVICE_FEE = 0;
+export const FRANCHISE_ORDER_FEE = 2;
+
+export function checkoutServiceFee(customerType: "common" | "subscriber" | "franchise"): number {
+  return customerType === "franchise" ? FRANCHISE_ORDER_FEE : CHECKOUT_SERVICE_FEE;
+}
+
+export function buildServiceFeeLine(
+  amount: number,
+  title = "Taxa operacional da franquia",
+): Record<string, unknown> | null {
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return {
+    title,
+    price: amount.toFixed(2),
+    quantity: 1,
+    requires_shipping: false,
+    taxable: false,
+  };
+}
 
 /**
  * A forma de entrega é enviada separadamente dos produtos. Os itens do pedido

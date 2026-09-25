@@ -535,6 +535,7 @@ export interface ShopifyVariantCheckoutDetail {
   productId: string;
   title: string;
   productTitle: string;
+  sku: string;
   price: number;
   availableForSale: boolean;
   quantityAvailable: number | null;
@@ -577,7 +578,7 @@ export async function fetchVariantCheckoutDetails(
   adminToken: string,
 ): Promise<Map<string, ShopifyVariantCheckoutDetail>> {
   const buildQuery = (withInventory: boolean) => `query($ids:[ID!]!){ nodes(ids:$ids){ ... on ProductVariant {
-        id title availableForSale ${withInventory ? "quantityAvailable" : ""} price { amount }
+        id title sku availableForSale ${withInventory ? "quantityAvailable" : ""} price { amount }
         image { url }
         product { id title }
       } } }`;
@@ -619,6 +620,7 @@ export async function fetchVariantCheckoutDetails(
       productId: String(node.product.id),
       title: String(node.title || ""),
       productTitle: String(node.product?.title || "Produto"),
+      sku: String(node.sku || "").trim(),
       price,
       availableForSale: Boolean(node.availableForSale),
       quantityAvailable: node.quantityAvailable !== null && node.quantityAvailable !== undefined &&
