@@ -382,8 +382,9 @@ export async function getOlistOrderInvoiceId(
   token: string,
 ): Promise<string | null> {
   const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id: orderId });
-  const invoiceId = payload?.retorno?.pedido?.id_nota_fiscal;
-  return invoiceId ? String(invoiceId) : null;
+  // A Olist devolve "0" quando o pedido ainda nao tem nota; nao e um ID valido.
+  const invoiceId = String(payload?.retorno?.pedido?.id_nota_fiscal ?? "").trim();
+  return invoiceId && invoiceId !== "0" ? invoiceId : null;
 }
 
 export async function getOlistInvoice(id: string, token: string): Promise<OlistInvoice> {
