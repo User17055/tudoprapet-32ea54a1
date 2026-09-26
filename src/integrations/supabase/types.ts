@@ -244,11 +244,11 @@ export type Database = {
           customer_snapshot: Json
           customer_type: string
           discount: number
+          franchise_payment_term_days: number | null
           id: string
           inventory_reserved_until: string | null
-          items_snapshot: Json
           invoice_purpose: string | null
-          franchise_payment_term_days: number | null
+          items_snapshot: Json
           olist_invoice_id: string | null
           olist_invoice_number: string | null
           olist_invoice_url: string | null
@@ -283,11 +283,11 @@ export type Database = {
           customer_snapshot?: Json
           customer_type: string
           discount?: number
+          franchise_payment_term_days?: number | null
           id?: string
           inventory_reserved_until?: string | null
-          items_snapshot?: Json
           invoice_purpose?: string | null
-          franchise_payment_term_days?: number | null
+          items_snapshot?: Json
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
           olist_invoice_url?: string | null
@@ -322,11 +322,11 @@ export type Database = {
           customer_snapshot?: Json
           customer_type?: string
           discount?: number
+          franchise_payment_term_days?: number | null
           id?: string
           inventory_reserved_until?: string | null
-          items_snapshot?: Json
           invoice_purpose?: string | null
-          franchise_payment_term_days?: number | null
+          items_snapshot?: Json
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
           olist_invoice_url?: string | null
@@ -1586,8 +1586,9 @@ export type Database = {
       invoke_olist_franchise_reconciliation: { Args: never; Returns: undefined }
       invoke_payment_reconciliation: { Args: never; Returns: undefined }
       is_cpf_available: { Args: { _cpf: string }; Returns: boolean }
-      is_tax_id_available: { Args: { _tax_id: string }; Returns: boolean }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      is_tax_id_available: { Args: { _tax_id: string }; Returns: boolean }
+      is_valid_cnpj: { Args: { value: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
       save_customer_address: {
         Args: {
