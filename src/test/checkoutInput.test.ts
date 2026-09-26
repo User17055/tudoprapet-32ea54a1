@@ -93,4 +93,15 @@ describe("entrada do checkout próprio", () => {
       ok: false, message: "Informe um código de indicação válido",
     });
   });
+
+  it("aceita somente as duas finalidades fiscais da franquia", () => {
+    const resale = parseCheckoutPrepareInput({ ...valid, invoicePurpose: "resale" });
+    expect(resale.ok && resale.value.invoicePurpose).toBe("resale");
+    const finalConsumption = parseCheckoutPrepareInput({ ...valid, invoicePurpose: "final_consumption" });
+    expect(finalConsumption.ok && finalConsumption.value.invoicePurpose).toBe("final_consumption");
+    expect(parseCheckoutPrepareInput({ ...valid, invoicePurpose: "outra" })).toEqual({
+      ok: false,
+      message: "Escolha uma finalidade válida para a nota fiscal",
+    });
+  });
 });

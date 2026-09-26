@@ -71,11 +71,15 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
     serviceFee: 2,
     total: 62,
     dueDate: "2026-10-02",
+    invoicePurpose: "resale" as const,
+    natureOperationId: "12345",
   };
   const order = buildOlistFranchiseOrder(input) as any;
   assertEquals(order.pedido.outras_despesas, 2);
   assertEquals(order.pedido.itens[0].item.codigo, "RACAO-1");
   assertEquals(order.pedido.situacao, "aprovado");
+  assertEquals(order.pedido.id_natureza_operacao, "12345");
+  assertEquals(order.pedido.obs.includes("revenda"), true);
   assertEquals(order.pedido.parcelas[0].parcela.data, "02/10/2026");
   assertEquals(order.pedido.parcelas[0].parcela.valor, 62);
   const receivable = buildOlistReceivable(input, "ABC123456") as any;

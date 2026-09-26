@@ -1194,13 +1194,16 @@ function UsersTab() {
   const [editName, setEditName] = useState("");
   const [search, setSearch] = useState("");
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
+  const [franchiseTerms, setFranchiseTerms] = useState<Record<string, number>>({});
+  const [savingTermId, setSavingTermId] = useState<string | null>(null);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
-    const [p, s, m] = await Promise.all([
+    const [p, s, m, franchiseSettings] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at", { ascending: false }),
       supabase.from("subscribers").select("user_id, status"),
       supabase.from("club_members").select("email, is_active"),
+      supabase.functions.invoke("admin-franchise-settings", { body: { action: "list" } }),
     ]);
     if (p.error && !silent) toast.error("Erro ao carregar usuários");
     setProfiles((p.data || []) as ProfileRow[]);
@@ -1214,6 +1217,11 @@ function UsersTab() {
       if (row.is_active && row.email) emails.add(row.email.toLowerCase());
     });
     setMemberEmails(emails);
+    const terms: Record<string, number> = {};
+    for (const account of franchiseSettings.data?.accounts || []) {
+      terms[String(account.user_id)] = Number(account.payment_term_days) === 30 ? 30 : 7;
+    }
+    setFranchiseTerms(terms);
     if (!silent) setLoading(false);
   };
 
@@ -1275,6 +1283,17 @@ function UsersTab() {
     toast.success(next ? "Marcado como franqueado" : "Franquia removida");
   };
 
+  const updateFranchiseTerm = async (p: ProfileRow, days: number) => {
+    setSavingTermId(p.user_id);
+    const { data, error } = await supabase.functions.invoke("admin-franchise-settings", {
+      body: { action: "update_payment_term", userId: p.user_id, paymentTermDays: days },
+    });
+    setSavingTermId(null);
+    if (error || data?.error) return toast.error(data?.error || "Erro ao atualizar o prazo");
+    setFranchiseTerms((current) => ({ ...current, [p.user_id]: days }));
+    toast.success(`Prazo atualizado para ${days} dias`);
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return profiles;
@@ -1333,12 +1352,14 @@ function UsersTab() {
         ) : filtered.length === 0 ? (
           <p className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</p>
         ) : (
-          <Table className="[&_th]:h-9 [&_td]:py-2">
+          <div className="overflow-x-auto">
+          <Table className="min-w-[880px] [&_th]:h-9 [&_td]:py-2">
             <TableHeader>
               <TableRow>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Plano</TableHead>
+                <TableHead>Prazo da franquia</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
@@ -1377,6 +1398,21 @@ function UsersTab() {
                           Sem plano
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {p.is_franchisee ? (
+                        <Select
+                          value={String(franchiseTerms[p.user_id] || 7)}
+                          onValueChange={(value) => void updateFranchiseTerm(p, Number(value))}
+                          disabled={savingTermId === p.user_id}
+                        >
+                          <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="7">7 dias</SelectItem>
+                            <SelectItem value="30">30 dias</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(p.created_at).toLocaleDateString("pt-BR")}
@@ -1430,6 +1466,7 @@ function UsersTab() {
               })}
             </TableBody>
           </Table>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -53,6 +53,8 @@ export interface OlistFranchiseOrderInput {
   shippingMethod?: string;
   paymentMethod?: string;
   paymentHolder?: string;
+  invoicePurpose?: "resale" | "final_consumption";
+  natureOperationId?: string;
 }
 
 export interface OlistCreatedOrder {
@@ -185,6 +187,9 @@ export function buildOlistFranchiseOrder(input: OlistFranchiseOrderInput): Recor
       outras_despesas: roundMoney(input.serviceFee),
       forma_frete: truncate(input.shippingMethod, 30),
       ...(input.paymentMethod ? { forma_pagamento: truncate(input.paymentMethod, 30) } : {}),
+      ...(input.natureOperationId
+        ? { id_natureza_operacao: truncate(input.natureOperationId, 30) }
+        : {}),
       parcelas: [{
         parcela: {
           data: toOlistDate(input.dueDate),
@@ -196,8 +201,18 @@ export function buildOlistFranchiseOrder(input: OlistFranchiseOrderInput): Recor
       situacao: "aprovado",
       numero_pedido_ecommerce: truncate(input.externalReference, 50),
       ecommerce: "TudoPraPet",
-      obs: truncate(`Pedido de franquia TudoPraPet ${input.externalReference}`, 100),
-      obs_internas: truncate(`Taxa operacional R$ ${roundMoney(input.serviceFee).toFixed(2)}`, 100),
+      obs: truncate(
+        `Pedido de franquia TudoPraPet ${input.externalReference} - NF-e: ${
+          input.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"
+        }`,
+        100,
+      ),
+      obs_internas: truncate(
+        `Taxa operacional R$ ${roundMoney(input.serviceFee).toFixed(2)} - Finalidade: ${
+          input.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"
+        }`,
+        100,
+      ),
     },
   };
 }

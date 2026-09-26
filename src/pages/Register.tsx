@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Circle, CreditCard, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { Building2, CheckCircle2, Circle, CreditCard, Lock, Mail, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthLayout } from '@/components/auth/AuthLayout';
 import { AuthField } from '@/components/auth/AuthField';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { cpfDigits, isValidCpf, maskCpf } from '@/lib/cpf';
+import { cnpjDigits, cpfDigits, isValidCnpj, isValidCpf, maskCnpj, maskCpf } from '@/lib/cpf';
 import {
   Select,
   SelectContent,
@@ -29,7 +29,8 @@ const Register = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [cpf, setCpf] = useState('');
+  const [personType, setPersonType] = useState<'individual' | 'company'>('individual');
+  const [taxId, setTaxId] = useState('');
   const [password, setPassword] = useState('');
   const [acquisitionSource, setAcquisitionSource] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -51,8 +52,9 @@ const Register = () => {
       toast.error('Crie uma senha segura seguindo todos os requisitos.');
       return;
     }
-    if (!isValidCpf(cpf)) {
-      toast.error('Informe um CPF valido.');
+    const validTaxId = personType === 'company' ? isValidCnpj(taxId) : isValidCpf(taxId);
+    if (!validTaxId) {
+      toast.error(`Informe um ${personType === 'company' ? 'CNPJ' : 'CPF'} válido.`);
       return;
     }
     if (!acquisitionSource) {
@@ -65,15 +67,16 @@ const Register = () => {
     }
     // O CPF e unico por conta. Sem esta checagem o banco recusa o cadastro e a
     // Supabase devolve um erro generico de servidor, sem dizer o motivo.
-    const { data: cpfDisponivel, error: cpfError } = await supabase.rpc('is_cpf_available', {
-      _cpf: cpfDigits(cpf),
+    const normalizedTaxId = personType === 'company' ? cnpjDigits(taxId) : cpfDigits(taxId);
+    const { data: taxIdAvailable, error: taxIdError } = await supabase.rpc('is_tax_id_available', {
+      _tax_id: normalizedTaxId,
     });
-    if (cpfError) {
-      toast.error('Nao foi possivel validar o CPF agora. Tente novamente em instantes.');
+    if (taxIdError) {
+      toast.error(`Não foi possível validar o ${personType === 'company' ? 'CNPJ' : 'CPF'} agora.`);
       return;
     }
-    if (!cpfDisponivel) {
-      toast.error('Este CPF ja esta cadastrado. Entre com o e-mail usado antes ou recupere a senha.');
+    if (!taxIdAvailable) {
+      toast.error(`Este ${personType === 'company' ? 'CNPJ' : 'CPF'} já está cadastrado.`);
       return;
     }
 
@@ -94,7 +97,8 @@ const Register = () => {
         firstName,
         lastName,
         email,
-        cpf: cpfDigits(cpf),
+        personType,
+        taxId: normalizedTaxId,
         password,
         acquisitionSource,
         referralCode: normalizedReferralCode,
@@ -136,7 +140,7 @@ const Register = () => {
         onSubmit={handleSubmit}
         className="space-y-4 rounded-2xl border border-border bg-background p-6 shadow-sm"
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <AuthField
             id="firstName"
             label="Nome"
@@ -172,18 +176,30 @@ const Register = () => {
           placeholder="seu@email.com"
         />
 
+        <div className="space-y-2">
+          <span className="text-sm font-bold text-foreground">Tipo de cadastro</span>
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1">
+            <button type="button" onClick={() => { setPersonType('individual'); setTaxId(''); }} className={`flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-bold transition ${personType === 'individual' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>
+              <UserIcon className="h-4 w-4" />Pessoa física
+            </button>
+            <button type="button" onClick={() => { setPersonType('company'); setTaxId(''); }} className={`flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-bold transition ${personType === 'company' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>
+              <Building2 className="h-4 w-4" />Pessoa jurídica
+            </button>
+          </div>
+        </div>
+
         <AuthField
-          id="cpf"
-          label="CPF"
+          id="taxId"
+          label={personType === 'company' ? 'CNPJ' : 'CPF'}
           icon={CreditCard}
           inputMode="numeric"
           autoComplete="off"
-          value={cpf}
-          onChange={(e) => setCpf(maskCpf(e.target.value))}
+          value={taxId}
+          onChange={(e) => setTaxId(personType === 'company' ? maskCnpj(e.target.value) : maskCpf(e.target.value))}
           required
-          maxLength={14}
-          placeholder="000.000.000-00"
-          aria-invalid={cpf.length === 14 && !isValidCpf(cpf)}
+          maxLength={personType === 'company' ? 18 : 14}
+          placeholder={personType === 'company' ? '00.000.000/0000-00' : '000.000.000-00'}
+          aria-invalid={taxId.length === (personType === 'company' ? 18 : 14) && !(personType === 'company' ? isValidCnpj(taxId) : isValidCpf(taxId))}
         />
 
         <div className="space-y-2">

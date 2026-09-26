@@ -107,6 +107,7 @@ type SavedPayment = {
   isDefault: boolean;
 };
 type PaymentMethod = "pix" | "credit_card" | "debit_card";
+type InvoicePurpose = "resale" | "final_consumption";
 type ShippingOption = {
   handle: string;
   code: string | null;
@@ -144,6 +145,8 @@ type CheckoutSummary = {
   } | null;
   total: number;
   items: SummaryItem[];
+  invoicePurpose?: InvoicePurpose;
+  paymentTermDays?: number;
 };
 type PaymentResult = {
   status: string;
@@ -356,6 +359,8 @@ export default function Checkout() {
   });
   const [cardErrors, setCardErrors] = useState<CardErrors>({});
   const [isFranchisee, setIsFranchisee] = useState(false);
+  const [invoicePurpose, setInvoicePurpose] = useState<InvoicePurpose | "">("");
+  const [franchisePaymentTermDays, setFranchisePaymentTermDays] = useState(7);
   const [franchiseConfirmationOpen, setFranchiseConfirmationOpen] = useState(false);
   const [credentials, setCredentials] = useState<{
     sessionId: string;
@@ -556,6 +561,7 @@ export default function Checkout() {
           (methods.find((item) => item.isDefault) || methods[0])?.id || "",
         );
         setIsFranchisee(Boolean(data.isFranchisee));
+        setFranchisePaymentTermDays(Number(data.paymentTermDays) === 30 ? 30 : 7);
       })
       .finally(() => setCustomerDataLoading(false));
   }, [previewMode, user]);
@@ -667,7 +673,13 @@ export default function Checkout() {
           sessionId: stored.sessionId,
           accessToken: stored.accessToken,
         });
-        if (stored.summary) setSummary(stored.summary);
+        if (stored.summary) {
+          setSummary(stored.summary);
+          if (["resale", "final_consumption"].includes(stored.summary.invoicePurpose)) {
+            setInvoicePurpose(stored.summary.invoicePurpose);
+          }
+          if (Number(stored.summary.paymentTermDays) === 30) setFranchisePaymentTermDays(30);
+        }
         if (stored.payment) {
           setPayment(stored.payment);
           setStep(4);
@@ -1058,6 +1070,10 @@ export default function Checkout() {
   ]);
   const nextPayment = () => {
     if (isFranchisee) {
+      if (!invoicePurpose) {
+        setMessage("Escolha se a nota fiscal será para revenda ou consumo final.");
+        return;
+      }
       setValidationAttempt(null);
       setMessage("");
       void confirmOrder();
@@ -1085,6 +1101,10 @@ export default function Checkout() {
 
   const requestFinalConfirmation = () => {
     if (isFranchisee) {
+      if (!invoicePurpose) {
+        setMessage("Escolha se a nota fiscal será para revenda ou consumo final.");
+        return;
+      }
       setFranchiseConfirmationOpen(true);
       return;
     }
@@ -1119,7 +1139,7 @@ export default function Checkout() {
               };
         const { data: prepared, error: prepareError } =
           await supabase.functions.invoke("checkout-prepare", {
-            body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase() },
+            body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase(), invoicePurpose: isFranchisee ? invoicePurpose : undefined },
             headers: sessionClaimHeaders(Boolean(user)),
           });
         if (prepareError || prepared?.error) {
@@ -1148,6 +1168,7 @@ export default function Checkout() {
         };
         setCredentials(active);
         setSummary(prepared.summary);
+        if (Number(prepared.summary?.paymentTermDays) === 30) setFranchisePaymentTermDays(30);
         activeSummary = prepared.summary;
         storeActive(active, prepared.summary);
         if (isFranchisee && ignoredItems.length) {
@@ -1429,6 +1450,9 @@ export default function Checkout() {
       >
         <PaymentStep
           franchise={isFranchisee}
+          invoicePurpose={invoicePurpose}
+          setInvoicePurpose={setInvoicePurpose}
+          paymentTermDays={franchisePaymentTermDays}
           deliveryMode={deliveryMode}
           method={paymentMethod}
           setMethod={setPaymentMethod}
@@ -1469,7 +1493,8 @@ export default function Checkout() {
             ))}
           </div>
           <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-            A Olist enviará por e-mail o boleto com opção de pagamento por Pix. O vencimento será em 7 dias e o pedido inclui a taxa operacional de R$ 2,00.
+            <strong>NF-e: {invoicePurpose === "resale" ? "revenda" : "consumo final"}.</strong>{" "}
+            A Olist enviará por e-mail o boleto com opção de pagamento por Pix. O vencimento será em {franchisePaymentTermDays} dias e o pedido inclui a taxa operacional de R$ 2,00.
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setFranchiseConfirmationOpen(false)}>
@@ -1597,6 +1622,9 @@ export default function Checkout() {
                       {step === 1 && (
                         <PaymentStep
                           franchise={isFranchisee}
+                          invoicePurpose={invoicePurpose}
+                          setInvoicePurpose={setInvoicePurpose}
+                          paymentTermDays={franchisePaymentTermDays}
                           deliveryMode={deliveryMode}
                           method={paymentMethod}
                           setMethod={setPaymentMethod}
@@ -2582,6 +2610,9 @@ function AddressRegistrationSheet({
 }
 function PaymentStep(props: {
   franchise: boolean;
+  invoicePurpose: InvoicePurpose | "";
+  setInvoicePurpose: (value: InvoicePurpose) => void;
+  paymentTermDays: number;
   deliveryMode: "pick_up" | "shipping";
   method: PaymentMethod;
   setMethod: (v: PaymentMethod) => void;
@@ -2624,8 +2655,27 @@ function PaymentStep(props: {
           onClick={() => {}}
           icon={<CreditCard className="h-5 w-5" />}
           title="Prazo da franquia"
-          text="Boleto com opção Pix enviado por e-mail, com vencimento em 7 dias"
+          text={`Boleto com opção Pix enviado por e-mail, com vencimento em ${props.paymentTermDays} dias`}
         />
+        <div>
+          <p className="mb-2 font-semibold text-slate-900">Finalidade da nota fiscal</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Choice
+              active={props.invoicePurpose === "resale"}
+              onClick={() => props.setInvoicePurpose("resale")}
+              icon={<Store className="h-5 w-5" />}
+              title="Revenda"
+              text="Os produtos serão revendidos pela franquia"
+            />
+            <Choice
+              active={props.invoicePurpose === "final_consumption"}
+              onClick={() => props.setInvoicePurpose("final_consumption")}
+              icon={<PackageCheck className="h-5 w-5" />}
+              title="Consumo final"
+              text="Os produtos serão usados pela própria franquia"
+            />
+          </div>
+        </div>
         <Nav
           back={props.onBack}
           next={props.onNext}
@@ -3592,7 +3642,7 @@ function Success({
         <h1 className="text-3xl font-bold">Pedido recebido!</h1>
         <p className="mt-3 text-slate-600">
           {payment?.status === "credit_approved"
-            ? "Nota fiscal emitida. A Olist enviará por e-mail o boleto com opção Pix, com vencimento em 7 dias."
+            ? `Nota fiscal emitida para ${summary?.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"}. A Olist enviará por e-mail o boleto com opção Pix, com vencimento em ${summary?.paymentTermDays || 7} dias.`
             : "Pagamento confirmado e pedido em preparação."}
         </p>
         {pickup && (

@@ -369,6 +369,10 @@ function normalize(order: any, delivery = deliveryLabel(order)) {
     String(item?.value || "").trim().length > 0
   );
   const pickupReady = pickupReadyByCode || /pronto[- ]retirada|ready-for-pickup/i.test(String(order.tags || ""));
+  const noteAttributes = new Map<string, string>((order.note_attributes || []).map(
+    (item: { name?: string; value?: string }) => [String(item.name || ""), String(item.value || "")],
+  ));
+  const invoicePurpose = noteAttributes.get("finalidade_nfe");
   return {
     id: order.id,
     name: order.name || `#${order.id}`,
@@ -390,6 +394,12 @@ function normalize(order: any, delivery = deliveryLabel(order)) {
     phone: order.phone || order.customer?.phone || address?.phone || null,
     address: addressText,
     note: order.note || null,
+    invoice_purpose: invoicePurpose === "resale" || invoicePurpose === "final_consumption"
+      ? invoicePurpose
+      : null,
+    payment_term_days: [7, 30].includes(Number(noteAttributes.get("prazo_pagamento_dias")))
+      ? Number(noteAttributes.get("prazo_pagamento_dias"))
+      : null,
     line_items: (order.line_items || []).map((item: any) => ({
       title: item.title || item.name || "Produto",
       variant_title: item.variant_title || null,

@@ -20,6 +20,7 @@ export interface CheckoutAddressInput {
 
 export interface CheckoutPrepareInput {
   referralCode?: string;
+  invoicePurpose?: "resale" | "final_consumption";
   items: Array<{ variantId: string; quantity: number }>;
   customer: CheckoutCustomerInput;
   delivery: {
@@ -78,7 +79,6 @@ export function validBrazilPhone(value: string): boolean {
   return /^[2-8]/.test(normalized[2]);
 }
 
-
 export function parseCheckoutAddress(raw: unknown): ValidationResult<CheckoutAddressInput> {
   const source = raw && typeof raw === "object" && !Array.isArray(raw)
     ? raw as Record<string, unknown>
@@ -93,8 +93,10 @@ export function parseCheckoutAddress(raw: unknown): ValidationResult<CheckoutAdd
     postalCode: digits(clean(source.postalCode, 16)),
     countryCode: "BR",
   };
-  if (!address.address1 || !address.number || !address.neighborhood || !address.city ||
-    !/^[A-Z]{2}$/.test(address.provinceCode) || address.postalCode.length !== 8) {
+  if (
+    !address.address1 || !address.number || !address.neighborhood || !address.city ||
+    !/^[A-Z]{2}$/.test(address.provinceCode) || address.postalCode.length !== 8
+  ) {
     return { ok: false, message: "Preencha o endereço completo" };
   }
   return { ok: true, value: address };
@@ -132,14 +134,21 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
   }
   const body = raw as Record<string, unknown>;
   const referralCode = clean(body.referralCode, 40).toUpperCase();
+  // deno-lint-ignore no-control-regex
   if (referralCode && /[\u0000-\u001f\u007f]/.test(referralCode)) {
     return { ok: false, message: "Informe um código de indicação válido" };
+  }
+  const invoicePurpose = clean(body.invoicePurpose, 32);
+  if (invoicePurpose && invoicePurpose !== "resale" && invoicePurpose !== "final_consumption") {
+    return { ok: false, message: "Escolha uma finalidade válida para a nota fiscal" };
   }
   const parsedItems = parseCheckoutItems(body.items);
   if (!parsedItems.ok) return { ok: false, message: (parsedItems as { message: string }).message };
 
   const parsedCustomer = parseCheckoutCustomer(body.customer);
-  if (!parsedCustomer.ok) return { ok: false, message: (parsedCustomer as { message: string }).message };
+  if (!parsedCustomer.ok) {
+    return { ok: false, message: (parsedCustomer as { message: string }).message };
+  }
   const customer = parsedCustomer.value;
 
   const sourceDelivery = body.delivery && typeof body.delivery === "object"
@@ -164,7 +173,9 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
   let billingAddress: CheckoutAddressInput | undefined;
   if (body.billingAddress) {
     const parsedBilling = parseCheckoutAddress(body.billingAddress);
-    if (!parsedBilling.ok) return { ok: false, message: "Preencha o endereço de cobrança completo" };
+    if (!parsedBilling.ok) {
+      return { ok: false, message: "Preencha o endereço de cobrança completo" };
+    }
     billingAddress = parsedBilling.value;
   }
   if (!billingAddress) {
@@ -173,7 +184,14 @@ export function parseCheckoutPrepareInput(raw: unknown): ValidationResult<Checko
 
   return {
     ok: true,
-    value: { items: parsedItems.value, customer, delivery: { code, optionHandle, address }, billingAddress, referralCode: referralCode || undefined },
+    value: {
+      items: parsedItems.value,
+      customer,
+      delivery: { code, optionHandle, address },
+      billingAddress,
+      referralCode: referralCode || undefined,
+      invoicePurpose: invoicePurpose as CheckoutPrepareInput["invoicePurpose"] || undefined,
+    },
   };
 }
 

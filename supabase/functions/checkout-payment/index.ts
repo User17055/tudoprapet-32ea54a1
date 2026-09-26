@@ -412,12 +412,26 @@ Deno.serve(async (req) => {
     let termDays = 0;
     if (session.customer_type === "franchise" && session.user_id) {
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("manually_blocked,blocked_reason")
+        .select("manually_blocked,blocked_reason,payment_term_days")
         .eq("user_id", session.user_id).maybeSingle();
       if (credit?.manually_blocked) {
         return jsonResponse({ error: credit.blocked_reason || "Franquia bloqueada" }, 403);
       }
-      termDays = FRANCHISE_PAYMENT_TERM_DAYS;
+      termDays = Number(session.franchise_payment_term_days) === 30
+        ? 30
+        : Number(session.franchise_payment_term_days) === 7
+        ? 7
+        : Number(credit?.payment_term_days) === 30
+        ? 30
+        : FRANCHISE_PAYMENT_TERM_DAYS;
+    }
+    const invoicePurpose = session.invoice_purpose === "final_consumption"
+      ? "final_consumption"
+      : session.invoice_purpose === "resale"
+      ? "resale"
+      : null;
+    if (session.customer_type === "franchise" && !invoicePurpose) {
+      return errorResponse("Volte à sacola e escolha a finalidade da NF-e antes de confirmar", 409);
     }
     const dueDate = dateInSaoPaulo(termDays);
     // `checkout-prepare` já barra o carrinho abaixo do piso, mas uma sessão
@@ -449,6 +463,16 @@ Deno.serve(async (req) => {
       olistStage = "configuration";
       const olistToken = Deno.env.get("OLIST_API_TOKEN") || Deno.env.get("TINY_API_TOKEN") || "";
       if (!olistToken) throw new Error("Olist não configurada para pedidos de franquia");
+      const natureOperationId = invoicePurpose === "final_consumption"
+        ? String(Deno.env.get("OLIST_FINAL_CONSUMPTION_NATURE_OPERATION_ID") || "").trim()
+        : String(Deno.env.get("OLIST_RESALE_NATURE_OPERATION_ID") || "").trim();
+      if (!natureOperationId) {
+        throw new Error(
+          invoicePurpose === "final_consumption"
+            ? "Natureza de operação da Olist para consumo final não configurada"
+            : "Natureza de operação da Olist para revenda não configurada",
+        );
+      }
       const billing = olistCustomer(customer, customerAddress);
       const deliveryAddress =
         session.address_snapshot && Object.keys(session.address_snapshot).length
@@ -476,6 +500,8 @@ Deno.serve(async (req) => {
         paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || "boleto")
           .trim()
           .toLowerCase(),
+        invoicePurpose: invoicePurpose!,
+        natureOperationId,
       };
 
       let order = session.olist_order_id
@@ -566,6 +592,8 @@ Deno.serve(async (req) => {
           olistOrderId: order.id,
           olistInvoiceId: invoice.id,
           dueDate,
+          paymentTermDays: termDays,
+          invoicePurpose,
         },
       });
       olistStage = "complete";
@@ -941,7 +969,9 @@ Deno.serve(async (req) => {
         shopify: "concluir o pedido na loja",
       };
       return errorResponse(
-        `Não foi possível ${stageMessage[olistStage] || "concluir o pedido da franquia"}. Nenhum pagamento foi confirmado.`,
+        `Não foi possível ${
+          stageMessage[olistStage] || "concluir o pedido da franquia"
+        }. Nenhum pagamento foi confirmado.`,
         502,
       );
     }

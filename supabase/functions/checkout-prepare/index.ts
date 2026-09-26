@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
     }
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
+    let franchisePaymentTermDays: 7 | 30 = 7;
     if (auth.user) {
       const [{ data: profile }, { data: clubMember }] = await Promise.all([
         admin.from("profiles").select("is_franchisee").eq("user_id", auth.user.id).maybeSingle(),
@@ -170,14 +171,18 @@ Deno.serve(async (req) => {
     }
 
     if (customerType === "franchise") {
+      if (!input.invoicePurpose) {
+        return errorResponse("Escolha se a nota fiscal será para revenda ou consumo final", 400);
+      }
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("manually_blocked,blocked_reason,block_on_any_open_invoice")
+        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,payment_term_days")
         .eq("user_id", auth.user!.id).maybeSingle();
       if (credit?.manually_blocked) {
         return jsonResponse({
           error: credit.blocked_reason || "Franquia bloqueada para novos pedidos",
         }, 403);
       }
+      franchisePaymentTermDays = Number(credit?.payment_term_days) === 30 ? 30 : 7;
       const { data: financialSessions } = await admin.from("checkout_sessions")
         .select("id").eq("user_id", auth.user!.id).eq("customer_type", "franchise");
       const sessionIds = (financialSessions ?? []).map((row) => row.id);
@@ -538,12 +543,17 @@ Deno.serve(async (req) => {
       address_snapshot: input.delivery.address ?? {},
       billing_address_snapshot: input.billingAddress ?? input.delivery.address ?? {},
       items_snapshot: itemsSnapshot,
+      invoice_purpose: customerType === "franchise" ? input.invoicePurpose : null,
+      franchise_payment_term_days: customerType === "franchise" ? franchisePaymentTermDays : null,
       referral_code: referral?.code ?? null,
       referral_employee_name: referral?.employee_name ?? null,
       commission_percent: commissionEligible ? storeCommissionPercent : 0,
       pricing_snapshot: {
         customerType,
         serviceFee,
+        ...(customerType === "franchise"
+          ? { invoicePurpose: input.invoicePurpose, paymentTermDays: franchisePaymentTermDays }
+          : {}),
         calculatedAt: new Date().toISOString(),
         ...(pickupLocation ? { pickupLocation } : {}),
       },
@@ -607,12 +617,21 @@ Deno.serve(async (req) => {
         "checkout-proprio",
         customerType === "franchise" ? "olist" : "asaas",
         customerType,
+        ...(customerType === "franchise" && input.invoicePurpose
+          ? [`nfe-${input.invoicePurpose === "resale" ? "revenda" : "consumo-final"}`]
+          : []),
         ...(shippingCode === "pick_up" ? ["retirada", "pick_up"] : []),
         ...(referral ? [`indicacao:${referral.code}`] : []),
       ],
       note: `Checkout TudoPraPet ${session.id}`,
       customAttributes: [
         { key: "checkout_session_id", value: session.id },
+        ...(customerType === "franchise" && input.invoicePurpose
+          ? [
+            { key: "finalidade_nfe", value: input.invoicePurpose },
+            { key: "prazo_pagamento_dias", value: String(franchisePaymentTermDays) },
+          ]
+          : []),
         ...(referral ? [{ key: "codigo_indicacao", value: referral.code }] : []),
         { key: "shipping_code", value: shippingCode },
         { key: "delivery_method_type", value: shippingCode === "pick_up" ? "pick_up" : "shipping" },
@@ -728,6 +747,9 @@ Deno.serve(async (req) => {
         shippingCode,
         items: itemsSnapshot,
         pickupLocation,
+        ...(customerType === "franchise"
+          ? { invoicePurpose: input.invoicePurpose, paymentTermDays: franchisePaymentTermDays }
+          : {}),
       },
     });
   } catch (error) {

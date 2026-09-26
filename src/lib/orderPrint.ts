@@ -29,6 +29,8 @@ export interface PrintableOrder {
   phone?: string | null;
   address?: string | null;
   note?: string | null;
+  invoice_purpose?: "resale" | "final_consumption" | null;
+  payment_term_days?: number | null;
   line_items: PrintableOrderItem[];
 }
 

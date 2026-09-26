@@ -16,6 +16,8 @@ interface FranchisePayment {
   orderNumber: string | null;
   invoiceNumber: string | null;
   invoiceUrl: string | null;
+  invoicePurpose: "resale" | "final_consumption" | null;
+  paymentTermDays: number | null;
   amount: number;
   currency: string;
   status: string;
@@ -123,9 +125,10 @@ export default function FranchisePayments() {
                             <h2 className="font-display text-lg font-bold">Pedido Olist {payment.orderNumber ? `#${payment.orderNumber}` : "em processamento"}</h2>
                             <Badge variant="outline" className={status.className}>{status.label}</Badge>
                           </div>
-                          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                             <div><span className="block text-xs text-muted-foreground">Valor</span><strong className="text-base">{money(payment.amount, payment.currency)}</strong></div>
                             <div><span className="block text-xs text-muted-foreground">Vencimento</span><strong className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" />{date(payment.dueDate)}</strong></div>
+                            <div><span className="block text-xs text-muted-foreground">Finalidade da NF-e</span><strong>{payment.invoicePurpose === "final_consumption" ? "Consumo final" : payment.invoicePurpose === "resale" ? "Revenda" : "Não informada"}</strong>{payment.paymentTermDays && <span className="block text-xs text-muted-foreground">Prazo de {payment.paymentTermDays} dias</span>}</div>
                             <div>
                               <span className="block text-xs text-muted-foreground">Nota fiscal</span>
                               <strong className="flex items-center gap-1.5"><FileText className="h-4 w-4" />{payment.invoiceNumber ? `NF-e ${payment.invoiceNumber}` : "Em emissão"}</strong>

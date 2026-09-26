@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (input: { firstName: string; lastName: string; email: string; cpf: string; password: string; acquisitionSource: string; referralCode?: string }) => Promise<{ success: boolean; signedIn?: boolean; error?: string }>;
+  register: (input: { firstName: string; lastName: string; email: string; personType: "individual" | "company"; taxId: string; password: string; acquisitionSource: string; referralCode?: string }) => Promise<{ success: boolean; signedIn?: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (input: { firstName: string; lastName: string; email: string; cpf: string; password: string; acquisitionSource: string; referralCode?: string }) => {
+  const register = async (input: { firstName: string; lastName: string; email: string; personType: "individual" | "company"; taxId: string; password: string; acquisitionSource: string; referralCode?: string }) => {
     try {
       const fullName = `${input.firstName} ${input.lastName}`.trim();
       const { data, error } = await supabase.auth.signUp({
@@ -79,7 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             full_name: fullName,
             first_name: input.firstName,
             last_name: input.lastName,
-            cpf: input.cpf,
+            person_type: input.personType,
+            cpf: input.personType === "individual" ? input.taxId : "",
+            cnpj: input.personType === "company" ? input.taxId : "",
             acquisition_source: input.acquisitionSource,
             referral_code: input.referralCode || '',
           },

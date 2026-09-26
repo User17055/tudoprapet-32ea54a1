@@ -23,7 +23,9 @@ Deno.serve(async (req) => {
     if (!profile?.is_franchisee) return errorResponse("Acesso exclusivo para franquias", 403);
 
     const { data: sessions, error: sessionsError } = await admin.from("checkout_sessions")
-      .select("id,created_at,status,currency,total,olist_order_id,olist_order_number,olist_invoice_id,olist_invoice_number,olist_invoice_url")
+      .select(
+        "id,created_at,status,currency,total,invoice_purpose,franchise_payment_term_days,olist_order_id,olist_order_number,olist_invoice_id,olist_invoice_number,olist_invoice_url",
+      )
       .eq("user_id", auth.user.id)
       .eq("customer_type", "franchise")
       .order("created_at", { ascending: false })
@@ -47,7 +49,9 @@ Deno.serve(async (req) => {
               olist_invoice_number: session.olist_invoice_number,
               olist_invoice_url: session.olist_invoice_url,
             }).eq("id", session.id);
-            if (invoiceUpdateError) console.error("franchise-payments invoice save:", invoiceUpdateError);
+            if (invoiceUpdateError) {
+              console.error("franchise-payments invoice save:", invoiceUpdateError);
+            }
           }
         } catch (invoiceError) {
           console.error(`franchise-payments invoice ${session.olist_invoice_id}:`, invoiceError);
@@ -59,7 +63,9 @@ Deno.serve(async (req) => {
     if (!sessionIds.length) return jsonResponse({ payments: [] });
 
     const { data: paymentRows, error: paymentsError } = await admin.from("payments")
-      .select("id,checkout_session_id,amount,status,due_date,provider_payment_id,provider_payment_url,created_at")
+      .select(
+        "id,checkout_session_id,amount,status,due_date,provider_payment_id,provider_payment_url,created_at",
+      )
       .in("checkout_session_id", sessionIds)
       .eq("provider", "olist")
       .order("created_at", { ascending: false });
@@ -81,9 +87,13 @@ Deno.serve(async (req) => {
         orderNumber: session.olist_order_number || session.olist_order_id || null,
         invoiceNumber: session.olist_invoice_number || null,
         invoiceUrl: session.olist_invoice_url || null,
+        invoicePurpose: session.invoice_purpose || null,
+        paymentTermDays: session.franchise_payment_term_days || null,
         amount: Number(payment?.amount ?? session.total),
         currency: session.currency || "BRL",
-        status: String(payment?.status || (session.status === "cancelled" ? "cancelled" : "processing")),
+        status: String(
+          payment?.status || (session.status === "cancelled" ? "cancelled" : "processing"),
+        ),
         dueDate: payment?.due_date || null,
         paymentUrl: payment?.provider_payment_url || null,
         providerPaymentId: payment?.provider_payment_id || null,
