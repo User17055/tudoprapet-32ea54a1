@@ -244,8 +244,10 @@ export type Database = {
           customer_snapshot: Json
           customer_type: string
           discount: number
+          franchise_payment_term_days: number | null
           id: string
           inventory_reserved_until: string | null
+          invoice_purpose: string | null
           items_snapshot: Json
           olist_invoice_id: string | null
           olist_invoice_number: string | null
@@ -281,8 +283,10 @@ export type Database = {
           customer_snapshot?: Json
           customer_type: string
           discount?: number
+          franchise_payment_term_days?: number | null
           id?: string
           inventory_reserved_until?: string | null
+          invoice_purpose?: string | null
           items_snapshot?: Json
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
@@ -318,8 +322,10 @@ export type Database = {
           customer_snapshot?: Json
           customer_type?: string
           discount?: number
+          franchise_payment_term_days?: number | null
           id?: string
           inventory_reserved_until?: string | null
+          invoice_purpose?: string | null
           items_snapshot?: Json
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
@@ -647,6 +653,8 @@ export type Database = {
           credit_limit: number | null
           manually_blocked: boolean
           payment_term_days: number
+          payment_term_updated_at: string | null
+          payment_term_updated_by: string | null
           updated_at: string
           user_id: string
         }
@@ -658,6 +666,8 @@ export type Database = {
           credit_limit?: number | null
           manually_blocked?: boolean
           payment_term_days?: number
+          payment_term_updated_at?: string | null
+          payment_term_updated_by?: string | null
           updated_at?: string
           user_id: string
         }
@@ -669,6 +679,8 @@ export type Database = {
           credit_limit?: number | null
           manually_blocked?: boolean
           payment_term_days?: number
+          payment_term_updated_at?: string | null
+          payment_term_updated_by?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1284,36 +1296,42 @@ export type Database = {
       profiles: {
         Row: {
           acquisition_source: string | null
+          cnpj: string | null
           cpf: string | null
           created_at: string
           email: string | null
           id: string
           is_franchisee: boolean
           name: string | null
+          person_type: string
           referral_code: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           acquisition_source?: string | null
+          cnpj?: string | null
           cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
           is_franchisee?: boolean
           name?: string | null
+          person_type?: string
           referral_code?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           acquisition_source?: string | null
+          cnpj?: string | null
           cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
           is_franchisee?: boolean
           name?: string | null
+          person_type?: string
           referral_code?: string | null
           updated_at?: string
           user_id?: string
@@ -1569,6 +1587,8 @@ export type Database = {
       invoke_payment_reconciliation: { Args: never; Returns: undefined }
       is_cpf_available: { Args: { _cpf: string }; Returns: boolean }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }
+      is_tax_id_available: { Args: { _tax_id: string }; Returns: boolean }
+      is_valid_cnpj: { Args: { value: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
       save_customer_address: {
         Args: {
