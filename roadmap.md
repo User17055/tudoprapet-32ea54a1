@@ -21,6 +21,6 @@
 - [ ] Confirmar em produção a criação do Draft Order (leitura de produto e estoque já validada)
 
 ## Assinante custo + 6% (28/09/2026)
-- [ ] subscriberPriceFromCost: 1,125 → 1,06 (+ teste)
-- [ ] Recalcular subscriber_prices no banco
-- [ ] Publicar admin-olist-cost-sync
+- [x] subscriberPriceFromCost: 1,125 → 1,06 (+ teste)
+- [x] Recalcular subscriber_prices no banco
+- [x] Publicar admin-olist-cost-sync
