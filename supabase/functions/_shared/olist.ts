@@ -107,7 +107,7 @@ export function roundMoney(value: number): number {
 }
 
 export function subscriberPriceFromCost(cost: number): number {
-  return roundMoney(cost * 1.06);
+  return roundMoney(cost * 1.05);
 }
 
 export function normalizeOlistId(value: unknown): string | null {
