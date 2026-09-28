@@ -19,3 +19,8 @@
 - [x] Incluir `read_products` e `read_inventory` no app Shopify e reinstalar
 - [x] Confirmar que o token gerenciado de produção foi renovado e pertence ao app TudoPraPet Clube
 - [ ] Confirmar em produção a criação do Draft Order (leitura de produto e estoque já validada)
+
+## Assinante custo + 6% (28/09/2026)
+- [x] subscriberPriceFromCost: 1,125 → 1,06 (+ teste)
+- [x] Recalcular subscriber_prices no banco
+- [x] Publicar admin-olist-cost-sync

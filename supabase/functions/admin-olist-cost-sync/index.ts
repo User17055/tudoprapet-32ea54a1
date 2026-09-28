@@ -1,5 +1,5 @@
 // Importa o custo do ERP Olist pelo SKU e atualiza as tabelas de precos locais.
-// Regra comercial: Shopify e a venda normal; assinante paga custo + 12,5% em
+// Regra comercial: Shopify e a venda normal; assinante paga custo + 6% em
 // todos os produtos; franquia pode pagar o custo ou mais, mas nunca menos que
 // o custo.
 
