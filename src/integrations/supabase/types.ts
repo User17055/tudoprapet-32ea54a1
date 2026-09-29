@@ -244,8 +244,6 @@ export type Database = {
           customer_snapshot: Json
           customer_type: string
           discount: number
-          franchise_payment_due_day: number | null
-          franchise_payment_schedule_type: string | null
           franchise_payment_term_days: number | null
           id: string
           inventory_reserved_until: string | null
@@ -285,8 +283,6 @@ export type Database = {
           customer_snapshot?: Json
           customer_type: string
           discount?: number
-          franchise_payment_due_day?: number | null
-          franchise_payment_schedule_type?: string | null
           franchise_payment_term_days?: number | null
           id?: string
           inventory_reserved_until?: string | null
@@ -326,8 +322,6 @@ export type Database = {
           customer_snapshot?: Json
           customer_type?: string
           discount?: number
-          franchise_payment_due_day?: number | null
-          franchise_payment_schedule_type?: string | null
           franchise_payment_term_days?: number | null
           id?: string
           inventory_reserved_until?: string | null
@@ -658,8 +652,6 @@ export type Database = {
           created_at: string
           credit_limit: number | null
           manually_blocked: boolean
-          payment_due_day: number | null
-          payment_schedule_type: string
           payment_term_days: number
           payment_term_updated_at: string | null
           payment_term_updated_by: string | null
@@ -673,8 +665,6 @@ export type Database = {
           created_at?: string
           credit_limit?: number | null
           manually_blocked?: boolean
-          payment_due_day?: number | null
-          payment_schedule_type?: string
           payment_term_days?: number
           payment_term_updated_at?: string | null
           payment_term_updated_by?: string | null
@@ -688,8 +678,6 @@ export type Database = {
           created_at?: string
           credit_limit?: number | null
           manually_blocked?: boolean
-          payment_due_day?: number | null
-          payment_schedule_type?: string
           payment_term_days?: number
           payment_term_updated_at?: string | null
           payment_term_updated_by?: string | null
@@ -1316,11 +1304,11 @@ export type Database = {
           email: string | null
           id: string
           is_franchisee: boolean
-          state_registration: string | null
-          state_registration_indicator: string | null
           name: string | null
           person_type: string
           referral_code: string | null
+          state_registration: string | null
+          state_registration_indicator: string | null
           updated_at: string
           user_id: string
         }
@@ -1334,11 +1322,11 @@ export type Database = {
           email?: string | null
           id?: string
           is_franchisee?: boolean
-          state_registration?: string | null
-          state_registration_indicator?: string | null
           name?: string | null
           person_type?: string
           referral_code?: string | null
+          state_registration?: string | null
+          state_registration_indicator?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1352,11 +1340,11 @@ export type Database = {
           email?: string | null
           id?: string
           is_franchisee?: boolean
-          state_registration?: string | null
-          state_registration_indicator?: string | null
           name?: string | null
           person_type?: string
           referral_code?: string | null
+          state_registration?: string | null
+          state_registration_indicator?: string | null
           updated_at?: string
           user_id?: string
         }
