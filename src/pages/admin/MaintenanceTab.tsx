@@ -61,7 +61,7 @@ export default function MaintenanceTab() {
     toast.success("Site liberado para todos.");
   };
 
-  if (maintenance.loading) return <Loader2 className="h-6 w-6 animate-spin text-[#112f5f]" />;
+  if (maintenance.loading) return <Loader2 className="h-6 w-6 animate-spin text-primary" />;
 
   if (maintenance.error) {
     return (
@@ -88,7 +88,7 @@ export default function MaintenanceTab() {
     <div className="grid max-w-4xl gap-6 lg:grid-cols-[1.2fr_0.8fr]">
       <Card className="border-0 shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-[#0a1931]"><Power className="h-5 w-5" /> Controle de acesso</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-lg text-foreground"><Power className="h-5 w-5" /> Controle de acesso</CardTitle>
           <CardDescription>Bloqueie toda a loja temporariamente. Administradores continuam com acesso normal.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -107,7 +107,7 @@ export default function MaintenanceTab() {
             <p className="text-xs text-muted-foreground">Mínimo de 1 minuto e máximo de 7 dias.</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button onClick={activate} disabled={saving} className="gap-2 bg-[#112f5f] hover:bg-[#0a1931]">
+            <Button onClick={activate} disabled={saving} className="gap-2">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <TriangleAlert className="h-4 w-4" />}
               {maintenance.active ? "Atualizar tempo" : "Ativar manutenção"}
             </Button>

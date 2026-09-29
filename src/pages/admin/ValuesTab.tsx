@@ -458,14 +458,16 @@ export default function ValuesTab() {
       </div>
 
       <Card>
-        <CardHeader className="gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        {/* Os quatro controles somam ~1000px: abaixo de 2xl o título fica em cima e
+            os filtros quebram linha, em vez de espremer o título numa coluna. */}
+        <CardHeader className="gap-3 p-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-base">Valores por produto</CardTitle>
             <CardDescription>
               {filteredRows.length} de {rows.length} variantes · compare Shopify, assinante, franquia e custo real.
             </CardDescription>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:w-auto 2xl:flex-nowrap">
             <Button variant="outline" onClick={syncAllFeedCosts} disabled={bulkSyncingOlist || loading}>
               {bulkSyncingOlist ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
               Atualizar rações pela Olist ({feedRowsWithSku.length})

@@ -3,21 +3,24 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
+  ArrowUpRight,
   CheckCircle2,
+  CircleDollarSign,
   Crown,
   Loader2,
   Package,
-  RefreshCw,
+  Receipt,
   ShieldCheck,
   Store,
   Users,
   Wrench,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { PrintableOrder } from "@/lib/orderPrint";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface DashboardData {
@@ -53,7 +56,23 @@ const orderStatus = (order: PrintableOrder) => {
   return "Em andamento";
 };
 
+const STATUS_STYLES: Record<string, string> = {
+  Pago: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  Concluído: "bg-blue-50 text-blue-700 ring-blue-600/20",
+  "Em andamento": "bg-amber-50 text-amber-800 ring-amber-600/20",
+  Reembolsado: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  Cancelado: "bg-slate-100 text-slate-600 ring-slate-500/20",
+};
+
+const greeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Bom dia";
+  if (hour < 18) return "Boa tarde";
+  return "Boa noite";
+};
+
 export default function OverviewTab() {
+  const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
 
@@ -95,18 +114,12 @@ export default function OverviewTab() {
 
   useEffect(() => { void load(); }, []);
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex min-h-72 items-center justify-center">
-          <div className="text-center text-sm text-muted-foreground">
-            <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-[#112f5f]" />
-            Carregando indicadores...
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const firstName =
+    user?.user_metadata?.first_name || user?.user_metadata?.name?.split(" ")[0] || user?.email?.split("@")[0] || "";
+  // "terça-feira, 29 de setembro" -> só a primeira letra maiúscula, como em português.
+  const todayText = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const today = todayText.charAt(0).toUpperCase() + todayText.slice(1);
+  const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0);
 
   const cards = [
     { label: "Clientes", value: data.users, icon: Users, color: "bg-blue-50 text-blue-700", to: "/admin?tab=users" },
@@ -117,25 +130,83 @@ export default function OverviewTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Boas-vindas com o estado da operação em uma frase. */}
+      <section className="relative overflow-hidden rounded-2xl bg-[hsl(var(--admin-sidebar))] p-6 text-white sm:p-8">
+        <div
+          className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-[hsl(var(--admin-gold))]/15 blur-2xl"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(hsl(0_0%_100%/0.08)_1px,transparent_1.5px)] [background-size:18px_18px]"
+          aria-hidden="true"
+        />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-medium text-white/65">{today}</p>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+              {greeting()}{firstName ? `, ${firstName}` : ""}!
+            </h2>
+            <p className="mt-2 flex items-center gap-2 text-sm text-white/80">
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Conferindo a operação...
+                </>
+              ) : alertCount > 0 ? (
+                <>
+                  <AlertTriangle className="h-4 w-4 text-[hsl(var(--admin-gold))]" />
+                  {alertCount === 1 ? "Há 1 ponto que precisa da sua atenção." : `Há ${alertCount} pontos que precisam da sua atenção.`}
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Nenhum alerta operacional no momento.
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { to: "/admin?tab=orders", label: "Pedidos", icon: Receipt },
+              { to: "/admin?tab=retirada", label: "Retirada", icon: Package },
+              { to: "/admin?tab=users", label: "Clientes", icon: Users },
+            ].map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/15 transition-colors hover:bg-white/20"
+              >
+                <Icon className="h-4 w-4 text-[hsl(var(--admin-gold))]" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Indicadores */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {cards.map(({ label, value, icon: Icon, color, to }) => (
-          <Link key={label} to={to} className="group">
-            <Card className="h-full border-0 shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md">
-              <CardContent className="flex items-center gap-4 p-5">
-                <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${color}`}>
-                  <Icon className="h-6 w-6" />
-                </span>
-                <div>
-                  <p className="text-2xl font-extrabold tabular-nums text-[#0a1931]">{value}</p>
-                  <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <Link key={label} to={to} className="group rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <Card className="h-full transition-all group-hover:-translate-y-0.5 group-hover:border-primary/30">
+              <CardContent className="p-4 sm:p-5">
+                <div className="flex items-start justify-between">
+                  <span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", color)}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
                 </div>
+                {loading ? (
+                  <Skeleton className="mt-4 h-8 w-16" />
+                ) : (
+                  <p className="mt-4 text-3xl font-bold tabular-nums tracking-tight text-foreground">{value}</p>
+                )}
+                <p className="mt-0.5 text-sm font-medium text-muted-foreground">{label}</p>
               </CardContent>
             </Card>
           </Link>
         ))}
       </div>
 
-      {(data.maintenance || data.pendingSales > 0 || data.failedCheckouts > 0) && (
+      {!loading && alertCount > 0 && (
         <Card className="border-amber-200 bg-amber-50/70">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base text-amber-900">
@@ -150,72 +221,109 @@ export default function OverviewTab() {
         </Card>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-lg text-[#0a1931]">Pedidos recentes</CardTitle>
-            <Button asChild variant="ghost" size="sm" className="gap-1 text-[#112f5f]">
-              <Link to="/admin?tab=orders">Ver todos <ArrowRight className="h-4 w-4" /></Link>
-            </Button>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle className="text-base">Pedidos recentes</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Os últimos pedidos da loja</p>
+            </div>
+            <Link
+              to="/admin?tab=orders"
+              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-primary transition-colors hover:bg-accent"
+            >
+              Ver todos <ArrowRight className="h-4 w-4" />
+            </Link>
           </CardHeader>
           <CardContent>
-            {data.recentOrders.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">Nenhum pedido encontrado.</p>
-            ) : (
-              <div className="divide-y">
-                {data.recentOrders.map((order) => (
-                  <div key={order.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[#112f5f]">
-                      <Package className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-900">{order.name} · {order.customer_name}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-lg" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-4 w-1/2" />
+                      <Skeleton className="h-3 w-1/3" />
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-900">{money(order.total_price, order.currency)}</p>
-                      <Badge variant="outline" className="mt-1 text-[10px]">{orderStatus(order)}</Badge>
-                    </div>
+                    <Skeleton className="h-5 w-20" />
                   </div>
                 ))}
               </div>
+            ) : data.recentOrders.length === 0 ? (
+              <div className="flex flex-col items-center py-10 text-center">
+                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                  <Receipt className="h-5 w-5 text-muted-foreground" />
+                </span>
+                <p className="text-sm text-muted-foreground">Nenhum pedido encontrado.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border/70">
+                {data.recentOrders.map((order) => {
+                  const status = orderStatus(order);
+                  return (
+                    <li key={order.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
+                        <Package className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {order.name} <span className="font-normal text-muted-foreground">·</span> {order.customer_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <p className="text-sm font-bold tabular-nums text-foreground">{money(order.total_price, order.currency)}</p>
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset",
+                            STATUS_STYLES[status],
+                          )}
+                        >
+                          {status}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg text-[#0a1931]">Acesso rápido</CardTitle>
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Acesso rápido</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Dica: <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-sans text-[10px] font-semibold">Ctrl K</kbd> busca qualquer seção
+            </p>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <QuickLink to="/admin?tab=orders" icon={Package} label="Gerenciar pedidos" />
-            <QuickLink to="/admin?tab=users" icon={Users} label="Consultar clientes" />
-            <QuickLink to="/admin?tab=administrators" icon={ShieldCheck} label="Cadastrar administrador" />
-            <QuickLink to="/admin?tab=maintenance" icon={Wrench} label="Controlar manutenção" />
-            <Button type="button" variant="outline" className="mt-4 w-full gap-2" onClick={() => void load()}>
-              <RefreshCw className="h-4 w-4" /> Atualizar indicadores
-            </Button>
+          <CardContent className="grid grid-cols-2 gap-2">
+            <QuickLink to="/admin?tab=orders" icon={Receipt} label="Pedidos" />
+            <QuickLink to="/admin?tab=users" icon={Users} label="Clientes" />
+            <QuickLink to="/admin?tab=values" icon={CircleDollarSign} label="Valores" />
+            <QuickLink to="/admin?tab=administrators" icon={ShieldCheck} label="Administradores" />
+            <QuickLink to="/admin?tab=retirada" icon={Package} label="Retirada" />
+            <QuickLink to="/admin?tab=maintenance" icon={Wrench} label="Manutenção" />
           </CardContent>
         </Card>
       </div>
-
-      {!data.maintenance && data.pendingSales === 0 && data.failedCheckouts === 0 && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
-          <CheckCircle2 className="h-5 w-5" /> Nenhum alerta operacional no momento.
-        </div>
-      )}
     </div>
   );
 }
 
 function QuickLink({ to, icon: Icon, label }: { to: string; icon: typeof Package; label: string }) {
   return (
-    <Button asChild variant="ghost" className="h-11 w-full justify-between px-3">
-      <Link to={to}>
-        <span className="flex items-center gap-3"><Icon className="h-4 w-4 text-[#112f5f]" />{label}</span>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-      </Link>
-    </Button>
+    <Link
+      to={to}
+      className="group flex flex-col gap-2 rounded-xl border border-border/80 p-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/30 hover:bg-accent"
+    >
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-primary transition-colors group-hover:bg-white">
+        <Icon className="h-4 w-4" />
+      </span>
+      {label}
+    </Link>
   );
 }
 
@@ -226,4 +334,3 @@ function StatusLink({ to, icon: Icon, text }: { to: string; icon: typeof Package
     </Link>
   );
 }
-

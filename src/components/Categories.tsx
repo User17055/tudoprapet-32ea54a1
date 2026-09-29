@@ -1,35 +1,29 @@
 import { useNavigate } from "react-router-dom";
-import pet1 from "@/assets/pet-1.svg.asset.json";
-import pet2 from "@/assets/pet-2.svg.asset.json";
-import { useCategoryTree } from "@/hooks/useCategoryTree";
+import { Cat, Dog } from "lucide-react";
 
 const pets = [
-  { label: "Cachorro", slug: "cachorro", img: pet2.url },
-  { label: "Gato", slug: "gato", img: pet1.url },
+  { label: "Cachorro", slug: "cachorro", Icon: Dog },
+  { label: "Gato", slug: "gato", Icon: Cat },
 ];
 
 export const Categories = () => {
   const navigate = useNavigate();
-  const { rootCats } = useCategoryTree();
-  const visiblePets = pets.filter((pet) => rootCats.some((category) => category.slug === pet.slug));
-
-  if (visiblePets.length === 0) return null;
 
   return (
-    <section className="py-1 md:hidden">
+    <section className="py-1 md:py-2">
       <div className="max-w-[220px] md:max-w-[280px] mx-auto px-3">
         <div className="grid grid-cols-2 gap-2 mx-auto">
-          {visiblePets.map((p) => (
+          {pets.map((p) => (
             <button
               key={p.slug}
               onClick={() => navigate(`/catalogo?categoria=${p.slug}`)}
               className="group flex flex-col items-center gap-0 rounded-xl transition-transform hover:-translate-y-0.5"
             >
-              <div className="w-20 h-20 md:w-28 md:h-28 overflow-hidden rounded-xl bg-white">
-                <img
-                  src={p.img}
-                  alt={p.label}
-                  className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground md:h-28 md:w-28">
+                <p.Icon
+                  aria-hidden="true"
+                  strokeWidth={1.8}
+                  className="h-11 w-11 transition-transform group-hover:scale-105 md:h-16 md:w-16"
                 />
               </div>
               <span className="text-xs font-bold text-primary font-[var(--font-body)]">{p.label}</span>

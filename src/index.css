@@ -199,3 +199,107 @@
   60% { transform: translateX(-4px); }
   80% { transform: translateX(4px); }
 }
+
+/* ---------------------------------------------------------------------------
+   Tema do painel administrativo.
+
+   Vale só enquanto /admin está montado: a página põe a classe `admin-theme` no
+   <html> e tira ao sair. Assim o painel ganha a própria paleta sem mudar nada
+   na loja, que continua lendo os tokens de :root. Fica no <html> (e não num
+   wrapper) porque diálogos, selects e popovers do Radix renderizam em portal
+   fora da árvore da página e também precisam das cores do painel.
+   --------------------------------------------------------------------------- */
+html.admin-theme {
+  --background: 220 33% 97%;
+  --foreground: 222 47% 11%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  --primary: 216 90% 34%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Etiquetas neutras (categorias, "Você", SHA) e botões secundários. No tema da
+     loja o secondary é o dourado da marca, que no painel acendia cada etiqueta. */
+  --secondary: 220 24% 93%;
+  --secondary-foreground: 222 40% 22%;
+
+  --muted: 220 27% 96%;
+  --muted-foreground: 220 12% 40%;
+
+  /* Hover e seleção de listas, selects e botões ghost. */
+  --accent: 214 100% 95%;
+  --accent-foreground: 216 90% 28%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 18% 89%;
+  --input: 220 16% 83%;
+  --ring: 216 90% 45%;
+
+  --radius: 0.75rem;
+
+  --admin-sidebar: 222 64% 12%;
+  --admin-sidebar-hover: 222 45% 18%;
+  --admin-sidebar-active: 222 50% 22%;
+  --admin-sidebar-border: 222 40% 20%;
+  --admin-sidebar-foreground: 220 30% 92%;
+  --admin-sidebar-muted: 220 20% 62%;
+  --admin-gold: 44 92% 62%;
+
+  color-scheme: light;
+}
+
+html.admin-theme body {
+  background-color: hsl(var(--background));
+}
+
+/* Barras de rolagem discretas dentro do painel. */
+html.admin-theme * {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(220 14% 78%) transparent;
+}
+
+/* Tabelas das abas: cabeçalho em caixa alta, linhas com hover suave. As abas
+   usam o Table do shadcn; o estilo entra aqui para não tocar em cada aba. */
+.admin-content table thead th {
+  background-color: hsl(var(--muted) / 0.8);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-content table thead th:first-child {
+  border-top-left-radius: calc(var(--radius) - 4px);
+  border-bottom-left-radius: calc(var(--radius) - 4px);
+}
+
+.admin-content table thead th:last-child {
+  border-top-right-radius: calc(var(--radius) - 4px);
+  border-bottom-right-radius: calc(var(--radius) - 4px);
+}
+
+.admin-content table thead tr {
+  border-bottom: 0;
+}
+
+.admin-content table tbody tr {
+  border-color: hsl(var(--border) / 0.7);
+}
+
+.admin-content table tbody tr:hover {
+  background-color: hsl(var(--accent) / 0.5);
+}
+
+/* Cartões com sombra mais leve e borda mais nítida que o padrão. */
+.admin-content .shadow-sm {
+  box-shadow:
+    0 1px 2px hsl(222 47% 11% / 0.04),
+    0 6px 16px -10px hsl(222 47% 11% / 0.12);
+}

@@ -136,7 +136,7 @@ export default function AdministratorsTab() {
               placeholder="admin@exemplo.com"
             />
           </div>
-          <Button className="w-full gap-2 bg-[#112f5f] hover:bg-[#0a2349]" disabled={saving} onClick={() => void addAdministrator()}>
+          <Button className="w-full gap-2" disabled={saving} onClick={() => void addAdministrator()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
             {saving ? "Cadastrando..." : "Conceder acesso de admin"}
           </Button>
@@ -161,7 +161,7 @@ export default function AdministratorsTab() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#112f5f]" /></div>
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : filtered.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Nenhum administrador encontrado.</p>
           ) : (

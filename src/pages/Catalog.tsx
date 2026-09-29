@@ -27,7 +27,6 @@ import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { fuzzySearch } from "@/lib/fuzzySearch";
 import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
-import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 
@@ -109,11 +108,12 @@ const Catalog = () => {
         ]);
         setProducts(shop);
         setBestSellingProducts(bestSelling?.data?.products?.edges || []);
-        setCategories(categoriesWithLinkedProducts(
-          (cats.data || []) as Category[],
-          pc.data || [],
-          new Set(shop.map((product) => product.node.id)),
-        ));
+        // A árvore completa é a fonte dos filtros de navegação. Reduzi-la
+        // pelos vínculos de produtos fazia os filtros raiz (Cachorro e Gato)
+        // desaparecerem em carregamentos parciais ou enquanto os vínculos eram
+        // atualizados. As contagens abaixo continuam considerando apenas produtos
+        // realmente visíveis e vinculados.
+        setCategories((cats.data || []) as Category[]);
         setBrands((brs.data || []) as Brand[]);
         setProductCats(pc.data || []);
         setProductBrands(pcontent.data || []);

@@ -208,14 +208,16 @@ export default function ConferenceTab() {
 
       <Card>
         <CardHeader className="p-4 pb-3">
-          <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-end">
-            <div>
+          {/* Com os cinco controles lado a lado, abaixo de 2xl o texto era espremido
+              numa coluna estreita; agora o título fica em cima e os filtros quebram linha. */}
+          <div className="flex flex-col justify-between gap-3 2xl:flex-row 2xl:items-end">
+            <div className="min-w-0">
               <CardTitle className="text-base">Relatório de produtos</CardTitle>
               <CardDescription className="mt-1">
                 Preços são exibidos por variação. Produto sem audiência configurada está oculto na loja.
               </CardDescription>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:flex-nowrap">
               <div className="relative sm:w-72">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -364,7 +366,7 @@ function SummaryCard({
           <Icon className="h-5 w-5" />
         </span>
         <span>
-          <span className="block text-2xl font-extrabold text-[#0a1931]">{value}</span>
+          <span className="block text-2xl font-extrabold text-foreground">{value}</span>
           <span className="block text-xs text-muted-foreground">{label}</span>
         </span>
       </CardContent>

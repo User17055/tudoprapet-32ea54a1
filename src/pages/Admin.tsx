@@ -1,12 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Trash2,
   Loader2,
@@ -36,6 +44,13 @@ import {
   ShieldCheck,
   CircleDollarSign,
   BadgePercent,
+  ChevronRight,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
+  Search,
+  ShieldAlert,
 
   type LucideIcon,
 } from "lucide-react";
@@ -65,6 +80,8 @@ import ValuesTab from "./admin/ValuesTab";
 import CommissionsTab from "./admin/CommissionsTab";
 import DuplicatesTab from "./admin/DuplicatesTab";
 import { ProductPicker } from "@/components/admin/ProductPicker";
+import { AdminSidebarNav } from "@/components/admin/AdminSidebarNav";
+import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
 
 interface SubPrice {
   id: string;
@@ -167,169 +184,401 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
 
 const ALL_SECTIONS = NAV_GROUPS.flatMap((g) => g.items);
 
+// Preferências do painel guardadas neste navegador. O acesso ao localStorage
+// pode falhar (aba anônima bloqueada); nesse caso o painel só não lembra.
+const SIDEBAR_KEY = "tpp-admin-sidebar";
+const RECENT_KEY = "tpp-admin-recent";
+const RECENT_LIMIT = 6;
+
+const readStorage = (key: string) => {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const writeStorage = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Sem armazenamento a preferência vale só até recarregar.
+  }
+};
+
+const readRecent = (): SectionId[] => {
+  try {
+    const parsed = JSON.parse(readStorage(RECENT_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((id) => ALL_SECTIONS.some((section) => section.id === id)) : [];
+  } catch {
+    return [];
+  }
+};
+
 export default function Admin() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const { isAdmin, loading: roleLoading } = useIsAdmin();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => readStorage(SIDEBAR_KEY) === "collapsed");
+  const [recentIds, setRecentIds] = useState<SectionId[]>(readRecent);
+  // Trocar a chave remonta a seção aberta, que então recarrega os próprios dados.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const contentRef = useRef<HTMLElement>(null);
 
   const tabParam = searchParams.get("tab");
   const active = ALL_SECTIONS.find((s) => s.id === tabParam) ?? ALL_SECTIONS[0];
-  const selectSection = (id: SectionId) => {
+  const activeGroup = NAV_GROUPS.find((group) => group.items.some((item) => item.id === active.id));
+  const selectSection = useCallback((id: string) => {
     setSearchParams({ tab: id });
     setMobileNavOpen(false);
+  }, [setSearchParams]);
+
+  // Tema do painel: vale só enquanto esta página está aberta (ver index.css).
+  useEffect(() => {
+    document.documentElement.classList.add("admin-theme");
+    return () => document.documentElement.classList.remove("admin-theme");
+  }, []);
+
+  useEffect(() => {
+    const previous = document.title;
+    document.title = `${active.label} · Painel TudoPraPet`;
+    return () => {
+      document.title = previous;
+    };
+  }, [active.label]);
+
+  useEffect(() => {
+    setRecentIds((current) => {
+      const next = [active.id, ...current.filter((id) => id !== active.id)].slice(0, RECENT_LIMIT);
+      writeStorage(RECENT_KEY, JSON.stringify(next));
+      return next;
+    });
+    contentRef.current?.scrollTo?.({ top: 0 });
+    window.scrollTo({ top: 0 });
+  }, [active.id]);
+
+  // Ctrl/⌘ + K abre a busca de seções de qualquer lugar do painel.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((current) => {
+      writeStorage(SIDEBAR_KEY, current ? "expanded" : "collapsed");
+      return !current;
+    });
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    toast.success("Sessão encerrada.");
+    navigate("/login");
+  };
+
+  const refreshSection = () => {
+    setRefreshKey((key) => key + 1);
+    toast.success("Seção atualizada", { description: active.label });
   };
 
   if (!authLoading && !user) return <Navigate to="/login" replace />;
   if (authLoading || roleLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-background" role="status" aria-label="Carregando o painel">
+        <img src={logo} alt="TudoPraPet" className="h-auto w-40 animate-pulse" />
+        <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Carregando o painel...
+        </p>
       </div>
     );
   }
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <main className="flex-1 container mx-auto py-16 text-center">
-          <h1 className="text-2xl font-bold mb-2">Acesso restrito</h1>
-          <p className="text-muted-foreground">Você não tem permissão para acessar este painel.</p>
-        </main>
-        <Footer />
-      </div>
+      <main className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+          <img src={logo} alt="TudoPraPet" className="mx-auto h-auto w-36" />
+          <span className="mx-auto mt-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <ShieldAlert className="h-7 w-7" />
+          </span>
+          <h1 className="mt-5 text-xl font-bold text-foreground">Acesso restrito</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Você não tem permissão para acessar este painel.</p>
+          {user?.email && (
+            <p className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Conectado como <span className="font-semibold text-foreground">{user.email}</span>
+            </p>
+          )}
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button asChild variant="outline">
+              <Link to="/">Voltar para a loja</Link>
+            </Button>
+            <Button onClick={() => void handleLogout()}>Entrar com outra conta</Button>
+          </div>
+        </div>
+      </main>
     );
   }
 
   const ActiveComponent = active.component;
   const ActiveIcon = active.icon;
+  const userInitial = (user?.email || "A").charAt(0).toUpperCase();
+
+  const sidebarHeader = (isCollapsed: boolean) => (
+    <div className={cn("flex h-16 shrink-0 items-center border-b border-[hsl(var(--admin-sidebar-border))]", isCollapsed ? "justify-center px-2" : "px-5")}>
+      <Link to="/admin?tab=overview" onClick={() => setMobileNavOpen(false)} className="flex min-w-0 items-center gap-3" aria-label="Painel TudoPraPet — visão geral">
+        {isCollapsed ? (
+          <img src="/favicon.svg" alt="" className="h-9 w-9 rounded-lg bg-white p-1" />
+        ) : (
+          <>
+            <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] brightness-0 invert" />
+            <span className="rounded-md bg-[hsl(var(--admin-gold))] px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[hsl(var(--admin-sidebar))]">
+              Admin
+            </span>
+          </>
+        )}
+      </Link>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#f4f6fa] text-[#1c2333]">
-      <header className="sticky top-0 z-50 flex h-20 items-center justify-between gap-4 bg-[#112f5f] px-4 text-white shadow-lg sm:px-7">
-        <Link to="/" className="flex min-w-0 items-center" aria-label="TudoPraPet">
-          <span className="flex h-12 shrink-0 items-center rounded-xl bg-white px-2.5 shadow-sm sm:h-14 sm:px-3">
-            <img src={logo} alt="" className="h-auto w-36 sm:w-48" />
-          </span>
-        </Link>
+    <div className="flex min-h-screen bg-background text-foreground">
+      {/* Menu lateral (desktop) */}
+      <aside
+        className={cn(
+          "sticky top-0 hidden h-screen shrink-0 flex-col bg-[hsl(var(--admin-sidebar))] text-[hsl(var(--admin-sidebar-foreground))] transition-[width] duration-200 lg:flex",
+          collapsed ? "w-[76px]" : "w-[264px]",
+        )}
+      >
+        {sidebarHeader(collapsed)}
 
-        <div className="pointer-events-none absolute inset-x-[28%] top-0 hidden h-full overflow-hidden lg:block" aria-hidden="true">
-          {[4, 19, 34, 49, 64, 79, 94].map((left, index) => (
-            <img
-              key={left}
-              src="/admin-decor/pataamarela.png"
-              alt=""
-              className="admin-paw-pulse absolute h-11 w-[72px] object-contain"
-              style={{
-                left: `${left}%`,
-                top: `${index % 2 === 0 ? -3 : 34}px`,
-                transform: `rotate(${index % 2 === 0 ? -70 : -88}deg)`,
-                animationDelay: `${(6 - index) * 0.15}s`,
-              }}
-            />
-          ))}
+        <div className={cn("shrink-0 pt-4", collapsed ? "px-3" : "px-4")}>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Buscar seção (Ctrl + K)"
+            className={cn(
+              "flex h-10 w-full items-center gap-2.5 rounded-lg border border-[hsl(var(--admin-sidebar-border))] bg-white/[0.04] text-sm text-[hsl(var(--admin-sidebar-muted))] transition-colors hover:bg-white/[0.08] hover:text-white",
+              collapsed ? "justify-center" : "px-3",
+            )}
+          >
+            <Search className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">Buscar seção...</span>
+                <kbd className="rounded border border-white/15 px-1.5 py-0.5 font-sans text-[10px] font-semibold">Ctrl K</kbd>
+              </>
+            )}
+          </button>
         </div>
 
-        <div className="relative flex min-w-0 items-center gap-2 sm:gap-4">
-          <div className="hidden min-w-0 text-right md:block">
-            <p className="text-sm font-semibold">Painel Administrativo</p>
-            <p className="max-w-64 truncate text-xs text-white/65">{user?.email}</p>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto py-5", collapsed ? "px-3" : "px-4")}>
+          <AdminSidebarNav groups={NAV_GROUPS} activeId={active.id} collapsed={collapsed} onSelect={selectSection} />
+        </div>
+
+        <div className={cn("shrink-0 border-t border-[hsl(var(--admin-sidebar-border))] p-3", collapsed && "flex flex-col items-center gap-2")}>
+          {!collapsed && (
+            <div className="mb-2 flex items-center gap-3 rounded-lg px-2 py-1.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--admin-gold))] text-sm font-extrabold text-[hsl(var(--admin-sidebar))]">
+                {userInitial}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-white">Administrador</p>
+                <p className="truncate text-[11px] text-[hsl(var(--admin-sidebar-muted))]">{user?.email}</p>
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
+            title={collapsed ? "Expandir menu" : "Recolher menu"}
+            className={cn(
+              "flex h-9 items-center gap-2 rounded-lg text-xs font-semibold text-[hsl(var(--admin-sidebar-muted))] transition-colors hover:bg-[hsl(var(--admin-sidebar-hover))] hover:text-white",
+              collapsed ? "w-10 justify-center" : "w-full px-2",
+            )}
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {!collapsed && "Recolher menu"}
+          </button>
+        </div>
+      </aside>
+
+      {/* Menu em gaveta (celular e tablet) */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent
+          side="left"
+          closeLabel="Fechar menu"
+          onClose={() => setMobileNavOpen(false)}
+          aria-describedby={undefined}
+          className="flex w-[288px] max-w-[85vw] flex-col gap-0 border-r-0 bg-[hsl(var(--admin-sidebar))] p-0 text-white lg:hidden"
+        >
+          <SheetTitle className="sr-only">Menu do painel</SheetTitle>
+          {sidebarHeader(false)}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+            <AdminSidebarNav groups={NAV_GROUPS} activeId={active.id} onSelect={selectSection} />
           </div>
-          <Button asChild size="sm" variant="secondary" className="h-9 gap-2 bg-[#f1c548] text-[#0a1931] hover:bg-[#e0b23f]">
-            <Link to="/">
-              <span className="hidden sm:inline">Ver loja</span>
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="shrink-0 border-t border-[hsl(var(--admin-sidebar-border))] p-4 text-[11px] text-[hsl(var(--admin-sidebar-muted))]">
+            <p className="truncate">{user?.email}</p>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior */}
+        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-md sm:px-6">
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className="text-white hover:bg-white/10 hover:text-white lg:hidden"
-            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+            className="-ml-1 lg:hidden"
+            aria-label="Abrir menu"
             aria-expanded={mobileNavOpen}
-            onClick={() => setMobileNavOpen((open) => !open)}
+            onClick={() => setMobileNavOpen(true)}
           >
-            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            <Menu className="h-5 w-5" />
           </Button>
-        </div>
-      </header>
 
-      <div className="flex min-h-[calc(100vh-5rem)] items-start">
-        {mobileNavOpen && (
-          <button
-            type="button"
-            className="fixed inset-0 top-20 z-30 bg-[#0a1931]/45 backdrop-blur-[1px] lg:hidden"
-            aria-label="Fechar menu"
-            onClick={() => setMobileNavOpen(false)}
-          />
-        )}
-
-        <aside
-          className={cn(
-            "fixed bottom-0 left-0 top-20 z-40 flex w-[280px] flex-col bg-[#ddac42] p-4 transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-[calc(100vh-5rem)] lg:w-64 lg:translate-x-0",
-            mobileNavOpen ? "translate-x-0" : "-translate-x-full",
-          )}
-        >
-          <nav className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-black/5 bg-white p-3 pb-16 shadow-[-8px_10px_0_rgba(10,25,49,0.16)] lg:pb-20">
-            <div className="mb-3 border-b pb-3 md:hidden">
-              <p className="text-xs font-bold text-[#112f5f]">Painel Administrativo</p>
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{user?.email}</p>
-            </div>
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="mb-4 last:mb-0">
-                <p className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#0a1931]/65">
-                  {group.label}
-                </p>
-                <ul className="space-y-1">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const selected = item.id === active.id;
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => selectSection(item.id)}
-                          aria-current={selected ? "page" : undefined}
-                          className={cn(
-                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors",
-                            selected
-                              ? "bg-[#112f5f] font-bold text-white shadow-sm"
-                              : "text-[#152642] hover:bg-[#f4f6fa]",
-                          )}
-                        >
-                          <Icon className={cn("h-4 w-4 shrink-0", selected ? "text-[#f1c548]" : "text-[#112f5f]")} />
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+          <nav aria-label="Você está em" className="flex min-w-0 items-center gap-1.5 text-sm">
+            <button
+              type="button"
+              onClick={() => selectSection("overview")}
+              className="hidden shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline"
+            >
+              Painel
+            </button>
+            {activeGroup && (
+              <>
+                <ChevronRight className="hidden h-4 w-4 shrink-0 text-muted-foreground/60 sm:block" />
+                <span className="hidden shrink-0 font-medium text-muted-foreground md:inline">{activeGroup.label}</span>
+                <ChevronRight className="hidden h-4 w-4 shrink-0 text-muted-foreground/60 md:block" />
+              </>
+            )}
+            <span className="truncate font-semibold text-foreground">{active.label}</span>
           </nav>
-        </aside>
 
-        <main className="min-w-0 flex-1 overflow-x-hidden px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="hidden h-9 w-56 items-center gap-2 rounded-lg border border-input bg-card px-3 text-sm text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-foreground md:flex xl:w-72"
+              aria-label="Buscar seção (Ctrl + K)"
+            >
+              <Search className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Buscar no painel...</span>
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-sans text-[10px] font-semibold">Ctrl K</kbd>
+            </button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="md:hidden"
+              aria-label="Buscar seção"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Search className="h-5 w-5" />
+            </Button>
+
+            <Button asChild variant="outline" size="sm" className="hidden h-9 gap-2 sm:inline-flex">
+              <Link to="/">
+                Ver loja
+                <ExternalLink className="h-4 w-4" />
+              </Link>
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground outline-none ring-offset-2 transition-shadow hover:ring-2 hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Menu da conta"
+                >
+                  {userInitial}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="w-60">
+                <DropdownMenuLabel className="font-normal">
+                  <p className="text-sm font-semibold">Administrador</p>
+                  <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild className="cursor-pointer gap-2">
+                  <Link to="/"><ExternalLink className="h-4 w-4" /> Ver loja</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2">
+                  <Link to="/perfil"><Users className="h-4 w-4" /> Minha conta</Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => void handleLogout()}
+                  className="cursor-pointer gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" /> Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+
+        <main ref={contentRef} className="admin-content min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-[1440px]">
-            <div className="mb-5 flex min-w-0 items-start gap-3 sm:mb-6">
-              <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112f5f] text-[#f1c548] shadow-sm">
-                <ActiveIcon className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b17c15]">
-                  {NAV_GROUPS.find((group) => group.items.some((item) => item.id === active.id))?.label}
-                </p>
-                <h1 className="break-words text-xl font-extrabold tracking-tight text-[#0a1931] sm:text-2xl">{active.label}</h1>
-                <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[hsl(var(--admin-sidebar))] text-[hsl(var(--admin-gold))] shadow-sm">
+                  <ActiveIcon className="h-6 w-6" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+                    {activeGroup?.label}
+                  </p>
+                  <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">{active.label}</h1>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{active.description}</p>
+                </div>
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={refreshSection}
+                    className="hidden h-9 w-9 shrink-0 self-start sm:inline-flex"
+                    aria-label="Recarregar esta seção"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Recarregar esta seção</TooltipContent>
+              </Tooltip>
             </div>
-            <section key={active.id} className="min-w-0 overflow-x-auto pb-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
+            <section key={`${active.id}-${refreshKey}`} className="min-w-0 overflow-x-auto pb-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
               <ActiveComponent />
             </section>
           </div>
         </main>
       </div>
+
+      <AdminCommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        groups={NAV_GROUPS}
+        recentIds={recentIds}
+        activeId={active.id}
+        onSelectSection={selectSection}
+        onRefresh={refreshSection}
+        onToggleSidebar={toggleCollapsed}
+        sidebarCollapsed={collapsed}
+        onOpenStore={() => navigate("/")}
+        onLogout={() => void handleLogout()}
+      />
     </div>
   );
 }
@@ -1334,8 +1583,8 @@ function UsersTab() {
             { label: "Sem plano", value: totalWithoutPlan },
             { label: "Franqueados", value: totalFranchisees },
           ].map((item) => (
-            <div key={item.label} className="rounded-lg border bg-[#f8f9fc] px-3 py-2 sm:min-w-28">
-              <p className="text-lg font-extrabold tabular-nums text-[#112f5f]">{item.value}</p>
+            <div key={item.label} className="rounded-lg border bg-muted/60 px-3 py-2 sm:min-w-28">
+              <p className="text-lg font-extrabold tabular-nums text-primary">{item.value}</p>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</p>
             </div>
           ))}
