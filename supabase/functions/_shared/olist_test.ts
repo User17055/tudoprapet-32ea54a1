@@ -46,9 +46,9 @@ Deno.test("ignora produto sem custo positivo", () => {
   );
 });
 
-Deno.test("calcula preco de assinante com 12,5% sobre o custo", () => {
-  assertEquals(subscriberPriceFromCost(100), 112.5);
-  assertEquals(subscriberPriceFromCost(100.55), 113.12);
+Deno.test("calcula preco de assinante com 5% sobre o custo", () => {
+  assertEquals(subscriberPriceFromCost(100), 105);
+  assertEquals(subscriberPriceFromCost(100.55), 105.58);
 });
 
 Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => {
