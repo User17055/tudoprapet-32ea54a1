@@ -397,8 +397,14 @@ function normalize(order: any, delivery = deliveryLabel(order)) {
     invoice_purpose: invoicePurpose === "resale" || invoicePurpose === "final_consumption"
       ? invoicePurpose
       : null,
-    payment_term_days: [7, 30].includes(Number(noteAttributes.get("prazo_pagamento_dias")))
+    payment_term_days: Number(noteAttributes.get("prazo_pagamento_dias")) >= 1
       ? Number(noteAttributes.get("prazo_pagamento_dias"))
+      : null,
+    payment_schedule_type: noteAttributes.get("modalidade_vencimento") === "fixed_day_next_month"
+      ? "fixed_day_next_month"
+      : "days_after_order",
+    payment_due_day: Number(noteAttributes.get("dia_fixo_vencimento")) >= 1
+      ? Number(noteAttributes.get("dia_fixo_vencimento"))
       : null,
     line_items: (order.line_items || []).map((item: any) => ({
       title: item.title || item.name || "Produto",

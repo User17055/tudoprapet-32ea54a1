@@ -147,6 +147,8 @@ type CheckoutSummary = {
   items: SummaryItem[];
   invoicePurpose?: InvoicePurpose;
   paymentTermDays?: number;
+  paymentScheduleType?: "days_after_order" | "fixed_day_next_month";
+  paymentDueDay?: number | null;
 };
 type PaymentResult = {
   status: string;
@@ -161,6 +163,13 @@ type PaymentResult = {
 const ACTIVE_KEY = "tpp_checkout_active";
 const SERVICE_FEE = 0;
 const FRANCHISE_ORDER_FEE = 2;
+const franchisePaymentLabel = (
+  scheduleType: "days_after_order" | "fixed_day_next_month",
+  termDays: number,
+  dueDay: number | null,
+) => scheduleType === "fixed_day_next_month" && dueDay
+  ? `todo dia ${dueDay} do mês seguinte`
+  : `${termDays} dias após a compra`;
 const PICKUP_STORE_ADDRESS = String(
   import.meta.env.VITE_PICKUP_STORE_ADDRESS || "",
 ).trim();
@@ -361,6 +370,8 @@ export default function Checkout() {
   const [isFranchisee, setIsFranchisee] = useState(false);
   const [invoicePurpose, setInvoicePurpose] = useState<InvoicePurpose | "">("");
   const [franchisePaymentTermDays, setFranchisePaymentTermDays] = useState(7);
+  const [franchisePaymentScheduleType, setFranchisePaymentScheduleType] = useState<"days_after_order" | "fixed_day_next_month">("days_after_order");
+  const [franchisePaymentDueDay, setFranchisePaymentDueDay] = useState<number | null>(null);
   const [franchiseConfirmationOpen, setFranchiseConfirmationOpen] = useState(false);
   const [credentials, setCredentials] = useState<{
     sessionId: string;
@@ -561,7 +572,13 @@ export default function Checkout() {
           (methods.find((item) => item.isDefault) || methods[0])?.id || "",
         );
         setIsFranchisee(Boolean(data.isFranchisee));
-        setFranchisePaymentTermDays(Number(data.paymentTermDays) === 30 ? 30 : 7);
+        const termDays = Number(data.paymentTermDays);
+        setFranchisePaymentTermDays(Number.isInteger(termDays) && termDays >= 1 ? termDays : 7);
+        setFranchisePaymentScheduleType(data.paymentScheduleType === "fixed_day_next_month"
+          ? "fixed_day_next_month"
+          : "days_after_order");
+        const dueDay = Number(data.paymentDueDay);
+        setFranchisePaymentDueDay(Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31 ? dueDay : null);
       })
       .finally(() => setCustomerDataLoading(false));
   }, [previewMode, user]);
@@ -678,7 +695,15 @@ export default function Checkout() {
           if (["resale", "final_consumption"].includes(stored.summary.invoicePurpose)) {
             setInvoicePurpose(stored.summary.invoicePurpose);
           }
-          if (Number(stored.summary.paymentTermDays) === 30) setFranchisePaymentTermDays(30);
+          const storedTermDays = Number(stored.summary.paymentTermDays);
+          if (Number.isInteger(storedTermDays) && storedTermDays >= 1) setFranchisePaymentTermDays(storedTermDays);
+          setFranchisePaymentScheduleType(stored.summary.paymentScheduleType === "fixed_day_next_month"
+            ? "fixed_day_next_month"
+            : "days_after_order");
+          const storedDueDay = Number(stored.summary.paymentDueDay);
+          setFranchisePaymentDueDay(Number.isInteger(storedDueDay) && storedDueDay >= 1 && storedDueDay <= 31
+            ? storedDueDay
+            : null);
         }
         if (stored.payment) {
           setPayment(stored.payment);
@@ -1168,7 +1193,15 @@ export default function Checkout() {
         };
         setCredentials(active);
         setSummary(prepared.summary);
-        if (Number(prepared.summary?.paymentTermDays) === 30) setFranchisePaymentTermDays(30);
+        const preparedTermDays = Number(prepared.summary?.paymentTermDays);
+        if (Number.isInteger(preparedTermDays) && preparedTermDays >= 1) setFranchisePaymentTermDays(preparedTermDays);
+        setFranchisePaymentScheduleType(prepared.summary?.paymentScheduleType === "fixed_day_next_month"
+          ? "fixed_day_next_month"
+          : "days_after_order");
+        const preparedDueDay = Number(prepared.summary?.paymentDueDay);
+        setFranchisePaymentDueDay(Number.isInteger(preparedDueDay) && preparedDueDay >= 1 && preparedDueDay <= 31
+          ? preparedDueDay
+          : null);
         activeSummary = prepared.summary;
         storeActive(active, prepared.summary);
         if (isFranchisee && ignoredItems.length) {
@@ -1453,6 +1486,8 @@ export default function Checkout() {
           invoicePurpose={invoicePurpose}
           setInvoicePurpose={setInvoicePurpose}
           paymentTermDays={franchisePaymentTermDays}
+          paymentScheduleType={franchisePaymentScheduleType}
+          paymentDueDay={franchisePaymentDueDay}
           deliveryMode={deliveryMode}
           method={paymentMethod}
           setMethod={setPaymentMethod}
@@ -1494,7 +1529,7 @@ export default function Checkout() {
           </div>
           <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
             <strong>NF-e: {invoicePurpose === "resale" ? "revenda" : "consumo final"}.</strong>{" "}
-            A Olist enviará por e-mail o boleto com opção de pagamento por Pix. O vencimento será em {franchisePaymentTermDays} dias e o pedido inclui a taxa operacional de R$ 2,00.
+            A Olist enviará por e-mail o boleto com opção de pagamento por Pix. O vencimento será {franchisePaymentLabel(franchisePaymentScheduleType, franchisePaymentTermDays, franchisePaymentDueDay)} e o pedido inclui a taxa operacional de R$ 2,00.
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setFranchiseConfirmationOpen(false)}>
@@ -1625,6 +1660,8 @@ export default function Checkout() {
                           invoicePurpose={invoicePurpose}
                           setInvoicePurpose={setInvoicePurpose}
                           paymentTermDays={franchisePaymentTermDays}
+                          paymentScheduleType={franchisePaymentScheduleType}
+                          paymentDueDay={franchisePaymentDueDay}
                           deliveryMode={deliveryMode}
                           method={paymentMethod}
                           setMethod={setPaymentMethod}
@@ -2613,6 +2650,8 @@ function PaymentStep(props: {
   invoicePurpose: InvoicePurpose | "";
   setInvoicePurpose: (value: InvoicePurpose) => void;
   paymentTermDays: number;
+  paymentScheduleType: "days_after_order" | "fixed_day_next_month";
+  paymentDueDay: number | null;
   deliveryMode: "pick_up" | "shipping";
   method: PaymentMethod;
   setMethod: (v: PaymentMethod) => void;
@@ -2655,7 +2694,7 @@ function PaymentStep(props: {
           onClick={() => {}}
           icon={<CreditCard className="h-5 w-5" />}
           title="Prazo da franquia"
-          text={`Boleto com opção Pix enviado por e-mail, com vencimento em ${props.paymentTermDays} dias`}
+          text={`Boleto com opção Pix enviado por e-mail, com vencimento ${franchisePaymentLabel(props.paymentScheduleType, props.paymentTermDays, props.paymentDueDay)}`}
         />
         <div>
           <p className="mb-2 font-semibold text-slate-900">Finalidade da nota fiscal</p>
@@ -3642,7 +3681,7 @@ function Success({
         <h1 className="text-3xl font-bold">Pedido recebido!</h1>
         <p className="mt-3 text-slate-600">
           {payment?.status === "credit_approved"
-            ? `Nota fiscal emitida para ${summary?.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"}. A Olist enviará por e-mail o boleto com opção Pix, com vencimento em ${summary?.paymentTermDays || 7} dias.`
+            ? `Nota fiscal emitida para ${summary?.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"}. A Olist enviará por e-mail o boleto com opção Pix, com vencimento ${franchisePaymentLabel(summary?.paymentScheduleType === "fixed_day_next_month" ? "fixed_day_next_month" : "days_after_order", summary?.paymentTermDays || 7, summary?.paymentDueDay || null)}.`
             : "Pagamento confirmado e pedido em preparação."}
         </p>
         {pickup && (

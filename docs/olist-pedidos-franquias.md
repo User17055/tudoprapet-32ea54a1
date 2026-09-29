@@ -11,7 +11,14 @@ O checkout de franquia usa a Olist como origem financeira. Depois da confirmaç�
 
 O boleto usa a mesma conta a receber e pode oferecer Pix por QR Code ou copia e cola. Não devem ser criadas duas cobranças separadas.
 
-A data de vencimento é contada desde o dia do pedido. O prazo e a finalidade da NF-e são salvos no pedido; alterações posteriores no cadastro não mudam pedidos antigos.
+A condição de pagamento é individual por franquia e pode ser configurada no
+Admin em dois modos:
+
+- **dias após a compra**: qualquer prazo entre 1 e 365 dias;
+- **dia fixo no mês seguinte**: dia 1 a 31; em meses curtos, usa o último dia.
+
+O prazo, a modalidade e a finalidade da NF-e são copiados para o pedido;
+alterações posteriores no cadastro não mudam pedidos antigos.
 
 ## Configuração
 

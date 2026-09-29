@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
     const { data: sessions, error: sessionsError } = await admin.from("checkout_sessions")
       .select(
-        "id,created_at,status,currency,total,invoice_purpose,franchise_payment_term_days,olist_order_id,olist_order_number,olist_invoice_id,olist_invoice_number,olist_invoice_url",
+        "id,created_at,status,currency,total,invoice_purpose,franchise_payment_term_days,franchise_payment_schedule_type,franchise_payment_due_day,olist_order_id,olist_order_number,olist_invoice_id,olist_invoice_number,olist_invoice_url",
       )
       .eq("user_id", auth.user.id)
       .eq("customer_type", "franchise")
@@ -89,6 +89,8 @@ Deno.serve(async (req) => {
         invoiceUrl: session.olist_invoice_url || null,
         invoicePurpose: session.invoice_purpose || null,
         paymentTermDays: session.franchise_payment_term_days || null,
+        paymentScheduleType: session.franchise_payment_schedule_type || "days_after_order",
+        paymentDueDay: session.franchise_payment_due_day || null,
         amount: Number(payment?.amount ?? session.total),
         currency: session.currency || "BRL",
         status: String(

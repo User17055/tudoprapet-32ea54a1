@@ -31,6 +31,8 @@ export interface PrintableOrder {
   note?: string | null;
   invoice_purpose?: "resale" | "final_consumption" | null;
   payment_term_days?: number | null;
+  payment_schedule_type?: "days_after_order" | "fixed_day_next_month" | null;
+  payment_due_day?: number | null;
   line_items: PrintableOrderItem[];
 }
 

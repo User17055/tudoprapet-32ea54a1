@@ -18,7 +18,16 @@ Deno.serve(async (req) => {
     if (body.action === "update_payment_term") {
       const userId = typeof body.userId === "string" ? body.userId : "";
       const paymentTermDays = Number(body.paymentTermDays);
-      if (!/^[0-9a-f-]{36}$/i.test(userId) || ![7, 30].includes(paymentTermDays)) {
+      const paymentScheduleType = body.paymentScheduleType === "fixed_day_next_month"
+        ? "fixed_day_next_month"
+        : "days_after_order";
+      const paymentDueDay = paymentScheduleType === "fixed_day_next_month"
+        ? Number(body.paymentDueDay)
+        : null;
+      const invalidDays = !Number.isInteger(paymentTermDays) || paymentTermDays < 1 || paymentTermDays > 365;
+      const invalidDueDay = paymentScheduleType === "fixed_day_next_month" &&
+        (!Number.isInteger(paymentDueDay) || paymentDueDay! < 1 || paymentDueDay! > 31);
+      if (!/^[0-9a-f-]{36}$/i.test(userId) || invalidDays || invalidDueDay) {
         return errorResponse("Prazo de pagamento inválido", 400);
       }
       const { data: profile, error: profileError } = await admin.from("profiles")
@@ -29,15 +38,17 @@ Deno.serve(async (req) => {
       const { error } = await admin.from("franchise_credit_accounts").upsert({
         user_id: userId,
         payment_term_days: paymentTermDays,
+        payment_schedule_type: paymentScheduleType,
+        payment_due_day: paymentDueDay,
         payment_term_updated_by: auth.auth.userId,
         payment_term_updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" });
       if (error) throw error;
-      return jsonResponse({ ok: true, userId, paymentTermDays });
+      return jsonResponse({ ok: true, userId, paymentTermDays, paymentScheduleType, paymentDueDay });
     }
 
     const { data, error } = await admin.from("franchise_credit_accounts")
-      .select("user_id,payment_term_days,payment_term_updated_at,payment_term_updated_by")
+      .select("user_id,payment_term_days,payment_schedule_type,payment_due_day,payment_term_updated_at,payment_term_updated_by")
       .order("updated_at", { ascending: false });
     if (error) throw error;
     return jsonResponse({ accounts: data || [] });

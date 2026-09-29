@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
         .select("name,cpf,cnpj,person_type,is_franchisee").eq("user_id", userId).maybeSingle();
       const { data: franchiseAccount } = accountProfile?.is_franchisee
         ? await admin.from("franchise_credit_accounts")
-          .select("payment_term_days").eq("user_id", userId).maybeSingle()
+          .select("payment_term_days,payment_schedule_type,payment_due_day").eq("user_id", userId).maybeSingle()
         : { data: null };
 
       // Primeiro acesso: usa o último checkout concluído sem duplicar dados.
@@ -101,7 +101,15 @@ Deno.serve(async (req) => {
         addresses: addresses ?? [],
         paymentMethods: methods ?? [],
         isFranchisee: Boolean(accountProfile?.is_franchisee),
-        paymentTermDays: Number(franchiseAccount?.payment_term_days) === 30 ? 30 : 7,
+        paymentTermDays: Number(franchiseAccount?.payment_term_days) >= 1
+          ? Number(franchiseAccount?.payment_term_days)
+          : 7,
+        paymentScheduleType: franchiseAccount?.payment_schedule_type === "fixed_day_next_month"
+          ? "fixed_day_next_month"
+          : "days_after_order",
+        paymentDueDay: Number(franchiseAccount?.payment_due_day) >= 1
+          ? Number(franchiseAccount?.payment_due_day)
+          : null,
       });
     }
 

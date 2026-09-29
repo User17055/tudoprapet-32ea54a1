@@ -158,7 +158,9 @@ Deno.serve(async (req) => {
     }
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
-    let franchisePaymentTermDays: 7 | 30 = 7;
+    let franchisePaymentTermDays = 7;
+    let franchisePaymentScheduleType: "days_after_order" | "fixed_day_next_month" = "days_after_order";
+    let franchisePaymentDueDay: number | null = null;
     if (auth.user) {
       const [{ data: profile }, { data: clubMember }] = await Promise.all([
         admin.from("profiles").select("is_franchisee").eq("user_id", auth.user.id).maybeSingle(),
@@ -175,14 +177,25 @@ Deno.serve(async (req) => {
         return errorResponse("Escolha se a nota fiscal será para revenda ou consumo final", 400);
       }
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,payment_term_days")
+        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,payment_term_days,payment_schedule_type,payment_due_day")
         .eq("user_id", auth.user!.id).maybeSingle();
       if (credit?.manually_blocked) {
         return jsonResponse({
           error: credit.blocked_reason || "Franquia bloqueada para novos pedidos",
         }, 403);
       }
-      franchisePaymentTermDays = Number(credit?.payment_term_days) === 30 ? 30 : 7;
+      const configuredDays = Number(credit?.payment_term_days);
+      franchisePaymentTermDays = Number.isInteger(configuredDays) && configuredDays >= 1 && configuredDays <= 365
+        ? configuredDays
+        : 7;
+      franchisePaymentScheduleType = credit?.payment_schedule_type === "fixed_day_next_month"
+        ? "fixed_day_next_month"
+        : "days_after_order";
+      const configuredDueDay = Number(credit?.payment_due_day);
+      franchisePaymentDueDay = franchisePaymentScheduleType === "fixed_day_next_month" &&
+          Number.isInteger(configuredDueDay) && configuredDueDay >= 1 && configuredDueDay <= 31
+        ? configuredDueDay
+        : null;
       const { data: financialSessions } = await admin.from("checkout_sessions")
         .select("id").eq("user_id", auth.user!.id).eq("customer_type", "franchise");
       const sessionIds = (financialSessions ?? []).map((row) => row.id);
@@ -545,6 +558,8 @@ Deno.serve(async (req) => {
       items_snapshot: itemsSnapshot,
       invoice_purpose: customerType === "franchise" ? input.invoicePurpose : null,
       franchise_payment_term_days: customerType === "franchise" ? franchisePaymentTermDays : null,
+      franchise_payment_schedule_type: customerType === "franchise" ? franchisePaymentScheduleType : null,
+      franchise_payment_due_day: customerType === "franchise" ? franchisePaymentDueDay : null,
       referral_code: referral?.code ?? null,
       referral_employee_name: referral?.employee_name ?? null,
       commission_percent: commissionEligible ? storeCommissionPercent : 0,
@@ -552,7 +567,12 @@ Deno.serve(async (req) => {
         customerType,
         serviceFee,
         ...(customerType === "franchise"
-          ? { invoicePurpose: input.invoicePurpose, paymentTermDays: franchisePaymentTermDays }
+          ? {
+            invoicePurpose: input.invoicePurpose,
+            paymentTermDays: franchisePaymentTermDays,
+            paymentScheduleType: franchisePaymentScheduleType,
+            paymentDueDay: franchisePaymentDueDay,
+          }
           : {}),
         calculatedAt: new Date().toISOString(),
         ...(pickupLocation ? { pickupLocation } : {}),
@@ -630,6 +650,10 @@ Deno.serve(async (req) => {
           ? [
             { key: "finalidade_nfe", value: input.invoicePurpose },
             { key: "prazo_pagamento_dias", value: String(franchisePaymentTermDays) },
+            { key: "modalidade_vencimento", value: franchisePaymentScheduleType },
+            ...(franchisePaymentDueDay
+              ? [{ key: "dia_fixo_vencimento", value: String(franchisePaymentDueDay) }]
+              : []),
           ]
           : []),
         ...(referral ? [{ key: "codigo_indicacao", value: referral.code }] : []),
@@ -748,7 +772,12 @@ Deno.serve(async (req) => {
         items: itemsSnapshot,
         pickupLocation,
         ...(customerType === "franchise"
-          ? { invoicePurpose: input.invoicePurpose, paymentTermDays: franchisePaymentTermDays }
+          ? {
+            invoicePurpose: input.invoicePurpose,
+            paymentTermDays: franchisePaymentTermDays,
+            paymentScheduleType: franchisePaymentScheduleType,
+            paymentDueDay: franchisePaymentDueDay,
+          }
           : {}),
       },
     });

@@ -35,6 +35,10 @@ import {
   issueOlistInvoice,
   type OlistFranchiseOrderInput,
 } from "../_shared/olist.ts";
+import {
+  franchisePaymentDueDate,
+  type FranchisePaymentScheduleType,
+} from "../_shared/franchise-payment.ts";
 
 const FRANCHISE_PAYMENT_TERM_DAYS = 7;
 
@@ -410,20 +414,36 @@ Deno.serve(async (req) => {
         ? session.billing_address_snapshot
         : session.address_snapshot) as Record<string, string>;
     let termDays = 0;
+    let paymentScheduleType: FranchisePaymentScheduleType = "days_after_order";
+    let paymentDueDay: number | null = null;
     if (session.customer_type === "franchise" && session.user_id) {
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("manually_blocked,blocked_reason,payment_term_days")
+        .select("manually_blocked,blocked_reason,payment_term_days,payment_schedule_type,payment_due_day")
         .eq("user_id", session.user_id).maybeSingle();
       if (credit?.manually_blocked) {
         return jsonResponse({ error: credit.blocked_reason || "Franquia bloqueada" }, 403);
       }
-      termDays = Number(session.franchise_payment_term_days) === 30
-        ? 30
-        : Number(session.franchise_payment_term_days) === 7
-        ? 7
-        : Number(credit?.payment_term_days) === 30
-        ? 30
+      const snapshotDays = Number(session.franchise_payment_term_days);
+      const configuredDays = Number(credit?.payment_term_days);
+      termDays = Number.isInteger(snapshotDays) && snapshotDays >= 1 && snapshotDays <= 365
+        ? snapshotDays
+        : Number.isInteger(configuredDays) && configuredDays >= 1 && configuredDays <= 365
+        ? configuredDays
         : FRANCHISE_PAYMENT_TERM_DAYS;
+      paymentScheduleType = session.franchise_payment_schedule_type === "fixed_day_next_month"
+        ? "fixed_day_next_month"
+        : session.franchise_payment_schedule_type === "days_after_order"
+        ? "days_after_order"
+        : credit?.payment_schedule_type === "fixed_day_next_month"
+        ? "fixed_day_next_month"
+        : "days_after_order";
+      const snapshotDueDay = Number(session.franchise_payment_due_day);
+      const configuredDueDay = Number(credit?.payment_due_day);
+      paymentDueDay = Number.isInteger(snapshotDueDay) && snapshotDueDay >= 1 && snapshotDueDay <= 31
+        ? snapshotDueDay
+        : Number.isInteger(configuredDueDay) && configuredDueDay >= 1 && configuredDueDay <= 31
+        ? configuredDueDay
+        : null;
     }
     const invoicePurpose = session.invoice_purpose === "final_consumption"
       ? "final_consumption"
@@ -433,7 +453,14 @@ Deno.serve(async (req) => {
     if (session.customer_type === "franchise" && !invoicePurpose) {
       return errorResponse("Volte à sacola e escolha a finalidade da NF-e antes de confirmar", 409);
     }
-    const dueDate = dateInSaoPaulo(termDays);
+    const dueDate = session.customer_type === "franchise"
+      ? franchisePaymentDueDate({
+        createdAt: session.created_at,
+        scheduleType: paymentScheduleType,
+        termDays,
+        dueDay: paymentDueDay,
+      })
+      : dateInSaoPaulo(termDays);
     // `checkout-prepare` já barra o carrinho abaixo do piso, mas uma sessão
     // criada antes desta guarda ainda chega aqui. Recusar antes de abrir a
     // tentativa evita gravar uma tentativa que só pode falhar.
@@ -593,6 +620,8 @@ Deno.serve(async (req) => {
           olistInvoiceId: invoice.id,
           dueDate,
           paymentTermDays: termDays,
+          paymentScheduleType,
+          paymentDueDay,
           invoicePurpose,
         },
       });

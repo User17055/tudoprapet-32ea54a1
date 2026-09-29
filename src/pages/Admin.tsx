@@ -1434,6 +1434,18 @@ interface ProfileRow {
   is_franchisee?: boolean | null;
 }
 
+type FranchisePaymentSetting = {
+  paymentScheduleType: "days_after_order" | "fixed_day_next_month";
+  paymentTermDays: number;
+  paymentDueDay: number | null;
+};
+
+const defaultFranchisePaymentSetting = (): FranchisePaymentSetting => ({
+  paymentScheduleType: "days_after_order",
+  paymentTermDays: 7,
+  paymentDueDay: null,
+});
+
 function UsersTab() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [subscriberIds, setSubscriberIds] = useState<Set<string>>(new Set());
@@ -1443,7 +1455,7 @@ function UsersTab() {
   const [editName, setEditName] = useState("");
   const [search, setSearch] = useState("");
   const [togglingEmail, setTogglingEmail] = useState<string | null>(null);
-  const [franchiseTerms, setFranchiseTerms] = useState<Record<string, number>>({});
+  const [franchiseTerms, setFranchiseTerms] = useState<Record<string, FranchisePaymentSetting>>({});
   const [savingTermId, setSavingTermId] = useState<string | null>(null);
 
   const load = async (silent = false) => {
@@ -1466,9 +1478,17 @@ function UsersTab() {
       if (row.is_active && row.email) emails.add(row.email.toLowerCase());
     });
     setMemberEmails(emails);
-    const terms: Record<string, number> = {};
+    const terms: Record<string, FranchisePaymentSetting> = {};
     for (const account of franchiseSettings.data?.accounts || []) {
-      terms[String(account.user_id)] = Number(account.payment_term_days) === 30 ? 30 : 7;
+      const termDays = Number(account.payment_term_days);
+      const dueDay = Number(account.payment_due_day);
+      terms[String(account.user_id)] = {
+        paymentScheduleType: account.payment_schedule_type === "fixed_day_next_month"
+          ? "fixed_day_next_month"
+          : "days_after_order",
+        paymentTermDays: Number.isInteger(termDays) && termDays >= 1 && termDays <= 365 ? termDays : 7,
+        paymentDueDay: Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31 ? dueDay : null,
+      };
     }
     setFranchiseTerms(terms);
     if (!silent) setLoading(false);
@@ -1532,15 +1552,23 @@ function UsersTab() {
     toast.success(next ? "Marcado como franqueado" : "Franquia removida");
   };
 
-  const updateFranchiseTerm = async (p: ProfileRow, days: number) => {
+  const updateFranchiseTerm = async (p: ProfileRow) => {
+    const setting = franchiseTerms[p.user_id] || defaultFranchisePaymentSetting();
     setSavingTermId(p.user_id);
     const { data, error } = await supabase.functions.invoke("admin-franchise-settings", {
-      body: { action: "update_payment_term", userId: p.user_id, paymentTermDays: days },
+      body: {
+        action: "update_payment_term",
+        userId: p.user_id,
+        paymentTermDays: setting.paymentTermDays,
+        paymentScheduleType: setting.paymentScheduleType,
+        paymentDueDay: setting.paymentDueDay,
+      },
     });
     setSavingTermId(null);
     if (error || data?.error) return toast.error(data?.error || "Erro ao atualizar o prazo");
-    setFranchiseTerms((current) => ({ ...current, [p.user_id]: days }));
-    toast.success(`Prazo atualizado para ${days} dias`);
+    toast.success(setting.paymentScheduleType === "fixed_day_next_month"
+      ? `Vencimento atualizado para todo dia ${setting.paymentDueDay}`
+      : `Prazo atualizado para ${setting.paymentTermDays} dias`);
   };
 
   const filtered = useMemo(() => {
@@ -1608,7 +1636,7 @@ function UsersTab() {
                 <TableHead>E-mail</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Plano</TableHead>
-                <TableHead>Prazo da franquia</TableHead>
+                <TableHead>Condição da franquia</TableHead>
                 <TableHead>Cadastrado em</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
@@ -1618,6 +1646,7 @@ function UsersTab() {
                 const hasPlan = subscriberIds.has(p.user_id);
                 const isMember = memberEmails.has((p.email || "").toLowerCase());
                 const editing = editId === p.id;
+                const paymentSetting = franchiseTerms[p.user_id] || defaultFranchisePaymentSetting();
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.email || "—"}</TableCell>
@@ -1650,17 +1679,66 @@ function UsersTab() {
                     </TableCell>
                     <TableCell>
                       {p.is_franchisee ? (
-                        <Select
-                          value={String(franchiseTerms[p.user_id] || 7)}
-                          onValueChange={(value) => void updateFranchiseTerm(p, Number(value))}
-                          disabled={savingTermId === p.user_id}
-                        >
-                          <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="7">7 dias</SelectItem>
-                            <SelectItem value="30">30 dias</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex min-w-[330px] items-center gap-2">
+                          <Select
+                            value={paymentSetting.paymentScheduleType}
+                            onValueChange={(value: FranchisePaymentSetting["paymentScheduleType"]) => {
+                              setFranchiseTerms((current) => ({
+                                ...current,
+                                [p.user_id]: {
+                                  ...paymentSetting,
+                                  paymentScheduleType: value,
+                                  paymentDueDay: value === "fixed_day_next_month"
+                                    ? paymentSetting.paymentDueDay || 10
+                                    : null,
+                                },
+                              }));
+                            }}
+                            disabled={savingTermId === p.user_id}
+                          >
+                            <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="days_after_order">Dias após compra</SelectItem>
+                              <SelectItem value="fixed_day_next_month">Dia fixo/mês seguinte</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={paymentSetting.paymentScheduleType === "fixed_day_next_month" ? 31 : 365}
+                            value={paymentSetting.paymentScheduleType === "fixed_day_next_month"
+                              ? paymentSetting.paymentDueDay || 10
+                              : paymentSetting.paymentTermDays}
+                            onChange={(event) => {
+                              const value = Number(event.target.value);
+                              setFranchiseTerms((current) => ({
+                                ...current,
+                                [p.user_id]: paymentSetting.paymentScheduleType === "fixed_day_next_month"
+                                  ? { ...paymentSetting, paymentDueDay: value }
+                                  : { ...paymentSetting, paymentTermDays: value },
+                              }));
+                            }}
+                            className="h-8 w-20"
+                            aria-label={paymentSetting.paymentScheduleType === "fixed_day_next_month"
+                              ? "Dia fixo de vencimento"
+                              : "Dias após a compra"}
+                          />
+                          <span className="whitespace-nowrap text-xs text-muted-foreground">
+                            {paymentSetting.paymentScheduleType === "fixed_day_next_month" ? "do próximo mês" : "dias"}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => void updateFranchiseTerm(p)}
+                            disabled={savingTermId === p.user_id}
+                            title="Salvar condição de pagamento"
+                          >
+                            {savingTermId === p.user_id
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <Check className="h-4 w-4" />}
+                          </Button>
+                        </div>
                       ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
