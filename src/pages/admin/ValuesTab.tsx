@@ -78,6 +78,11 @@ type OlistSyncResponse = {
   results?: Array<{ sku?: string; status?: string }>;
 };
 
+// Cada item exige uma chamada individual à Olist e a Edge Function respeita o
+// limite de 30 chamadas/minuto. Lotes maiores mantinham uma requisição HTTP
+// aberta por mais de 50 segundos e podiam ser encerrados pelo gateway.
+const OLIST_SYNC_BATCH_SIZE = 10;
+
 const money = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
@@ -266,13 +271,32 @@ export default function ValuesTab() {
     const issueSkus: string[] = [];
     try {
       // A function aceita lotes pequenos para nao estourar o limite da API da Olist.
-      for (let index = 0; index < items.length; index += 25) {
-        const { data, error } = await supabase.functions.invoke("admin-olist-cost-sync", {
-          body: { items: items.slice(index, index + 25) },
-        });
-        const response = data as OlistSyncResponse | null;
-        if (error || !response?.ok) {
-          fatalError = response?.error || error?.message || "A sincronização foi recusada.";
+      for (let index = 0; index < items.length; index += OLIST_SYNC_BATCH_SIZE) {
+        const batch = items.slice(index, index + OLIST_SYNC_BATCH_SIZE);
+        let response: OlistSyncResponse | null = null;
+        let requestError: Error | null = null;
+
+        // Uma resposta perdida pode ser repetida com segurança: a função faz
+        // upsert e só registra histórico quando o custo realmente mudou.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const result = await supabase.functions.invoke("admin-olist-cost-sync", {
+              body: { items: batch },
+            });
+            response = result.data as OlistSyncResponse | null;
+            requestError = result.error;
+          } catch (error) {
+            requestError = error instanceof Error ? error : new Error("Falha de conexão com a função");
+          }
+          if (!requestError || !/failed to send|fetch|network/i.test(requestError.message)) break;
+          if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 800));
+        }
+
+        if (requestError || !response?.ok) {
+          const transportFailure = /failed to send|fetch|network/i.test(requestError?.message || "");
+          fatalError = response?.error
+            || (transportFailure ? "A conexão com a função foi interrompida. Tente novamente." : requestError?.message)
+            || "A sincronização foi recusada.";
           break;
         }
         updated += response.updated || 0;

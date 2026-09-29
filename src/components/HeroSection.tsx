@@ -29,7 +29,7 @@ export const HeroSection = () => {
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-7 leading-relaxed">
               Sua seleção pet entra em campo! Rações, farmácia, brinquedos e
               acessórios com preços de craque. Entrega em Presidente Prudente
-              por R$ 10. 🇧🇷⚽
+              por R$ 10. 🇧🇷
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8">
