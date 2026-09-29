@@ -56,6 +56,8 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
     externalReference: "12345678-1234-1234-1234-123456789012",
     customer: {
       name: "Franquia Teste",
+      tradeName: "Franquia Teste Centro",
+      stateRegistration: "123456789",
       cpfCnpj: "12345678000199",
       email: "franquia@teste.com",
       phone: "18999999999",
@@ -76,6 +78,8 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   };
   const order = buildOlistFranchiseOrder(input) as any;
   assertEquals(order.pedido.outras_despesas, 2);
+  assertEquals(order.pedido.cliente.nome_fantasia, "Franquia Teste Centro");
+  assertEquals(order.pedido.cliente.ie, "123456789");
   assertEquals(order.pedido.itens[0].item.codigo, "RACAO-1");
   assertEquals(order.pedido.situacao, "aprovado");
   assertEquals(order.pedido.id_natureza_operacao, "12345");
@@ -84,5 +88,6 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   assertEquals(order.pedido.parcelas[0].parcela.valor, 62);
   const receivable = buildOlistReceivable(input, "ABC123456") as any;
   assertEquals(receivable.conta.valor, 62);
+  assertEquals(receivable.conta.cliente.ie, "123456789");
   assertEquals(receivable.conta.vencimento, "02/10/2026");
 });

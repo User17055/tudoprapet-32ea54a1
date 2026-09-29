@@ -23,6 +23,8 @@ export interface OlistCost {
 
 export interface OlistFranchiseCustomer {
   name: string;
+  tradeName?: string;
+  stateRegistration?: string;
   cpfCnpj: string;
   email: string;
   phone: string;
@@ -133,8 +135,12 @@ export function toOlistDate(value: string | Date): string {
 function olistCustomer(customer: OlistFranchiseCustomer): Record<string, unknown> {
   return {
     nome: truncate(customer.name, 50),
+    ...(customer.tradeName ? { nome_fantasia: truncate(customer.tradeName, 50) } : {}),
     tipo_pessoa: customer.cpfCnpj.replace(/\D/g, "").length === 14 ? "J" : "F",
     cpf_cnpj: customer.cpfCnpj.replace(/\D/g, ""),
+    ...(customer.stateRegistration
+      ? { ie: customer.stateRegistration.replace(/\D/g, "").slice(0, 14) }
+      : {}),
     endereco: truncate(customer.address, 50),
     numero: truncate(customer.number, 10),
     complemento: truncate(customer.complement, 50),
@@ -152,6 +158,9 @@ function olistDeliveryAddress(customer: OlistFranchiseCustomer): Record<string, 
   return {
     tipo_pessoa: customer.cpfCnpj.replace(/\D/g, "").length === 14 ? "J" : "F",
     cpf_cnpj: customer.cpfCnpj.replace(/\D/g, ""),
+    ...(customer.stateRegistration
+      ? { ie: customer.stateRegistration.replace(/\D/g, "").slice(0, 14) }
+      : {}),
     endereco: truncate(customer.address, 50),
     numero: truncate(customer.number, 10),
     complemento: truncate(customer.complement, 50),

@@ -1168,6 +1168,11 @@ export default function Checkout() {
             headers: sessionClaimHeaders(Boolean(user)),
           });
         if (prepareError || prepared?.error) {
+          if (prepared?.profileRequired) {
+            toast.error(prepared.error || "Complete os dados fiscais da franquia.");
+            navigate("/perfil?retorno=checkout");
+            return;
+          }
           const detail = prepared?.error || await edgeFunctionErrorText(prepareError, "Falha ao preparar pedido.");
           throw new Error(detail);
         }
@@ -1229,6 +1234,11 @@ export default function Checkout() {
           headers: sessionClaimHeaders(Boolean(user)),
         });
       if (paymentError || paymentData?.error) {
+        if (paymentData?.profileRequired) {
+          toast.error(paymentData.error || "Complete os dados fiscais da franquia.");
+          navigate("/perfil?retorno=checkout");
+          return;
+        }
         const detail = paymentData?.error || await edgeFunctionErrorText(paymentError, "Falha ao criar cobrança.");
         throw new Error(customerPaymentError(detail));
       }

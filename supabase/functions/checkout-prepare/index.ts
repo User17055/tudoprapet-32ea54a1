@@ -36,6 +36,7 @@ import {
   type CommissionRule,
   selectCommissionRule,
 } from "../_shared/commission.ts";
+import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -158,23 +159,37 @@ Deno.serve(async (req) => {
     }
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
+    let franchiseFiscalProfile: FranchiseFiscalProfile | null = null;
     let franchisePaymentTermDays = 7;
     let franchisePaymentScheduleType: "days_after_order" | "fixed_day_next_month" = "days_after_order";
     let franchisePaymentDueDay: number | null = null;
     if (auth.user) {
       const [{ data: profile }, { data: clubMember }] = await Promise.all([
-        admin.from("profiles").select("is_franchisee").eq("user_id", auth.user.id).maybeSingle(),
+        admin.from("profiles").select("is_franchisee,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", auth.user.id).maybeSingle(),
         admin.from("club_members").select("is_active")
           .eq("email", (auth.user.email || input.customer.email).toLowerCase())
           .eq("is_active", true).maybeSingle(),
       ]);
-      if (profile?.is_franchisee) customerType = "franchise";
+      if (profile?.is_franchisee) {
+        customerType = "franchise";
+        franchiseFiscalProfile = profile;
+      }
       else if (clubMember?.is_active) customerType = "subscriber";
     }
 
     if (customerType === "franchise") {
       if (!input.invoicePurpose) {
         return errorResponse("Escolha se a nota fiscal será para revenda ou consumo final", 400);
+      }
+      const fiscalError = franchiseFiscalError(franchiseFiscalProfile, input.invoicePurpose);
+      const { count: savedAddressCount, error: addressCountError } = await admin.from("customer_addresses")
+        .select("id", { count: "exact", head: true }).eq("user_id", auth.user!.id);
+      if (addressCountError) throw addressCountError;
+      if (fiscalError || (savedAddressCount ?? 0) === 0) {
+        return jsonResponse({
+          error: fiscalError || "Cadastre um endereço fiscal no perfil da franquia",
+          profileRequired: true,
+        });
       }
       const { data: credit } = await admin.from("franchise_credit_accounts")
         .select("manually_blocked,blocked_reason,block_on_any_open_invoice,payment_term_days,payment_schedule_type,payment_due_day")
@@ -552,7 +567,17 @@ Deno.serve(async (req) => {
       total,
       shipping_method: shippingMethod,
       shipping_code: shippingCode,
-      customer_snapshot: input.customer,
+      customer_snapshot: customerType === "franchise"
+        ? {
+          ...input.customer,
+          name: franchiseFiscalProfile!.company_legal_name,
+          cpfCnpj: String(franchiseFiscalProfile!.cnpj || "").replace(/\D/g, ""),
+          legalName: franchiseFiscalProfile!.company_legal_name,
+          tradeName: franchiseFiscalProfile!.company_trade_name || "",
+          stateRegistration: franchiseFiscalProfile!.state_registration || "",
+          stateRegistrationIndicator: franchiseFiscalProfile!.state_registration_indicator,
+        }
+        : input.customer,
       address_snapshot: input.delivery.address ?? {},
       billing_address_snapshot: input.billingAddress ?? input.delivery.address ?? {},
       items_snapshot: itemsSnapshot,

@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -67,6 +68,14 @@ interface AccountContact {
   email: string;
   cpfCnpj: string;
   mobilePhone: string;
+}
+
+interface FranchiseFiscalProfile {
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  stateRegistration: string;
+  stateRegistrationIndicator: "contributor" | "exempt" | "non_contributor" | "";
 }
 
 const emptyAccountAddress = (): AccountAddress => ({ id: null, label: "Casa", recipientName: "", address1: "", address2: "", number: "", neighborhood: "", city: "", provinceCode: "", postalCode: "", countryCode: "BR", isDefaultShipping: false });
@@ -123,6 +132,9 @@ const Profile = () => {
   const [contactLoading, setContactLoading] = useState(true);
   const [contactBusy, setContactBusy] = useState(false);
   const [contactError, setContactError] = useState("");
+  const [fiscalProfile, setFiscalProfile] = useState<FranchiseFiscalProfile>({ legalName: "", tradeName: "", cnpj: "", stateRegistration: "", stateRegistrationIndicator: "" });
+  const [fiscalBusy, setFiscalBusy] = useState(false);
+  const [fiscalError, setFiscalError] = useState("");
   const [addressesLoading, setAddressesLoading] = useState(true);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [addressForm, setAddressForm] = useState<AccountAddress>(emptyAccountAddress);
@@ -161,6 +173,18 @@ const Profile = () => {
         neighborhood: String(item.neighborhood || ""), city: String(item.city || ""), provinceCode: String(item.province_code || ""),
         postalCode: maskCep(String(item.postal_code || "")), countryCode: "BR", isDefaultShipping: Boolean(item.is_default_shipping),
       })));
+    }
+    if (!error && data?.franchiseFiscalProfile) {
+      const fiscal = data.franchiseFiscalProfile as Record<string, string>;
+      setFiscalProfile({
+        legalName: String(fiscal.legalName || ""),
+        tradeName: String(fiscal.tradeName || ""),
+        cnpj: maskCpfCnpj(String(fiscal.cnpj || "")),
+        stateRegistration: onlyDigits(String(fiscal.stateRegistration || "")).slice(0, 14),
+        stateRegistrationIndicator: (["contributor", "exempt", "non_contributor"].includes(fiscal.stateRegistrationIndicator)
+          ? fiscal.stateRegistrationIndicator
+          : "") as FranchiseFiscalProfile["stateRegistrationIndicator"],
+      });
     }
     setContactLoading(false);
     setAddressesLoading(false);
@@ -240,14 +264,33 @@ const Profile = () => {
   };
 
   const saveContact = async () => {
-    if (contact.name.trim().length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email) || ![11, 14].includes(onlyDigits(contact.cpfCnpj).length) || ![10, 11].includes(onlyDigits(contact.mobilePhone).length)) {
+    const document = isFranchisee ? fiscalProfile.cnpj : contact.cpfCnpj;
+    if (contact.name.trim().length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email) || ![11, 14].includes(onlyDigits(document).length) || ![10, 11].includes(onlyDigits(contact.mobilePhone).length)) {
       setContactError("Preencha nome, e-mail, CPF ou CNPJ e celular corretamente."); return;
     }
     setContactBusy(true); setContactError("");
-    const { data, error } = await supabase.functions.invoke("checkout-customer-data", { body: { action: "save_contact", customer: contact, billingSameAsShipping: true } });
+    const { data, error } = await supabase.functions.invoke("checkout-customer-data", { body: { action: "save_contact", customer: { ...contact, cpfCnpj: document }, billingSameAsShipping: true } });
     setContactBusy(false);
     if (error || data?.error) { setContactError(data?.error || "Não foi possível salvar seus dados. Confira o CPF ou CNPJ."); return; }
     toast.success("Dados pessoais salvos.");
+  };
+
+  const saveFiscalProfile = async () => {
+    if (fiscalProfile.legalName.trim().length < 2 || onlyDigits(fiscalProfile.cnpj).length !== 14 || !fiscalProfile.stateRegistrationIndicator) {
+      setFiscalError("Preencha razão social, CNPJ e situação da inscrição estadual."); return;
+    }
+    if (fiscalProfile.stateRegistrationIndicator === "contributor" && !/^\d{2,14}$/.test(onlyDigits(fiscalProfile.stateRegistration))) {
+      setFiscalError("Informe a inscrição estadual com 2 a 14 dígitos."); return;
+    }
+    setFiscalBusy(true); setFiscalError("");
+    const { data, error } = await supabase.functions.invoke("checkout-customer-data", { body: {
+      action: "save_franchise_fiscal",
+      ...fiscalProfile,
+    } });
+    setFiscalBusy(false);
+    if (error || data?.error) { setFiscalError(data?.error || "Não foi possível salvar os dados fiscais."); return; }
+    setContact((current) => ({ ...current, cpfCnpj: fiscalProfile.cnpj }));
+    toast.success("Dados fiscais da franquia salvos.");
   };
 
   return (
@@ -331,9 +374,27 @@ const Profile = () => {
                 <p className="text-sm text-muted-foreground">Usados na nota fiscal, cobrança e identificação dos seus pedidos.</p>
               </div>
               <div className="p-4 md:p-5">
-                {contactLoading ? <div className="h-24 animate-pulse rounded-xl bg-muted/60" /> : <><div className="grid gap-3 sm:grid-cols-2"><ProfileField label="Nome completo"><Input autoComplete="name" value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></ProfileField><ProfileField label="E-mail para nota e comprovante"><Input type="email" autoComplete="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></ProfileField><ProfileField label="CPF ou CNPJ"><Input inputMode="numeric" maxLength={18} placeholder="000.000.000-00" value={contact.cpfCnpj} onChange={(event) => setContact({ ...contact, cpfCnpj: maskCpfCnpj(event.target.value) })} /></ProfileField><ProfileField label="Celular"><Input inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 00000-0000" value={contact.mobilePhone} onChange={(event) => setContact({ ...contact, mobilePhone: maskPhone(event.target.value) })} /></ProfileField></div>{contactError && <p className="mt-3 text-sm font-medium text-destructive">{contactError}</p>}<Button type="button" className="mt-4 w-full sm:w-auto" disabled={contactBusy} onClick={() => void saveContact()}>{contactBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar meus dados</Button></>}
+                {contactLoading ? <div className="h-24 animate-pulse rounded-xl bg-muted/60" /> : <><div className="grid gap-3 sm:grid-cols-2"><ProfileField label="Nome completo"><Input autoComplete="name" value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} /></ProfileField><ProfileField label="E-mail para nota e comprovante"><Input type="email" autoComplete="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></ProfileField><ProfileField label={isFranchisee ? "CNPJ (edite nos dados fiscais)" : "CPF ou CNPJ"}><Input disabled={isFranchisee} inputMode="numeric" maxLength={18} placeholder="000.000.000-00" value={isFranchisee ? fiscalProfile.cnpj : contact.cpfCnpj} onChange={(event) => setContact({ ...contact, cpfCnpj: maskCpfCnpj(event.target.value) })} /></ProfileField><ProfileField label="Celular"><Input inputMode="tel" autoComplete="tel" maxLength={15} placeholder="(00) 00000-0000" value={contact.mobilePhone} onChange={(event) => setContact({ ...contact, mobilePhone: maskPhone(event.target.value) })} /></ProfileField></div>{contactError && <p className="mt-3 text-sm font-medium text-destructive">{contactError}</p>}<Button type="button" className="mt-4 w-full sm:w-auto" disabled={contactBusy} onClick={() => void saveContact()}>{contactBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar meus dados</Button></>}
               </div>
             </section>
+            {isFranchisee && <section className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="border-b border-border px-5 py-4 md:px-6">
+                <h2 className="font-display text-lg font-bold text-foreground">Dados fiscais da franquia</h2>
+                <p className="text-sm text-muted-foreground">Obrigatórios para emitir a NF-e e concluir compras da franquia.</p>
+              </div>
+              <div className="p-4 md:p-5">
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Para comprar para <strong>revenda</strong>, selecione contribuinte de ICMS e informe a inscrição estadual. O nome fantasia é opcional.</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ProfileField label="Razão social *"><Input value={fiscalProfile.legalName} onChange={(event) => setFiscalProfile({ ...fiscalProfile, legalName: event.target.value })} /></ProfileField>
+                  <ProfileField label="Nome fantasia"><Input placeholder="Opcional" value={fiscalProfile.tradeName} onChange={(event) => setFiscalProfile({ ...fiscalProfile, tradeName: event.target.value })} /></ProfileField>
+                  <ProfileField label="CNPJ *"><Input inputMode="numeric" maxLength={18} placeholder="00.000.000/0000-00" value={fiscalProfile.cnpj} onChange={(event) => setFiscalProfile({ ...fiscalProfile, cnpj: maskCpfCnpj(event.target.value) })} /></ProfileField>
+                  <ProfileField label="Situação da IE *"><Select value={fiscalProfile.stateRegistrationIndicator} onValueChange={(value: FranchiseFiscalProfile["stateRegistrationIndicator"]) => setFiscalProfile({ ...fiscalProfile, stateRegistrationIndicator: value, stateRegistration: value === "contributor" ? fiscalProfile.stateRegistration : "" })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="contributor">Contribuinte de ICMS</SelectItem><SelectItem value="exempt">Isento</SelectItem><SelectItem value="non_contributor">Não contribuinte</SelectItem></SelectContent></Select></ProfileField>
+                  {fiscalProfile.stateRegistrationIndicator === "contributor" && <ProfileField label="Inscrição estadual *"><Input inputMode="numeric" maxLength={14} value={fiscalProfile.stateRegistration} onChange={(event) => setFiscalProfile({ ...fiscalProfile, stateRegistration: onlyDigits(event.target.value).slice(0, 14) })} /></ProfileField>}
+                </div>
+                {fiscalError && <p className="mt-3 text-sm font-medium text-destructive">{fiscalError}</p>}
+                <Button type="button" className="mt-4 w-full sm:w-auto" disabled={fiscalBusy} onClick={() => void saveFiscalProfile()}>{fiscalBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar dados fiscais</Button>
+              </div>
+            </section>}
             <section className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="flex flex-col items-start gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between md:px-6">
                 <div>

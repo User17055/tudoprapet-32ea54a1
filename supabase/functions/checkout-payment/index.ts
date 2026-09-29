@@ -39,6 +39,7 @@ import {
   franchisePaymentDueDate,
   type FranchisePaymentScheduleType,
 } from "../_shared/franchise-payment.ts";
+import { franchiseFiscalError } from "../_shared/franchise-fiscal.ts";
 
 const FRANCHISE_PAYMENT_TERM_DAYS = 7;
 
@@ -55,11 +56,13 @@ function dateInSaoPaulo(addDays = 0): string {
 }
 
 function olistCustomer(
-  customer: { name: string; email: string; cpfCnpj: string; mobilePhone: string },
+  customer: { name: string; email: string; cpfCnpj: string; mobilePhone: string; tradeName?: string; stateRegistration?: string },
   address: Record<string, string>,
 ) {
   return {
     name: customer.name,
+    tradeName: customer.tradeName,
+    stateRegistration: customer.stateRegistration,
     cpfCnpj: customer.cpfCnpj,
     email: customer.email,
     phone: customer.mobilePhone,
@@ -408,6 +411,10 @@ Deno.serve(async (req) => {
       email: string;
       cpfCnpj: string;
       mobilePhone: string;
+      legalName?: string;
+      tradeName?: string;
+      stateRegistration?: string;
+      stateRegistrationIndicator?: string;
     };
     const customerAddress =
       (session.billing_address_snapshot && Object.keys(session.billing_address_snapshot).length
@@ -452,6 +459,44 @@ Deno.serve(async (req) => {
       : null;
     if (session.customer_type === "franchise" && !invoicePurpose) {
       return errorResponse("Volte à sacola e escolha a finalidade da NF-e antes de confirmar", 409);
+    }
+    if (session.customer_type === "franchise") {
+      if (session.user_id) {
+        const { count: addressCount, error: addressError } = await admin.from("customer_addresses")
+          .select("id", { count: "exact", head: true }).eq("user_id", session.user_id);
+        if (addressError) throw addressError;
+        if ((addressCount ?? 0) === 0) {
+          return jsonResponse({ error: "Cadastre um endereço fiscal no perfil da franquia", profileRequired: true });
+        }
+      }
+      let fiscalError = franchiseFiscalError({
+        cnpj: customer.cpfCnpj,
+        company_legal_name: customer.legalName || customer.name,
+        company_trade_name: customer.tradeName,
+        state_registration: customer.stateRegistration,
+        state_registration_indicator: customer.stateRegistrationIndicator,
+      }, invoicePurpose);
+      if (fiscalError && session.user_id) {
+        const { data: currentFiscalProfile, error: currentFiscalError } = await admin.from("profiles")
+          .select("cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator")
+          .eq("user_id", session.user_id).maybeSingle();
+        if (currentFiscalError) throw currentFiscalError;
+        fiscalError = franchiseFiscalError(currentFiscalProfile, invoicePurpose);
+        if (!fiscalError && currentFiscalProfile) {
+          Object.assign(customer, {
+            name: currentFiscalProfile.company_legal_name,
+            legalName: currentFiscalProfile.company_legal_name,
+            tradeName: currentFiscalProfile.company_trade_name || "",
+            cpfCnpj: currentFiscalProfile.cnpj,
+            stateRegistration: currentFiscalProfile.state_registration || "",
+            stateRegistrationIndicator: currentFiscalProfile.state_registration_indicator,
+          });
+          const { error: snapshotError } = await admin.from("checkout_sessions")
+            .update({ customer_snapshot: customer }).eq("id", sessionId);
+          if (snapshotError) throw snapshotError;
+        }
+      }
+      if (fiscalError) return jsonResponse({ error: fiscalError, profileRequired: true });
     }
     const dueDate = session.customer_type === "franchise"
       ? franchisePaymentDueDate({

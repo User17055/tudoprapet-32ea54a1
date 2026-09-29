@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
         .eq("user_id", userId).is("revoked_at", null).order("is_default", { ascending: false })
         .order("updated_at", { ascending: false });
       const { data: accountProfile } = await admin.from("profiles")
-        .select("name,cpf,cnpj,person_type,is_franchisee").eq("user_id", userId).maybeSingle();
+        .select("name,cpf,cnpj,person_type,is_franchisee,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", userId).maybeSingle();
       const { data: franchiseAccount } = accountProfile?.is_franchisee
         ? await admin.from("franchise_credit_accounts")
           .select("payment_term_days,payment_schedule_type,payment_due_day").eq("user_id", userId).maybeSingle()
@@ -101,6 +101,15 @@ Deno.serve(async (req) => {
         addresses: addresses ?? [],
         paymentMethods: methods ?? [],
         isFranchisee: Boolean(accountProfile?.is_franchisee),
+        franchiseFiscalProfile: accountProfile?.is_franchisee
+          ? {
+            legalName: accountProfile.company_legal_name || "",
+            tradeName: accountProfile.company_trade_name || "",
+            cnpj: accountProfile.cnpj || "",
+            stateRegistration: accountProfile.state_registration || "",
+            stateRegistrationIndicator: accountProfile.state_registration_indicator || "",
+          }
+          : null,
         paymentTermDays: Number(franchiseAccount?.payment_term_days) >= 1
           ? Number(franchiseAccount?.payment_term_days)
           : 7,
@@ -116,22 +125,71 @@ Deno.serve(async (req) => {
     if (action === "save_contact") {
       const parsed = parseCheckoutCustomer(body.customer);
       if (!parsed.ok) return errorResponse(parsed.message, 400);
+      const { data: currentAccount } = await admin.from("profiles")
+        .select("is_franchisee,cnpj").eq("user_id", userId).maybeSingle();
+      if (currentAccount?.is_franchisee && !currentAccount.cnpj) {
+        return errorResponse("Salve primeiro os dados fiscais da franquia", 400);
+      }
+      const fiscalDocument = currentAccount?.is_franchisee
+        ? String(currentAccount.cnpj).replace(/\D/g, "")
+        : parsed.value.cpfCnpj;
       const { error } = await admin.from("checkout_customer_profiles").upsert({
         user_id: userId,
         full_name: parsed.value.name,
         invoice_email: parsed.value.email,
-        cpf_cnpj: parsed.value.cpfCnpj,
+        cpf_cnpj: fiscalDocument,
         mobile_phone: parsed.value.mobilePhone,
         billing_same_as_shipping: body.billingSameAsShipping !== false,
       }, { onConflict: "user_id" });
       if (error) throw error;
-      const isCompany = parsed.value.cpfCnpj.length === 14;
-      const { error: accountError } = await admin.from("profiles").update({
-        person_type: isCompany ? "company" : "individual",
-        cpf: isCompany ? null : parsed.value.cpfCnpj,
-        cnpj: isCompany ? parsed.value.cpfCnpj : null,
+      if (!currentAccount?.is_franchisee) {
+        const isCompany = parsed.value.cpfCnpj.length === 14;
+        const { error: accountError } = await admin.from("profiles").update({
+          person_type: isCompany ? "company" : "individual",
+          cpf: isCompany ? null : parsed.value.cpfCnpj,
+          cnpj: isCompany ? parsed.value.cpfCnpj : null,
+        }).eq("user_id", userId);
+        if (accountError) throw accountError;
+      }
+      return jsonResponse({ saved: true });
+    }
+
+    if (action === "save_franchise_fiscal") {
+      const { data: current } = await admin.from("profiles")
+        .select("is_franchisee").eq("user_id", userId).maybeSingle();
+      if (!current?.is_franchisee) return errorResponse("Cadastro disponível apenas para franquias", 403);
+      const legalName = typeof body.legalName === "string" ? body.legalName.trim().slice(0, 160) : "";
+      const tradeName = typeof body.tradeName === "string" ? body.tradeName.trim().slice(0, 160) : "";
+      const cnpj = typeof body.cnpj === "string" ? body.cnpj.replace(/\D/g, "") : "";
+      const indicator = typeof body.stateRegistrationIndicator === "string"
+        ? body.stateRegistrationIndicator
+        : "";
+      const stateRegistration = typeof body.stateRegistration === "string"
+        ? body.stateRegistration.replace(/\D/g, "")
+        : "";
+      if (legalName.length < 2) return errorResponse("Informe a razão social", 400);
+      const { data: validCnpj, error: cnpjError } = await admin.rpc("is_valid_cnpj", { value: cnpj });
+      if (cnpjError) throw cnpjError;
+      if (!validCnpj) return errorResponse("Informe um CNPJ válido", 400);
+      if (!["contributor", "exempt", "non_contributor"].includes(indicator)) {
+        return errorResponse("Informe a situação da inscrição estadual", 400);
+      }
+      if (indicator === "contributor" && !/^\d{2,14}$/.test(stateRegistration)) {
+        return errorResponse("Informe uma inscrição estadual válida", 400);
+      }
+      const { error } = await admin.from("profiles").update({
+        person_type: "company",
+        cpf: null,
+        cnpj,
+        company_legal_name: legalName,
+        company_trade_name: tradeName || null,
+        state_registration: indicator === "contributor" ? stateRegistration : null,
+        state_registration_indicator: indicator,
       }).eq("user_id", userId);
-      if (accountError) throw accountError;
+      if (error) throw error;
+      const { error: checkoutProfileError } = await admin.from("checkout_customer_profiles")
+        .update({ full_name: legalName, cpf_cnpj: cnpj }).eq("user_id", userId);
+      if (checkoutProfileError) throw checkoutProfileError;
       return jsonResponse({ saved: true });
     }
 
