@@ -1297,6 +1297,8 @@ export type Database = {
         Row: {
           acquisition_source: string | null
           cnpj: string | null
+          company_legal_name: string | null
+          company_trade_name: string | null
           cpf: string | null
           created_at: string
           email: string | null
@@ -1305,12 +1307,16 @@ export type Database = {
           name: string | null
           person_type: string
           referral_code: string | null
+          state_registration: string | null
+          state_registration_indicator: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           acquisition_source?: string | null
           cnpj?: string | null
+          company_legal_name?: string | null
+          company_trade_name?: string | null
           cpf?: string | null
           created_at?: string
           email?: string | null
@@ -1319,12 +1325,16 @@ export type Database = {
           name?: string | null
           person_type?: string
           referral_code?: string | null
+          state_registration?: string | null
+          state_registration_indicator?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           acquisition_source?: string | null
           cnpj?: string | null
+          company_legal_name?: string | null
+          company_trade_name?: string | null
           cpf?: string | null
           created_at?: string
           email?: string | null
@@ -1333,6 +1343,8 @@ export type Database = {
           name?: string | null
           person_type?: string
           referral_code?: string | null
+          state_registration?: string | null
+          state_registration_indicator?: string | null
           updated_at?: string
           user_id?: string
         }
