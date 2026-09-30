@@ -90,7 +90,7 @@ export default function FranchisePayments() {
             <div>
               <p className="text-sm font-bold uppercase tracking-wider text-primary">Franquia</p>
               <h1 className="mt-1 font-display text-3xl font-black text-foreground">Pagamentos</h1>
-              <p className="mt-2 text-muted-foreground">Acompanhe boletos, Pix, vencimentos e baixas registradas na Olist.</p>
+              <p className="mt-2 text-muted-foreground">Consulte e pague suas cobranças por boleto ou Pix diretamente pelo aplicativo.</p>
             </div>
             <Button variant="outline" onClick={() => void loadPayments()} disabled={loading}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar

@@ -1539,7 +1539,7 @@ export default function Checkout() {
           </div>
           <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
             <strong>NF-e: {invoicePurpose === "resale" ? "revenda" : "consumo final"}.</strong>{" "}
-            A Olist enviará por e-mail o boleto com opção de pagamento por Pix. O vencimento será {franchisePaymentLabel(franchisePaymentScheduleType, franchisePaymentTermDays, franchisePaymentDueDay)} e o pedido inclui a taxa operacional de R$ 2,00.
+            A cobrança ficará disponível no aplicativo, na área de Pagamentos. O vencimento será {franchisePaymentLabel(franchisePaymentScheduleType, franchisePaymentTermDays, franchisePaymentDueDay)} e o pedido inclui a taxa operacional de R$ 2,00.
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setFranchiseConfirmationOpen(false)}>
@@ -2704,7 +2704,7 @@ function PaymentStep(props: {
           onClick={() => {}}
           icon={<CreditCard className="h-5 w-5" />}
           title="Prazo da franquia"
-          text={`Boleto com opção Pix enviado por e-mail, com vencimento ${franchisePaymentLabel(props.paymentScheduleType, props.paymentTermDays, props.paymentDueDay)}`}
+          text={`Cobrança disponível no aplicativo, com boleto ou Pix e vencimento ${franchisePaymentLabel(props.paymentScheduleType, props.paymentTermDays, props.paymentDueDay)}`}
         />
         <div>
           <p className="mb-2 font-semibold text-slate-900">Finalidade da nota fiscal</p>
@@ -3691,7 +3691,7 @@ function Success({
         <h1 className="text-3xl font-bold">Pedido recebido!</h1>
         <p className="mt-3 text-slate-600">
           {payment?.status === "credit_approved"
-            ? `Nota fiscal emitida para ${summary?.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"}. A Olist enviará por e-mail o boleto com opção Pix, com vencimento ${franchisePaymentLabel(summary?.paymentScheduleType === "fixed_day_next_month" ? "fixed_day_next_month" : "days_after_order", summary?.paymentTermDays || 7, summary?.paymentDueDay || null)}.`
+            ? `Nota fiscal emitida para ${summary?.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"}. A cobrança ficará disponível no aplicativo, na área de Pagamentos, com vencimento ${franchisePaymentLabel(summary?.paymentScheduleType === "fixed_day_next_month" ? "fixed_day_next_month" : "days_after_order", summary?.paymentTermDays || 7, summary?.paymentDueDay || null)}.`
             : "Pagamento confirmado e pedido em preparação."}
         </p>
         {pickup && (
