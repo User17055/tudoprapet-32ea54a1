@@ -1316,11 +1316,11 @@ export type Database = {
           email: string | null
           id: string
           is_franchisee: boolean
-          state_registration: string | null
-          state_registration_indicator: string | null
           name: string | null
           person_type: string
           referral_code: string | null
+          state_registration: string | null
+          state_registration_indicator: string | null
           updated_at: string
           user_id: string
         }
@@ -1334,11 +1334,11 @@ export type Database = {
           email?: string | null
           id?: string
           is_franchisee?: boolean
-          state_registration?: string | null
-          state_registration_indicator?: string | null
           name?: string | null
           person_type?: string
           referral_code?: string | null
+          state_registration?: string | null
+          state_registration_indicator?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1352,11 +1352,11 @@ export type Database = {
           email?: string | null
           id?: string
           is_franchisee?: boolean
-          state_registration?: string | null
-          state_registration_indicator?: string | null
           name?: string | null
           person_type?: string
           referral_code?: string | null
+          state_registration?: string | null
+          state_registration_indicator?: string | null
           updated_at?: string
           user_id?: string
         }
