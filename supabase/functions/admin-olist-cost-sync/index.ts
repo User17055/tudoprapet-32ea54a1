@@ -6,13 +6,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { fetchOlistCostBySku, normalizeSku } from "../_shared/olist.ts";
-import { priceFromCostAndMargin, subscriberMarginForProduct } from "../_shared/subscriber-category.ts";
+import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "../_shared/subscriber-category.ts";
 
 type SyncItem = {
   productId?: string;
   variantId?: string;
   sku?: string;
-  isFeed?: boolean;
+  weightKg?: number | null;
 };
 
 const MAX_ITEMS = 25;
@@ -46,12 +46,13 @@ Deno.serve(async (req) => {
     productId: String(item.productId || ""),
     variantId: String(item.variantId || ""),
     sku: String(item.sku || "").trim(),
-    isFeed: item.isFeed === true,
+    weightKg: item.weightKg === null || item.weightKg === undefined ? null : Number(item.weightKg),
   }));
   const invalid = items.find((item) =>
     !item.productId.startsWith("gid://shopify/Product/") ||
     !item.variantId.startsWith("gid://shopify/ProductVariant/") ||
-    !normalizeSku(item.sku)
+    !normalizeSku(item.sku) ||
+    (item.weightKg !== null && (!Number.isFinite(item.weightKg) || item.weightKg <= 0 || item.weightKg > 1000))
   );
   if (invalid) return errorResponse("Produto, variante ou SKU invalido", 400);
 
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
   const results: Array<Record<string, unknown>> = [];
   const productIds = [...new Set(items.map((item) => item.productId))];
   const [categoryResult, linkResult, ruleResult] = await Promise.all([
-    admin.from("categories").select("id,parent_id"),
+    admin.from("categories").select("id,name,parent_id"),
     admin.from("product_categories").select("shopify_product_id,category_id").in("shopify_product_id", productIds),
     admin.from("subscriber_category_margins").select("category_id,percent"),
   ]);
@@ -83,12 +84,15 @@ Deno.serve(async (req) => {
 
       const { data: existingCost, error: existingCostError } = await admin
         .from("product_costs")
-        .select("cost,previous_cost,cost_changed_at")
+        .select("cost,previous_cost,cost_changed_at,package_weight_kg")
         .eq("shopify_variant_id", item.variantId)
         .maybeSingle();
       if (existingCostError) throw existingCostError;
 
       const oldCost = existingCost ? Number(existingCost.cost) : null;
+      const packageWeightKg = item.weightKg ?? (existingCost?.package_weight_kg === null || existingCost?.package_weight_kg === undefined
+        ? null
+        : Number(existingCost.package_weight_kg));
       const costChanged = oldCost === null || oldCost !== product.cost;
       const changedAt = new Date().toISOString();
       const { error: costError } = await admin.from("product_costs").upsert({
@@ -100,6 +104,7 @@ Deno.serve(async (req) => {
         cost_changed_at: costChanged && oldCost !== null ? changedAt : existingCost?.cost_changed_at ?? null,
         source: "olist",
         synced_at: changedAt,
+        package_weight_kg: packageWeightKg,
       }, { onConflict: "shopify_variant_id" });
       if (costError) throw costError;
 
@@ -127,8 +132,9 @@ Deno.serve(async (req) => {
       const franchisePrice = currentFranchisePrice !== null && currentFranchisePrice >= product.cost
         ? currentFranchisePrice
         : product.cost;
-      const subscriberMarginPercent = subscriberMarginForProduct(
+      const subscriberMarginPercent = subscriberMarginWithFeedRule(
         item.productId,
+        packageWeightKg,
         categoryResult.data || [],
         linkResult.data || [],
         ruleResult.data || [],
@@ -169,6 +175,7 @@ Deno.serve(async (req) => {
         franchisePrice,
         subscriberPrice,
         subscriberMarginPercent,
+        packageWeightKg,
       });
     } catch (error) {
       console.error("[admin-olist-cost-sync]", item.sku, error);

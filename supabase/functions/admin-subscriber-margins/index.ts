@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { priceFromCostAndMargin, subscriberMarginForProduct } from "../_shared/subscriber-category.ts";
+import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "../_shared/subscriber-category.ts";
 
 async function allRows(client: SupabaseClient, table: string, select: string) {
   const rows: Record<string, unknown>[] = [];
@@ -15,15 +15,24 @@ async function allRows(client: SupabaseClient, table: string, select: string) {
 
 async function reprice(admin: SupabaseClient) {
   const [costs, categories, links, rules] = await Promise.all([
-    allRows(admin, "product_costs", "shopify_product_id,shopify_variant_id,cost"),
-    allRows(admin, "categories", "id,parent_id"),
+    allRows(admin, "product_costs", "shopify_product_id,shopify_variant_id,cost,package_weight_kg"),
+    allRows(admin, "categories", "id,name,parent_id"),
     allRows(admin, "product_categories", "shopify_product_id,category_id"),
     allRows(admin, "subscriber_category_margins", "category_id,percent"),
   ]);
   const prices = costs.map((row) => {
     const productId = String(row.shopify_product_id || "");
     const cost = Number(row.cost);
-    const percent = subscriberMarginForProduct(productId, categories as never[], links as never[], rules as never[]);
+    const packageWeightKg = row.package_weight_kg === null || row.package_weight_kg === undefined
+      ? null
+      : Number(row.package_weight_kg);
+    const percent = subscriberMarginWithFeedRule(
+      productId,
+      packageWeightKg,
+      categories as never[],
+      links as never[],
+      rules as never[],
+    );
     return {
       shopify_product_id: productId,
       shopify_variant_id: String(row.shopify_variant_id),

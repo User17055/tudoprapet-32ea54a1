@@ -15,6 +15,7 @@ import { fetchAllCustomerPrices } from "@/hooks/useCustomerPrices";
 import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePercentages";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { isMissingValue, isSaleAtOrBelowCost, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
+import { parsePackageWeightKg } from "@/lib/packageWeight";
 
 type SubscriberPrice = {
   shopify_variant_id: string;
@@ -68,7 +69,7 @@ type OlistSyncItem = {
   productId: string;
   variantId: string;
   sku: string;
-  isFeed: boolean;
+  weightKg: number | null;
 };
 
 type OlistSyncResponse = {
@@ -261,6 +262,11 @@ export default function ValuesTab() {
       productTitle: product.node.title,
       image: product.node.images.edges[0]?.node,
       isFeed: isFeedProduct(product),
+      weightKg: parsePackageWeightKg(
+        ...variant.selectedOptions.map((option) => option.value),
+        variant.title,
+        product.node.title,
+      ),
       variant,
     }))), [products]);
 
@@ -346,7 +352,7 @@ export default function ValuesTab() {
     productId: row.productId,
     variantId: row.variant.id,
     sku: row.variant.sku!.trim(),
-    isFeed: row.isFeed,
+    weightKg: row.weightKg,
   })), true);
 
   const franchiseBelowCost = useMemo(() => rows.filter((row) => {
@@ -617,7 +623,7 @@ export default function ValuesTab() {
                         <div>
                           <p className="font-medium">{row.productTitle}</p>
                           <p className="text-xs text-muted-foreground">
-                            {row.variant.title}{row.variant.sku ? ` · SKU ${row.variant.sku}` : " · sem SKU"}{row.isFeed ? " · ração" : ""}
+                            {row.variant.title}{row.variant.sku ? ` · SKU ${row.variant.sku}` : " · sem SKU"}{row.isFeed ? " · ração" : ""}{row.weightKg ? ` · ${row.weightKg.toLocaleString("pt-BR")} kg` : ""}
                           </p>
                         </div>
                       </div></TableCell>
@@ -676,7 +682,7 @@ export default function ValuesTab() {
                             productId: row.productId,
                             variantId: row.variant.id,
                             sku: row.variant.sku!.trim(),
-                            isFeed: row.isFeed,
+                            weightKg: row.weightKg,
                           }])}
                         >
                           {syncingOlistId === row.variant.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}

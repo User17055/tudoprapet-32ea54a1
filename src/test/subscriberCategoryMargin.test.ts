@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { priceFromCostAndMargin, subscriberMarginForProduct } from "../../supabase/functions/_shared/subscriber-category.ts";
+import {
+  feedMarginForWeight,
+  isProductInFeedCategory,
+  priceFromCostAndMargin,
+  subscriberMarginForProduct,
+  subscriberMarginWithFeedRule,
+} from "../../supabase/functions/_shared/subscriber-category.ts";
+import { parsePackageWeightKg } from "../lib/packageWeight";
 
 const categories = [
   { id: "dogs", parent_id: null },
@@ -27,5 +34,40 @@ describe("margem de assinante por categoria", () => {
   it("usa 5% quando nenhuma categoria possui regra", () => {
     expect(subscriberMarginForProduct("product-1", categories, links, [])).toBe(5);
     expect(priceFromCostAndMargin(100, 5)).toBe(105);
+  });
+});
+
+describe("regra automatica de racao por peso", () => {
+  const feedCategories = [
+    { id: "feed", name: "Ração", parent_id: null },
+    { id: "dog-feed", name: "Cães adultos", parent_id: "feed" },
+  ];
+  const feedLinks = [{ shopify_product_id: "feed-product", category_id: "dog-feed" }];
+
+  it("reconhece Racao tambem como grupo pai", () => {
+    expect(isProductInFeedCategory("feed-product", feedCategories, feedLinks)).toBe(true);
+  });
+
+  it("aplica 60% ate 7,5 kg e 40% acima", () => {
+    expect(feedMarginForWeight(7.5)).toBe(60);
+    expect(feedMarginForWeight(7.501)).toBe(40);
+    expect(subscriberMarginWithFeedRule("feed-product", 7.5, feedCategories, feedLinks, [
+      { category_id: "feed", percent: 10 },
+    ])).toBe(60);
+    expect(subscriberMarginWithFeedRule("feed-product", 15, feedCategories, feedLinks, [
+      { category_id: "feed", percent: 10 },
+    ])).toBe(40);
+  });
+
+  it("mantem a regra comum quando o peso nao esta informado", () => {
+    expect(subscriberMarginWithFeedRule("feed-product", null, feedCategories, feedLinks, [
+      { category_id: "feed", percent: 10 },
+    ])).toBe(10);
+  });
+
+  it("extrai peso em kg ou gramas da variacao", () => {
+    expect(parsePackageWeightKg("15 kg")).toBe(15);
+    expect(parsePackageWeightKg("Pacote 750 g")).toBe(0.75);
+    expect(parsePackageWeightKg("Adulto", "7,5kg")).toBe(7.5);
   });
 });
