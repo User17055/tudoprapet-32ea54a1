@@ -698,6 +698,50 @@ export type Database = {
         }
         Relationships: []
       }
+      franchise_open_orders: {
+        Row: {
+          checkout_session_id: string | null
+          created_at: string
+          id: string
+          items: Json
+          reserved_until: string
+          shopify_draft_order_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkout_session_id?: string | null
+          created_at?: string
+          id?: string
+          items?: Json
+          reserved_until: string
+          shopify_draft_order_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkout_session_id?: string | null
+          created_at?: string
+          id?: string
+          items?: Json
+          reserved_until?: string
+          shopify_draft_order_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "franchise_open_orders_checkout_session_id_fkey"
+            columns: ["checkout_session_id"]
+            isOneToOne: false
+            referencedRelation: "checkout_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       franchise_prices: {
         Row: {
           created_at: string
@@ -1385,6 +1429,35 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      subscriber_category_margins: {
+        Row: {
+          category_id: string
+          created_at: string
+          percent: number
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          percent: number
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          percent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriber_category_margins_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: true
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscriber_prices: {
         Row: {
