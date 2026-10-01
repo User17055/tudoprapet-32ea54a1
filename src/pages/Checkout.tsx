@@ -1606,8 +1606,29 @@ export default function Checkout() {
             data-checkout-enter
             className="mb-5 text-2xl font-bold tracking-tight text-slate-900"
           >
-            Sacola
+            {launch?.source === "open_order" ? "Finalizar pedido reservado" : "Sacola"}
           </h1>
+          {launch?.source === "open_order" && (
+            <div
+              data-checkout-enter
+              className="mb-5 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                  <PackageCheck className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold">Estoque reservado para sua franquia</p>
+                  <p className="mt-0.5 text-xs text-emerald-800">
+                    Confira entrega, finalidade da NF-e e pagamento. Para alterar produtos, volte ao pedido em aberto.
+                  </p>
+                </div>
+              </div>
+              <Button asChild type="button" size="sm" variant="outline" className="shrink-0 border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-950">
+                <Link to="/meus-pedidos">Gerenciar pedido</Link>
+              </Button>
+            </div>
+          )}
           {step > 0 && (
             <div data-checkout-enter className="lg:hidden">
               <Steps current={Math.min(step, 1)} />
