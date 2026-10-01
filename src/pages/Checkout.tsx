@@ -297,6 +297,30 @@ export default function Checkout() {
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("preview") === "1";
   const launch = useMemo(() => readCheckoutLaunch(), []);
+  const openOrderLaunchSummary = useMemo<CheckoutSummary | null>(() => {
+    if (launch?.source !== "open_order") return null;
+    const launchItems = launch.items.map((item) => {
+      const unitPrice = Number(item.unitPrice) || 0;
+      return {
+        variantId: item.variantId,
+        productTitle: item.productTitle || "Produto",
+        variantTitle: item.variantTitle || "",
+        imageUrl: item.imageUrl,
+        quantity: item.quantity,
+        unitPrice,
+        lineTotal: unitPrice * item.quantity,
+      };
+    });
+    const subtotal = launchItems.reduce((total, item) => total + item.lineTotal, 0);
+    return {
+      subtotal,
+      discount: 0,
+      serviceFee: FRANCHISE_ORDER_FEE,
+      shippingAmount: 0,
+      total: subtotal + FRANCHISE_ORDER_FEE,
+      items: launchItems,
+    };
+  }, [launch]);
   const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const { isSubscribed } = useSubscription();
@@ -313,7 +337,7 @@ export default function Checkout() {
         variantId,
         quantity,
       }))
-    : launch?.source === "buy_now"
+    : launch?.source === "buy_now" || launch?.source === "open_order"
       ? launch.items
       : cartItems.map(({ variantId, quantity }) => ({ variantId, quantity }));
   const [step, setStep] = useState(0);
@@ -382,7 +406,7 @@ export default function Checkout() {
     accessToken: string;
   } | null>(null);
   const [summary, setSummary] = useState<CheckoutSummary | null>(
-    previewMode ? PREVIEW_SUMMARY : null,
+    previewMode ? PREVIEW_SUMMARY : openOrderLaunchSummary,
   );
   const [payment, setPayment] = useState<PaymentResult | null>(null);
   const { getSubscriberPrice: cardSubscriberPrice } = useSubscriberPrices();
@@ -1136,6 +1160,15 @@ export default function Checkout() {
     nextPayment();
   };
 
+  const franchiseConfirmationItems = cartItems.length
+    ? cartItems
+    : (summary?.items ?? []).map((item) => ({
+      variantId: item.variantId,
+      quantity: item.quantity,
+      variantTitle: item.variantTitle,
+      product: { node: { title: item.productTitle } },
+    }));
+
   async function confirmOrder() {
     if (previewMode)
       return setMessage(
@@ -1164,7 +1197,7 @@ export default function Checkout() {
               };
         const { data: prepared, error: prepareError } =
           await supabase.functions.invoke("checkout-prepare", {
-            body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase(), invoicePurpose: isFranchisee ? invoicePurpose : undefined },
+            body: { items, customer, delivery, billingAddress: effectiveBilling, paymentMethod, referralCode: referralCode.trim().toUpperCase(), invoicePurpose: isFranchisee ? invoicePurpose : undefined, openOrderId: launch?.openOrderId },
             headers: sessionClaimHeaders(Boolean(user)),
           });
         if (prepareError || prepared?.error) {
@@ -1530,7 +1563,7 @@ export default function Checkout() {
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-4">
-            {cartItems.map((item) => (
+            {franchiseConfirmationItems.map((item) => (
               <div key={item.variantId} className="flex justify-between gap-4 text-sm">
                 <span className="text-slate-700">{item.product.node.title}{item.variantTitle && item.variantTitle !== "Default Title" ? ` — ${item.variantTitle}` : ""}</span>
                 <span className="shrink-0 font-semibold text-slate-950">{item.quantity} un.</span>

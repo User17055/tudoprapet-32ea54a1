@@ -27,6 +27,7 @@ import { useCartStore } from "@/stores/cartStore";
 import { toast } from "sonner";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
 import { useCartAvailability } from "@/hooks/useCartAvailability";
+import { FranchiseOpenOrderCartActions } from "@/components/FranchiseOpenOrderCartActions";
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -407,6 +408,13 @@ const Cart = () => {
                   </p>
                 )}
 
+                <FranchiseOpenOrderCartActions
+                  enabled={isFranchisee}
+                  items={availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity }))}
+                  disabled={availabilityLoading || isLoading || isSyncing || franchiseLoading}
+                  onSaved={clearCart}
+                />
+
                 <Button
                   onClick={handleCheckout}
                   className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
@@ -417,7 +425,7 @@ const Cart = () => {
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
                     <>
-                      Finalizar compra
+                      {isFranchisee ? "Ir para pagamento" : "Finalizar compra"}
                       <ExternalLink className="ml-2 h-4 w-4" />
                     </>
                   )}
@@ -456,6 +464,13 @@ const Cart = () => {
                 </p>
               )}
 
+              <FranchiseOpenOrderCartActions
+                enabled={isFranchisee}
+                items={availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity }))}
+                disabled={availabilityLoading || isLoading || isSyncing || franchiseLoading}
+                onSaved={clearCart}
+              />
+
               <Button
                 onClick={handleCheckout}
                 className="w-full rounded-full py-6 font-display text-base font-bold shadow-md"
@@ -466,7 +481,7 @@ const Cart = () => {
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <>
-                    Finalizar compra
+                    {isFranchisee ? "Ir para pagamento" : "Finalizar compra"}
                     <ExternalLink className="ml-2 h-4 w-4" />
                   </>
                 )}

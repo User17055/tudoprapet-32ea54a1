@@ -507,8 +507,72 @@ export interface FiscalDraftOrderResult extends DraftOrderResult {
   attempts?: number;
 }
 
+export interface ReservedDraftOrderResult {
+  ok: boolean;
+  draftOrderId: string | null;
+  reservedUntil: string | null;
+  error: string | null;
+}
+
+/** Cria ou atualiza o rascunho simples usado pelo pedido em aberto da franquia. */
+export async function saveReservedDraftOrder(input: {
+  draftOrderId?: string | null;
+  items: Array<{ variantId: string; quantity: number }>;
+  reserveInventoryUntil: string;
+  userId: string;
+}, token: string): Promise<ReservedDraftOrderResult> {
+  const updating = Boolean(input.draftOrderId);
+  const query = updating
+    ? `mutation SaveOpenOrder($id: ID!, $input: DraftOrderInput!) {
+        draftOrderUpdate(id: $id, input: $input) {
+          draftOrder { id legacyResourceId reserveInventoryUntil }
+          userErrors { field message }
+        }
+      }`
+    : `mutation SaveOpenOrder($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder { id legacyResourceId reserveInventoryUntil }
+          userErrors { field message }
+        }
+      }`;
+  const variables: Record<string, unknown> = {
+    input: {
+      lineItems: input.items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+      reserveInventoryUntil: input.reserveInventoryUntil,
+      tags: ["pedido-em-aberto", "franchise"],
+      note: "Pedido em aberto TudoPraPet",
+      customAttributes: [{ key: "franchise_open_order_user_id", value: input.userId }],
+    },
+  };
+  if (updating) variables.id = `gid://shopify/DraftOrder/${input.draftOrderId}`;
+  const response = await fetch(`${ADMIN_API}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({ query, variables }),
+  });
+  const body = await response.json().catch(() => null);
+  const payload = updating ? body?.data?.draftOrderUpdate : body?.data?.draftOrderCreate;
+  const errors = normalizeShopifyUserErrors(body?.errors?.length ? body.errors : (payload?.userErrors ?? []));
+  const draft = payload?.draftOrder;
+  const id = draft?.legacyResourceId
+    ? String(draft.legacyResourceId)
+    : (draft?.id ? String(draft.id).split("/").pop() : null);
+  const reservedUntil = typeof draft?.reserveInventoryUntil === "string" ? draft.reserveInventoryUntil : null;
+  if (!response.ok || errors.length || !id || Date.parse(reservedUntil || "") < Date.parse(input.reserveInventoryUntil) - 1000) {
+    return {
+      ok: false,
+      draftOrderId: id ?? null,
+      reservedUntil,
+      error: describeDraftFailure(errors, "A Shopify não confirmou a reserva de estoque."),
+    };
+  }
+  return { ok: true, draftOrderId: id, reservedUntil, error: null };
+}
+
 
 export interface FiscalDraftOrderInput {
+  /** Quando informado, transforma o pedido em aberto no rascunho fiscal final. */
+  draftOrderId?: string;
   lineItems: Record<string, unknown>[];
   email: string;
   customerName?: string;
@@ -966,17 +1030,27 @@ export async function createFiscalDraftOrder(
   } });
 
   const runMutation = async (withPhone: boolean) => {
+    const updating = Boolean(input.draftOrderId);
     const response = await fetch(`${ADMIN_API}/graphql.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
       body: JSON.stringify({
-        query: `mutation CreateFiscalDraft($input: DraftOrderInput!) {
+        query: updating
+          ? `mutation UpdateFiscalDraft($id: ID!, $input: DraftOrderInput!) {
+          draftOrderUpdate(id: $id, input: $input) {
+            draftOrder { id legacyResourceId invoiceUrl reserveInventoryUntil }
+            userErrors { field message }
+          }
+        }`
+          : `mutation CreateFiscalDraft($input: DraftOrderInput!) {
           draftOrderCreate(input: $input) {
             draftOrder { id legacyResourceId invoiceUrl reserveInventoryUntil }
             userErrors { field message }
           }
         }`,
-        variables: buildVariables(withPhone),
+        variables: updating
+          ? { ...buildVariables(withPhone), id: `gid://shopify/DraftOrder/${input.draftOrderId}` }
+          : buildVariables(withPhone),
       }),
     });
     const responseText = await response.text();
@@ -1004,7 +1078,7 @@ export async function createFiscalDraftOrder(
   for (let round = 0; round < 4; round++) {
     attempts += 1;
     const { status, ok, body } = await runMutation(withPhone);
-    const payload = body?.data?.draftOrderCreate;
+    const payload = input.draftOrderId ? body?.data?.draftOrderUpdate : body?.data?.draftOrderCreate;
     const draft = payload?.draftOrder;
     const draftOrderId: string | null = draft?.legacyResourceId
       ? String(draft.legacyResourceId)
@@ -1023,7 +1097,7 @@ export async function createFiscalDraftOrder(
         const confirmedReservation = Date.parse(String(draft?.reserveInventoryUntil || ""));
         if (!Number.isFinite(confirmedReservation) ||
           confirmedReservation < requestedReservation - 1_000) {
-          await deleteDraftOrder(draftOrderId, token);
+          if (!input.draftOrderId) await deleteDraftOrder(draftOrderId, token);
           return {
             requestOk: false,
             invoiceUrl: null,
@@ -1046,7 +1120,7 @@ export async function createFiscalDraftOrder(
       };
     }
 
-    if (draftOrderId) await deleteDraftOrder(draftOrderId, token);
+    if (draftOrderId && !input.draftOrderId) await deleteDraftOrder(draftOrderId, token);
     console.error(
       `Criacao GraphQL do rascunho falhou (tentativa ${attempts}, HTTP ${status}):`,
       describeDraftFailure(creationErrors, "sem detalhe da Shopify"),

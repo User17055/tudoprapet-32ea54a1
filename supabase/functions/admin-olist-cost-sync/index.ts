@@ -1,12 +1,12 @@
 // Importa o custo do ERP Olist pelo SKU e atualiza as tabelas de precos locais.
-// Regra comercial: Shopify e a venda normal; assinante paga custo + 5% em
-// todos os produtos; franquia pode pagar o custo ou mais, mas nunca menos que
-// o custo.
+// Regra comercial: Shopify e a venda normal; assinante paga custo + percentual
+// da categoria mais especifica; franquia nunca paga abaixo do custo.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
-import { fetchOlistCostBySku, normalizeSku, subscriberPriceFromCost } from "../_shared/olist.ts";
+import { fetchOlistCostBySku, normalizeSku } from "../_shared/olist.ts";
+import { priceFromCostAndMargin, subscriberMarginForProduct } from "../_shared/subscriber-category.ts";
 
 type SyncItem = {
   productId?: string;
@@ -57,6 +57,16 @@ Deno.serve(async (req) => {
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const results: Array<Record<string, unknown>> = [];
+  const productIds = [...new Set(items.map((item) => item.productId))];
+  const [categoryResult, linkResult, ruleResult] = await Promise.all([
+    admin.from("categories").select("id,parent_id"),
+    admin.from("product_categories").select("shopify_product_id,category_id").in("shopify_product_id", productIds),
+    admin.from("subscriber_category_margins").select("category_id,percent"),
+  ]);
+  if (categoryResult.error || linkResult.error || ruleResult.error) {
+    console.error("[admin-olist-cost-sync] categorias:", categoryResult.error || linkResult.error || ruleResult.error);
+    return errorResponse("Nao foi possivel carregar as regras de preco por categoria", 500);
+  }
 
   // Sequencial de proposito: evita rajadas na API do ERP e preserva a ordem do relatorio.
   for (let index = 0; index < items.length; index += 1) {
@@ -117,7 +127,13 @@ Deno.serve(async (req) => {
       const franchisePrice = currentFranchisePrice !== null && currentFranchisePrice >= product.cost
         ? currentFranchisePrice
         : product.cost;
-      const subscriberPrice = subscriberPriceFromCost(product.cost);
+      const subscriberMarginPercent = subscriberMarginForProduct(
+        item.productId,
+        categoryResult.data || [],
+        linkResult.data || [],
+        ruleResult.data || [],
+      );
+      const subscriberPrice = priceFromCostAndMargin(product.cost, subscriberMarginPercent);
       const { error: franchiseError } = await admin.from("franchise_prices").upsert({
         shopify_product_id: item.productId,
         shopify_variant_id: item.variantId,
@@ -152,6 +168,7 @@ Deno.serve(async (req) => {
         costIncreased: oldCost !== null && product.cost > oldCost,
         franchisePrice,
         subscriberPrice,
+        subscriberMarginPercent,
       });
     } catch (error) {
       console.error("[admin-olist-cost-sync]", item.sku, error);

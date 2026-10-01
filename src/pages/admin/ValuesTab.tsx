@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Download, History, Loader2, Package, Search, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { SubscriberCategoryMarginsCard } from "@/components/admin/SubscriberCategoryMarginsCard";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 import { fetchAllCustomerPrices } from "@/hooks/useCustomerPrices";
@@ -81,7 +83,7 @@ type OlistSyncResponse = {
 // Cada item exige uma chamada individual à Olist e a Edge Function respeita o
 // limite de 30 chamadas/minuto. Lotes maiores mantinham uma requisição HTTP
 // aberta por mais de 50 segundos e podiam ser encerrados pelo gateway.
-const OLIST_SYNC_BATCH_SIZE = 10;
+const OLIST_SYNC_INTERVAL_MS = 2200;
 
 const money = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -155,9 +157,12 @@ export default function ValuesTab() {
   const [loading, setLoading] = useState(true);
   const [syncingOlistId, setSyncingOlistId] = useState<string | null>(null);
   const [bulkSyncingOlist, setBulkSyncingOlist] = useState(false);
+  const [olistProgress, setOlistProgress] = useState<{ current: number; total: number; updated: number; failed: number } | null>(null);
   const [details, setDetails] = useState<PriceDetails | null>(null);
   const [costHistory, setCostHistory] = useState<CostHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const bulkSyncingRef = useRef(false);
+  const reloadTimerRef = useRef<number | null>(null);
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -204,14 +209,22 @@ export default function ValuesTab() {
 
   useEffect(() => {
     load();
+    const scheduleReload = () => {
+      if (bulkSyncingRef.current) return;
+      if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = window.setTimeout(() => { void load(true); }, 500);
+    };
     const channel = supabase
       .channel("admin-values")
-      .on("postgres_changes", { event: "*", schema: "public", table: "subscriber_prices" }, () => load(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, () => load(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "product_costs" }, () => load(true))
-      .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, () => load(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "subscriber_prices" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_costs" }, scheduleReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_prices" }, scheduleReload)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const subscriberMap = useMemo(() => new Map(subscriberPrices.map((row) => [row.shopify_variant_id, row.subscriber_price])), [subscriberPrices]);
@@ -251,8 +264,8 @@ export default function ValuesTab() {
       variant,
     }))), [products]);
 
-  const feedRowsWithSku = useMemo(
-    () => rows.filter((row) => row.isFeed && row.variant.sku?.trim()),
+  const rowsWithSku = useMemo(
+    () => rows.filter((row) => row.variant.sku?.trim()),
     [rows],
   );
 
@@ -261,7 +274,10 @@ export default function ValuesTab() {
       toast.error("Nenhuma ração com SKU foi encontrada na Shopify.");
       return;
     }
-    if (bulk) setBulkSyncingOlist(true);
+    if (bulk) {
+      bulkSyncingRef.current = true;
+      setBulkSyncingOlist(true);
+    }
     else setSyncingOlistId(items[0].variantId);
 
     let updated = 0;
@@ -269,48 +285,50 @@ export default function ValuesTab() {
     let failed = 0;
     let fatalError = "";
     const issueSkus: string[] = [];
+    if (bulk) setOlistProgress({ current: 0, total: items.length, updated: 0, failed: 0 });
     try {
-      // A function aceita lotes pequenos para nao estourar o limite da API da Olist.
-      for (let index = 0; index < items.length; index += OLIST_SYNC_BATCH_SIZE) {
-        const batch = items.slice(index, index + OLIST_SYNC_BATCH_SIZE);
+      // Uma requisicao curta por variante; o intervalo abaixo respeita 30 chamadas/minuto.
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
         let response: OlistSyncResponse | null = null;
         let requestError: Error | null = null;
 
         // Uma resposta perdida pode ser repetida com segurança: a função faz
         // upsert e só registra histórico quando o custo realmente mudou.
-        for (let attempt = 0; attempt < 2; attempt += 1) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
             const result = await supabase.functions.invoke("admin-olist-cost-sync", {
-              body: { items: batch },
+              body: { items: [item] },
             });
             response = result.data as OlistSyncResponse | null;
             requestError = result.error;
           } catch (error) {
             requestError = error instanceof Error ? error : new Error("Falha de conexão com a função");
           }
-          if (!requestError || !/failed to send|fetch|network/i.test(requestError.message)) break;
-          if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 800));
+          if (!requestError && response?.ok) break;
+          if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 800 * (attempt + 1)));
         }
 
         if (requestError || !response?.ok) {
+          failed += 1;
+          issueSkus.push(item.sku);
           const transportFailure = /failed to send|fetch|network/i.test(requestError?.message || "");
           fatalError = response?.error
             || (transportFailure ? "A conexão com a função foi interrompida. Tente novamente." : requestError?.message)
             || "A sincronização foi recusada.";
-          break;
         }
-        updated += response.updated || 0;
-        notFound += response.notFound || 0;
-        failed += response.failed || 0;
-        issueSkus.push(...(response.results || [])
+        updated += response?.updated || 0;
+        notFound += response?.notFound || 0;
+        failed += response?.failed || 0;
+        issueSkus.push(...(response?.results || [])
           .filter((result) => result.status !== "updated" && result.sku)
           .map((result) => result.sku!));
+        if (bulk) setOlistProgress({ current: index + 1, total: items.length, updated, failed: failed + notFound });
+        if (index < items.length - 1) await new Promise((resolve) => window.setTimeout(resolve, OLIST_SYNC_INTERVAL_MS));
       }
-      if (fatalError) {
-        toast.error("Não foi possível consultar a Olist.", { description: fatalError });
-      } else if (notFound || failed) {
+      if (notFound || failed) {
         toast.warning(`${updated} atualizado${updated === 1 ? "" : "s"}; ${notFound} SKU${notFound === 1 ? "" : "s"} não encontrado${notFound === 1 ? "" : "s"}; ${failed} erro${failed === 1 ? "" : "s"}.`, {
-          description: issueSkus.length ? `Confira: ${issueSkus.join(", ")}` : undefined,
+          description: issueSkus.length ? `Confira: ${issueSkus.join(", ")}${fatalError ? `. Último erro: ${fatalError}` : ""}` : fatalError || undefined,
           duration: 12000,
         });
       } else {
@@ -318,16 +336,17 @@ export default function ValuesTab() {
       }
       if (updated > 0) await load(true);
     } finally {
+      bulkSyncingRef.current = false;
       setBulkSyncingOlist(false);
       setSyncingOlistId(null);
     }
   };
 
-  const syncAllFeedCosts = () => syncFromOlist(feedRowsWithSku.map((row) => ({
+  const syncAllCosts = () => syncFromOlist(rowsWithSku.map((row) => ({
     productId: row.productId,
     variantId: row.variant.id,
     sku: row.variant.sku!.trim(),
-    isFeed: true,
+    isFeed: row.isFeed,
   })), true);
 
   const franchiseBelowCost = useMemo(() => rows.filter((row) => {
@@ -481,6 +500,19 @@ export default function ValuesTab() {
         </p>
       </div>
 
+      <SubscriberCategoryMarginsCard onPricesChanged={() => void load(true)} />
+
+      {olistProgress && (
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium">Atualizando custos em fila</span>
+            <span className="tabular-nums text-muted-foreground">{olistProgress.current} de {olistProgress.total}</span>
+          </div>
+          <Progress value={olistProgress.total ? (olistProgress.current / olistProgress.total) * 100 : 0} />
+          <p className="mt-2 text-xs text-muted-foreground">{olistProgress.updated} atualizados · {olistProgress.failed} com pendência. A fila continua mesmo quando um SKU falha.</p>
+        </div>
+      )}
+
       <Card>
         {/* Os quatro controles somam ~1000px: abaixo de 2xl o título fica em cima e
             os filtros quebram linha, em vez de espremer o título numa coluna. */}
@@ -492,9 +524,9 @@ export default function ValuesTab() {
             </CardDescription>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:w-auto 2xl:flex-nowrap">
-            <Button variant="outline" onClick={syncAllFeedCosts} disabled={bulkSyncingOlist || loading}>
+            <Button variant="outline" onClick={syncAllCosts} disabled={bulkSyncingOlist || loading}>
               {bulkSyncingOlist ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-              Atualizar rações pela Olist ({feedRowsWithSku.length})
+              Atualizar todos pela Olist ({rowsWithSku.length})
             </Button>
             <Select value={valueFilter} onValueChange={(value) => setValueFilter(value as MissingValueFilter)}>
               <SelectTrigger className="w-full sm:w-56" aria-label="Filtrar pendências de valores">

@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Package, PiggyBank, ExternalLink, Crown, Wallet } from 'lucide-react';
 import logo from '@/assets/tpp-logo.svg';
+import { useIsFranchisee } from '@/hooks/useIsFranchisee';
+import { FranchiseOpenOrderCard } from '@/components/FranchiseOpenOrderCard';
 
 interface OrderLine {
   title: string;
@@ -74,6 +76,7 @@ const MeusPedidos = () => {
   const [data, setData] = useState<OrdersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { isFranchisee } = useIsFranchisee();
 
   useEffect(() => {
     if (authLoading) return;
@@ -114,6 +117,8 @@ const MeusPedidos = () => {
           <h1 className="font-display font-900 text-3xl text-foreground">Meus Pedidos</h1>
           <p className="text-muted-foreground">Veja seu histórico e quanto você economizou.</p>
         </div>
+
+        <FranchiseOpenOrderCard enabled={isFranchisee} />
 
         {loading && (
           <div className="flex justify-center py-16">

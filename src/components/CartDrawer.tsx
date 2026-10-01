@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
 import { useCartAvailability } from "@/hooks/useCartAvailability";
+import { FranchiseOpenOrderCartActions } from "@/components/FranchiseOpenOrderCartActions";
 
 export const CartDrawer = () => {
   const navigate = useNavigate();
@@ -395,6 +396,13 @@ export const CartDrawer = () => {
                   )}
                 </p>
 
+                <FranchiseOpenOrderCartActions
+                  enabled={isFranchisee}
+                  items={availableItems.map((item) => ({ variantId: item.variantId, quantity: item.quantity }))}
+                  disabled={availabilityLoading || isLoading || isSyncing || franchiseLoading}
+                  onSaved={() => { clearCart(); setCartOpen(false); }}
+                />
+
                 <Button
                   onClick={handleCheckout}
                   className="w-full btn-bounce rounded-full font-display font-bold text-base py-6 shadow-md"
@@ -405,7 +413,7 @@ export const CartDrawer = () => {
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      Finalizar compra
+                      {isFranchisee ? "Ir para pagamento" : "Finalizar compra"}
                       <ExternalLink className="w-4 h-4 ml-2" />
                     </>
                   )}

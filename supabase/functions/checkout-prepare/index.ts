@@ -97,6 +97,7 @@ Deno.serve(async (req) => {
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
 
     const rawBody = await req.json() as Record<string, unknown>;
+    const requestedOpenOrderId = typeof rawBody.openOrderId === "string" ? rawBody.openOrderId : null;
     const intendedMethod = rawBody.paymentMethod === "credit_card"
       ? "credit_card"
       : rawBody.paymentMethod === "debit_card"
@@ -163,6 +164,7 @@ Deno.serve(async (req) => {
     let franchisePaymentTermDays = 7;
     let franchisePaymentScheduleType: "days_after_order" | "fixed_day_next_month" = "days_after_order";
     let franchisePaymentDueDay: number | null = null;
+    let openOrder: { id: string; shopify_draft_order_id: string; items: Array<{ variantId: string; quantity: number }>; reserved_until: string } | null = null;
     if (auth.user) {
       const [{ data: profile }, { data: clubMember }] = await Promise.all([
         admin.from("profiles").select("is_franchisee,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", auth.user.id).maybeSingle(),
@@ -228,6 +230,29 @@ Deno.serve(async (req) => {
           );
         }
       }
+
+      if (requestedOpenOrderId) {
+        const { data: savedOrder, error: savedOrderError } = await admin.from("franchise_open_orders")
+          .select("id,shopify_draft_order_id,items,reserved_until")
+          .eq("id", requestedOpenOrderId).eq("user_id", auth.user!.id).eq("status", "open").maybeSingle();
+        if (savedOrderError) throw savedOrderError;
+        if (!savedOrder) return errorResponse("Pedido em aberto não encontrado", 404);
+        if (Date.parse(savedOrder.reserved_until) <= Date.now()) {
+          return errorResponse("A reserva de estoque deste pedido venceu", 409);
+        }
+        const savedItems = (savedOrder.items as Array<{ variantId?: unknown; quantity?: unknown }>).map((item) => ({
+          variantId: String(item.variantId || ""),
+          quantity: Number(item.quantity),
+        }));
+        const normalized = (items: Array<{ variantId: string; quantity: number }>) => items
+          .map((item) => `${item.variantId}:${item.quantity}`).sort().join("|");
+        if (normalized(savedItems) !== normalized(input.items)) {
+          return errorResponse("O pedido em aberto mudou. Abra-o novamente antes de continuar.", 409);
+        }
+        openOrder = { ...savedOrder, items: savedItems };
+      }
+    } else if (requestedOpenOrderId) {
+      return errorResponse("Pedido em aberto exclusivo para franqueados", 403);
     }
 
     const requestedItems = input.items;
@@ -239,6 +264,16 @@ Deno.serve(async (req) => {
         storefrontToken,
         shopifyToken,
       );
+      if (openOrder) {
+        for (const item of openOrder.items) {
+          const detail = details.get(item.variantId);
+          if (!detail || detail.inventoryTracked === false || detail.quantityAvailable === null) continue;
+          // A disponibilidade da Storefront já desconta a reserva deste próprio
+          // rascunho. Recolocamos somente a quantidade dele para validá-lo.
+          detail.quantityAvailable += item.quantity;
+          if (item.quantity > 0) detail.availableForSale = true;
+        }
+      }
     } catch (error) {
       const inventoryError = error instanceof ShopifyInventoryVerificationError ? error : null;
       const technicalMessage = error instanceof Error ? error.message : String(error);
@@ -630,6 +665,7 @@ Deno.serve(async (req) => {
     if (serviceFeeLine) lineItems.push(serviceFeeLine);
 
     const draft = await createFiscalDraftOrder({
+      ...(openOrder ? { draftOrderId: openOrder.shopify_draft_order_id } : {}),
       lineItems,
       email: input.customer.email,
       customerName: input.customer.name,
@@ -763,6 +799,15 @@ Deno.serve(async (req) => {
         `Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`,
         draft.error,
       );
+    }
+    if (openOrder) {
+      const { error: openOrderError } = await admin.from("franchise_open_orders").update({
+        status: "converted",
+        checkout_session_id: session.id,
+        reserved_until: inventoryReservedUntil,
+        updated_at: new Date().toISOString(),
+      }).eq("id", openOrder.id).eq("status", "open");
+      if (openOrderError) throw openOrderError;
     }
     await writeCheckoutAttemptLog(admin, {
       checkoutSessionId: session.id,
