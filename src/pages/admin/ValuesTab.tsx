@@ -506,10 +506,26 @@ export default function ValuesTab() {
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-2 flex items-center justify-between gap-3 text-sm">
             <span className="font-medium">Atualizando custos em fila</span>
-            <span className="tabular-nums text-muted-foreground">{olistProgress.current} de {olistProgress.total}</span>
+            <span className="tabular-nums text-muted-foreground">
+              {olistProgress.current} processados de {olistProgress.total}
+            </span>
           </div>
           <Progress value={olistProgress.total ? (olistProgress.current / olistProgress.total) * 100 : 0} />
-          <p className="mt-2 text-xs text-muted-foreground">{olistProgress.updated} atualizados · {olistProgress.failed} com pendência. A fila continua mesmo quando um SKU falha.</p>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-md bg-emerald-50 px-2 py-2">
+              <p className="text-lg font-bold tabular-nums text-emerald-700">{olistProgress.updated}</p>
+              <p className="text-[11px] text-emerald-800">atualizados</p>
+            </div>
+            <div className="rounded-md bg-sky-50 px-2 py-2">
+              <p className="text-lg font-bold tabular-nums text-sky-700">{Math.max(0, olistProgress.total - olistProgress.current)}</p>
+              <p className="text-[11px] text-sky-800">faltam</p>
+            </div>
+            <div className="rounded-md bg-amber-50 px-2 py-2">
+              <p className="text-lg font-bold tabular-nums text-amber-700">{olistProgress.failed}</p>
+              <p className="text-[11px] text-amber-800">pendências</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">A fila continua automaticamente mesmo quando um SKU falha.</p>
         </div>
       )}
 
