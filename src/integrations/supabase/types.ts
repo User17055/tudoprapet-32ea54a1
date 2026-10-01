@@ -1162,6 +1162,7 @@ export type Database = {
           cost: number
           cost_changed_at: string | null
           created_at: string
+          package_weight_kg: number | null
           previous_cost: number | null
           shopify_product_id: string
           shopify_variant_id: string
@@ -1174,6 +1175,7 @@ export type Database = {
           cost: number
           cost_changed_at?: string | null
           created_at?: string
+          package_weight_kg?: number | null
           previous_cost?: number | null
           shopify_product_id: string
           shopify_variant_id: string
@@ -1186,6 +1188,7 @@ export type Database = {
           cost?: number
           cost_changed_at?: string | null
           created_at?: string
+          package_weight_kg?: number | null
           previous_cost?: number | null
           shopify_product_id?: string
           shopify_variant_id?: string
