@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { fetchAllRows } from "@/lib/fetchAllRows";
+import { supabase } from "@/integrations/supabase/client";
 
 interface FranchisePrice {
   shopify_variant_id: string;
@@ -9,6 +10,9 @@ interface FranchisePrice {
 
 let cached: FranchisePrice[] | null = null;
 let pending: Promise<FranchisePrice[]> | null = null;
+let liveStarted = false;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+const listeners = new Set<(prices: FranchisePrice[]) => void>();
 
 /** Le a tabela inteira, pagina a pagina. Usada tambem pela tela de Valores. */
 export async function fetchAllFranchisePrices(): Promise<FranchisePrice[]> {
@@ -44,6 +48,37 @@ export function invalidateFranchisePricesCache() {
   cached = null;
 }
 
+async function refreshPrices() {
+  if (pending) return pending;
+  pending = (async () => {
+    try {
+      cached = await fetchAllFranchisePrices();
+      for (const listener of listeners) listener(cached);
+      return cached;
+    } finally {
+      pending = null;
+    }
+  })();
+  return pending;
+}
+
+function scheduleRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => { void refreshPrices().catch(console.error); }, 250);
+}
+
+function ensureLiveUpdates() {
+  if (liveStarted || typeof window === "undefined") return;
+  liveStarted = true;
+  supabase.channel("live-franchise-prices")
+    .on("postgres_changes", { event: "*", schema: "public", table: "franchise_prices" }, scheduleRefresh)
+    .subscribe();
+  window.addEventListener("focus", scheduleRefresh);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") scheduleRefresh();
+  });
+}
+
 export function useFranchisePrices() {
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const [prices, setPrices] = useState<FranchisePrice[]>(cached || []);
@@ -58,11 +93,14 @@ export function useFranchisePrices() {
       setPricesLoading(false);
       return;
     }
+    ensureLiveUpdates();
+    listeners.add(setPrices);
     setPricesLoading(!cached);
     fetchPrices()
       .then(setPrices)
       .catch(console.error)
       .finally(() => setPricesLoading(false));
+    return () => { listeners.delete(setPrices); };
   }, [franchiseeLoading, isFranchisee]);
 
   const getFranchisePrice = (variantId: string): number | null => {
