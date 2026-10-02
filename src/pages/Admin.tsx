@@ -62,6 +62,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import logo from "@/assets/tpp-logo.svg";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
@@ -587,6 +588,7 @@ function PricesTab() {
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [prices, setPrices] = useState<SubPrice[]>([]);
   const [customerPrices, setCustomerPrices] = useState<{ shopify_variant_id: string; price: number }[]>([]);
+  const [productCosts, setProductCosts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [productId, setProductId] = useState("");
@@ -603,16 +605,22 @@ function PricesTab() {
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [shop, sub, customer] = await Promise.all([
+      const [shop, sub, customer, costs] = await Promise.all([
         fetchAllShopifyProducts(),
         supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
         supabase.from("customer_prices").select("shopify_variant_id,price"),
+        fetchAllRows<{ shopify_variant_id: string; cost: number | string }>(
+          "product_costs",
+          "shopify_variant_id,cost",
+          { orderBy: "shopify_variant_id" },
+        ),
       ]);
       setProducts(shop);
       if (sub.error) throw sub.error;
       if (customer.error) throw customer.error;
       setPrices((sub.data || []) as SubPrice[]);
       setCustomerPrices((customer.data || []).map((row) => ({ ...row, price: Number(row.price) })));
+      setProductCosts(new Map(costs.map((row) => [row.shopify_variant_id, Number(row.cost)])));
     } catch (e) {
       if (!silent) toast.error("Erro ao carregar dados");
       console.error(e);
@@ -635,6 +643,11 @@ function PricesTab() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "customer_prices" },
+        () => loadAll(true),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "product_costs" },
         () => loadAll(true),
       )
       .subscribe();
@@ -676,10 +689,11 @@ function PricesTab() {
     ? customerPrices.find((row) => row.shopify_variant_id === selectedVariant.id)?.price ?? shopifyPrice
     : null;
   const estimatedCost = selectedCustomerPrice === null ? null : selectedCustomerPrice / 2;
+  const realCost = selectedVariant ? productCosts.get(selectedVariant.id) ?? null : null;
   const manualCostValue = Number(manualCost.replace(",", "."));
   const calculationBaseCost = calculationMode === "manual"
     ? (manualCost.trim() !== "" && Number.isFinite(manualCostValue) ? manualCostValue : null)
-    : estimatedCost;
+    : (realCost ?? estimatedCost);
   const adjustmentValue = Number(adjustment.replace(",", "."));
   const calculatedSubscriberPrice = calculationBaseCost === null || !Number.isFinite(adjustmentValue)
     ? null
@@ -807,7 +821,7 @@ function PricesTab() {
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-base">Adicionar preço de assinante</CardTitle>
           <CardDescription>
-            Escolha entre usar o custo estimado atual ou informar o custo manualmente e aplicar o reajuste desejado.
+            Escolha entre usar o custo real da Olist ou informar o custo manualmente e aplicar o reajuste desejado.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
@@ -895,7 +909,7 @@ function PricesTab() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="automatic">Automático (custo estimado atual)</SelectItem>
+                    <SelectItem value="automatic">Automático (custo real da Olist)</SelectItem>
                     <SelectItem value="manual">Informar custo manualmente</SelectItem>
                   </SelectContent>
                 </Select>
@@ -907,8 +921,23 @@ function PricesTab() {
                     <Input value={selectedCustomerPrice === null ? "" : `R$ ${selectedCustomerPrice.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Custo estimado (50%)</label>
-                    <Input value={estimatedCost === null ? "" : `R$ ${estimatedCost.toFixed(2)}`} readOnly placeholder="Selecione a variante" />
+                    <label className="mb-1 block text-sm font-medium">Custo real (Olist)</label>
+                    <Input
+                      value={
+                        realCost !== null
+                          ? `R$ ${realCost.toFixed(2)}`
+                          : estimatedCost === null
+                            ? ""
+                            : `R$ ${estimatedCost.toFixed(2)} (estimado)`
+                      }
+                      readOnly
+                      placeholder="Selecione a variante"
+                    />
+                    {realCost === null && estimatedCost !== null && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Sem custo da Olist cadastrado — usando estimativa de 50% do valor.
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -998,7 +1027,7 @@ function PricesTab() {
                   <TableHead className="w-40">Status</TableHead>
                   <TableHead>Variante</TableHead>
                   <TableHead className="text-right">Valor base</TableHead>
-                  <TableHead className="text-right">Custo estimado</TableHead>
+                  <TableHead className="text-right">Custo real (Olist)</TableHead>
                   <TableHead className="text-right">Preço assinante</TableHead>
                   <TableHead className="w-28"><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
@@ -1052,7 +1081,11 @@ function PricesTab() {
                         {customerPrice === null ? "—" : `R$ ${customerPrice.toFixed(2)}`}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {customerPrice === null ? "—" : `R$ ${(customerPrice / 2).toFixed(2)}`}
+                        {displayedVariant && productCosts.has(displayedVariant.id)
+                          ? `R$ ${productCosts.get(displayedVariant.id)!.toFixed(2)}`
+                          : customerPrice === null
+                            ? "—"
+                            : `~R$ ${(customerPrice / 2).toFixed(2)}`}
                       </TableCell>
                       <TableCell className="text-right">
                         {registeredPrice ? (
