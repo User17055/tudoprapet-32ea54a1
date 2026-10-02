@@ -35,16 +35,32 @@ Deno.serve(async (req) => {
       const current = await fetchCurrentVariantPrices(ids.slice(start, start + 100), storefrontToken);
       for (const [id, price] of current) prices.set(id, price);
     }
-    if (prices.size !== ids.length) return errorResponse("Não foi possível verificar os preços atuais", 503);
+    // Variantes sem preço na Shopify (removidas/ocultas) não derrubam o lote: só não são avaliadas.
 
     const admin = createClient(supabaseUrl, serviceKey);
-    const [costResult, customerResult] = await Promise.all([
-      admin.from("product_costs").select("shopify_variant_id,cost").in("shopify_variant_id", ids),
-      admin.from("customer_prices").select("shopify_variant_id,price").in("shopify_variant_id", ids),
-    ]);
-    if (costResult.error || customerResult.error) throw costResult.error || customerResult.error;
-    const customerPrices = new Map((customerResult.data || []).map((row) => [row.shopify_variant_id, Number(row.price)]));
-    const blockedVariantIds = (costResult.data || []).filter((row) => {
+    const costRows: Array<{ shopify_variant_id: string; cost: number }> = [];
+    const customerRows: Array<{ shopify_variant_id: string; price: number }> = [];
+    // Lotes pequenos evitam URLs gigantes no filtro .in(); uma nova tentativa cobre falhas de rede.
+    for (let start = 0; start < ids.length; start += 80) {
+      const chunk = ids.slice(start, start + 80);
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const [costResult, customerResult] = await Promise.all([
+          admin.from("product_costs").select("shopify_variant_id,cost").in("shopify_variant_id", chunk),
+          admin.from("customer_prices").select("shopify_variant_id,price").in("shopify_variant_id", chunk),
+        ]);
+        lastError = costResult.error || customerResult.error;
+        if (!lastError) {
+          costRows.push(...(costResult.data || []));
+          customerRows.push(...(customerResult.data || []));
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      if (lastError) throw lastError;
+    }
+    const customerPrices = new Map(customerRows.map((row) => [row.shopify_variant_id, Number(row.price)]));
+    const blockedVariantIds = costRows.filter((row) => {
       const override = customerPrices.get(row.shopify_variant_id);
       const sale = override !== undefined && Number.isFinite(override) && override > 0
         ? override : prices.get(row.shopify_variant_id);

@@ -169,8 +169,8 @@ ${JSON.stringify(products)}
     field.nullable = true;
   }
 
-  const primaryModel = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
-  const fallbackModels = unique([primaryModel, "gemini-3.5-flash", "gemini-3-flash-preview"]).filter(Boolean);
+  const primaryModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+  const fallbackModels = unique([primaryModel, "gemini-2.5-flash", "gemini-2.0-flash"]).filter(Boolean);
 
   let text = "";
   let lastStatus = 0;
@@ -179,7 +179,8 @@ ${JSON.stringify(products)}
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     // Transitorios (429/503) merecem uma segunda tentativa com espera curta antes de trocar de modelo.
     for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 5000));
+      if (attempt > 0 && lastStatus === 404) break; // modelo inexistente: troca imediatamente
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2000));
       const geminiResponse = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
