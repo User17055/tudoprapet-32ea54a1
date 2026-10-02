@@ -79,15 +79,32 @@ esta na tela, e nao o modelo oculto.
 - Leitura da tela do PDV, sem clicar: o select de forma de recebimento tem a opcao
   `Vindi`, e `#btn_baixar`, `vfp_dec_valor[]` e `#ven_int_codigo` existem.
 
+## Primeira venda real (01/10/2026 22:28)
+
+O bot foi ligado e processou a fatura `542381263` (R$ 52,00, PLANO SUPER ECONOMICO):
+cliente, produto, total e observacao corretos, e o SimplesVet criou a venda **110245**.
+Depois disso o worker falhou ao ler o codigo da venda e a tarefa foi para revisao
+manual, como previsto. O bot foi desligado de novo.
+
+Causa: `#ven_int_codigo` nao e o codigo da venda. Ha 8 campos com esse nome, todos
+ocultos em formularios de modais (orcamento, NFC-e, e-mail); eles guardam um id interno
+(ex.: `192695117`), e o primeiro, que o worker lia, fica vazio. O codigo que aparece em
+Consulta vendas esta na linha `Codigo:` do resumo da venda. O worker agora le essa linha
+(validado na venda 110245: retorna `110245`; no PDV vazio, nada).
+
+A venda 110245 ficou "Em atendimento", sem recebimento. Para concluir: registrar o
+recebimento `Vindi` de R$ 52,00 nela e concluir a tarefa na fila com a venda 110245
+(sem `retry_now` comum, que criaria outra venda).
+
 ## Ainda nao validado
 
-Tudo o que acontece **depois** do clique em Registrar recebimento so pode ser testado
-criando uma venda real:
-
+- [x] criar a venda e abrir o modal de recebimento (venda 110245);
+- [x] leitura do codigo da venda pela linha `Codigo:` do resumo;
 - [ ] modal de recebimento: escolher `Vindi`, preencher o valor e clicar em `#btn_baixar`;
-- [ ] leitura do codigo da venda: ha 5 elementos `#ven_int_codigo` na pagina e o worker
-      usa o primeiro;
-- [ ] confirmacao `text=Baixado`.
+- [ ] confirmacao de sucesso: o status da venda e um `span.badge` ("Em atendimento" antes
+      do recebimento). O `config.env` ainda usa `text=Baixado`, que pega o primeiro
+      elemento com esse texto na pagina; se falhar, trocar por
+      `span.badge:visible:text-is("Baixado")`.
 
 Para isso, use uma fatura paga que **ainda nao** tenha sido lancada manualmente no
 SimplesVet, com `SIMPLESVET_HEADLESS=0` ou acompanhando as capturas. Se o worker
