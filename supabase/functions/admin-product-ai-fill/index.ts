@@ -179,7 +179,7 @@ ${JSON.stringify(products)}
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     // Transitorios (429/503) merecem uma segunda tentativa com espera curta antes de trocar de modelo.
     for (let attempt = 0; attempt < 2; attempt++) {
-      if (lastStatus === 404) break; // modelo inexistente: troca imediatamente
+      if (attempt > 0 && lastStatus === 404) break; // modelo inexistente: troca imediatamente
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2000));
       const geminiResponse = await fetch(endpoint, {
         method: "POST",
