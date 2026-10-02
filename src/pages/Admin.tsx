@@ -654,10 +654,6 @@ function PricesTab() {
     [prices]
   );
 
-  const availableProducts = useMemo(
-    () => products.filter(p => !registeredProductIds.has(p.node.id)),
-    [products, registeredProductIds]
-  );
 
   const priceByProductId = useMemo(() => {
     const map = new Map<string, SubPrice>();
@@ -672,14 +668,6 @@ function PricesTab() {
     return true;
   }), [products, registeredProductIds, registrationFilter]);
 
-  useEffect(() => {
-    if (productId && registeredProductIds.has(productId)) {
-      setProductId("");
-      setVariantId("");
-      setManualCost("");
-      setAdjustment("0");
-    }
-  }, [productId, registeredProductIds]);
 
   const selectedVariant = selectedProduct?.node.variants.edges.find(v => v.node.id === variantId)?.node
     || selectedProduct?.node.variants.edges[0]?.node;
@@ -702,13 +690,6 @@ function PricesTab() {
   const handleSave = async () => {
     if (!productId || !variantId) {
       toast.error("Preencha todos os campos");
-      return;
-    }
-    if (registeredProductIds.has(productId)) {
-      toast.error("Este produto ja possui preco de assinante cadastrado.");
-      setProductId("");
-      setVariantId("");
-      setAdjustment("0");
       return;
     }
     if (!Number.isFinite(adjustmentValue) || adjustmentValue < 0) {
@@ -879,7 +860,6 @@ function PricesTab() {
                 <ProductPicker
                   products={products}
                   value={productId}
-                  excludeIds={registeredProductIds}
                   placeholder="Pesquisar ou selecionar um produto..."
                   onChange={(value) => {
                     setProductId(value);
@@ -888,9 +868,9 @@ function PricesTab() {
                     setAdjustment("0");
                   }}
                 />
-                {!loading && availableProducts.length === 0 && (
+                {!loading && products.length === 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Todos os produtos carregados ja possuem preco de assinante cadastrado.
+                    Nenhum produto carregado.
                   </p>
                 )}
               </div>
