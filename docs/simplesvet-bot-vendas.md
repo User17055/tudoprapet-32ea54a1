@@ -96,46 +96,69 @@ A venda 110245 ficou "Em atendimento", sem recebimento. Para concluir: registrar
 recebimento `Vindi` de R$ 52,00 nela e concluir a tarefa na fila com a venda 110245
 (sem `retry_now` comum, que criaria outra venda).
 
-## Ainda nao validado
+## Em producao (desde 01/10/2026 23:10)
 
-- [x] criar a venda e abrir o modal de recebimento (venda 110245);
-- [x] leitura do codigo da venda pela linha `Codigo:` do resumo;
-- [ ] modal de recebimento: escolher `Vindi`, preencher o valor e clicar em `#btn_baixar`;
-- [ ] confirmacao de sucesso: o status da venda e um `span.badge` ("Em atendimento" antes
-      do recebimento). O `config.env` ainda usa `text=Baixado`, que pega o primeiro
-      elemento com esse texto na pagina; se falhar, trocar por
-      `span.badge:visible:text-is("Baixado")`.
+Na primeira noite o bot lancou **32 faturas** de ponta a ponta (venda + recebimento
+`Vindi` + status "Baixado"), visiveis em **Realizados > Baixas SV**. Cada venda leva de
+10 a 30 s.
 
-Para isso, use uma fatura paga que **ainda nao** tenha sido lancada manualmente no
-SimplesVet, com `SIMPLESVET_HEADLESS=0` ou acompanhando as capturas. Se o worker
-falhar depois do clique, a tarefa vai para revisao manual, sem nova tentativa.
+### Como roda
 
-Outros pontos de atencao:
+| O que | Como |
+|---|---|
+| Inicio | cron **a cada 1 minuto** (`flock` impede duas execucoes ao mesmo tempo) |
+| Fila | processa **enquanto houver fatura**, com `SIMPLESVET_SALES_PAUSE_SECONDS=10` entre uma e outra (`SIMPLESVET_SALES_BATCH_SIZE=0` = sem limite) |
+| Fatura nova | o webhook cria a tarefa; o bot pega em ate 1 min, ou na sequencia se ja estiver rodando |
+| Desligar | `SIMPLESVET_SALES_ENABLED=0` no `config.env` (ou `kill`, sem `-9`): termina a venda atual e para antes da proxima |
 
-- **Preco:** o worker nao altera o preco do item (`SIMPLESVET_SALE_PRICE_SELECTOR`
-  vazio). O preco do produto no SimplesVet precisa ser igual ao valor do item na
-  Vindi, senao a tarefa para em "Total divergente".
-- **Login:** em alguns testes o formulario de login nao apareceu em 45 s; o worker
-  tenta 3 vezes (num dos testes entrou so na terceira, apos 142 s). Se a falha for em
-  "abrir tela de login", o problema e esse.
-- **Conciliacao:** em 01/10 havia 2 produtos da Vindi pendentes de conciliacao. Faturas
-  com esses produtos ficam na fila ate serem classificados.
+### O que o bot trata sozinho
 
-## Nao reenviar a fatura 549518144
+- **Preco da Vindi diferente da tabela:** clica no item, abre "Alterar item da venda"
+  (`#edicao-box`) e troca o Preco (`#e__vpr_dec_preco`). O produto precisa ter **preco
+  variavel** no cadastro do SimplesVet; sem isso o campo vem bloqueado, e o bot lanca a
+  diferenca como desconto no item (so quando o valor da Vindi e menor).
+- **Varios produtos:** o SimplesVet coloca o item novo no topo da lista; o bot acha o item
+  pelo `data-uid` da linha.
+- **"Atencao: este cliente tem outras vendas em aberto":** clica em **Baixar apenas esta
+  venda**.
+- **Cliente com credito no SimplesVet:** o valor da Vindi passa do "Total a receber" e o
+  SimplesVet confirma o credito do troco; o bot aceita a confirmacao (registrada no log
+  como `VENDA_SV_CONFIRMACAO`).
+- **Codigo da venda:** lido na linha `Codigo:` do resumo (`#ven_int_codigo` e um id interno).
+- **Sucesso:** selo de status (`span.badge`) igual a "Baixado".
 
-A tarefa da fatura Vindi `549518144` esta em revisao manual. Essa fatura ja tem a
-venda **110239** no SimplesVet (lancada as 18:17 de 01/10, "Baixado", mesmo valor).
-Usar `retry_now` nela criaria uma venda duplicada.
+### Tentativas
+
+- **Qualquer erro antes de salvar a venda:** ate 3 tentativas, reaproveitando o login
+  (so reabre o PDV). Novo login apenas se a falha foi no login ou a pagina fechou.
+- **Erro depois de salvar:** nunca repete do zero (criaria outra venda). Reabre a mesma
+  venda pelo codigo e refaz so o recebimento, ate 3 vezes; se ela ja estiver "Baixado",
+  conta como sucesso.
+- **Rodadas automaticas:** fatura que falhou **sem criar venda** volta sozinha para a fila
+  depois de `SIMPLESVET_SALES_AUTO_RETRY_MINUTES=10`, por ate
+  `SIMPLESVET_SALES_AUTO_RETRY_CYCLES=3` rodadas (estado em `rpa/data/sales-auto-retry.json`).
+  Fatura com venda criada nunca volta sozinha.
+
+### Pendente
+
+- As faturas `539169997`, `549701746` e `542381263` tiveram a venda criada sem recebimento;
+  as vendas (110263, 110271 e 110245) foram excluidas no SimplesVet, mas o `retry_now`
+  nao libera tarefa com venda vinculada (`released: 0`). Precisa de uma acao no painel do
+  Lis-onTech para liberar.
+- Fatura `549518144`: ja tem a venda **110239**, lancada manualmente em 01/10; reenviar
+  cria outra venda.
 
 ## Como desfazer
 
-Os arquivos anteriores ficaram com o sufixo `.bak-20261001-cliente`:
+Cada mudanca guardou a versao anterior com sufixo `.bak-AAAAMMDD-<motivo>`
+(ex.: `rpa/simplesvet-sales-worker.js.bak-20261002-tentativas`,
+`secure/config.env.bak-20261002-tentativas`, `/root/crontab.bak-20261002-1min`):
 
 ```sh
 cd /opt/lisontech-simplesvet
-cp -p rpa/simplesvet-sales-worker.js.bak-20261001-cliente rpa/simplesvet-sales-worker.js
-cp -p secure/config.env.bak-20261001-cliente secure/config.env
-cp -p secure/config.env.example.bak-20261001-cliente secure/config.env.example
+cp -p rpa/simplesvet-sales-worker.js.bak-20261002-tentativas rpa/simplesvet-sales-worker.js
+cp -p secure/config.env.bak-20261002-tentativas secure/config.env
+crontab /root/crontab.bak-20261002-1min
 ```
 
 Se a publicacao automatica do Lis-onTech enviar arquivos para a VPS, aplique a mesma
