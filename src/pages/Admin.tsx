@@ -654,10 +654,6 @@ function PricesTab() {
     [prices]
   );
 
-  const availableProducts = useMemo(
-    () => products.filter(p => !registeredProductIds.has(p.node.id)),
-    [products, registeredProductIds]
-  );
 
   const priceByProductId = useMemo(() => {
     const map = new Map<string, SubPrice>();
@@ -872,9 +868,9 @@ function PricesTab() {
                     setAdjustment("0");
                   }}
                 />
-                {!loading && availableProducts.length === 0 && (
+                {!loading && products.length === 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Todos os produtos carregados ja possuem preco de assinante cadastrado.
+                    Nenhum produto carregado.
                   </p>
                 )}
               </div>
