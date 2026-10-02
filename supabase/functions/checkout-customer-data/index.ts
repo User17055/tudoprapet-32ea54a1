@@ -143,13 +143,16 @@ Deno.serve(async (req) => {
       }, { onConflict: "user_id" });
       if (error) throw error;
       if (!currentAccount?.is_franchisee) {
-        const isCompany = parsed.value.cpfCnpj.length === 14;
-        const { error: accountError } = await admin.from("profiles").update({
-          person_type: isCompany ? "company" : "individual",
-          cpf: isCompany ? null : parsed.value.cpfCnpj,
-          cnpj: isCompany ? parsed.value.cpfCnpj : null,
-        }).eq("user_id", userId);
-        if (accountError) throw accountError;
+        // Só completa o cadastro quando ele ainda não tem documento; nunca apaga nem troca o existente.
+        const { data: docs } = await admin.from("profiles").select("cpf").eq("user_id", userId).maybeSingle();
+        if (!docs?.cpf && !currentAccount?.cnpj) {
+          const isCompany = parsed.value.cpfCnpj.length === 14;
+          const { error: accountError } = await admin.from("profiles").update(isCompany
+            ? { person_type: "company", cnpj: parsed.value.cpfCnpj }
+            : { person_type: "individual", cpf: parsed.value.cpfCnpj }).eq("user_id", userId);
+          // Documento já usado em outra conta não deve travar o checkout.
+          if (accountError) console.error("[checkout-customer-data] profile document", accountError.code);
+        }
       }
       return jsonResponse({ saved: true });
     }
