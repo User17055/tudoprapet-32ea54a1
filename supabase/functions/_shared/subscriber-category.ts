@@ -74,25 +74,17 @@ export function isProductInFeedCategory(
   });
 }
 
-/** Regra fixa de Racao: ate 7,5 kg +60%; acima de 7,5 kg +40%. */
-export function feedMarginForWeight(packageWeightKg: number | null | undefined): number | null {
-  const weight = Number(packageWeightKg);
-  if (!Number.isFinite(weight) || weight <= 0) return null;
-  return weight > 7.5 ? 40 : 60;
-}
-
+/** Racao sempre usa a margem fixa de assinante de 5% sobre o custo. */
 export function subscriberMarginWithFeedRule(
   productId: string,
-  packageWeightKg: number | null | undefined,
+  _packageWeightKg: number | null | undefined,
   categories: SubscriberCategory[],
   links: SubscriberProductCategory[],
   rules: SubscriberCategoryRule[],
   fallback = 5,
 ): number {
-  const feedMargin = isProductInFeedCategory(productId, categories, links)
-    ? feedMarginForWeight(packageWeightKg)
-    : null;
-  return feedMargin ?? subscriberMarginForProduct(productId, categories, links, rules, fallback);
+  if (isProductInFeedCategory(productId, categories, links)) return 5;
+  return subscriberMarginForProduct(productId, categories, links, rules, fallback);
 }
 
 export function priceFromCostAndMargin(cost: number, percent: number): number {

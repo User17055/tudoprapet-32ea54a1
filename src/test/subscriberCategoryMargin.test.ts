@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  feedMarginForWeight,
   isProductInFeedCategory,
   priceFromCostAndMargin,
   subscriberMarginForProduct,
@@ -37,7 +36,7 @@ describe("margem de assinante por categoria", () => {
   });
 });
 
-describe("regra automatica de racao por peso", () => {
+describe("regra automatica de racao", () => {
   const feedCategories = [
     { id: "feed", name: "Ração", parent_id: null },
     { id: "dog-feed", name: "Cães adultos", parent_id: "feed" },
@@ -48,21 +47,19 @@ describe("regra automatica de racao por peso", () => {
     expect(isProductInFeedCategory("feed-product", feedCategories, feedLinks)).toBe(true);
   });
 
-  it("aplica 60% ate 7,5 kg e 40% acima", () => {
-    expect(feedMarginForWeight(7.5)).toBe(60);
-    expect(feedMarginForWeight(7.501)).toBe(40);
+  it("aplica 5% independentemente do peso e da regra da categoria", () => {
     expect(subscriberMarginWithFeedRule("feed-product", 7.5, feedCategories, feedLinks, [
       { category_id: "feed", percent: 10 },
-    ])).toBe(60);
+    ])).toBe(5);
     expect(subscriberMarginWithFeedRule("feed-product", 15, feedCategories, feedLinks, [
       { category_id: "feed", percent: 10 },
-    ])).toBe(40);
+    ])).toBe(5);
   });
 
-  it("mantem a regra comum quando o peso nao esta informado", () => {
+  it("aplica 5% mesmo quando o peso nao esta informado", () => {
     expect(subscriberMarginWithFeedRule("feed-product", null, feedCategories, feedLinks, [
       { category_id: "feed", percent: 10 },
-    ])).toBe(10);
+    ])).toBe(5);
   });
 
   it("extrai peso em kg ou gramas da variacao", () => {

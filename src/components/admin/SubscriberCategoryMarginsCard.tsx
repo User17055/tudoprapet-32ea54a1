@@ -101,7 +101,7 @@ export function SubscriberCategoryMarginsCard({ onPricesChanged }: { onPricesCha
       <CardContent className="space-y-4 p-4 pt-0">
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <p className="font-semibold">Regra automática para o grupo Ração</p>
-          <p className="mt-1">Até 7,5 kg: custo Olist + 60%. Acima de 7,5 kg: custo Olist + 40%. Essa regra prevalece sobre o percentual comum da categoria.</p>
+          <p className="mt-1">Todas as rações usam custo Olist + 5%, independentemente do peso. Essa regra prevalece sobre o percentual comum da categoria.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px_auto]">
           <Select value={categoryId} onValueChange={setCategoryId} disabled={loading || Boolean(busyId)}>
