@@ -48,21 +48,15 @@ describe("regra automatica de racao por peso", () => {
     expect(isProductInFeedCategory("feed-product", feedCategories, feedLinks)).toBe(true);
   });
 
-  it("aplica 60% ate 7,5 kg e 40% acima", () => {
-    expect(feedMarginForWeight(7.5)).toBe(60);
-    expect(feedMarginForWeight(7.501)).toBe(40);
-    expect(subscriberMarginWithFeedRule("feed-product", 7.5, feedCategories, feedLinks, [
-      { category_id: "feed", percent: 10 },
-    ])).toBe(60);
-    expect(subscriberMarginWithFeedRule("feed-product", 15, feedCategories, feedLinks, [
-      { category_id: "feed", percent: 10 },
-    ])).toBe(40);
-  });
-
-  it("mantem a regra comum quando o peso nao esta informado", () => {
-    expect(subscriberMarginWithFeedRule("feed-product", null, feedCategories, feedLinks, [
-      { category_id: "feed", percent: 10 },
-    ])).toBe(10);
+  it("aplica sempre 5% em racao, qualquer peso, acima da regra da categoria", () => {
+    expect(feedMarginForWeight(7.5)).toBe(5);
+    expect(feedMarginForWeight(15)).toBe(5);
+    for (const weight of [null, 1, 7.5, 15]) {
+      expect(subscriberMarginWithFeedRule("feed-product", weight, feedCategories, feedLinks, [
+        { category_id: "feed", percent: 10 },
+      ])).toBe(5);
+    }
+    expect(priceFromCostAndMargin(100, 5)).toBe(105);
   });
 
   it("extrai peso em kg ou gramas da variacao", () => {

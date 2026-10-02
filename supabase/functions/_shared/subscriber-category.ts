@@ -74,25 +74,25 @@ export function isProductInFeedCategory(
   });
 }
 
-/** Regra fixa de Racao: ate 7,5 kg +60%; acima de 7,5 kg +40%. */
-export function feedMarginForWeight(packageWeightKg: number | null | undefined): number | null {
-  const weight = Number(packageWeightKg);
-  if (!Number.isFinite(weight) || weight <= 0) return null;
-  return weight > 7.5 ? 40 : 60;
+/** Margem fixa de assinante para o grupo Racao: custo Olist + 5%. */
+export const FEED_SUBSCRIBER_MARGIN = 5;
+
+/** Regra fixa de Racao: sempre +5%, independente do peso. */
+export function feedMarginForWeight(_packageWeightKg?: number | null): number {
+  return FEED_SUBSCRIBER_MARGIN;
 }
 
+/** Racao sempre usa +5%, prevalecendo sobre peso e regras da categoria. */
 export function subscriberMarginWithFeedRule(
   productId: string,
-  packageWeightKg: number | null | undefined,
+  _packageWeightKg: number | null | undefined,
   categories: SubscriberCategory[],
   links: SubscriberProductCategory[],
   rules: SubscriberCategoryRule[],
   fallback = 5,
 ): number {
-  const feedMargin = isProductInFeedCategory(productId, categories, links)
-    ? feedMarginForWeight(packageWeightKg)
-    : null;
-  return feedMargin ?? subscriberMarginForProduct(productId, categories, links, rules, fallback);
+  if (isProductInFeedCategory(productId, categories, links)) return FEED_SUBSCRIBER_MARGIN;
+  return subscriberMarginForProduct(productId, categories, links, rules, fallback);
 }
 
 export function priceFromCostAndMargin(cost: number, percent: number): number {
