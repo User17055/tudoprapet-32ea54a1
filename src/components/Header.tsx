@@ -7,6 +7,7 @@ import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
 import { MobileCategoryNav } from "@/components/MobileCategoryNav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCategoryTree } from "@/hooks/useCategoryTree";
+import { buildCategoryIndex, categoryPath, resolveCategory } from "@/lib/catalogFilters";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { searchShopifyProducts, fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
@@ -68,7 +69,7 @@ export const Header = () => {
   const { getCustomerPrice } = useCustomerPrices();
   const navigate = useNavigate();
   const location = useLocation();
-  const { rootCats, childrenOf, loading: categoriesLoading } = useCategoryTree();
+  const { categories, rootCats, childrenOf, loading: categoriesLoading } = useCategoryTree();
   const audienceMap = useMemo(
     () => new Map(audienceRows.map((row) => [row.shopify_product_id, row.audience])),
     [audienceRows],
@@ -81,10 +82,16 @@ export const Header = () => {
     [rootCats],
   );
 
-  const isCategoryActive = (slug: string) => {
-    if (location.pathname !== "/catalogo") return false;
-    return new URLSearchParams(location.search).get("categoria") === slug;
-  };
+  // A aba do pet fica acesa tambem dentro das subcategorias (Cachorro > Ração > Seca).
+  // Pelo ID, porque o slug `racao` existe sob Cachorro e sob Gato.
+  const activeRootId = useMemo(() => {
+    if (location.pathname !== "/catalogo") return null;
+    const params = new URLSearchParams(location.search);
+    const current = resolveCategory(categories, params.get("categoria") || params.get("pet"), params.get("categoria_id"));
+    if (!current) return null;
+    return categoryPath(buildCategoryIndex(categories), current.id)[0]?.id || null;
+  }, [categories, location.pathname, location.search]);
+  const isCategoryActive = (id: string) => id === activeRootId;
   useEffect(() => {
     let lastY = window.scrollY;
     const onScroll = () => {

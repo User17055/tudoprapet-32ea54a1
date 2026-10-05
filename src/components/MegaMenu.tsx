@@ -14,7 +14,7 @@ interface MegaMenuProps {
   items: MegaMenuItem[];
   childrenOf: Map<string, Category[]>;
   loading: boolean;
-  isActive: (slug: string) => boolean;
+  isActive: (id: string) => boolean;
 }
 
 export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps) => {
@@ -57,7 +57,7 @@ export const MegaMenu = ({ items, childrenOf, loading, isActive }: MegaMenuProps
     >
       {items.map((item) => {
         const kids = childrenOf.get(item.id) || [];
-        const selected = isActive(item.slug) || openId === item.id;
+        const selected = isActive(item.id) || openId === item.id;
 
         return (
           <div key={item.id} className="flex items-stretch" onMouseEnter={() => openItem(item)}>
