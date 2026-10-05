@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { Fragment, useEffect, useState, useMemo, useRef, type ReactElement } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -20,7 +20,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
@@ -29,60 +28,83 @@ import { fuzzySearch } from "@/lib/fuzzySearch";
 import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
+import {
+  fetchProductAttributeRows,
+  fetchProductBrandRows,
+  fetchProductCategoryRows,
+  fetchStoreBrands,
+  fetchStoreCategories,
+  type ProductAttributeRow,
+  type ProductBrandRow,
+  type ProductCategoryRow,
+  type StoreBrand,
+  type StoreCategory,
+} from "@/lib/catalogData";
+import {
+  HIDDEN_ATTR_KEYS,
+  PRICE_RANGES,
+  buildCatalogParams,
+  buildCategoryIndex,
+  catalogCategoryHref,
+  categoryDescendants,
+  categoryPath,
+  computeCatalogFacets,
+  parseCatalogParams,
+  resolveCategory,
+  type CatalogFilterState,
+  type FacetProduct,
+  type SortKey,
+} from "@/lib/catalogFilters";
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Mais relevantes" },
-  { value: "price-asc", label: "Menor preco" },
-  { value: "price-desc", label: "Maior preco" },
+  { value: "price-asc", label: "Menor preço" },
+  { value: "price-desc", label: "Maior preço" },
   { value: "name-asc", label: "A - Z" },
   { value: "name-desc", label: "Z - A" },
 ];
 
-const PRICE_RANGES = [
-  { label: "R$ 0,00 - R$ 25,00", min: 0, max: 25 },
-  { label: "R$ 25,00 - R$ 50,00", min: 25, max: 50 },
-  { label: "R$ 50,00 - R$ 100,00", min: 50, max: 100 },
-  { label: "R$ 100,00 - R$ 200,00", min: 100, max: 200 },
-  { label: "+ R$ 200,00", min: 200, max: Infinity },
-];
-
 const PRODUCTS_PER_PAGE = 24;
 
-const normalizeSlug = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
 
-interface Category { id: string; name: string; slug: string; parent_id: string | null; sort_order: number; }
-interface Brand { id: string; name: string; slug: string; }
+const cloneFilters = (state: CatalogFilterState): CatalogFilterState => ({
+  ...state,
+  brandSlugs: new Set(state.brandSlugs),
+  priceKeys: new Set(state.priceKeys),
+  attrs: Object.fromEntries(Object.entries(state.attrs).map(([key, values]) => [key, new Set(values)])),
+});
+
+const toggleInSet = <T,>(set: Set<T>, item: T) => {
+  if (set.has(item)) set.delete(item); else set.add(item);
+};
+
+const CheckRow = ({ checked, onChange, label, count }: { checked: boolean; onChange: () => void; label: string; count?: number }) => (
+  <label className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 -mx-2 cursor-pointer text-sm transition-colors hover:bg-muted hover:text-primary">
+    <Checkbox checked={checked} onCheckedChange={onChange} />
+    <span className="min-w-0 flex-1 break-words leading-snug">{label}</span>
+    {count !== undefined && <span className="shrink-0 text-muted-foreground text-xs">({count})</span>}
+  </label>
+);
+
 const Catalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedSearch = searchParams.get("busca") || "";
+  // A URL e a fonte da verdade dos filtros; o React so guarda o texto ainda nao enviado da busca.
+  const filters = useMemo(() => parseCatalogParams(searchParams), [searchParams]);
+  const [searchInput, setSearchInput] = useState(filters.search);
+  useEffect(() => setSearchInput(filters.search), [filters.search]);
+
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [bestSellingProducts, setBestSellingProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState(searchParams.get("busca") || "");
-  const [categorySlug, setCategorySlug] = useState(searchParams.get("categoria") || "all");
-  const [categoryId, setCategoryId] = useState<string | null>(searchParams.get("categoria_id"));
-  // multi-select brand slugs and attribute values
-  const [brandSlugs, setBrandSlugs] = useState<Set<string>>(new Set());
-  const [attrValues, setAttrValues] = useState<Record<string, Set<string>>>({});
-  const [priceRangeIdxs, setPriceRangeIdxs] = useState<Set<number>>(new Set());
-  const [sort, setSort] = useState("relevance");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
   const resultsTopRef = useRef<HTMLDivElement>(null);
-  const paginationInitializedRef = useRef(false);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [productCats, setProductCats] = useState<{ shopify_product_id: string; category_id: string }[]>([]);
-  const [productBrands, setProductBrands] = useState<{ shopify_product_id: string; brand_id: string | null }[]>([]);
-  const [productAttrs, setProductAttrs] = useState<{ shopify_product_id: string; attr_key: string; attr_value: string }[]>([]);
+  const [categories, setCategories] = useState<StoreCategory[]>([]);
+  const [brands, setBrands] = useState<StoreBrand[]>([]);
+  const [productCats, setProductCats] = useState<ProductCategoryRow[]>([]);
+  const [productBrands, setProductBrands] = useState<ProductBrandRow[]>([]);
+  const [productAttrs, setProductAttrs] = useState<ProductAttributeRow[]>([]);
   const { isVisibleTo, loading: audienceLoading } = useProductAudience();
   const { isFranchisee, loading: franchiseeLoading } = useIsFranchisee();
   const { blockedVariantIds, loading: saleVisibilityLoading } = useClientSaleVisibility();
@@ -94,129 +116,79 @@ const Catalog = () => {
   const catalogLoading = loading || audienceLoading || franchiseeLoading || variationsLoading || saleVisibilityLoading;
 
   useEffect(() => {
+    let active = true;
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [shop, bestSelling, cats, brs, pc, pcontent, pa] = await Promise.all([
+        const [shop, bestSelling, cats, brs, pc, pb, pa] = await Promise.all([
           fetchAllShopifyProducts(),
           cachedStorefrontApiRequest(BEST_SELLING_PRODUCTS_QUERY, { first: 100 }),
-          supabase.from("categories").select("*").order("sort_order").order("name"),
-          supabase.from("brands").select("*").order("name"),
-          supabase.from("product_categories").select("shopify_product_id, category_id"),
-          supabase.from("product_content").select("shopify_product_id, brand_id"),
-          supabase.from("product_attributes").select("shopify_product_id, attr_key, attr_value"),
+          fetchStoreCategories(),
+          fetchStoreBrands(),
+          fetchProductCategoryRows(),
+          fetchProductBrandRows(),
+          fetchProductAttributeRows(),
         ]);
+        if (!active) return;
         setProducts(shop);
         setBestSellingProducts(bestSelling?.data?.products?.edges || []);
-        // A árvore completa é a fonte dos filtros de navegação. Reduzi-la
-        // pelos vínculos de produtos fazia os filtros raiz (Cachorro e Gato)
-        // desaparecerem em carregamentos parciais ou enquanto os vínculos eram
-        // atualizados. As contagens abaixo continuam considerando apenas produtos
-        // realmente visíveis e vinculados.
-        setCategories((cats.data || []) as Category[]);
-        setBrands((brs.data || []) as Brand[]);
-        setProductCats(pc.data || []);
-        setProductBrands(pcontent.data || []);
-        setProductAttrs(pa.data || []);
+        setCategories(cats);
+        setBrands(brs);
+        setProductCats(pc);
+        setProductBrands(pb);
+        setProductAttrs(pa);
       } catch (error) {
         console.error("Failed to fetch products:", error);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     fetchAll();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  useEffect(() => {
-    const category = searchParams.get("categoria");
-    const categoryParamId = searchParams.get("categoria_id");
-    const pet = searchParams.get("pet");
-
-    if (category) {
-      const matchingCategory =
-        (categoryParamId && categories.find((c) => c.id === categoryParamId)) ||
-        categories.find((c) => c.slug === category);
-      setCategorySlug(matchingCategory?.slug || category);
-      setCategoryId(matchingCategory?.id || categoryParamId);
-    } else if (pet) {
-      const petSlug = normalizeSlug(pet);
-      const matchingCategory = categories.find((c) => normalizeSlug(c.slug) === petSlug || normalizeSlug(c.name) === petSlug);
-      setCategorySlug(matchingCategory?.slug || petSlug);
-      setCategoryId(matchingCategory?.id || null);
-    } else {
-      setCategorySlug("all");
-      setCategoryId(null);
-    }
-
-    setAttrValues((prev) => {
-      if (!prev.Pet) return prev;
-      const next = { ...prev };
-      delete next.Pet;
-      return next;
-    });
-  }, [searchParams, categories]);
-
-  const applySearch = () => {
-    const params: Record<string, string> = {};
-    if (search) params.busca = search;
-    if (categorySlug !== "all") params.categoria = categorySlug;
-    if (categoryId) params.categoria_id = categoryId;
-    setSearchParams(params);
+  /**
+   * Toda mudanca de filtro passa por aqui e vira URL. Refinar volta para a
+   * pagina 1; trocar de categoria, buscar e paginar entram no historico (o
+   * "voltar" desfaz), marcar caixinhas e ordenar so substituem a entrada.
+   */
+  const updateFilters = (
+    change: (draft: CatalogFilterState) => void,
+    { resetPage = true, replace = true }: { resetPage?: boolean; replace?: boolean } = {},
+  ) => {
+    const draft = cloneFilters(filters);
+    change(draft);
+    if (resetPage) draft.page = 1;
+    setSearchParams(buildCatalogParams(draft), { replace });
   };
 
   const clearFilters = () => {
-    setSearch("");
-    setCategorySlug("all");
-    setCategoryId(null);
-    setBrandSlugs(new Set());
-    setAttrValues({});
-    setPriceRangeIdxs(new Set());
-    setSort("relevance");
+    setSearchInput("");
     setSearchParams({});
   };
 
-  const selectedCat = useMemo(
-    () => categories.find((c) => c.id === categoryId) || categories.find((c) => c.slug === categorySlug),
-    [categories, categoryId, categorySlug],
-  );
-  const expandCategoryIds = useCallback((rootId: string): Set<string> => {
-    const ids = new Set<string>([rootId]);
-    let frontier = [rootId];
-    while (frontier.length) {
-      const next: string[] = [];
-      for (const id of frontier) for (const c of categories) if (c.parent_id === id && !ids.has(c.id)) { ids.add(c.id); next.push(c.id); }
-      frontier = next;
-    }
-    return ids;
-  }, [categories]);
-
-  const petCategories = useMemo(
-    () => categories.filter((category) =>
-      category.parent_id === null && ["cachorro", "gato"].includes(normalizeSlug(category.slug)),
-    ),
+  const categoryIndex = useMemo(() => buildCategoryIndex(categories), [categories]);
+  const parentOf = useMemo(
+    () => new Map(categories.map((category) => [category.id, category.parent_id])),
     [categories],
   );
+  const hasCategoryParam = Boolean(filters.categorySlug || filters.categoryId);
+  const selectedCat = useMemo(
+    () => resolveCategory(categories, filters.categorySlug, filters.categoryId),
+    [categories, filters.categorySlug, filters.categoryId],
+  );
+  const selectedPath = useMemo(
+    () => (selectedCat ? categoryPath(categoryIndex, selectedCat.id) : []),
+    [categoryIndex, selectedCat],
+  );
+  const selectCategory = (category: StoreCategory | null) =>
+    updateFilters((draft) => {
+      draft.categorySlug = category?.slug || null;
+      draft.categoryId = category?.id || null;
+    }, { replace: false });
 
-  const selectPetCategory = (category: Category) => {
-    const isSelected = categoryId === category.id;
-    setCategorySlug(isSelected ? "all" : category.slug);
-    setCategoryId(isSelected ? null : category.id);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("pet");
-      next.delete("categoria");
-      next.delete("categoria_id");
-      if (!isSelected) {
-        next.set("categoria", category.slug);
-        next.set("categoria_id", category.id);
-      }
-      return next;
-    });
-  };
-
-  // Counts per filter — based on products that pass all OTHER filters
-  // For simplicity & performance, counts are based on the unfiltered product set.
-  const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
   const productById = useMemo(() => new Map(products.map((p) => [p.node.id, p])), [products]);
   const audienceVisibleProducts = useMemo(() => {
     if (audienceLoading || franchiseeLoading || variationsLoading) return [];
@@ -239,151 +211,121 @@ const Catalog = () => {
     productById,
     blockedVariantIds,
   ]);
-  const hasRequestedSearch = requestedSearch.trim().length > 0;
+  const hasSearch = filters.search.length > 0;
   const discoverableProducts = useMemo(
-    () => hasRequestedSearch
+    () => hasSearch
       ? audienceVisibleProducts
       : audienceVisibleProducts.filter(isProductAvailable),
-    [audienceVisibleProducts, hasRequestedSearch],
-  );
-  const discoverableIds = useMemo(
-    () => new Set(discoverableProducts.map((product) => product.node.id)),
-    [discoverableProducts],
+    [audienceVisibleProducts, hasSearch],
   );
 
-  // Só valores realmente vinculados a produtos aparecem como filtros.
-  const valuesByKey = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const a of productAttrs) {
-      if (!discoverableIds.has(a.shopify_product_id)) continue;
-      if (!map.has(a.attr_key)) map.set(a.attr_key, new Set());
-      map.get(a.attr_key)!.add(a.attr_value);
+  // busca tolerante a erros de digitacao; define o universo sobre o qual os filtros contam
+  const searchedProducts = useMemo(() => {
+    if (!hasSearch) return discoverableProducts;
+    return fuzzySearch(filters.search, discoverableProducts, (p) => [
+      { value: p.node.title, weight: 1 },
+      { value: getVariationGroupName(p.node.id) || "", weight: 1 },
+      ...getVariations(p.node.id)
+        .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
+        .flatMap((item) => [
+          { value: item.label, weight: 1 },
+          { value: item.shopify_product_title, weight: 1 },
+        ]),
+      { value: p.node.vendor, weight: 0.9 },
+      { value: p.node.productType, weight: 0.85 },
+      { value: (p.node.tags || []).join(" "), weight: 0.8 },
+      { value: p.node.description?.slice(0, 300), weight: 0.6 },
+    ]);
+  }, [discoverableProducts, hasSearch, filters.search, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+
+  const facetProducts = useMemo<FacetProduct[]>(() => {
+    const catsByProduct = new Map<string, Set<string>>();
+    for (const row of productCats) {
+      if (!catsByProduct.has(row.shopify_product_id)) catsByProduct.set(row.shopify_product_id, new Set());
+      catsByProduct.get(row.shopify_product_id)!.add(row.category_id);
     }
-    return map;
-  }, [discoverableIds, productAttrs]);
-
-  const customKeys = useMemo(() => {
-    const keys: string[] = [];
-    for (const k of valuesByKey.keys()) {
-      if (!(STANDARD_ATTR_KEYS as readonly string[]).includes(k)) keys.push(k);
+    const brandByProduct = new Map<string, string>();
+    for (const row of productBrands) if (row.brand_id) brandByProduct.set(row.shopify_product_id, row.brand_id);
+    const attrsByProduct = new Map<string, Map<string, Set<string>>>();
+    for (const row of productAttrs) {
+      if (!attrsByProduct.has(row.shopify_product_id)) attrsByProduct.set(row.shopify_product_id, new Map());
+      const attrs = attrsByProduct.get(row.shopify_product_id)!;
+      if (!attrs.has(row.attr_key)) attrs.set(row.attr_key, new Set());
+      attrs.get(row.attr_key)!.add(row.attr_value);
     }
-    return keys.sort();
-  }, [valuesByKey]);
+    return searchedProducts.map((product) => ({
+      id: product.node.id,
+      price: productPrice(product),
+      brandId: brandByProduct.get(product.node.id) || null,
+      categoryIds: catsByProduct.get(product.node.id) || new Set(),
+      attrs: attrsByProduct.get(product.node.id) || new Map(),
+    }));
+  }, [searchedProducts, productCats, productBrands, productAttrs]);
 
-  // count products per brand slug
-  const brandCount = useMemo(() => {
-    const m = new Map<string, number>();
-    const productBrandMap = new Map<string, string>();
-    productBrands.forEach((pb) => { if (pb.brand_id) productBrandMap.set(pb.shopify_product_id, pb.brand_id); });
-    for (const b of brands) {
-      let n = 0;
-      for (const p of discoverableProducts) if (productBrandMap.get(p.node.id) === b.id) n++;
-      m.set(b.slug, n);
-    }
-    return m;
-  }, [brands, productBrands, discoverableProducts]);
-  const visibleBrands = useMemo(
-    () => brands.filter((brand) => (brandCount.get(brand.slug) || 0) > 0),
-    [brands, brandCount],
-  );
+  const brandBySlug = useMemo(() => new Map(brands.map((brand) => [brand.slug, brand])), [brands]);
 
-  const priceCount = useMemo(() => {
-    return PRICE_RANGES.map((r) => discoverableProducts.filter((p) => {
-      const price = productPrice(p);
-      return price >= r.min && price <= r.max;
-    }).length);
-  }, [discoverableProducts]);
-
-  const petCategoryCount = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const category of petCategories) {
-      const allowed = expandCategoryIds(category.id);
-      const productIds = new Set(
-        productCats
-          .filter((item) => allowed.has(item.category_id))
-          .map((item) => item.shopify_product_id),
-      );
-      counts.set(
-        category.id,
-        discoverableProducts.filter((product) => productIds.has(product.node.id)).length,
-      );
-    }
-    return counts;
-  }, [discoverableProducts, expandCategoryIds, petCategories, productCats]);
-
-  const attrCount = (key: string, value: string) =>
-    productAttrs.filter(
-      (a) =>
-        discoverableIds.has(a.shopify_product_id) &&
-        a.attr_key === key &&
-        a.attr_value === value,
-    ).length;
+  const facets = useMemo(() => {
+    const brandIds = new Set<string>();
+    filters.brandSlugs.forEach((slug) => {
+      const brand = brandBySlug.get(slug);
+      // Marca desconhecida na URL nao pode virar "sem filtro": nada casa com ela.
+      brandIds.add(brand?.id || `missing:${slug}`);
+    });
+    return computeCatalogFacets(
+      facetProducts,
+      {
+        // Categoria inexistente na URL mostra zero produtos em vez da loja inteira com o titulo errado.
+        categoryIds: selectedCat
+          ? categoryDescendants(categoryIndex, selectedCat.id)
+          : hasCategoryParam ? new Set() : null,
+        brandIds,
+        priceKeys: filters.priceKeys,
+        attrs: filters.attrs,
+      },
+      parentOf,
+    );
+  }, [facetProducts, filters, brandBySlug, selectedCat, categoryIndex, hasCategoryParam, parentOf]);
 
   const filteredProducts = useMemo(() => {
-    let result = [...discoverableProducts];
-
-    // busca tolerante a erros de digitacao
-    const term = requestedSearch.trim();
-    if (term) {
-      result = fuzzySearch(term, result, (p) => [
-        { value: p.node.title, weight: 1 },
-        { value: getVariationGroupName(p.node.id) || "", weight: 1 },
-        ...getVariations(p.node.id)
-          .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
-          .flatMap((item) => [
-            { value: item.label, weight: 1 },
-            { value: item.shopify_product_title, weight: 1 },
-          ]),
-        { value: p.node.vendor, weight: 0.9 },
-        { value: p.node.productType, weight: 0.85 },
-        { value: (p.node.tags || []).join(" "), weight: 0.8 },
-        { value: p.node.description?.slice(0, 300), weight: 0.6 },
-      ]);
-    }
-
-
-    if (categorySlug !== "all") {
-      if (selectedCat) {
-        const allowed = expandCategoryIds(selectedCat.id);
-        const productIds = new Set(productCats.filter((pc) => allowed.has(pc.category_id)).map((pc) => pc.shopify_product_id));
-        result = result.filter((p) => productIds.has(p.node.id));
-      }
-    }
-
-    if (brandSlugs.size > 0) {
-      const brandIds = new Set(brands.filter((b) => brandSlugs.has(b.slug)).map((b) => b.id));
-      const productIds = new Set(productBrands.filter((pb) => pb.brand_id && brandIds.has(pb.brand_id)).map((pb) => pb.shopify_product_id));
-      result = result.filter((p) => productIds.has(p.node.id));
-    }
-
-    // attribute filters: AND across keys, OR within a key
-    for (const [k, set] of Object.entries(attrValues)) {
-      if (!set || set.size === 0) continue;
-      const productIds = new Set(productAttrs.filter((a) => a.attr_key === k && set.has(a.attr_value)).map((a) => a.shopify_product_id));
-      result = result.filter((p) => productIds.has(p.node.id));
-    }
-
-    // price ranges (OR)
-    if (priceRangeIdxs.size > 0) {
-      result = result.filter((p) => {
-        const price = productPrice(p);
-        for (const idx of priceRangeIdxs) {
-          const r = PRICE_RANGES[idx];
-          if (price >= r.min && price <= r.max) return true;
-        }
-        return false;
-      });
-    }
-
+    const result = searchedProducts.filter((product) => facets.matchingIds.has(product.node.id));
+    const { sort } = filters;
     if (sort === "price-asc") result.sort((a, b) => productPrice(a) - productPrice(b));
     else if (sort === "price-desc") result.sort((a, b) => productPrice(b) - productPrice(a));
     else if (sort === "name-asc") result.sort((a, b) => a.node.title.localeCompare(b.node.title));
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
-
     return result;
-  }, [discoverableProducts, requestedSearch, categorySlug, brandSlugs, attrValues, priceRangeIdxs, sort, selectedCat, productCats, productBrands, productAttrs, brands, expandCategoryIds, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+  }, [searchedProducts, facets, filters]);
+
+  const visibleBrands = useMemo(
+    () => brands.filter((brand) => (facets.brandCounts.get(brand.id) || 0) > 0 || filters.brandSlugs.has(brand.slug)),
+    [brands, facets, filters.brandSlugs],
+  );
+
+  // Atributos padrao primeiro (na ordem do admin), depois os livres em ordem alfabetica.
+  const attrGroups = useMemo(() => {
+    const keys = new Set([...facets.attrCounts.keys(), ...Object.keys(filters.attrs)]);
+    const standard = (STANDARD_ATTR_KEYS as readonly string[]).filter((key) => keys.has(key));
+    const custom = [...keys].filter((key) => !standard.includes(key)).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return [...standard, ...custom]
+      .filter((key) => !HIDDEN_ATTR_KEYS.has(key))
+      .map((key) => {
+        const counts = facets.attrCounts.get(key) || new Map<string, number>();
+        const values = new Set([...counts.keys(), ...(filters.attrs[key] || [])]);
+        return {
+          key,
+          values: [...values]
+            .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }))
+            .map((value) => ({ value, count: counts.get(value) || 0 })),
+        };
+      })
+      .filter((group) => group.values.length > 0);
+  }, [facets, filters.attrs]);
+
+  const visiblePriceRanges = PRICE_RANGES.filter((range) =>
+    (facets.priceCounts.get(range.key) || 0) > 0 || filters.priceKeys.has(range.key));
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const currentPage = Math.min(filters.page, totalPages);
   const paginatedProducts = useMemo(
     () => filteredProducts.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE),
     [filteredProducts, currentPage],
@@ -404,50 +346,23 @@ const Catalog = () => {
     return items;
   }, [currentPage, totalPages]);
 
-  useEffect(() => {
-    if (!paginationInitializedRef.current) {
-      paginationInitializedRef.current = true;
-      return;
-    }
-    setCurrentPage(1);
-  }, [requestedSearch, categorySlug, categoryId, brandSlugs, attrValues, priceRangeIdxs, sort]);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
+  const scrollToResults = () =>
+    requestAnimationFrame(() => resultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
 
   const changePage = (page: number) => {
     const nextPage = Math.min(Math.max(page, 1), totalPages);
     if (nextPage === currentPage) return;
-    setCurrentPage(nextPage);
-    requestAnimationFrame(() => resultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    updateFilters((draft) => { draft.page = nextPage; }, { resetPage: false, replace: false });
+    scrollToResults();
   };
 
-  const totalAttrSelected = Object.values(attrValues).reduce((n, s) => n + (s?.size || 0), 0);
+  const totalAttrSelected = Object.values(filters.attrs).reduce((n, s) => n + s.size, 0);
   const hasRefinementFilters =
-    brandSlugs.size > 0 || totalAttrSelected > 0 || search || priceRangeIdxs.size > 0;
-  const hasActiveFilters =
-    categorySlug !== "all" || brandSlugs.size > 0 || totalAttrSelected > 0 || search ||
-    priceRangeIdxs.size > 0 || sort !== "relevance";
+    filters.brandSlugs.size > 0 || totalAttrSelected > 0 || hasSearch || filters.priceKeys.size > 0;
+  const hasActiveFilters = hasCategoryParam || hasRefinementFilters || filters.sort !== "relevance";
 
-  const toggleSetItem = <T,>(setState: React.Dispatch<React.SetStateAction<Set<T>>>, item: T) =>
-    setState((prev) => {
-      const next = new Set(prev);
-      if (next.has(item)) next.delete(item); else next.add(item);
-      return next;
-    });
-
-  const toggleAttr = (key: string, value: string) =>
-    setAttrValues((prev) => {
-      const next = { ...prev };
-      const cur = new Set(next[key] || []);
-      if (cur.has(value)) cur.delete(value); else cur.add(value);
-      if (cur.size === 0) delete next[key]; else next[key] = cur;
-      return next;
-    });
-
-  const categoryChipLabel = selectedCat?.name || categorySlug;
-  const pageTitle = categorySlug === "all" ? "Catalogo" : categoryChipLabel;
+  const categoryLabel = selectedCat?.name || filters.categorySlug || "";
+  const pageTitle = hasCategoryParam ? categoryLabel : "Catálogo";
   const shelfProducts = useMemo(() => {
     const filteredIds = new Set(filteredProducts.map((product) => product.node.id));
     const usedIds = new Set<string>();
@@ -471,50 +386,83 @@ const Catalog = () => {
   }, [bestSellingProducts, filteredProducts]);
 
   const activeChips: { key: string; label: string; onRemove: () => void }[] = [];
-  if (categorySlug !== "all") {
+  if (hasCategoryParam) {
     activeChips.push({
-      key: `cat-${categoryId || categorySlug}`,
-      label: categoryChipLabel,
-      onRemove: () => {
-        setCategorySlug("all");
-        setCategoryId(null);
-      },
+      key: `cat-${selectedCat?.id || filters.categorySlug}`,
+      label: selectedPath.length > 1 ? selectedPath.map((category) => category.name).join(" › ") : categoryLabel,
+      onRemove: () => selectCategory(null),
     });
   }
-  brandSlugs.forEach((slug) => {
-    const brand = brands.find((b) => b.slug === slug);
-    activeChips.push({ key: `brand-${slug}`, label: brand?.name || slug, onRemove: () => toggleSetItem(setBrandSlugs, slug) });
-  });
-  Object.entries(attrValues).forEach(([key, values]) => {
-    values.forEach((value) => {
-      activeChips.push({ key: `attr-${key}-${value}`, label: `${key}: ${value}`, onRemove: () => toggleAttr(key, value) });
+  filters.brandSlugs.forEach((slug) => {
+    activeChips.push({
+      key: `brand-${slug}`,
+      label: brandBySlug.get(slug)?.name || slug,
+      onRemove: () => updateFilters((draft) => toggleInSet(draft.brandSlugs, slug)),
     });
   });
-  priceRangeIdxs.forEach((idx) => {
-    activeChips.push({ key: `price-${idx}`, label: PRICE_RANGES[idx].label, onRemove: () => toggleSetItem(setPriceRangeIdxs, idx) });
+  Object.entries(filters.attrs).forEach(([key, values]) => {
+    values.forEach((value) => {
+      activeChips.push({
+        key: `attr-${key}-${value}`,
+        label: `${key}: ${value}`,
+        onRemove: () => updateFilters((draft) => toggleAttr(draft, key, value)),
+      });
+    });
   });
-  if (search) {
+  PRICE_RANGES.filter((range) => filters.priceKeys.has(range.key)).forEach((range) => {
+    activeChips.push({
+      key: `price-${range.key}`,
+      label: range.label,
+      onRemove: () => updateFilters((draft) => toggleInSet(draft.priceKeys, range.key)),
+    });
+  });
+  if (hasSearch) {
     activeChips.push({
       key: "search",
-      label: `Busca: "${search}"`,
-      onRemove: () => {
-        setSearch("");
-        setSearchParams(
-          categorySlug !== "all"
-            ? { categoria: categorySlug, ...(categoryId ? { categoria_id: categoryId } : {}) }
-            : {},
-        );
-      },
+      label: `Busca: "${filters.search}"`,
+      onRemove: () => updateFilters((draft) => { draft.search = ""; }, { replace: false }),
     });
   }
 
-  const CheckRow = ({ checked, onChange, label, count }: { checked: boolean; onChange: () => void; label: string; count?: number }) => (
-    <label className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 -mx-2 cursor-pointer text-sm transition-colors hover:bg-muted hover:text-primary">
-      <Checkbox checked={checked} onCheckedChange={onChange} />
-      <span className="min-w-0 flex-1 break-words leading-snug">{label}</span>
-      {count !== undefined && <span className="shrink-0 text-muted-foreground text-xs">({count})</span>}
-    </label>
-  );
+  function toggleAttr(draft: CatalogFilterState, key: string, value: string) {
+    const values = draft.attrs[key] || new Set<string>();
+    toggleInSet(values, value);
+    if (values.size === 0) delete draft.attrs[key]; else draft.attrs[key] = values;
+  }
+
+  // Arvore: raizes sempre; abaixo delas so o ramo da categoria escolhida fica aberto.
+  // Sem categoria escolhida, cada pet ja mostra o primeiro nivel (Ração, Farmácia...).
+  const selectedPathIds = new Set(selectedPath.map((category) => category.id));
+  const renderCategoryNodes = (parentId: string | null, depth: number): ReactElement[] =>
+    (categoryIndex.childrenOf.get(parentId) || [])
+      .filter((category) => (facets.categoryCounts.get(category.id) || 0) > 0 || selectedPathIds.has(category.id))
+      .map((category) => {
+        const isSelected = selectedCat?.id === category.id;
+        const expanded = selectedPathIds.has(category.id) || (depth === 0 && !selectedCat);
+        return (
+          <Fragment key={category.id}>
+            <button
+              type="button"
+              onClick={() => {
+                // Clicar na categoria ja escolhida sobe um nivel.
+                if (!isSelected) selectCategory(category);
+                else selectCategory(category.parent_id ? categoryIndex.byId.get(category.parent_id) || null : null);
+              }}
+              aria-current={isSelected ? "true" : undefined}
+              style={{ paddingLeft: `${depth * 0.875 + 0.5}rem` }}
+              className={`-mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm transition-colors hover:bg-muted hover:text-primary ${
+                isSelected ? "bg-primary/10 font-bold text-primary" : depth === 0 ? "font-semibold" : ""
+              }`}
+            >
+              <span className="min-w-0 flex-1 break-words leading-snug">{category.name}</span>
+              <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                ({facets.categoryCounts.get(category.id) || 0})
+              </span>
+            </button>
+            {expanded && renderCategoryNodes(category.id, depth + 1)}
+          </Fragment>
+        );
+      });
 
   // Sidebar with all filters.
   // "compact" e a versao que vai dentro do sheet no mobile: as secoes nascem fechadas
@@ -542,15 +490,15 @@ const Catalog = () => {
           role="search"
           onSubmit={(event) => {
             event.preventDefault();
-            applySearch();
+            updateFilters((draft) => { draft.search = searchInput.trim(); }, { replace: false });
           }}
         >
           <Input
             type="search"
             enterKeyHint="search"
             placeholder="Buscar..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="rounded-full"
           />
           <Button type="submit" size="sm" className="shrink-0 rounded-full">Pesquisar</Button>
@@ -558,26 +506,32 @@ const Catalog = () => {
       </div>
 
       <Accordion
-        key={loading ? "loading" : "loaded"}
+        // So remonta quando tudo carregou: antes disso os grupos de atributo ainda
+        // nao existem e nasceriam fechados.
+        key={catalogLoading ? "loading" : "loaded"}
         type="multiple"
         defaultValue={
-          compact ? [] : ["pet", "preco", "marca", ...STANDARD_ATTR_KEYS.filter((key) => key !== "Pet"), ...customKeys]
+          compact ? ["categoria"] : ["categoria", "preco", "marca", ...attrGroups.map((group) => group.key)]
         }
         className="border-0"
       >
-        <AccordionItem value="pet" className="border-b border-border last:border-0">
-          <AccordionTrigger className="font-display font-bold text-sm">Pet</AccordionTrigger>
+        <AccordionItem value="categoria" className="border-b border-border last:border-0">
+          <AccordionTrigger className="font-display font-bold text-sm">Categoria</AccordionTrigger>
           <AccordionContent>
-            <div className="space-y-0.5">
-              {petCategories.map((category) => (
-                <CheckRow
-                  key={category.id}
-                  checked={categoryId === category.id}
-                  onChange={() => selectPetCategory(category)}
-                  label={category.name}
-                  count={petCategoryCount.get(category.id)}
-                />
-              ))}
+            <div className="space-y-0.5 overflow-x-hidden px-2">
+              {hasCategoryParam && (
+                <button
+                  type="button"
+                  onClick={() => selectCategory(null)}
+                  className="-mx-2 mb-1 flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:text-primary"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> Todas as categorias
+                </button>
+              )}
+              {renderCategoryNodes(null, 0)}
+              {!loading && facets.categoryCounts.size === 0 && (
+                <p className="text-xs text-muted-foreground py-2">Nenhuma categoria.</p>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -586,13 +540,13 @@ const Catalog = () => {
           <AccordionTrigger className="font-display font-bold text-sm">Faixa de Preço</AccordionTrigger>
           <AccordionContent>
             <div className="space-y-0.5">
-              {PRICE_RANGES.map((r, idx) => (
+              {visiblePriceRanges.map((range) => (
                 <CheckRow
-                  key={idx}
-                  checked={priceRangeIdxs.has(idx)}
-                  onChange={() => toggleSetItem(setPriceRangeIdxs, idx)}
-                  label={r.label}
-                  count={priceCount[idx]}
+                  key={range.key}
+                  checked={filters.priceKeys.has(range.key)}
+                  onChange={() => updateFilters((draft) => toggleInSet(draft.priceKeys, range.key))}
+                  label={range.label}
+                  count={facets.priceCounts.get(range.key) || 0}
                 />
               ))}
             </div>
@@ -607,55 +561,30 @@ const Catalog = () => {
               {visibleBrands.map((b) => (
                 <CheckRow
                   key={b.id}
-                  checked={brandSlugs.has(b.slug)}
-                  onChange={() => toggleSetItem(setBrandSlugs, b.slug)}
+                  checked={filters.brandSlugs.has(b.slug)}
+                  onChange={() => updateFilters((draft) => toggleInSet(draft.brandSlugs, b.slug))}
                   label={b.name}
-                  count={brandCount.get(b.slug)}
+                  count={facets.brandCounts.get(b.id) || 0}
                 />
               ))}
             </div>
           </AccordionContent>
         </AccordionItem>
 
-        {STANDARD_ATTR_KEYS.filter((key) => key !== "Pet").map((key) => {
-          const values = Array.from(valuesByKey.get(key) || []).sort();
-          if (values.length === 0) return null;
-          const selected = attrValues[key] || new Set<string>();
+        {attrGroups.map(({ key, values }) => {
+          const selected = filters.attrs[key] || new Set<string>();
           return (
             <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
               <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-0.5 overflow-x-hidden">
-                  {values.map((v) => (
+                  {values.map(({ value, count }) => (
                     <CheckRow
-                      key={v}
-                      checked={selected.has(v)}
-                      onChange={() => toggleAttr(key, v)}
-                      label={v}
-                      count={attrCount(key, v)}
-                    />
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-
-        {customKeys.map((key) => {
-          const values = Array.from(valuesByKey.get(key) || []).sort();
-          const selected = attrValues[key] || new Set<string>();
-          return (
-            <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
-              <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-0.5 overflow-x-hidden">
-                  {values.map((v) => (
-                    <CheckRow
-                      key={v}
-                      checked={selected.has(v)}
-                      onChange={() => toggleAttr(key, v)}
-                      label={v}
-                      count={attrCount(key, v)}
+                      key={value}
+                      checked={selected.has(value)}
+                      onChange={() => updateFilters((draft) => toggleAttr(draft, key, value))}
+                      label={value}
+                      count={count}
                     />
                   ))}
                 </div>
@@ -682,29 +611,38 @@ const Catalog = () => {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
-                  {categorySlug === "all" ? (
-                    <BreadcrumbPage>Catálogo</BreadcrumbPage>
-                  ) : (
+                  {hasCategoryParam ? (
                     <BreadcrumbLink asChild>
                       <Link to="/catalogo">Catálogo</Link>
                     </BreadcrumbLink>
+                  ) : (
+                    <BreadcrumbPage>Catálogo</BreadcrumbPage>
                   )}
                 </BreadcrumbItem>
-                {categorySlug !== "all" && (
-                  <>
+                {hasCategoryParam && (selectedPath.length ? selectedPath : [null]).map((category, index, path) => (
+                  <Fragment key={category?.id || "unknown"}>
                     <BreadcrumbSeparator />
                     <BreadcrumbItem>
-                      <BreadcrumbPage>{categoryChipLabel}</BreadcrumbPage>
+                      {category && index < path.length - 1 ? (
+                        <BreadcrumbLink asChild>
+                          <Link to={catalogCategoryHref(category)}>{category.name}</Link>
+                        </BreadcrumbLink>
+                      ) : (
+                        <BreadcrumbPage>{category?.name || categoryLabel}</BreadcrumbPage>
+                      )}
                     </BreadcrumbItem>
-                  </>
-                )}
+                  </Fragment>
+                ))}
               </BreadcrumbList>
             </Breadcrumb>
             <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
               <h1 className="font-display font-900 text-3xl text-foreground">{pageTitle}</h1>
               <div className="flex items-center gap-4 self-start md:self-auto">
                 <span className="hidden text-sm font-bold text-foreground sm:inline">Ordenar por:</span>
-                <Select value={sort} onValueChange={setSort}>
+                <Select
+                  value={filters.sort}
+                  onValueChange={(value) => updateFilters((draft) => { draft.sort = value as SortKey; })}
+                >
                   <SelectTrigger className="h-12 w-[180px] rounded-lg border-[#9ca3af] bg-white">
                     <SelectValue />
                   </SelectTrigger>
@@ -726,13 +664,14 @@ const Catalog = () => {
                 <h2 className="font-display text-2xl font-bold">
                   Mais comprados em {pageTitle}
                 </h2>
-                <Link
-                  to="/catalogo"
+                <button
+                  type="button"
+                  onClick={scrollToResults}
                   className="hidden h-12 w-12 items-center justify-center rounded-full border border-border text-foreground shadow-sm transition hover:border-primary hover:text-primary md:flex"
-                  aria-label="Ver mais produtos"
+                  aria-label="Ver todos os produtos"
                 >
                   <ChevronRight className="h-6 w-6" />
-                </Link>
+                </button>
               </div>
               <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
                 {shelfProducts.map((product) => (
@@ -740,14 +679,14 @@ const Catalog = () => {
                     key={`shelf-${product.node.id}`}
                     product={product}
                     products={products}
-                    searchQuery={requestedSearch}
+                    searchQuery={filters.search}
                   />
                 ))}
               </div>
             </section>
           )}
 
-          <div className="grid lg:grid-cols-[220px_1fr] gap-8">
+          <div className="grid lg:grid-cols-[240px_1fr] gap-8">
             <div className="hidden lg:block">{renderFilters()}</div>
 
             <button
@@ -861,7 +800,7 @@ const Catalog = () => {
                       key={product.node.id}
                       product={product}
                       products={products}
-                      searchQuery={requestedSearch}
+                      searchQuery={filters.search}
                     />
                   ))}
                 </div>

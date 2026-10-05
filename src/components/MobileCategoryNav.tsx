@@ -10,14 +10,14 @@ import { isProductAvailable } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchProductCategoryRows, type ProductCategoryRow } from "@/lib/catalogData";
 
 const catalogHref = (slug: string, id: string) => `/catalogo?categoria=${slug}&categoria_id=${id}`;
 
 interface MobileCategoryNavProps {
   items: MegaMenuItem[];
   childrenOf: Map<string, Category[]>;
-  isActive: (slug: string) => boolean;
+  isActive: (id: string) => boolean;
   onNavigate: () => void;
   /**
    * Conteúdo fixo no rodapé do painel. O painel é um portal `fixed inset-0`
@@ -27,18 +27,13 @@ interface MobileCategoryNavProps {
   footer?: ReactNode;
 }
 
-interface ProductCategoryLink {
-  shopify_product_id: string;
-  category_id: string;
-}
-
 /** Menu mobile em tela cheia com pets no topo e categorias ilustradas. */
 export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate, footer }: MobileCategoryNavProps) => {
-  const initialRoot = items.find((item) => isActive(item.slug)) || items[0];
+  const initialRoot = items.find((item) => isActive(item.id)) || items[0];
   const [selectedRootId, setSelectedRootId] = useState(initialRoot?.id || "");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
-  const [productCategories, setProductCategories] = useState<ProductCategoryLink[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategoryRow[]>([]);
   const { blockedVariantIds } = useClientSaleVisibility();
   const { isFranchisee } = useIsFranchisee();
 
@@ -52,11 +47,11 @@ export const MobileCategoryNav = ({ items, childrenOf, isActive, onNavigate, foo
     let active = true;
     Promise.all([
       fetchAllShopifyProducts(),
-      supabase.from("product_categories").select("shopify_product_id, category_id"),
+      fetchProductCategoryRows(),
     ]).then(([shopifyProducts, links]) => {
       if (!active) return;
       setProducts(shopifyProducts);
-      setProductCategories((links.data || []) as ProductCategoryLink[]);
+      setProductCategories(links);
     }).catch(console.error);
     return () => {
       active = false;

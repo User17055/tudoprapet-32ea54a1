@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Cat, Dog } from "lucide-react";
+import { useCategoryTree } from "@/hooks/useCategoryTree";
+import { catalogCategoryHref } from "@/lib/catalogFilters";
 
 const pets = [
   { label: "Cachorro", slug: "cachorro", Icon: Dog },
@@ -8,6 +10,13 @@ const pets = [
 
 export const Categories = () => {
   const navigate = useNavigate();
+  const { rootCats } = useCategoryTree();
+  // Os dois pets aparecem sempre; o ID entra no link quando a categoria ja carregou,
+  // porque o slug sozinho pode existir em mais de um ramo.
+  const petHref = (slug: string) => {
+    const category = rootCats.find((item) => item.slug === slug);
+    return category ? catalogCategoryHref(category) : `/catalogo?categoria=${slug}`;
+  };
 
   return (
     <section className="py-1 md:py-2">
@@ -16,7 +25,7 @@ export const Categories = () => {
           {pets.map((p) => (
             <button
               key={p.slug}
-              onClick={() => navigate(`/catalogo?categoria=${p.slug}`)}
+              onClick={() => navigate(petHref(p.slug))}
               className="group flex flex-col items-center gap-0 rounded-xl transition-transform hover:-translate-y-0.5"
             >
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground md:h-28 md:w-28">

@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { categoriesWithLinkedProducts } from "@/lib/categoryAvailability";
+import { fetchProductCategoryRows, fetchStoreCategories, type StoreCategory } from "@/lib/catalogData";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 
-export interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  parent_id: string | null;
-  sort_order: number;
-}
+export type Category = StoreCategory;
 
 export function useCategoryTree() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -24,14 +18,14 @@ export function useCategoryTree() {
     if (saleLoading || franchiseLoading) return;
     let active = true;
     Promise.all([
-      supabase.from("categories").select("*").order("sort_order").order("name"),
-      supabase.from("product_categories").select("shopify_product_id, category_id"),
+      fetchStoreCategories(),
+      fetchProductCategoryRows(),
       fetchAllShopifyProducts(),
-    ]).then(([categoryResult, linkResult, products]) => {
+    ]).then(([allCategories, links, products]) => {
         if (!active) return;
         setCategories(categoriesWithLinkedProducts(
-          (categoryResult.data || []) as Category[],
-          linkResult.data || [],
+          allCategories,
+          links,
           new Set(products
             .filter((product) => isClientProductVisible(product, blockedVariantIds, isFranchisee))
             .map((product) => product.node.id)),
