@@ -614,20 +614,49 @@ Deno.serve(async (req) => {
       }).eq("id", paymentAttempt.id);
       if (paymentSaveError) throw paymentSaveError;
 
+      // NF-e nunca bloqueia o pedido: só pedido/cobrança Olist e Shopify
+      // interrompem o checkout. Rejeição fiscal vira alerta e reprocessamento.
       olistStage = "invoice";
-      let invoice = session.olist_invoice_id
-        ? {
-          id: String(session.olist_invoice_id),
-          number: String(session.olist_invoice_number || ""),
-          issued: false,
-        }
-        : await generateOlistInvoice(order.id, olistToken);
-      const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
-        olist_invoice_id: invoice.id,
-        olist_invoice_number: invoice.number,
-      }).eq("id", sessionId);
-      if (invoiceSaveError) throw invoiceSaveError;
-      invoice = await issueOlistInvoice(invoice, olistToken);
+      const invoiceOutcome = await issueFranchiseInvoiceSafely({
+        orderId: order.id,
+        token: olistToken,
+        savedInvoice: session.olist_invoice_id
+          ? {
+            id: String(session.olist_invoice_id),
+            number: String(session.olist_invoice_number || ""),
+            issued: false,
+          }
+          : null,
+        onInvoiceGenerated: async (generated) => {
+          const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
+            olist_invoice_id: generated.id,
+            olist_invoice_number: generated.number,
+          }).eq("id", sessionId);
+          if (invoiceSaveError) throw invoiceSaveError;
+        },
+      });
+      const invoice = invoiceOutcome.invoice;
+      if (invoiceOutcome.status === "rejected") {
+        console.warn(`checkout-payment: NF-e da sessão ${sessionId} pendente de correção:`, invoiceOutcome.error);
+        await writeCheckoutAttemptLog(admin, {
+          checkoutSessionId: sessionId,
+          userId: logContext.userId,
+          customerName: customer.name,
+          customerEmail: customer.email,
+          paymentMethod: "terms",
+          stage: "payment",
+          success: false,
+          errorMessage: `Alerta NF-e (pedido seguiu para a Shopify): ${invoiceOutcome.error}`,
+          metadata: {
+            provider: "olist",
+            olistStage: "invoice",
+            alert: "olist_invoice_rejected",
+            blocking: false,
+            olistOrderId: order.id,
+            olistInvoiceId: invoice?.id ?? null,
+          },
+        });
+      }
 
       olistStage = "shopify";
       const shopifyToken = shopifyAdminToken();
