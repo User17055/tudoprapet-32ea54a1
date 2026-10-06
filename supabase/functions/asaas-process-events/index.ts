@@ -136,6 +136,7 @@ async function enqueueCancellationOfOtherAttempts(
   admin: SupabaseClient,
   paid: PaymentRow,
 ) {
+  // leitura-limitada: pagamentos de UMA sessao
   const { data: others, error } = await admin.from("payments")
     .select("id")
     .eq("checkout_session_id", paid.checkout_session_id)

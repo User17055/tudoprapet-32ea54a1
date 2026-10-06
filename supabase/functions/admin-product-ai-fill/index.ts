@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
+import { fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
 
 type InputProduct = {
   id?: string;
@@ -80,9 +81,13 @@ Deno.serve(async (req) => {
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const [categoryResult, brandResult, attributeResult] = await Promise.all([
-    admin.from("categories").select("id,name,parent_id").order("name"),
-    admin.from("brands").select("id,name").order("name"),
-    admin.from("attribute_values").select("attr_key,attr_value").order("attr_key").order("sort_order"),
+    fetchAllRowsResult<{ id: string; name: string; parent_id: string | null }>(admin, "categories", "id,name,parent_id", {
+      orderBy: ["name", "id"],
+    }),
+    fetchAllRowsResult<{ id: string; name: string }>(admin, "brands", "id,name", { orderBy: ["name", "id"] }),
+    fetchAllRowsResult<{ attr_key: string; attr_value: string }>(admin, "attribute_values", "id,attr_key,attr_value", {
+      orderBy: ["attr_key", "sort_order", "id"],
+    }),
   ]);
   const taxonomyError = categoryResult.error || brandResult.error || attributeResult.error;
   if (taxonomyError) {

@@ -212,6 +212,7 @@ async function recoverPaidOrders(
     .map((row: any) => String(row.user_id)))];
   if (userIdsMissingCpf.length) {
     const { data: profiles, error: profilesError } = await adminDb
+      // leitura-limitada: clientes dos ate 100 pedidos da pagina (limit 100 acima)
       .from("checkout_customer_profiles")
       .select("user_id,cpf_cnpj")
       .in("user_id", userIdsMissingCpf);
@@ -224,6 +225,7 @@ async function recoverPaidOrders(
   const sessionIds = (sessions || []).map((row: any) => row.id);
   if (!sessionIds.length) return { recovered: 0, pending: 0, pendingSales: [] };
   const { data: paidPayments, error: paymentsError } = await adminDb
+    // leitura-limitada: pagamentos dos ate 100 pedidos da pagina (limit 100 acima)
     .from("payments")
     .select("id,checkout_session_id,attempt_number,status,provider_payment_id")
     .in("checkout_session_id", sessionIds)
@@ -606,6 +608,7 @@ Deno.serve(async (req) => {
     const paymentBySession = new Map<string, any>();
     if (loggedSessionIds.length) {
       const { data: generatedPayments, error: generatedPaymentsError } = await adminDb
+        // leitura-limitada: pagamentos das ate 100 sessoes do log (limit 100 acima)
         .from("payments")
         .select("checkout_session_id,provider,method,amount,status,provider_payment_id,provider_payment_url,created_at")
         .in("checkout_session_id", loggedSessionIds)

@@ -7,6 +7,7 @@ import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { fetchOlistCostBySku, normalizeSku } from "../_shared/olist.ts";
 import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "../_shared/subscriber-category.ts";
+import { fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
 
 type SyncItem = {
   productId?: string;
@@ -60,9 +61,18 @@ Deno.serve(async (req) => {
   const results: Array<Record<string, unknown>> = [];
   const productIds = [...new Set(items.map((item) => item.productId))];
   const [categoryResult, linkResult, ruleResult] = await Promise.all([
-    admin.from("categories").select("id,name,parent_id"),
-    admin.from("product_categories").select("shopify_product_id,category_id").in("shopify_product_id", productIds),
-    admin.from("subscriber_category_margins").select("category_id,percent"),
+    fetchAllRowsResult<{ id: string; name: string; parent_id: string | null }>(admin, "categories", "id,name,parent_id", {
+      orderBy: "id",
+    }),
+    fetchAllRowsResult<{ shopify_product_id: string; category_id: string }>(
+      admin,
+      "product_categories",
+      "id,shopify_product_id,category_id",
+      { orderBy: "id", filter: (query) => query.in("shopify_product_id", productIds) },
+    ),
+    fetchAllRowsResult<{ category_id: string; percent: number }>(admin, "subscriber_category_margins", "category_id,percent", {
+      orderBy: "category_id",
+    }),
   ]);
   if (categoryResult.error || linkResult.error || ruleResult.error) {
     console.error("[admin-olist-cost-sync] categorias:", categoryResult.error || linkResult.error || ruleResult.error);

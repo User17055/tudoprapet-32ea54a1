@@ -26,7 +26,7 @@
  * REGRA: incremente a cada entrega que mexa em supabase/functions/.
  * `scripts/check-deploy.sh` compara este valor com o que a function publicada devolve.
  */
-export const FUNCTIONS_VERSION = "2026-10-02.1";
+export const FUNCTIONS_VERSION = "2026-10-06.1";
 
 const ALLOWED_HEADERS = [
   // canônicos do SDK

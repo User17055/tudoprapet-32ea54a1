@@ -95,6 +95,7 @@ export async function handleSpecialPriceCheckout(
     }
 
     const { data: customerRows } = await adminClient
+      // leitura-limitada: variantes do carrinho
       .from("customer_prices")
       .select("shopify_variant_id,price")
       .in("shopify_variant_id", variantIds);
@@ -114,6 +115,7 @@ export async function handleSpecialPriceCheckout(
     const costFloorMap = new Map<string, number>();
     if (config.priceTable === "franchise_prices") {
       const { data: costRows } = await adminClient
+        // leitura-limitada: variantes do carrinho
         .from("product_costs")
         .select("shopify_variant_id,cost")
         .in("shopify_variant_id", variantIds);
@@ -134,6 +136,7 @@ export async function handleSpecialPriceCheckout(
     const currentPriceMap = await fetchCurrentVariantPrices(variantIds, storefrontToken);
 
     if (config.priceTable !== "franchise_prices") {
+      // leitura-limitada: variantes do carrinho
       const { data: costRows, error: costError } = await adminClient.from("product_costs")
         .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
       if (costError) throw costError;
