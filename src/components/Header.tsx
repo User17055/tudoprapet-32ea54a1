@@ -10,8 +10,10 @@ import { useCategoryTree } from "@/hooks/useCategoryTree";
 import { buildCategoryIndex, categoryPath, resolveCategory } from "@/lib/catalogFilters";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { searchShopifyProducts, fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
-import { fuzzySearch } from "@/lib/fuzzySearch";
+import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
+import { normalizeText } from "@/lib/fuzzySearch";
+import { productSearchFields, relevantTerms, searchProducts } from "@/lib/productSearch";
+import { fetchProductCategoryRows, fetchStoreCategories } from "@/lib/catalogData";
 import { isAudienceVisibleTo, useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
@@ -37,6 +39,7 @@ const buildSearchSuggestions = (term: string, products: ShopifyProduct[]) => {
   const productWords = products.flatMap((product) =>
     product.node.title.toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]+/gu) || [],
   );
+  const baseTerms = relevantTerms(term);
   const suggestions = [base];
   const fallbackWords = productWords.filter(
     (word) => word.length >= 4 && !["para", "ração", "rações", "adultos"].includes(word),
@@ -46,7 +49,10 @@ const buildSearchSuggestions = (term: string, products: ShopifyProduct[]) => {
     ...priorityWords.filter((item) => productWords.includes(item)),
     ...fallbackWords,
   ]) {
-    if (base.includes(word) || suggestions.some((item) => item.endsWith(` ${word}`))) continue;
+    // "gato" ja digitado nao vira sugestao "gato gatos".
+    const plain = normalizeText(word);
+    if (baseTerms.some((term) => plain.startsWith(term) || term.startsWith(plain))) continue;
+    if (suggestions.some((item) => item.endsWith(` ${word}`))) continue;
     suggestions.push(`${base} ${word}`);
     if (suggestions.length === 3) break;
   }
@@ -119,29 +125,35 @@ export const Header = () => {
 
     const timer = window.setTimeout(async () => {
       try {
-        let products = await searchShopifyProducts(term, 10);
-        if (products.length === 0) {
-          // fallback tolerante a erros de digitacao
-          const all = await fetchAllShopifyProducts();
-          products = fuzzySearch(term, all, (p) => [
-            { value: p.node.title, weight: 1 },
-            { value: p.node.vendor, weight: 0.9 },
-            { value: p.node.productType, weight: 0.85 },
-            { value: (p.node.tags || []).join(" "), weight: 0.8 },
-          ]).slice(0, 10);
-        }
+        // Mesma busca do catalogo, sobre os produtos que este visitante pode ver. Antes a
+        // Shopify devolvia 10 resultados e so depois saiam os exclusivos de franquia (388
+        // de 714), entao a previa ficava vazia com produto certo disponivel.
+        const [all, categories, links] = await Promise.all([
+          fetchAllShopifyProducts(),
+          fetchStoreCategories(),
+          fetchProductCategoryRows(),
+        ]);
         if (cancelled) return;
-
-        const matchingProducts = products
-          .filter((product) =>
-            isAudienceVisibleTo(
-              audienceMap.get(product.node.id) ?? null,
-              isFranchisee,
-            ),
-          )
+        const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
+        const categoryNames = new Map<string, string[]>();
+        for (const row of links) {
+          const name = categoryNameById.get(row.category_id);
+          if (!name) continue;
+          if (!categoryNames.has(row.shopify_product_id)) categoryNames.set(row.shopify_product_id, []);
+          categoryNames.get(row.shopify_product_id)!.push(name);
+        }
+        const visible = all
+          .filter((product) => isAudienceVisibleTo(audienceMap.get(product.node.id) ?? null, isFranchisee))
           .filter(isProductAvailable)
-          .filter((product) => isClientProductVisible(product, blockedVariantIds, isFranchisee))
-          .slice(0, 6);
+          .filter((product) => isClientProductVisible(product, blockedVariantIds, isFranchisee));
+        const matchingProducts = searchProducts(term, visible, (p) => productSearchFields({
+          title: p.node.title,
+          vendor: p.node.vendor,
+          productType: p.node.productType,
+          tags: p.node.tags,
+          description: p.node.description,
+          categoryNames: categoryNames.get(p.node.id),
+        })).slice(0, 6);
 
         setSearchResults(matchingProducts);
       } catch (error) {

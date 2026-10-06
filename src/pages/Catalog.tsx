@@ -20,12 +20,18 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
-import { fuzzySearch } from "@/lib/fuzzySearch";
+import {
+  buildSearchVocabulary,
+  productSearchFields,
+  searchProducts,
+  suggestSearchCorrection,
+  type SearchField,
+} from "@/lib/productSearch";
 import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
+import { normalizeText } from "@/lib/fuzzySearch";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 import {
@@ -43,6 +49,7 @@ import {
 import {
   HIDDEN_ATTR_KEYS,
   PRICE_RANGES,
+  attrLabel,
   buildCatalogParams,
   buildCategoryIndex,
   catalogCategoryHref,
@@ -50,7 +57,11 @@ import {
   categoryPath,
   computeCatalogFacets,
   parseCatalogParams,
+  parsePriceInput,
+  priceBoundsLabel,
   resolveCategory,
+  sortAttrKeys,
+  sortAttrValues,
   type CatalogFilterState,
   type FacetProduct,
   type SortKey,
@@ -58,6 +69,7 @@ import {
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "relevance", label: "Mais relevantes" },
+  { value: "best-selling", label: "Mais vendidos" },
   { value: "price-asc", label: "Menor preço" },
   { value: "price-desc", label: "Maior preço" },
   { value: "name-asc", label: "A - Z" },
@@ -65,6 +77,10 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 ];
 
 const PRODUCTS_PER_PAGE = 24;
+// Acima disso a lista de marcas ganha campo de busca e mostra so as maiores.
+const BRANDS_COLLAPSED = 8;
+
+const priceInputText = (value: number | null) => (value === null ? "" : String(value).replace(".", ","));
 
 const productPrice = (p: ShopifyProduct) => parseFloat(p.node.priceRange.minVariantPrice.amount);
 
@@ -98,6 +114,13 @@ const Catalog = () => {
   const [bestSellingProducts, setBestSellingProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [brandQuery, setBrandQuery] = useState("");
+  const [showAllBrands, setShowAllBrands] = useState(false);
+  // Texto dos campos de preco; so vira filtro ao aplicar.
+  const [priceMinInput, setPriceMinInput] = useState(priceInputText(filters.priceMin));
+  const [priceMaxInput, setPriceMaxInput] = useState(priceInputText(filters.priceMax));
+  useEffect(() => setPriceMinInput(priceInputText(filters.priceMin)), [filters.priceMin]);
+  useEffect(() => setPriceMaxInput(priceInputText(filters.priceMax)), [filters.priceMax]);
   const resultsTopRef = useRef<HTMLDivElement>(null);
 
   const [categories, setCategories] = useState<StoreCategory[]>([]);
@@ -219,24 +242,43 @@ const Catalog = () => {
     [audienceVisibleProducts, hasSearch],
   );
 
-  // busca tolerante a erros de digitacao; define o universo sobre o qual os filtros contam
+  // Campos da busca por produto: os mesmos da barra do topo, mais as categorias e as
+  // variacoes visiveis, que so o catalogo carrega.
+  const searchFieldsById = useMemo(() => {
+    const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
+    const categoryNames = new Map<string, string[]>();
+    for (const row of productCats) {
+      const name = categoryNameById.get(row.category_id);
+      if (!name) continue;
+      if (!categoryNames.has(row.shopify_product_id)) categoryNames.set(row.shopify_product_id, []);
+      categoryNames.get(row.shopify_product_id)!.push(name);
+    }
+    return new Map<string, SearchField[]>(discoverableProducts.map((p) => [p.node.id, productSearchFields({
+      title: p.node.title,
+      vendor: p.node.vendor,
+      productType: p.node.productType,
+      tags: p.node.tags,
+      description: p.node.description,
+      categoryNames: categoryNames.get(p.node.id),
+      variationGroupName: getVariationGroupName(p.node.id),
+      variationTexts: getVariations(p.node.id)
+        .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
+        .flatMap((item) => [item.label, item.shopify_product_title]),
+    })]));
+  }, [discoverableProducts, categories, productCats, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+
+  // Toda palavra digitada precisa casar; define o universo sobre o qual os filtros contam.
+  // Na relevancia, o que esta em estoque vem antes do esgotado, mantendo a ordem da busca.
   const searchedProducts = useMemo(() => {
     if (!hasSearch) return discoverableProducts;
-    return fuzzySearch(filters.search, discoverableProducts, (p) => [
-      { value: p.node.title, weight: 1 },
-      { value: getVariationGroupName(p.node.id) || "", weight: 1 },
-      ...getVariations(p.node.id)
-        .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
-        .flatMap((item) => [
-          { value: item.label, weight: 1 },
-          { value: item.shopify_product_title, weight: 1 },
-        ]),
-      { value: p.node.vendor, weight: 0.9 },
-      { value: p.node.productType, weight: 0.85 },
-      { value: (p.node.tags || []).join(" "), weight: 0.8 },
-      { value: p.node.description?.slice(0, 300), weight: 0.6 },
-    ]);
-  }, [discoverableProducts, hasSearch, filters.search, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+    const ranked = searchProducts(filters.search, discoverableProducts, (p) => searchFieldsById.get(p.node.id) || []);
+    return [...ranked.filter(isProductAvailable), ...ranked.filter((p) => !isProductAvailable(p))];
+  }, [discoverableProducts, hasSearch, filters.search, searchFieldsById]);
+
+  const searchSuggestion = useMemo(() => {
+    if (!hasSearch || searchedProducts.length > 0) return null;
+    return suggestSearchCorrection(filters.search, buildSearchVocabulary(searchFieldsById.values()));
+  }, [hasSearch, searchedProducts.length, filters.search, searchFieldsById]);
 
   const facetProducts = useMemo<FacetProduct[]>(() => {
     const catsByProduct = new Map<string, Set<string>>();
@@ -280,6 +322,8 @@ const Catalog = () => {
           : hasCategoryParam ? new Set() : null,
         brandIds,
         priceKeys: filters.priceKeys,
+        priceMin: filters.priceMin,
+        priceMax: filters.priceMax,
         attrs: filters.attrs,
       },
       parentOf,
@@ -289,37 +333,58 @@ const Catalog = () => {
   const filteredProducts = useMemo(() => {
     const result = searchedProducts.filter((product) => facets.matchingIds.has(product.node.id));
     const { sort } = filters;
-    if (sort === "price-asc") result.sort((a, b) => productPrice(a) - productPrice(b));
+    if (sort === "best-selling") {
+      // Ordem da Shopify (100 mais vendidos); o resto segue na ordem em que ja estava.
+      const rank = new Map(bestSellingProducts.map((product, index) => [product.node.id, index]));
+      const position = new Map(result.map((product, index) => [product.node.id, index]));
+      result.sort((a, b) =>
+        (rank.get(a.node.id) ?? Infinity) - (rank.get(b.node.id) ?? Infinity)
+        || position.get(a.node.id)! - position.get(b.node.id)!);
+    } else if (sort === "price-asc") result.sort((a, b) => productPrice(a) - productPrice(b));
     else if (sort === "price-desc") result.sort((a, b) => productPrice(b) - productPrice(a));
     else if (sort === "name-asc") result.sort((a, b) => a.node.title.localeCompare(b.node.title));
     else if (sort === "name-desc") result.sort((a, b) => b.node.title.localeCompare(a.node.title));
     return result;
-  }, [searchedProducts, facets, filters]);
+  }, [searchedProducts, facets, filters, bestSellingProducts]);
 
   const visibleBrands = useMemo(
     () => brands.filter((brand) => (facets.brandCounts.get(brand.id) || 0) > 0 || filters.brandSlugs.has(brand.slug)),
     [brands, facets, filters.brandSlugs],
   );
 
-  // Atributos padrao primeiro (na ordem do admin), depois os livres em ordem alfabetica.
+  // Grupos na ordem e com o nome de exibicao de `catalogFilters`; valores em ordem natural.
   const attrGroups = useMemo(() => {
     const keys = new Set([...facets.attrCounts.keys(), ...Object.keys(filters.attrs)]);
-    const standard = (STANDARD_ATTR_KEYS as readonly string[]).filter((key) => keys.has(key));
-    const custom = [...keys].filter((key) => !standard.includes(key)).sort((a, b) => a.localeCompare(b, "pt-BR"));
-    return [...standard, ...custom]
-      .filter((key) => !HIDDEN_ATTR_KEYS.has(key))
+    return sortAttrKeys([...keys].filter((key) => !HIDDEN_ATTR_KEYS.has(key)))
       .map((key) => {
         const counts = facets.attrCounts.get(key) || new Map<string, number>();
         const values = new Set([...counts.keys(), ...(filters.attrs[key] || [])]);
         return {
           key,
-          values: [...values]
-            .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }))
-            .map((value) => ({ value, count: counts.get(value) || 0 })),
+          label: attrLabel(key),
+          values: sortAttrValues(key, values).map((value) => ({ value, count: counts.get(value) || 0 })),
         };
       })
       .filter((group) => group.values.length > 0);
   }, [facets, filters.attrs]);
+
+  // Marcas: as que tem mais produtos primeiro; as marcadas nunca somem da lista.
+  const brandQueryNormalized = normalizeText(brandQuery);
+  const brandsByCount = [...visibleBrands].sort((a, b) =>
+    (facets.brandCounts.get(b.id) || 0) - (facets.brandCounts.get(a.id) || 0) || a.name.localeCompare(b.name, "pt-BR"));
+  const brandsShown = brandQueryNormalized
+    ? brandsByCount.filter((brand) => normalizeText(brand.name).includes(brandQueryNormalized))
+    : showAllBrands || brandsByCount.length <= BRANDS_COLLAPSED
+    ? brandsByCount
+    : brandsByCount.filter((brand, index) => index < BRANDS_COLLAPSED || filters.brandSlugs.has(brand.slug));
+
+  const applyPriceBounds = () => updateFilters((draft) => {
+    const min = parsePriceInput(priceMinInput);
+    const max = parsePriceInput(priceMaxInput);
+    const [low, high] = min !== null && max !== null && min > max ? [max, min] : [min, max];
+    draft.priceMin = low;
+    draft.priceMax = high;
+  });
 
   const visiblePriceRanges = PRICE_RANGES.filter((range) =>
     (facets.priceCounts.get(range.key) || 0) > 0 || filters.priceKeys.has(range.key));
@@ -357,8 +422,9 @@ const Catalog = () => {
   };
 
   const totalAttrSelected = Object.values(filters.attrs).reduce((n, s) => n + s.size, 0);
-  const hasRefinementFilters =
-    filters.brandSlugs.size > 0 || totalAttrSelected > 0 || hasSearch || filters.priceKeys.size > 0;
+  const hasPriceBounds = filters.priceMin !== null || filters.priceMax !== null;
+  const hasRefinementFilters = filters.brandSlugs.size > 0 || totalAttrSelected > 0 || hasSearch
+    || filters.priceKeys.size > 0 || hasPriceBounds;
   const hasActiveFilters = hasCategoryParam || hasRefinementFilters || filters.sort !== "relevance";
 
   const categoryLabel = selectedCat?.name || filters.categorySlug || "";
@@ -404,7 +470,7 @@ const Catalog = () => {
     values.forEach((value) => {
       activeChips.push({
         key: `attr-${key}-${value}`,
-        label: `${key}: ${value}`,
+        label: `${attrLabel(key)}: ${value}`,
         onRemove: () => updateFilters((draft) => toggleAttr(draft, key, value)),
       });
     });
@@ -416,6 +482,13 @@ const Catalog = () => {
       onRemove: () => updateFilters((draft) => toggleInSet(draft.priceKeys, range.key)),
     });
   });
+  if (hasPriceBounds) {
+    activeChips.push({
+      key: "price-bounds",
+      label: priceBoundsLabel(filters.priceMin, filters.priceMax)!,
+      onRemove: () => updateFilters((draft) => { draft.priceMin = null; draft.priceMax = null; }),
+    });
+  }
   if (hasSearch) {
     activeChips.push({
       key: "search",
@@ -549,6 +622,37 @@ const Catalog = () => {
                   count={facets.priceCounts.get(range.key) || 0}
                 />
               ))}
+              <form
+                className="flex items-end gap-2 pt-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  applyPriceBounds();
+                }}
+              >
+                <label className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  Mínimo
+                  <Input
+                    inputMode="decimal"
+                    placeholder="R$ 0"
+                    value={priceMinInput}
+                    onChange={(event) => setPriceMinInput(event.target.value)}
+                    className="mt-1 h-9 px-2"
+                  />
+                </label>
+                <label className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  Máximo
+                  <Input
+                    inputMode="decimal"
+                    placeholder="R$ 500"
+                    value={priceMaxInput}
+                    onChange={(event) => setPriceMaxInput(event.target.value)}
+                    className="mt-1 h-9 px-2"
+                  />
+                </label>
+                <Button type="submit" size="sm" variant="outline" className="h-9 shrink-0" aria-label="Aplicar faixa de preço">
+                  OK
+                </Button>
+              </form>
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -558,7 +662,20 @@ const Catalog = () => {
           <AccordionContent>
             <div className="space-y-0.5 overflow-x-hidden">
               {visibleBrands.length === 0 && <p className="text-xs text-muted-foreground py-2">Nenhuma marca.</p>}
-              {visibleBrands.map((b) => (
+              {visibleBrands.length > BRANDS_COLLAPSED && (
+                <Input
+                  type="search"
+                  placeholder="Buscar marca"
+                  value={brandQuery}
+                  onChange={(event) => setBrandQuery(event.target.value)}
+                  className="mb-2 h-9"
+                  aria-label="Buscar marca"
+                />
+              )}
+              {brandQuery && brandsShown.length === 0 && (
+                <p className="text-xs text-muted-foreground py-2">Nenhuma marca com esse nome.</p>
+              )}
+              {brandsShown.map((b) => (
                 <CheckRow
                   key={b.id}
                   checked={filters.brandSlugs.has(b.slug)}
@@ -567,15 +684,24 @@ const Catalog = () => {
                   count={facets.brandCounts.get(b.id) || 0}
                 />
               ))}
+              {!brandQuery && visibleBrands.length > BRANDS_COLLAPSED && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllBrands((value) => !value)}
+                  className="pt-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  {showAllBrands ? "Ver menos" : `Ver todas (${visibleBrands.length})`}
+                </button>
+              )}
             </div>
           </AccordionContent>
         </AccordionItem>
 
-        {attrGroups.map(({ key, values }) => {
+        {attrGroups.map(({ key, label, values }) => {
           const selected = filters.attrs[key] || new Set<string>();
           return (
             <AccordionItem key={key} value={key} className="border-b border-border last:border-0">
-              <AccordionTrigger className="font-display font-bold text-sm">{key}</AccordionTrigger>
+              <AccordionTrigger className="font-display font-bold text-sm">{label}</AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-0.5 overflow-x-hidden">
                   {values.map(({ value, count }) => (
@@ -787,8 +913,40 @@ const Catalog = () => {
               ) : filteredProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <PackageOpen className="h-16 w-16 text-muted-foreground mb-4" />
-                  <h3 className="font-display font-bold text-xl mb-2">Nenhum produto encontrado</h3>
-                  <p className="text-muted-foreground max-w-md">Tente ajustar os filtros ou buscar por outro termo.</p>
+                  <h3 className="font-display font-bold text-xl mb-2">
+                    {hasSearch ? `Nenhum resultado para "${filters.search}"` : "Nenhum produto encontrado"}
+                  </h3>
+                  {searchSuggestion ? (
+                    <p className="text-muted-foreground max-w-md">
+                      Você quis dizer{" "}
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => updateFilters((draft) => { draft.search = searchSuggestion; }, { replace: false })}
+                      >
+                        {searchSuggestion}
+                      </button>
+                      ?
+                    </p>
+                  ) : hasSearch && searchedProducts.length > 0 ? (
+                    // A busca acha produtos, mas os filtros marcados escondem todos.
+                    <p className="text-muted-foreground max-w-md">
+                      A busca encontrou {searchedProducts.length} {searchedProducts.length === 1 ? "produto" : "produtos"}, mas nenhum passa pelos filtros marcados.{" "}
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => setSearchParams(buildCatalogParams({ ...parseCatalogParams(new URLSearchParams()), search: filters.search }))}
+                      >
+                        Ver todos
+                      </button>
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground max-w-md">
+                      {hasSearch
+                        ? "Confira a ortografia ou use menos palavras, como o nome da marca ou do produto."
+                        : "Tente ajustar os filtros."}
+                    </p>
+                  )}
                   {hasActiveFilters && (
                     <Button variant="outline" className="mt-4" onClick={clearFilters}>Limpar filtros</Button>
                   )}

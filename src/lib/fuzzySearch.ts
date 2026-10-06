@@ -16,7 +16,7 @@ const tokenize = (value: string) => normalizeText(value).match(/[a-z0-9]+/g) || 
 
 const STOP_WORDS = new Set(["para", "de", "da", "do", "com", "e", "a", "o", "em", "por"]);
 
-function levenshtein(a: string, b: string): number {
+export function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   if (!a.length) return b.length;
   if (!b.length) return a.length;
@@ -36,7 +36,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 /** Tolerancia de erros de acordo com o tamanho da palavra. */
-const allowedDistance = (word: string) => {
+export const allowedDistance = (word: string) => {
   if (word.length <= 3) return 0;
   if (word.length <= 5) return 1;
   if (word.length <= 8) return 2;
