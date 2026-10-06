@@ -68,4 +68,4 @@ A migration agenda a conciliação a cada 10 minutos. Ela precisa encontrar o se
 
 ## Comportamento em falhas
 
-Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a Shopify falhar no meio do processo, uma nova tentativa retoma os registros existentes em vez de gerar uma duplicidade. O checkout só informa sucesso depois de confirmar que a NF-e foi autorizada.
+Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a Shopify falhar no meio do processo, uma nova tentativa retoma os registros existentes em vez de gerar uma duplicidade. Depois que a Olist aceita a solicitação de emissão, o pedido é concluído na Shopify mesmo que a NF-e ainda esteja pendente de autorização pela SEFAZ. Uma recusa real da solicitação de emissão continua interrompendo o fluxo.

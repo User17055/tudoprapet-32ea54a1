@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireUser } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { hasSufficientInventory } from "../_shared/inventory.ts";
+import { hasSufficientFranchiseInventory } from "../_shared/inventory.ts";
 import {
   deleteDraftOrder,
   fetchVariantCheckoutDetails,
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
         availableForSale: detail.availableForSale || ownReservation > 0,
         quantityAvailable: detail.quantityAvailable === null ? null : detail.quantityAvailable + ownReservation,
       };
-      if (!hasSufficientInventory(adjusted, item.quantity)) {
+      if (!hasSufficientFranchiseInventory(adjusted, item.quantity)) {
         return errorResponse(`Estoque insuficiente para ${detail.productTitle}`, 409);
       }
     }

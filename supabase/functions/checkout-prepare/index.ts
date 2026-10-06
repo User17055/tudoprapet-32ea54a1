@@ -30,7 +30,7 @@ import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
-import { hasSufficientInventory } from "../_shared/inventory.ts";
+import { hasSufficientFranchiseInventory, hasSufficientInventory } from "../_shared/inventory.ts";
 import {
   commissionForLine,
   type CommissionRule,
@@ -323,7 +323,10 @@ Deno.serve(async (req) => {
         });
         return false;
       }
-      if (!hasSufficientInventory(detail, item.quantity)) {
+      const hasInventory = customerType === "franchise"
+        ? hasSufficientFranchiseInventory(detail, item.quantity)
+        : hasSufficientInventory(detail, item.quantity);
+      if (!hasInventory) {
         unavailableItems.push({
           variantId: item.variantId,
           productTitle: detail.productTitle,

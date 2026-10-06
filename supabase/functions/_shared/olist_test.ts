@@ -3,6 +3,7 @@ import {
   buildOlistFranchiseOrder,
   buildOlistReceivable,
   findExactOlistCost,
+  issueOlistInvoice,
   normalizeOlistId,
   normalizeSku,
   roundMoney,
@@ -18,6 +19,38 @@ Deno.test("nao trata o identificador zero da Olist como nota fiscal existente", 
   assertEquals(normalizeOlistId(0), null);
   assertEquals(normalizeOlistId("000"), null);
   assertEquals(normalizeOlistId(" 123 "), "123");
+});
+
+Deno.test("permite seguir com o pedido quando a emissao da nota foi aceita e segue pendente", async () => {
+  const originalFetch = globalThis.fetch;
+  const responses = [
+    { retorno: { nota_fiscal: { id: 321, numero: 42, situacao: "Pendente" } } },
+    { retorno: { status: "OK", nota_fiscal: { id: 321 } } },
+    { retorno: { nota_fiscal: { id: 321, numero: 42, situacao: "Pendente" } } },
+  ];
+  globalThis.fetch = (() =>
+    Promise.resolve(new Response(JSON.stringify(responses.shift()), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))) as typeof fetch;
+
+  try {
+    const invoice = await issueOlistInvoice(
+      { id: "321", number: "42", issued: false },
+      "token-test",
+    );
+    assertEquals(invoice, {
+      id: "321",
+      number: "42",
+      series: undefined,
+      issued: false,
+      accessKey: null,
+      accessUrl: null,
+    });
+    assertEquals(responses.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 Deno.test("seleciona somente o codigo exato e calcula centavos", () => {
