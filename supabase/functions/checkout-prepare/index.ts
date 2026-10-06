@@ -37,6 +37,7 @@ import {
   selectCommissionRule,
 } from "../_shared/commission.ts";
 import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
+import { franchiseOrderFingerprint } from "../_shared/franchise-order-dedup.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -92,6 +93,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
+  let dedupAdmin: any = null;
+  let dedupUserId: string | null = null;
+  let dedupFingerprint: string | null = null;
+  let keepDedupLock = false;
   try {
     const auth = await optionalCheckoutUser(req);
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
@@ -114,6 +119,7 @@ Deno.serve(async (req) => {
     // lá, o checkout existente continua sendo o fallback seguro para envio.
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+    dedupAdmin = admin;
     const { error: rateError } = await admin.rpc("consume_checkout_rate_limit", {
       p_key_hash: await requestKey(req, auth.user?.id ?? null),
       p_limit: 8,
@@ -589,6 +595,30 @@ Deno.serve(async (req) => {
     if (total < MIN_CHARGE_VALUE) {
       return errorResponse(belowMinimumChargeMessage(total), 422);
     }
+    if (customerType === "franchise" && auth.user) {
+      dedupUserId = auth.user.id;
+      dedupFingerprint = await franchiseOrderFingerprint(
+        auth.user.id,
+        input.items,
+        shippingCode,
+        input.invoicePurpose || "",
+      );
+      const { data: claimed, error: claimError } = await admin.rpc(
+        "claim_franchise_order_submission",
+        {
+          p_user_id: dedupUserId,
+          p_fingerprint: dedupFingerprint,
+          p_window_seconds: 60 * 60,
+        },
+      );
+      if (claimError) throw claimError;
+      if (claimed !== true) {
+        return errorResponse(
+          "Este mesmo pedido já está sendo processado ou foi enviado há menos de 1 hora.",
+          409,
+        );
+      }
+    }
     const accessToken = newCheckoutAccessToken();
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);
     const tokenExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
@@ -760,6 +790,13 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
+      if (dedupUserId && dedupFingerprint) {
+        await admin.rpc("release_franchise_order_submission", {
+          p_user_id: dedupUserId,
+          p_fingerprint: dedupFingerprint,
+        });
+        dedupFingerprint = null;
+      }
       return errorResponse(customerFacingDraftError(userErrors, draft.error), 502);
     }
 
@@ -795,7 +832,22 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
+      if (dedupUserId && dedupFingerprint) {
+        await admin.rpc("release_franchise_order_submission", {
+          p_user_id: dedupUserId,
+          p_fingerprint: dedupFingerprint,
+        });
+        dedupFingerprint = null;
+      }
       return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
+    }
+    keepDedupLock = Boolean(dedupUserId && dedupFingerprint);
+    if (keepDedupLock) {
+      const { error: linkError } = await admin.from("franchise_order_submission_locks")
+        .update({ checkout_session_id: session.id, updated_at: new Date().toISOString() })
+        .eq("user_id", dedupUserId!)
+        .eq("fingerprint", dedupFingerprint!);
+      if (linkError) console.error("Falha ao vincular trava de pedido duplicado:", linkError);
     }
     if (!draft.taxCredentialStored) {
       console.warn(
@@ -855,6 +907,13 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
+    if (dedupAdmin && dedupUserId && dedupFingerprint && !keepDedupLock) {
+      const { error: releaseError } = await dedupAdmin.rpc("release_franchise_order_submission", {
+        p_user_id: dedupUserId,
+        p_fingerprint: dedupFingerprint,
+      });
+      if (releaseError) console.error("Falha ao liberar trava de pedido duplicado:", releaseError);
+    }
     console.error("checkout-prepare:", error);
     return errorResponse("Não foi possível preparar o checkout", 500);
   }
