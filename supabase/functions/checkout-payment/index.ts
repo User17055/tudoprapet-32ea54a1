@@ -30,9 +30,8 @@ import { taxCredentialGapMessage, writeCheckoutAttemptLog } from "../_shared/che
 import {
   createOlistFranchiseOrder,
   ensureOlistOrderReceivable,
-  generateOlistInvoice,
   getOlistReceivable,
-  issueOlistInvoice,
+  issueFranchiseInvoiceSafely,
   type OlistFranchiseOrderInput,
 } from "../_shared/olist.ts";
 import {
@@ -675,8 +674,10 @@ Deno.serve(async (req) => {
       const { error: completedSaveError } = await admin.from("checkout_sessions").update({
         status: "credit_approved",
         shopify_order_id: completed.orderId,
-        olist_invoice_number: invoice.number,
-        olist_invoice_url: invoice.accessUrl || null,
+        olist_invoice_status: invoiceOutcome.status,
+        olist_invoice_checked_at: new Date().toISOString(),
+        ...(invoice?.number ? { olist_invoice_number: invoice.number } : {}),
+        ...(invoice?.accessUrl ? { olist_invoice_url: invoice.accessUrl } : {}),
       }).eq("id", sessionId);
       if (completedSaveError) throw completedSaveError;
       await writeCheckoutAttemptLog(admin, {
@@ -691,7 +692,8 @@ Deno.serve(async (req) => {
         metadata: {
           provider: "olist",
           olistOrderId: order.id,
-          olistInvoiceId: invoice.id,
+          olistInvoiceId: invoice?.id ?? null,
+          invoiceStatus: invoiceOutcome.status,
           dueDate,
           paymentTermDays: termDays,
           paymentScheduleType,
