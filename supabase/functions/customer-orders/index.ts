@@ -45,15 +45,23 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: linkedSessions, error: linkedError } = await admin
       .from("checkout_sessions")
-      .select("shopify_order_id")
+      .select("shopify_order_id, customer_type, status")
       .eq("user_id", user.id)
       .not("shopify_order_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(250);
     if (linkedError) throw linkedError;
+    const numericOrderId = (value: unknown) =>
+      String(value || "").split("/").pop()?.replace(/\D/g, "") || "";
     const linkedOrderIds = [...new Set((linkedSessions ?? [])
-      .map((row) => String(row.shopify_order_id || "").split("/").pop()?.replace(/\D/g, "") || "")
+      .map((row) => numericOrderId(row.shopify_order_id))
       .filter(Boolean))];
+    // Pedidos de franquia sao concluidos com pagamento pendente (boleto/Pix a prazo).
+    // So esses, vinculados por sessao aprovada, podem aparecer pendentes.
+    const franchisePendingAllowed = new Set((linkedSessions ?? [])
+      .filter((row) => row.customer_type === "franchise" && row.status === "credit_approved")
+      .map((row) => numericOrderId(row.shopify_order_id))
+      .filter(Boolean));
 
     const emailOrdersUrl = `https://${shopDomain}/admin/api/2025-07/orders.json?email=${encodeURIComponent(
       user.email
@@ -97,10 +105,10 @@ Deno.serve(async (req) => {
     // Only show orders that were actually completed (paid/partially paid).
     // Exclude cancelled, refunded, pending and unpaid orders entirely.
     const validatedRaw = rawOrders.filter((o: any) => {
+      if (o.cancelled_at) return false;
       const fs = (o.financial_status || "").toLowerCase();
-      const validFinancial = ["paid", "partially_paid"].includes(fs);
-      const wasCancelled = !!o.cancelled_at;
-      return validFinancial && !wasCancelled;
+      if (["paid", "partially_paid"].includes(fs)) return true;
+      return ["pending", "authorized"].includes(fs) && franchisePendingAllowed.has(String(o.id));
     });
 
 
