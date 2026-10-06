@@ -92,3 +92,35 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   assertEquals(receivable.conta.cliente.ie, "123456789");
   assertEquals(receivable.conta.vencimento, "02/10/2026");
 });
+
+Deno.test("emissao aceita pela Olist mas pendente na SEFAZ nao interrompe o fluxo", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input: Request | URL | string) => {
+    const url = String(input);
+    if (url.includes("nota.fiscal.emitir.php")) {
+      return Promise.resolve(new Response(JSON.stringify({
+        retorno: { status: "OK", nota_fiscal: { id: "555" } },
+      })));
+    }
+    if (url.includes("nota.fiscal.obter.php")) {
+      // Nota ainda sem chave de acesso: pendente na SEFAZ.
+      return Promise.resolve(new Response(JSON.stringify({
+        retorno: {
+          status: "OK",
+          nota_fiscal: { id: "555", numero: "000007", serie: "1", situacao: "pendente" },
+        },
+      })));
+    }
+    return Promise.resolve(new Response("{}", { status: 404 }));
+  };
+  try {
+    const result = await issueOlistInvoice(
+      { id: "555", number: "000007", issued: false },
+      "token-de-teste",
+    );
+    assertEquals(result.id, "555");
+    assertEquals(result.issued, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
