@@ -251,8 +251,10 @@ export type Database = {
           inventory_reserved_until: string | null
           invoice_purpose: string | null
           items_snapshot: Json
+          olist_invoice_checked_at: string | null
           olist_invoice_id: string | null
           olist_invoice_number: string | null
+          olist_invoice_status: string | null
           olist_invoice_url: string | null
           olist_order_id: string | null
           olist_order_number: string | null
@@ -292,8 +294,10 @@ export type Database = {
           inventory_reserved_until?: string | null
           invoice_purpose?: string | null
           items_snapshot?: Json
+          olist_invoice_checked_at?: string | null
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
+          olist_invoice_status?: string | null
           olist_invoice_url?: string | null
           olist_order_id?: string | null
           olist_order_number?: string | null
@@ -333,8 +337,10 @@ export type Database = {
           inventory_reserved_until?: string | null
           invoice_purpose?: string | null
           items_snapshot?: Json
+          olist_invoice_checked_at?: string | null
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
+          olist_invoice_status?: string | null
           olist_invoice_url?: string | null
           olist_order_id?: string | null
           olist_order_number?: string | null
