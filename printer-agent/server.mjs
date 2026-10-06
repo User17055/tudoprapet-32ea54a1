@@ -65,6 +65,14 @@ async function fetchLabelOrders(){
   return data.orders||[];
 }
 
+async function fetchLabelOrder(orderId){
+  const data=await agentPost({action:"print_order",orderId:String(orderId)});
+  if(!data.order||!Array.isArray(data.order.line_items)||data.order.line_items.length===0){
+    throw new Error("O pedido ainda nao esta completo na Shopify. Aguarde alguns segundos e tente novamente.");
+  }
+  return data.order;
+}
+
 function invoiceLabelZpl(invoice,order){
   const delivery=clean(order.delivery_label||order.shipping_method||"ENVIO",18).toUpperCase();
   const orderNumber=clean(order.name||order.id,24);
@@ -138,9 +146,10 @@ async function pollOrders(){if(polling||!config.autoPrint)return;if(!config.prin
   const pending=orders.filter(o=>new Date(o.created_at).getTime()>activatedAt&&!state.printedOrderIds.includes(String(o.id))).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
   for(const order of pending){
     try{
-      await sendRaw(orderToZpl(order));
-      state.printedOrderIds.push(String(order.id));
-      await recordHistory({orderId:String(order.id),orderName:order.name||String(order.id),source:"automatic",status:"printed"});
+      const freshOrder=await fetchLabelOrder(order.id);
+      await sendRaw(orderToZpl(freshOrder));
+      state.printedOrderIds.push(String(freshOrder.id));
+      await recordHistory({orderId:String(freshOrder.id),orderName:freshOrder.name||String(freshOrder.id),source:"automatic",status:"printed"});
     }catch(error){
       await recordHistory({orderId:String(order.id),orderName:order.name||String(order.id),source:"automatic",status:"error",error:error instanceof Error?error.message:String(error)});
       throw error;
@@ -204,7 +213,7 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.2",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.3",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}
@@ -214,9 +223,7 @@ const server=http.createServer(async(req,res)=>{
     try{
       body=await readJson(req);
       if(!body.orderId)throw new Error("Selecione um pedido");
-      const orders=await fetchLabelOrders();
-      order=orders.find(item=>String(item.id)===String(body.orderId));
-      if(!order)throw new Error("Pedido não encontrado entre os pedidos recentes");
+      order=await fetchLabelOrder(body.orderId);
       const zpl=orderToZpl(order);
       if(body.print===true){
         await sendRaw(zpl);
@@ -233,9 +240,7 @@ const server=http.createServer(async(req,res)=>{
     try{
       body=await readJson(req);
       if(!body.orderId||!body.invoice||typeof body.invoice!=="object")throw new Error("Selecione o pedido e o XML da nota fiscal");
-      const orders=await fetchLabelOrders();
-      order=orders.find(item=>String(item.id)===String(body.orderId));
-      if(!order)throw new Error("Pedido não encontrado entre os pedidos recentes");
+      order=await fetchLabelOrder(body.orderId);
       const zpl=invoiceLabelZpl(body.invoice,order);
       if(body.print===true){
         await sendRaw(zpl);

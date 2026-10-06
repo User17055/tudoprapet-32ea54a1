@@ -1,1 +1,1 @@
-{"name":"tudoprapet-printer-agent","version":"1.5.2","private":true,"type":"module","scripts":{"start":"node server.mjs"},"engines":{"node":">=20"}}
+{"name":"tudoprapet-printer-agent","version":"1.5.3","private":true,"type":"module","scripts":{"start":"node server.mjs"},"engines":{"node":">=20"}}
