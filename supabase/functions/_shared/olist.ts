@@ -519,3 +519,42 @@ export async function fetchOlistCostBySku(sku: string, token: string): Promise<O
   }
   return findExactOlistCost(payload, sku);
 }
+
+export type FranchiseInvoiceStatus = "issued" | "pending" | "rejected";
+
+export interface FranchiseInvoiceOutcome {
+  invoice: OlistInvoice | null;
+  status: FranchiseInvoiceStatus;
+  error: string | null;
+}
+
+/**
+ * Gera/emite a NF-e da franquia sem nunca interromper o checkout.
+ * A nota é obrigação fiscal posterior: rejeição da Olist/SEFAZ (CFOP, ICMS,
+ * etc.) vira alerta e fica para reprocessamento, mas o pedido na Shopify
+ * segue. Reaproveita o id já salvo para nunca gerar uma segunda nota.
+ */
+export async function issueFranchiseInvoiceSafely(
+  params: {
+    orderId: string;
+    savedInvoice: OlistInvoice | null;
+    token: string;
+    onInvoiceGenerated?: (invoice: OlistInvoice) => Promise<void>;
+  },
+): Promise<FranchiseInvoiceOutcome> {
+  let invoice = params.savedInvoice;
+  try {
+    if (!invoice) {
+      invoice = await generateOlistInvoice(params.orderId, params.token);
+      if (params.onInvoiceGenerated) await params.onInvoiceGenerated(invoice);
+    }
+    const issued = await issueOlistInvoice(invoice, params.token);
+    return { invoice: issued, status: issued.issued ? "issued" : "pending", error: null };
+  } catch (error) {
+    return {
+      invoice,
+      status: "rejected",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}

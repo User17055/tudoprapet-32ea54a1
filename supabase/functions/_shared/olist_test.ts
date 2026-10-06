@@ -3,6 +3,7 @@ import {
   buildOlistFranchiseOrder,
   buildOlistReceivable,
   findExactOlistCost,
+  issueFranchiseInvoiceSafely,
   issueOlistInvoice,
   normalizeOlistId,
   normalizeSku,
@@ -120,6 +121,43 @@ Deno.test("emissao aceita pela Olist mas pendente na SEFAZ nao interrompe o flux
     );
     assertEquals(result.id, "555");
     assertEquals(result.issued, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("rejeicao fiscal da Olist vira alerta e nao interrompe o fluxo", async () => {
+  const originalFetch = globalThis.fetch;
+  let generateCalls = 0;
+  globalThis.fetch = (input: Request | URL | string) => {
+    const url = String(input);
+    if (url.includes("gerar.nota.fiscal") || url.includes("nota.fiscal.gerar")) generateCalls++;
+    if (url.includes("nota.fiscal.emitir.php")) {
+      return Promise.resolve(new Response(JSON.stringify({
+        retorno: {
+          status: "Erro",
+          erros: [{ erro: "O CFOP informado em um dos itens está inválido" }],
+        },
+      })));
+    }
+    if (url.includes("nota.fiscal.obter.php")) {
+      return Promise.resolve(new Response(JSON.stringify({
+        retorno: { status: "OK", nota_fiscal: { id: "777", numero: "000091", situacao: "pendente" } },
+      })));
+    }
+    return Promise.resolve(new Response("{}", { status: 404 }));
+  };
+  try {
+    const outcome = await issueFranchiseInvoiceSafely({
+      orderId: "156",
+      savedInvoice: { id: "777", number: "000091", issued: false },
+      token: "token-de-teste",
+    });
+    assertEquals(outcome.status, "rejected");
+    assertEquals(outcome.invoice?.id, "777");
+    assertEquals(Boolean(outcome.error), true);
+    // Nota já salva: nunca gera uma segunda.
+    assertEquals(generateCalls, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

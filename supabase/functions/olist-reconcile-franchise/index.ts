@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { getOlistReceivable } from "../_shared/olist.ts";
+import { getOlistReceivable, issueFranchiseInvoiceSafely } from "../_shared/olist.ts";
 
 function dateFromOlist(value?: string): Date | null {
   const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -81,7 +81,46 @@ Deno.serve(async (req) => {
         console.error(`Falha ao conciliar conta Olist ${row.provider_payment_id}:`, entryError);
       }
     }
-    return jsonResponse({ checked: rows?.length || 0, paid, overdue, pending, failed });
+    // Reprocessa NF-e pendentes/rejeitadas de pedidos já concluídos na Shopify.
+    // Reaproveita a nota salva; só gera nota quando o pedido ainda não tem uma.
+    const invoiceSummary = { checked: 0, issued: 0, pending: 0, rejected: 0 };
+    const { data: invoiceRows, error: invoiceRowsError } = await admin.from("checkout_sessions")
+      .select("id,olist_order_id,olist_invoice_id,olist_invoice_number")
+      .eq("customer_type", "franchise")
+      .eq("status", "credit_approved")
+      .not("olist_order_id", "is", null)
+      .in("olist_invoice_status", ["pending", "rejected"])
+      .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
+      .limit(15);
+    if (invoiceRowsError) console.error("Falha ao listar NF-e pendentes:", invoiceRowsError);
+    for (const row of invoiceRows || []) {
+      invoiceSummary.checked++;
+      const outcome = await issueFranchiseInvoiceSafely({
+        orderId: String(row.olist_order_id),
+        token,
+        savedInvoice: row.olist_invoice_id
+          ? { id: String(row.olist_invoice_id), number: String(row.olist_invoice_number || ""), issued: false }
+          : null,
+        onInvoiceGenerated: async (generated) => {
+          const { error: saveError } = await admin.from("checkout_sessions").update({
+            olist_invoice_id: generated.id,
+            olist_invoice_number: generated.number,
+          }).eq("id", row.id);
+          if (saveError) throw saveError;
+        },
+      });
+      invoiceSummary[outcome.status]++;
+      if (outcome.error) console.warn(`NF-e da sessão ${row.id} segue pendente:`, outcome.error);
+      await admin.from("checkout_sessions").update({
+        olist_invoice_status: outcome.status,
+        olist_invoice_checked_at: new Date().toISOString(),
+        ...(outcome.invoice?.id ? { olist_invoice_id: outcome.invoice.id } : {}),
+        ...(outcome.invoice?.number ? { olist_invoice_number: outcome.invoice.number } : {}),
+        ...(outcome.invoice?.accessUrl ? { olist_invoice_url: outcome.invoice.accessUrl } : {}),
+      }).eq("id", row.id);
+    }
+
+    return jsonResponse({ checked: rows?.length || 0, paid, overdue, pending, failed, invoices: invoiceSummary });
   } catch (error) {
     console.error("olist-reconcile-franchise:", error);
     return errorResponse("Falha ao conciliar contas da Olist", 500);
