@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   PRICE_RANGES,
+  attrLabel,
   buildCatalogParams,
   buildCategoryIndex,
   categoryDescendants,
   categoryPath,
   computeCatalogFacets,
   parseCatalogParams,
+  parsePriceInput,
+  priceBoundsLabel,
   priceInRange,
   resolveCategory,
+  sortAttrKeys,
+  sortAttrValues,
   type FacetProduct,
 } from "@/lib/catalogFilters";
 
@@ -143,5 +148,57 @@ describe("facetas", () => {
   it("categoria escolhida sem produto nenhum devolve zero, não a loja inteira", () => {
     const result = computeCatalogFacets(products, { ...noSelection, categoryIds: new Set() }, parentOf);
     expect(result.matchingIds.size).toBe(0);
+  });
+});
+
+describe("faixa de preço digitada", () => {
+  it("entende vírgula, ponto de milhar e R$", () => {
+    expect(parsePriceInput("29,90")).toBe(29.9);
+    expect(parsePriceInput("R$ 1.250,50")).toBe(1250.5);
+    expect(parsePriceInput("30")).toBe(30);
+    expect(parsePriceInput("")).toBeNull();
+    expect(parsePriceInput("abc")).toBeNull();
+  });
+
+  it("vai e volta pela URL, e mínimo maior que máximo é invertido", () => {
+    const parsed = parseCatalogParams(new URLSearchParams("preco_min=80&preco_max=30"));
+    expect([parsed.priceMin, parsed.priceMax]).toEqual([30, 80]);
+    expect(buildCatalogParams(parsed).toString()).toBe("preco_min=30&preco_max=80");
+    expect(parseCatalogParams(new URLSearchParams("preco_min=lixo")).priceMin).toBeNull();
+  });
+
+  it("restringe os produtos, inclusive nas pontas, e não esconde as faixas prontas", () => {
+    const products = [product("a", 10, null, []), product("b", 30, null, []), product("c", 80, null, [])];
+    const result = computeCatalogFacets(products, { ...noSelection, priceMin: 30, priceMax: 80 }, parentOf);
+    expect([...result.matchingIds].sort()).toEqual(["b", "c"]);
+    // As faixas prontas são do mesmo grupo: contam sem a faixa digitada.
+    expect(result.priceCounts.get("0-25")).toBe(1);
+  });
+
+  it("rótulo do chip", () => {
+    expect(priceBoundsLabel(30, 80)).toMatch(/^R\$\s?30 a R\$\s?80$/);
+    expect(priceBoundsLabel(30, null)).toMatch(/^A partir de R\$\s?30$/);
+    expect(priceBoundsLabel(null, 29.9)).toMatch(/^Até R\$\s?29,90$/);
+    expect(priceBoundsLabel(null, null)).toBeNull();
+  });
+});
+
+describe("ordenação e atributos", () => {
+  it("aceita mais vendidos na URL", () => {
+    expect(parseCatalogParams(new URLSearchParams("ordem=best-selling")).sort).toBe("best-selling");
+  });
+
+  it("grupos conhecidos na ordem definida, com nome de exibição", () => {
+    expect(sortAttrKeys(["Uso Medicamentos", "Formato Do Alimento", "Zeta Nova", "Idade", "Porte de Raça"]))
+      .toEqual(["Idade", "Porte de Raça", "Formato Do Alimento", "Uso Medicamentos", "Zeta Nova"]);
+    expect(attrLabel("Formato Do Alimento")).toBe("Formato do alimento");
+    expect(attrLabel("Porte de Raça")).toBe("Porte");
+    expect(attrLabel("Cor Da Coleira")).toBe("Cor da Coleira");
+  });
+
+  it("valores em ordem natural quando ela existe", () => {
+    expect(sortAttrValues("Idade", ["Sênior", "Adulto", "Filhote"])).toEqual(["Filhote", "Adulto", "Sênior"]);
+    expect(sortAttrValues("Porte de Raça", ["Grande", "Pequeno", "Médio"])).toEqual(["Pequeno", "Médio", "Grande"]);
+    expect(sortAttrValues("Aplicação", ["Spray", "Comprimido"])).toEqual(["Comprimido", "Spray"]);
   });
 });

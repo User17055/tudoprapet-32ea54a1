@@ -19,12 +19,78 @@ export const PRICE_RANGES: readonly PriceRange[] = [
 
 export const priceInRange = (price: number, range: PriceRange) => price >= range.min && price < range.max;
 
-export const SORT_KEYS = ["relevance", "price-asc", "price-desc", "name-asc", "name-desc"] as const;
+/** Faixa digitada pelo cliente ("de R$ 30 ate R$ 80"); as duas pontas valem. */
+export const priceWithinBounds = (price: number, min: number | null, max: number | null) =>
+  (min === null || price >= min) && (max === null || price <= max);
+
+const formatBound = (value: number) =>
+  value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: value % 1 ? 2 : 0 });
+
+export function priceBoundsLabel(min: number | null, max: number | null): string | null {
+  if (min !== null && max !== null) return `${formatBound(min)} a ${formatBound(max)}`;
+  if (min !== null) return `A partir de ${formatBound(min)}`;
+  if (max !== null) return `Até ${formatBound(max)}`;
+  return null;
+}
+
+/** "29,90", "29.90" ou "R$ 30" viram numero; vazio ou invalido vira null. */
+export function parsePriceInput(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const cleaned = value.replace(/[^\d,.]/g, "");
+  if (!cleaned) return null;
+  // Virgula e o separador decimal brasileiro; ponto antes dela e milhar.
+  const normalized = cleaned.includes(",") ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned;
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
+}
+
+export const SORT_KEYS = ["relevance", "best-selling", "price-asc", "price-desc", "name-asc", "name-desc"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 
 // Atributo "Pet" e respondido pela arvore de categorias (Cachorro/Gato); como
 // filtro proprio ele duplicaria a escolha e podia contradize-la.
 export const HIDDEN_ATTR_KEYS = new Set(["Pet"]);
+
+// Ordem e nome de exibicao dos atributos que existem no banco (10/2026). A chave da URL
+// continua sendo a do banco; so o rotulo muda. Atributo novo criado no admin aparece
+// depois destes, em ordem alfabetica, com o nome arrumado por `attrLabel`.
+const ATTR_DISPLAY: readonly { key: string; label: string; values?: readonly string[] }[] = [
+  { key: "Idade", label: "Idade", values: ["Filhote", "Adulto", "Sênior"] },
+  { key: "Porte de Raça", label: "Porte", values: ["Pequeno", "Médio", "Grande", "Gigante"] },
+  { key: "Formato Do Alimento", label: "Formato do alimento" },
+  { key: "Aplicação", label: "Aplicação" },
+  { key: "Uso Medicamentos", label: "Uso do medicamento" },
+];
+const ATTR_DISPLAY_BY_KEY = new Map(ATTR_DISPLAY.map((item, index) => [item.key, { ...item, index }]));
+const LOWERCASE_WORDS = new Set(["de", "da", "do", "das", "dos", "e", "para"]);
+
+export function attrLabel(key: string): string {
+  const known = ATTR_DISPLAY_BY_KEY.get(key);
+  if (known) return known.label;
+  return key
+    .split(/\s+/)
+    .map((word, index) => (index > 0 && LOWERCASE_WORDS.has(word.toLowerCase()) ? word.toLowerCase() : word))
+    .join(" ");
+}
+
+/** Grupos conhecidos na ordem definida; os demais em ordem alfabetica pelo rotulo. */
+export function sortAttrKeys(keys: Iterable<string>): string[] {
+  return [...keys].sort((a, b) => {
+    const ia = ATTR_DISPLAY_BY_KEY.get(a)?.index ?? Infinity;
+    const ib = ATTR_DISPLAY_BY_KEY.get(b)?.index ?? Infinity;
+    return ia !== ib ? ia - ib : attrLabel(a).localeCompare(attrLabel(b), "pt-BR");
+  });
+}
+
+/** Valores em ordem natural quando ela existe (Filhote, Adulto, Senior); senao alfabetica. */
+export function sortAttrValues(key: string, values: Iterable<string>): string[] {
+  const order = ATTR_DISPLAY_BY_KEY.get(key)?.values;
+  const rank = (value: string) => {
+    const index = order?.indexOf(value) ?? -1;
+    return index === -1 ? Infinity : index;
+  };
+  return [...values].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, "pt-BR", { numeric: true }));
+}
 
 const ATTR_PARAM_PREFIX = "f.";
 
@@ -34,6 +100,8 @@ export interface CatalogFilterState {
   categoryId: string | null;
   brandSlugs: Set<string>;
   priceKeys: Set<string>;
+  priceMin: number | null;
+  priceMax: number | null;
   attrs: Record<string, Set<string>>;
   sort: SortKey;
   page: number;
@@ -57,11 +125,16 @@ export function parseCatalogParams(params: URLSearchParams): CatalogFilterState 
     categoryId: params.get("categoria_id") || null,
     brandSlugs: new Set(params.getAll("marca").filter(Boolean)),
     priceKeys: new Set(params.getAll("preco").filter((key) => validPrices.has(key))),
+    ...orderedBounds(parsePriceInput(params.get("preco_min")), parsePriceInput(params.get("preco_max"))),
     attrs,
     sort: (SORT_KEYS as readonly string[]).includes(sort || "") ? (sort as SortKey) : "relevance",
     page: Number.isFinite(page) && page > 1 ? page : 1,
   };
 }
+
+// Minimo maior que o maximo e erro de digitacao, nao "nenhum produto": inverte.
+const orderedBounds = (min: number | null, max: number | null) =>
+  min !== null && max !== null && min > max ? { priceMin: max, priceMax: min } : { priceMin: min, priceMax: max };
 
 export function buildCatalogParams(state: CatalogFilterState): URLSearchParams {
   const params = new URLSearchParams();
@@ -70,6 +143,8 @@ export function buildCatalogParams(state: CatalogFilterState): URLSearchParams {
   if (state.categoryId) params.set("categoria_id", state.categoryId);
   for (const slug of [...state.brandSlugs].sort()) params.append("marca", slug);
   for (const range of PRICE_RANGES) if (state.priceKeys.has(range.key)) params.append("preco", range.key);
+  if (state.priceMin !== null) params.set("preco_min", String(state.priceMin));
+  if (state.priceMax !== null) params.set("preco_max", String(state.priceMax));
   for (const key of Object.keys(state.attrs).sort()) {
     for (const value of [...state.attrs[key]].sort()) params.append(`${ATTR_PARAM_PREFIX}${key}`, value);
   }
@@ -176,6 +251,9 @@ export interface FacetSelection {
   categoryIds: ReadonlySet<string> | null;
   brandIds: ReadonlySet<string>;
   priceKeys: ReadonlySet<string>;
+  /** Faixa digitada; faz parte do mesmo grupo das faixas prontas. */
+  priceMin?: number | null;
+  priceMax?: number | null;
   attrs: Readonly<Record<string, ReadonlySet<string>>>;
 }
 
@@ -216,8 +294,9 @@ export function computeCatalogFacets(
     const passBrand = selection.brandIds.size === 0
       || (product.brandId !== null && selection.brandIds.has(product.brandId));
     const productRanges = PRICE_RANGES.filter((range) => priceInRange(product.price, range));
-    const passPrice = selection.priceKeys.size === 0
-      || productRanges.some((range) => selection.priceKeys.has(range.key));
+    const passPrice = (selection.priceKeys.size === 0
+      || productRanges.some((range) => selection.priceKeys.has(range.key)))
+      && priceWithinBounds(product.price, selection.priceMin ?? null, selection.priceMax ?? null);
     const failedAttrs = attrEntries.filter(([key, values]) =>
       ![...(product.attrs.get(key) || [])].some((value) => values.has(value)));
     const passAttrs = failedAttrs.length === 0;
