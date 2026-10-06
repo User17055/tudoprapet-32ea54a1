@@ -21,14 +21,35 @@ describe("impressão de pedido", () => {
     const zpl = orderToZpl(order);
     expect(zpl.startsWith("^XA")).toBe(true);
     expect(zpl.endsWith("^XZ")).toBe(true);
-    expect(zpl).toContain("TPP-ZPL-V2");
+    expect(zpl).toContain("TPP-ZPL-V3");
     expect(zpl).toContain("^GFA");
     expect(zpl).toContain("Joao   Silva");
     expect(zpl).toContain("2x Racao Premium - 2 kg");
     expect(zpl).toContain("^FDRETIRADA^FS");
     expect(zpl).toContain("RETIRAR NA LOJA TUDOPRAPET");
-    expect(zpl).toContain("^FO25,735^GB750,2,2^FS");
+    expect(zpl).toContain("^LL1200");
     expect(zpl).not.toContain("Separacao:");
+  });
+
+  it("divide pedidos grandes em etiquetas sem cortar nenhum item", () => {
+    const largeOrder: PrintableOrder = {
+      ...order,
+      line_items: Array.from({ length: 12 }, (_, index) => ({
+        title: `Produto ${index + 1}`,
+        quantity: 1,
+        price: index + 1,
+      })),
+    };
+    const zpl = orderToZpl(largeOrder);
+
+    expect(zpl.match(/\^XA/g)).toHaveLength(3);
+    expect(zpl.match(/\^XZ/g)).toHaveLength(3);
+    expect(zpl.match(/\^LL1200/g)).toHaveLength(3);
+    expect(zpl).toContain("ITENS 1-5 DE 12 - FOLHA 1/3");
+    expect(zpl).toContain("ITENS 11-12 DE 12 - FOLHA 3/3");
+    for (let index = 1; index <= 12; index += 1) {
+      expect(zpl).toContain(`1x Produto ${index}`);
+    }
   });
 
   it("gera documento A4 com os dados do pedido", () => {

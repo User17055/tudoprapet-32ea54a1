@@ -25,38 +25,40 @@ function sendRaw(zpl){return new Promise(async(resolve,reject)=>{const temp=join
 const clean=(v,max=50)=>String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[\^~]/g," ").replace(/[^\x20-\x7e]/g," ").slice(0,max);
 const brl=v=>`R$ ${Number(v||0).toFixed(2).replace(".",",")}`;
 function orderToZpl(o){
-  let y=755;
-  const items=(o.line_items||[]).map((item,index)=>{
-    if(index>0)y+=58;
-    const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;
-    return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${clean(label,85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${clean(brl(item.price*item.quantity),20)}^FS`;
-  }).join("\n");
-  const totalY=y+82,height=Math.max(950,totalY+165);
+  const allItems=o.line_items||[],itemsPerLabel=5;
+  const pages=allItems.length?Array.from({length:Math.ceil(allItems.length/itemsPerLabel)},(_,index)=>allItems.slice(index*itemsPerLabel,(index+1)*itemsPerLabel)):[[]];
   const delivery=clean(o.delivery_label||o.shipping_method||"ENVIO",18).toUpperCase();
   const barcode=String(o.id||o.name).replace(/\D/g,"").slice(-20)||"0";
-  return `^XA
+  return pages.map((pageItems,pageIndex)=>{
+    let y=755;
+    const items=pageItems.map((item,index)=>{if(index>0)y+=58;const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${clean(label,85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${clean(brl(item.price*item.quantity),20)}^FS`}).join("\n")||"^FO25,755^A0N,24,24^FDNenhum item informado^FS";
+    const totalY=y+82,pageNumber=pageIndex+1,pageCount=pages.length,itemStart=pageIndex*itemsPerLabel+1,itemEnd=itemStart+pageItems.length-1;
+    const pageDescription=pageCount>1?`ITENS ${itemStart}-${itemEnd} DE ${allItems.length} - FOLHA ${pageNumber}/${pageCount}`:"ITENS DO PEDIDO";
+    return `^XA
 ^CI28
-^FX TPP-ZPL-V2
+^FX TPP-ZPL-V3
 ^PW800
-^LL${height}
+^LL1200
 ^FO160,20${logoGfa.trim()}^FS
 ^FO25,120^GB750,4,4^FS
 ^FO25,145^GB750,90,90^FS
 ^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
 ^FO25,255^A0N,30,30^FDPEDIDO ${clean(o.name,24)}^FS
+^FO545,255^A0N,24,24^FB230,1,0,R^FDFOLHA ${pageNumber}/${pageCount}^FS
 ^FO25,295^A0N,22,22^FDMETODO: ${clean(o.shipping_method||delivery,48)}^FS
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS
 ^FO25,525^A0N,24,24^FDDESTINATARIO^FS
 ^FO25,560^A0N,31,31^FB730,2,5,L^FD${clean(o.customer_name,60)}^FS
 ^FO25,640^A0N,22,22^FB730,3,5,L^FD${delivery==="RETIRADA"?"RETIRAR NA LOJA TUDOPRAPET":clean(o.address||"Nao informado",100)}^FS
-^FO25,735^GB750,2,2^FS
+^FO25,715^A0N,20,20^FD${pageDescription}^FS
+^FO25,742^GB750,2,2^FS
 ${items}
 ^FO25,${totalY}^GB750,2,2^FS
-^FO25,${totalY+25}^A0N,32,32^FDTotal^FS
+^FO25,${totalY+25}^A0N,32,32^FDTotal do pedido^FS
 ^FO500,${totalY+25}^A0N,32,32^FB275,1,0,R^FD${clean(brl(o.total_price),22)}^FS
 ^FO25,${totalY+75}^A0N,20,20^FDPAGAMENTO: ${clean(o.financial_status,25)}^FS
-^XZ`;
+^XZ`}).join("\n");
 }
 
 async function fetchLabelOrders(){
