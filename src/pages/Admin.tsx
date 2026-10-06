@@ -607,8 +607,15 @@ function PricesTab() {
     try {
       const [shop, sub, customer, costs] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("subscriber_prices").select("*").order("updated_at", { ascending: false }),
-        supabase.from("customer_prices").select("shopify_variant_id,price"),
+        // Paginadas: subscriber_prices passou de 1000 linhas e as mais antigas sumiam como
+        // "Não configurado". A lista continua das mais recentes para as mais antigas.
+        fetchAllRows<SubPrice & { updated_at: string }>("subscriber_prices", "*", { orderBy: "id" })
+          .then((rows) => rows.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))),
+        fetchAllRows<{ shopify_variant_id: string; price: number | string }>(
+          "customer_prices",
+          "shopify_variant_id,price",
+          { orderBy: "shopify_variant_id" },
+        ),
         fetchAllRows<{ shopify_variant_id: string; cost: number | string }>(
           "product_costs",
           "shopify_variant_id,cost",
@@ -616,10 +623,8 @@ function PricesTab() {
         ),
       ]);
       setProducts(shop);
-      if (sub.error) throw sub.error;
-      if (customer.error) throw customer.error;
-      setPrices((sub.data || []) as SubPrice[]);
-      setCustomerPrices((customer.data || []).map((row) => ({ ...row, price: Number(row.price) })));
+      setPrices(sub);
+      setCustomerPrices(customer.map((row) => ({ ...row, price: Number(row.price) })));
       setProductCosts(new Map(costs.map((row) => [row.shopify_variant_id, Number(row.cost)])));
     } catch (e) {
       if (!silent) toast.error("Erro ao carregar dados");
@@ -2141,11 +2146,11 @@ function ContentTab() {
     try {
       const [shop, cnt] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("product_content").select("*").order("updated_at", { ascending: false }),
+        fetchAllRows<ProductContent & { updated_at: string }>("product_content", "*", { orderBy: "id" })
+          .then((rows) => rows.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))),
       ]);
       setProducts(shop);
-      if (cnt.error) throw cnt.error;
-      setContents((cnt.data || []) as ProductContent[]);
+      setContents(cnt);
     } catch (e) {
       toast.error("Erro ao carregar dados");
       console.error(e);

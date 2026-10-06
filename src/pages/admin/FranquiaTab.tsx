@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trash2, Loader2, Store, Tag, Package, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
 import { ProductPicker } from "@/components/admin/ProductPicker";
@@ -407,14 +408,17 @@ function FranchisePricesPanel() {
     try {
       const [shop, franchise, customer] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("franchise_prices").select("*").order("updated_at", { ascending: false }),
-        supabase.from("customer_prices").select("shopify_variant_id,price"),
+        fetchAllRows<FranchPrice & { price: number | string; updated_at: string }>("franchise_prices", "*", { orderBy: "shopify_variant_id" })
+          .then((rows) => rows.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))),
+        fetchAllRows<{ shopify_variant_id: string; price: number | string }>(
+          "customer_prices",
+          "shopify_variant_id,price",
+          { orderBy: "shopify_variant_id" },
+        ),
       ]);
-      if (franchise.error) throw franchise.error;
-      if (customer.error) throw customer.error;
       setProducts(shop);
-      setPrices((franchise.data || []).map((row) => ({ ...row, price: Number(row.price) })));
-      setCustomerPrices((customer.data || []).map((row) => ({ ...row, price: Number(row.price) })));
+      setPrices(franchise.map((row) => ({ ...row, price: Number(row.price) })));
+      setCustomerPrices(customer.map((row) => ({ ...row, price: Number(row.price) })));
     } catch (error) {
       if (!silent) toast.error("Erro ao carregar dados");
       console.error(error);

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EyeOff, Loader2, Package, Printer, RefreshCw, Search, Tag, Users, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/fetchAllRows";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllProductAudience, type ProductAudience } from "@/hooks/useProductAudience";
 
@@ -65,13 +65,16 @@ export default function ConferenceTab() {
       const [shopifyProducts, audienceRows, subscriberResult] = await Promise.all([
         fetchAllShopifyProducts(),
         fetchAllProductAudience(),
-        supabase.from("subscriber_prices").select("shopify_variant_id,subscriber_price"),
+        fetchAllRows<SubscriberPriceRow>(
+          "subscriber_prices",
+          "id,shopify_variant_id,subscriber_price",
+          { orderBy: "id" },
+        ),
       ]);
-      if (subscriberResult.error) throw subscriberResult.error;
       setProducts(shopifyProducts);
       setAudiences(audienceRows as AudienceRow[]);
       setSubscriberPrices(
-        ((subscriberResult.data || []) as SubscriberPriceRow[]).map((row) => ({
+        subscriberResult.map((row) => ({
           ...row,
           subscriber_price: Number(row.subscriber_price),
         })),
