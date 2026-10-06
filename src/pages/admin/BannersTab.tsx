@@ -13,6 +13,8 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
+import type { Tables } from "@/integrations/supabase/types";
 
 interface Banner {
   id: string;
@@ -41,10 +43,7 @@ export default function BannersTab() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("hero_banners")
-      .select("*")
-      .order("sort_order", { ascending: true });
+    const { data, error } = await fetchAllRowsResult<Tables<"hero_banners">>("hero_banners", "*", { orderBy: ["sort_order", "id"] });
 
     if (error) {
       toast.error(error.message);

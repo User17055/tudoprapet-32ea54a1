@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 export interface ProductVariationItem {
   id: string;
@@ -65,11 +65,12 @@ async function fetchProductVariations(forceRefresh = false): Promise<ProductVari
   pendingData = (async () => {
     try {
       const [itemsResult, groupsResult] = await Promise.all([
-        supabase
-          .from("product_variation_items")
-          .select("id, group_id, shopify_product_id, shopify_product_handle, shopify_product_title, label, sort_order")
-          .order("sort_order"),
-        supabase.from("product_variation_groups").select("id, name"),
+        fetchAllRowsResult<ProductVariationItem>(
+          "product_variation_items",
+          "id, group_id, shopify_product_id, shopify_product_handle, shopify_product_title, label, sort_order",
+          { orderBy: ["sort_order", "id"] },
+        ),
+        fetchAllRowsResult<ProductVariationGroup>("product_variation_groups", "id, name", { orderBy: "id" }),
       ]);
       if (itemsResult.error) throw itemsResult.error;
       if (groupsResult.error) throw groupsResult.error;

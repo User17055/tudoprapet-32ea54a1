@@ -1,4 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetchAllRows";
 
 // Leituras compartilhadas pela vitrine (catalogo, menu desktop e menu mobile).
@@ -46,22 +45,14 @@ export function clearCatalogDataCache() {
 }
 
 export const fetchStoreCategories = () =>
-  cached("categories", async () => {
-    const { data, error } = await supabase
-      .from("categories")
-      .select("id, name, slug, parent_id, sort_order")
-      .order("sort_order")
-      .order("name");
-    if (error) throw error;
-    return (data || []) as StoreCategory[];
-  });
+  cached("categories", () =>
+    fetchAllRows<StoreCategory>("categories", "id, name, slug, parent_id, sort_order", {
+      orderBy: ["sort_order", "name", "id"],
+    }));
 
 export const fetchStoreBrands = () =>
-  cached("brands", async () => {
-    const { data, error } = await supabase.from("brands").select("id, name, slug").order("name");
-    if (error) throw error;
-    return (data || []) as StoreBrand[];
-  });
+  cached("brands", () =>
+    fetchAllRows<StoreBrand>("brands", "id, name, slug", { orderBy: ["name", "id"] }));
 
 export const fetchProductCategoryRows = () =>
   cached("product_categories", () =>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import useEmblaCarousel from "embla-carousel-react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
  
 interface HeroBanner {
   id: string;
@@ -60,11 +61,10 @@ export const HeroCarousel = ({ onHasBannersChange }: HeroCarouselProps) => {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("hero_banners")
-        .select("*")
-        .eq("active", true)
-        .order("sort_order", { ascending: true });
+      const { data } = await fetchAllRowsResult<HeroBanner>("hero_banners", "*", {
+        orderBy: ["sort_order", "id"],
+        filter: (query) => query.eq("active", true),
+      });
 
       if (!data) {
         onHasBannersChange?.(false);

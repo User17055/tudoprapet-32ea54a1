@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Category } from "@/hooks/useCategoryTree";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 export default function CategoriesTab() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -13,11 +14,7 @@ export default function CategoriesTab() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("categories")
-      .select("*")
-      .order("sort_order")
-      .order("name");
+    const { data, error } = await fetchAllRowsResult("categories", "*", { orderBy: ["sort_order", "name", "id"] });
     if (error) toast.error(error.message);
     setCategories((data || []) as Category[]);
     setLoading(false);
