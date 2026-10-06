@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { PrintableOrder } from "@/lib/orderPrint";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface DashboardData {
   users: number;
@@ -79,7 +80,9 @@ export default function OverviewTab() {
   const load = async () => {
     setLoading(true);
     const [profiles, members, administrators, maintenance, ordersResult] = await Promise.all([
-      supabase.from("profiles").select("user_id,is_franchisee"),
+      fetchAllRowsResult<{ user_id: string; is_franchisee: boolean }>("profiles", "user_id,is_franchisee", {
+        orderBy: "user_id",
+      }),
       supabase.from("club_members").select("id", { count: "exact", head: true }).eq("is_active", true),
       supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "admin"),
       supabase.from("site_maintenance").select("enabled").eq("id", true).maybeSingle(),

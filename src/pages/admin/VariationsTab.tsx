@@ -14,6 +14,7 @@ import {
   invalidateProductVariationsCache,
   type ProductVariationItem,
 } from "@/hooks/useProductVariations";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface VariationGroup {
   id: string;
@@ -50,8 +51,10 @@ export default function VariationsTab() {
     try {
       const [shop, groupRows, itemRows] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("product_variation_groups").select("*").order("created_at", { ascending: false }),
-        supabase.from("product_variation_items").select("*").order("sort_order"),
+        fetchAllRowsResult("product_variation_groups", "*", {
+          orderBy: [{ column: "created_at", ascending: false }, "id"],
+        }),
+        fetchAllRowsResult("product_variation_items", "*", { orderBy: ["sort_order", "id"] }),
       ]);
       if (groupRows.error) throw groupRows.error;
       if (itemRows.error) throw itemRows.error;

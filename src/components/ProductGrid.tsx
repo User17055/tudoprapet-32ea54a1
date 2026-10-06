@@ -4,13 +4,13 @@ import { ProductCard } from "@/components/ProductCard";
 import { ProductCardSkeleton } from "@/components/ProductCardSkeleton";
 import { PackageOpen } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
 import { isProductAvailable } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface FeaturedProduct {
   shopify_product_id: string;
@@ -39,10 +39,9 @@ export const ProductGrid = () => {
       try {
         const [shopifyData, featuredData] = await Promise.all([
           fetchAllShopifyProducts(),
-          supabase
-            .from("featured_products")
-            .select("shopify_product_id")
-            .order("sort_order", { ascending: true }),
+          fetchAllRowsResult<{ shopify_product_id: string }>("featured_products", "id,shopify_product_id", {
+            orderBy: ["sort_order", "id"],
+          }),
         ]);
 
         const shopifyProducts = shopifyData || [];

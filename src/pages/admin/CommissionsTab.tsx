@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { ProductPicker } from "@/components/admin/ProductPicker";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface CommissionCode {
   id: string;
@@ -80,7 +81,11 @@ export default function CommissionsTab() {
     try {
       const [report, categoryResult, catalog] = await Promise.all([
         supabase.functions.invoke("admin-commissions", { body: { action: "list" } }),
-        supabase.from("categories").select("id,name,parent_id").order("name"),
+        fetchAllRowsResult<{ id: string; name: string; parent_id: string | null }>(
+          "categories",
+          "id,name,parent_id",
+          { orderBy: ["name", "id"] },
+        ),
         fetchAllShopifyProducts(),
       ]);
       const { data, error } = report;

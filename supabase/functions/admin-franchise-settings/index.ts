@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -47,9 +48,12 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: true, userId, paymentTermDays, paymentScheduleType, paymentDueDay });
     }
 
-    const { data, error } = await admin.from("franchise_credit_accounts")
-      .select("user_id,payment_term_days,payment_schedule_type,payment_due_day,payment_term_updated_at,payment_term_updated_by")
-      .order("updated_at", { ascending: false });
+    const { data, error } = await fetchAllRowsResult(
+      admin,
+      "franchise_credit_accounts",
+      "user_id,payment_term_days,payment_schedule_type,payment_due_day,payment_term_updated_at,payment_term_updated_by",
+      { orderBy: [{ column: "updated_at", ascending: false }, "user_id"] },
+    );
     if (error) throw error;
     return jsonResponse({ accounts: data || [] });
   } catch (error) {

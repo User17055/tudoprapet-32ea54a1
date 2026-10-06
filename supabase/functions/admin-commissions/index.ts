@@ -120,6 +120,7 @@ Deno.serve(async (req) => {
     const sessionIds = sessions.map((session) => session.id);
     const payments = [] as Array<{ checkout_session_id: string; status: string; created_at: string }>;
     for (let index = 0; index < sessionIds.length; index += 100) {
+      // leitura-limitada: pagamentos de um lote de 100 sessoes
       const { data, error } = await admin.from("payments")
         .select("checkout_session_id,status,created_at")
         .in("checkout_session_id", sessionIds.slice(index, index + 100))

@@ -62,7 +62,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useAuth } from "@/contexts/AuthContext";
 import { storefrontApiRequest, PRODUCTS_QUERY, type ShopifyProduct } from "@/lib/shopify";
 import { fetchAllShopifyProducts } from "@/lib/shopify";
-import { fetchAllRows } from "@/lib/fetchAllRows";
+import { fetchAllRows, fetchAllRowsResult } from "@/lib/fetchAllRows";
 import logo from "@/assets/tpp-logo.svg";
 import DetailsTab from "./admin/DetailsTab";
 import BannersTab from "./admin/BannersTab";
@@ -1318,8 +1318,12 @@ function MembersTab() {
   const load = async () => {
     setLoading(true);
     const [memberRows, profileRows] = await Promise.all([
-      supabase.from("club_members").select("*").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("email, name"),
+      fetchAllRowsResult<Member>("club_members", "*", {
+        orderBy: [{ column: "created_at", ascending: false }, "id"],
+      }),
+      fetchAllRowsResult<{ email: string | null; name: string | null }>("profiles", "user_id, email, name", {
+        orderBy: "user_id",
+      }),
     ]);
     if (memberRows.error) toast.error("Erro ao carregar membros");
     if (profileRows.error) toast.error("Erro ao carregar nomes dos perfis");
@@ -1479,9 +1483,11 @@ function UsersTab() {
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     const [p, s, m, franchiseSettings] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-      supabase.from("subscribers").select("user_id, status"),
-      supabase.from("club_members").select("email, is_active"),
+      fetchAllRowsResult<ProfileRow>("profiles", "*", {
+        orderBy: [{ column: "created_at", ascending: false }, "user_id"],
+      }),
+      fetchAllRowsResult<{ user_id: string; status: string }>("subscribers", "id, user_id, status", { orderBy: "id" }),
+      fetchAllRowsResult<{ email: string; is_active: boolean }>("club_members", "id, email, is_active", { orderBy: "id" }),
       supabase.functions.invoke("admin-franchise-settings", { body: { action: "list" } }),
     ]);
     if (p.error && !silent) toast.error("Erro ao carregar usuários");
@@ -1847,16 +1853,13 @@ function ReferralCodesTab() {
   const loadAll = async () => {
     setLoading(true);
     const [codeRows, profileRows] = await Promise.all([
-      supabase
-        .from("employee_referral_codes")
-        .select("*")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("id, email, name, referral_code, acquisition_source, created_at")
-        .eq("acquisition_source", "recomendacao")
-        .not("referral_code", "is", null)
-        .order("created_at", { ascending: false }),
+      fetchAllRowsResult("employee_referral_codes", "*", {
+        orderBy: [{ column: "created_at", ascending: false }, "id"],
+      }),
+      fetchAllRowsResult("profiles", "id, email, name, referral_code, acquisition_source, created_at", {
+        orderBy: [{ column: "created_at", ascending: false }, "id"],
+        filter: (query) => query.eq("acquisition_source", "recomendacao").not("referral_code", "is", null),
+      }),
     ]);
 
     if (codeRows.error) toast.error("Erro ao carregar códigos: " + codeRows.error.message);

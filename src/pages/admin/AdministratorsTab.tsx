@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface ProfileRow {
   user_id: string;
@@ -35,8 +36,15 @@ export default function AdministratorsTab() {
   const load = async () => {
     setLoading(true);
     const [profileResult, roleResult] = await Promise.all([
-      supabase.from("profiles").select("user_id,name,email,created_at").order("name"),
-      supabase.from("user_roles").select("id,user_id,created_at").eq("role", "admin").order("created_at"),
+      fetchAllRowsResult<{ user_id: string; name: string | null; email: string | null; created_at: string }>(
+        "profiles",
+        "user_id,name,email,created_at",
+        { orderBy: ["name", "user_id"] },
+      ),
+      fetchAllRowsResult<{ id: string; user_id: string; created_at: string }>("user_roles", "id,user_id,created_at", {
+        orderBy: ["created_at", "id"],
+        filter: (query) => query.eq("role", "admin"),
+      }),
     ]);
     if (profileResult.error || roleResult.error) {
       toast.error("Não foi possível carregar os administradores", {

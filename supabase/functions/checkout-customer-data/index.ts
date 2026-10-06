@@ -23,6 +23,7 @@ Deno.serve(async (req) => {
       let { data: profile } = await admin.from("checkout_customer_profiles")
         .select("full_name,invoice_email,cpf_cnpj,mobile_phone,billing_same_as_shipping")
         .eq("user_id", userId).maybeSingle();
+      // leitura-limitada: enderecos de UM cliente
       let { data: addresses } = await admin.from("customer_addresses")
         .select(
           "id,label,recipient_name,address1,number,address2,neighborhood,city,province_code,postal_code,country_code,is_default_shipping,is_default_billing",
@@ -31,6 +32,7 @@ Deno.serve(async (req) => {
           "updated_at",
           { ascending: false },
         );
+      // leitura-limitada: cartoes de UM cliente
       const { data: methods } = await admin.from("customer_payment_methods")
         .select("id,brand,last_four,holder_name,is_default")
         .eq("user_id", userId).is("revoked_at", null).order("is_default", { ascending: false })

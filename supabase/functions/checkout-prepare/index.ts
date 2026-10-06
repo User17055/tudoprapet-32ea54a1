@@ -37,6 +37,7 @@ import {
   selectCommissionRule,
 } from "../_shared/commission.ts";
 import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
+import { fetchAllRows, fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -213,8 +214,12 @@ Deno.serve(async (req) => {
           Number.isInteger(configuredDueDay) && configuredDueDay >= 1 && configuredDueDay <= 31
         ? configuredDueDay
         : null;
-      const { data: financialSessions } = await admin.from("checkout_sessions")
-        .select("id").eq("user_id", auth.user!.id).eq("customer_type", "franchise");
+      // Todas as sessoes da franquia, sem corte: uma que ficasse de fora escaparia da
+      // trava de fatura em aberto.
+      const financialSessions = await fetchAllRows<{ id: string }>(admin, "checkout_sessions", "id", {
+        orderBy: "id",
+        filter: (query) => query.eq("user_id", auth.user!.id).eq("customer_type", "franchise"),
+      });
       const sessionIds = (financialSessions ?? []).map((row) => row.id);
       if (sessionIds.length) {
         let overdueQuery = admin.from("payments").select("id", { count: "exact", head: true })
@@ -305,6 +310,7 @@ Deno.serve(async (req) => {
     const productIds = [...new Set(Array.from(details.values()).map((detail) => detail.productId))];
     let audienceRows: Array<{ shopify_product_id: string; audience: string }> = [];
     if (productIds.length) {
+      // leitura-limitada: produtos do carrinho
       const audienceResult = await admin.from("product_audience")
         .select("shopify_product_id,audience").in("shopify_product_id", productIds);
       if (audienceResult.error) throw audienceResult.error;
@@ -359,6 +365,7 @@ Deno.serve(async (req) => {
 
     // O valor regular definido no sistema tem prioridade sobre a Shopify para
     // todos os perfis. Na ausência dele, o preço atual da Shopify é o fallback.
+    // leitura-limitada: variantes do carrinho
     const { data: customerRows } = await admin.from("customer_prices")
       .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
     const customerPriceMap = new Map<string, number>();
@@ -372,6 +379,7 @@ Deno.serve(async (req) => {
     const specialPriceMap = new Map(customerPriceMap);
     const franchiseCostMap = new Map<string, number>();
     if (customerType === "subscriber") {
+      // leitura-limitada: variantes do carrinho
       const { data } = await admin.from("subscriber_prices")
         .select("shopify_variant_id,subscriber_price").in("shopify_variant_id", variantIds);
       for (const row of data ?? []) {
@@ -383,6 +391,7 @@ Deno.serve(async (req) => {
         }
       }
     } else if (customerType === "franchise") {
+      // leitura-limitada: variantes do carrinho
       const { data } = await admin.from("franchise_prices")
         .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
       for (const row of data ?? []) {
@@ -397,6 +406,7 @@ Deno.serve(async (req) => {
       // O preco de franquia pode ser igual ou superior ao custo, nunca inferior.
       // Esta barreira fica no servidor para proteger inclusive carrinhos antigos
       // e valores gravados antes da validacao existir no administrativo.
+      // leitura-limitada: variantes do carrinho
       const { data: costRows } = await admin.from("product_costs")
         .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
       for (const row of costRows ?? []) {
@@ -415,6 +425,7 @@ Deno.serve(async (req) => {
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
 
     if (customerType !== "franchise") {
+      // leitura-limitada: variantes do carrinho
       const { data: costRows, error: costError } = await admin.from("product_costs")
         .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
       if (costError) throw costError;
@@ -447,12 +458,16 @@ Deno.serve(async (req) => {
         ...new Set(input.items.map((item) => details.get(item.variantId)!.productId)),
       ];
       const [rulesResult, linksResult, categoriesResult, settingsResult] = await Promise.all([
-        admin.from("commission_rules").select("id,scope,category_id,shopify_product_id,percent"),
+        fetchAllRowsResult<CommissionRule>(admin, "commission_rules", "id,scope,category_id,shopify_product_id,percent", {
+          orderBy: "id",
+        }),
+        // leitura-limitada: categorias dos produtos do carrinho
         admin.from("product_categories").select("shopify_product_id,category_id").in(
           "shopify_product_id",
           productIds,
         ),
-        admin.from("categories").select("id,parent_id").limit(1000),
+        // Arvore inteira: um `.limit(1000)` aqui seria o mesmo corte silencioso.
+        fetchAllRowsResult<{ id: string; parent_id: string | null }>(admin, "categories", "id,parent_id", { orderBy: "id" }),
         admin.from("commission_settings").select("store_percent").eq("id", true).maybeSingle(),
       ]);
       if (rulesResult.error) throw rulesResult.error;

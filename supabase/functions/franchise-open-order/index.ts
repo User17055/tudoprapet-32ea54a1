@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
     }
 
     const productIds = [...new Set([...details.values()].map((detail) => detail.productId))];
+    // leitura-limitada: produtos do pedido
     const { data: audienceRows, error: audienceError } = await admin.from("product_audience")
       .select("shopify_product_id,audience").in("shopify_product_id", productIds);
     if (audienceError) throw audienceError;
@@ -114,6 +115,7 @@ Deno.serve(async (req) => {
     }
 
     const variantIds = combined.map((item) => item.variantId);
+    // leitura-limitada: variantes do pedido
     const { data: prices, error: priceError } = await admin.from("franchise_prices")
       .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
     if (priceError) throw priceError;

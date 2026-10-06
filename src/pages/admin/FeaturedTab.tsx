@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { ArrowDown, ArrowUp, Loader2, Package, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface FeaturedProduct {
   id: string;
@@ -26,7 +27,7 @@ export default function FeaturedTab() {
     try {
       const [shop, highlights] = await Promise.all([
         fetchAllShopifyProducts(),
-        supabase.from("featured_products").select("*").order("sort_order", { ascending: true }),
+        fetchAllRowsResult("featured_products", "*", { orderBy: ["sort_order", "id"] }),
       ]);
 
       setProducts(shop);

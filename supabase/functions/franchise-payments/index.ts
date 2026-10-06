@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
     const sessionIds = (sessions || []).map((session) => session.id);
     if (!sessionIds.length) return jsonResponse({ payments: [] });
 
+    // leitura-limitada: pagamentos dos ate 100 pedidos (limit 100 acima)
     const { data: paymentRows, error: paymentsError } = await admin.from("payments")
       .select(
         "id,checkout_session_id,amount,status,due_date,provider_payment_id,provider_payment_url,created_at",

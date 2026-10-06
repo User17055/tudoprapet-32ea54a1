@@ -46,7 +46,9 @@ Deno.serve(async (req) => {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         const [costResult, customerResult] = await Promise.all([
+          // leitura-limitada: lote de 80 variantes
           admin.from("product_costs").select("shopify_variant_id,cost").in("shopify_variant_id", chunk),
+          // leitura-limitada: lote de 80 variantes
           admin.from("customer_prices").select("shopify_variant_id,price").in("shopify_variant_id", chunk),
         ]);
         lastError = costResult.error || customerResult.error;

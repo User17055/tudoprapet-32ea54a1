@@ -14,7 +14,7 @@ import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { ProductPicker } from "@/components/admin/ProductPicker";
 import { fuzzySearch, normalizeText } from "@/lib/fuzzySearch";
 import { suggestProductDetails, type ProductDetailSuggestion } from "@/lib/productDetailSuggestions";
-import { fetchAllRows } from "@/lib/fetchAllRows";
+import { fetchAllRows, fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 interface Category {
   id: string;
@@ -170,8 +170,8 @@ function ValuesPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: ks }, { data: vals }] = await Promise.all([
-      supabase.from("attribute_keys").select("*").order("sort_order").order("name"),
-      supabase.from("attribute_values").select("*").order("attr_key").order("sort_order").order("attr_value"),
+      fetchAllRowsResult("attribute_keys", "*", { orderBy: ["sort_order", "name", "id"] }),
+      fetchAllRowsResult("attribute_values", "*", { orderBy: ["attr_key", "sort_order", "attr_value", "id"] }),
     ]);
     setKeys((ks || []) as AttrKey[]);
     setItems((vals || []) as AttrValue[]);
@@ -370,11 +370,7 @@ function CategoriesPanel() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("categories")
-      .select("*")
-      .order("sort_order")
-      .order("name");
+    const { data, error } = await fetchAllRowsResult("categories", "*", { orderBy: ["sort_order", "name", "id"] });
     if (error) toast.error("Erro ao carregar categorias");
     setCategories((data || []) as Category[]);
     setLoading(false);
@@ -481,7 +477,7 @@ function BrandsPanel() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("brands").select("*").order("name");
+    const { data, error } = await fetchAllRowsResult("brands", "*", { orderBy: ["name", "id"] });
     if (error) toast.error("Erro ao carregar marcas");
     setBrands((data || []) as Brand[]);
     setLoading(false);
@@ -600,8 +596,8 @@ function AssignPanel() {
   useEffect(() => {
     (async () => {
       const [{ data: vals }, { data: ks }] = await Promise.all([
-        supabase.from("attribute_values").select("*").order("attr_key").order("sort_order"),
-        supabase.from("attribute_keys").select("name").order("sort_order").order("name"),
+        fetchAllRowsResult("attribute_values", "*", { orderBy: ["attr_key", "sort_order", "id"] }),
+        fetchAllRowsResult("attribute_keys", "id,name", { orderBy: ["sort_order", "name", "id"] }),
       ]);
       setAllValues((vals || []) as AttrValue[]);
       setRegisteredKeys(((ks || []) as { name: string }[]).map((r) => r.name));
@@ -689,9 +685,11 @@ function AssignPanel() {
 
   const reloadProfiles = async () => {
     const [profileRows, categoryRows, attributeRows] = await Promise.all([
-      supabase.from("product_detail_profiles").select("id, name, brand_id").order("name"),
-      supabase.from("product_detail_profile_categories").select("profile_id, category_id"),
-      supabase.from("product_detail_profile_attributes").select("*").order("sort_order"),
+      fetchAllRowsResult("product_detail_profiles", "id, name, brand_id", { orderBy: ["name", "id"] }),
+      fetchAllRowsResult("product_detail_profile_categories", "profile_id, category_id", {
+        orderBy: ["profile_id", "category_id"],
+      }),
+      fetchAllRowsResult("product_detail_profile_attributes", "*", { orderBy: ["sort_order", "id"] }),
     ]);
     setProfiles((profileRows.data || []) as DetailProfile[]);
     setProfileCategories((categoryRows.data || []) as DetailProfileCategory[]);
@@ -704,8 +702,8 @@ function AssignPanel() {
       try {
         const [shop, cats, brs] = await Promise.all([
           fetchAllShopifyProducts(),
-          supabase.from("categories").select("*").order("name"),
-          supabase.from("brands").select("*").order("name"),
+          fetchAllRowsResult("categories", "*", { orderBy: ["name", "id"] }),
+          fetchAllRowsResult("brands", "*", { orderBy: ["name", "id"] }),
         ]);
         setProducts(shop);
         setCategories((cats.data || []) as Category[]);
@@ -731,7 +729,9 @@ function AssignPanel() {
     }
     (async () => {
       const [pc, pa, content] = await Promise.all([
+        // leitura-limitada: vinculos de UM produto
         supabase.from("product_categories").select("*").eq("shopify_product_id", productId),
+        // leitura-limitada: atributos de UM produto
         supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
         supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
       ]);
@@ -1109,7 +1109,9 @@ function AssignPanel() {
 
       await reloadAll();
       const [{ data: currentCats }, { data: currentAttrs }, { data: currentContent }] = await Promise.all([
+        // leitura-limitada: vinculos de UM produto
         supabase.from("product_categories").select("*").eq("shopify_product_id", productId),
+        // leitura-limitada: atributos de UM produto
         supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
         supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
       ]);
@@ -1282,7 +1284,9 @@ function AssignPanel() {
       const current = applicable.find((item) => item.productId === productId);
       if (current) {
         const [{ data: currentCats }, { data: currentAttrs }, { data: currentContent }] = await Promise.all([
+          // leitura-limitada: vinculos de UM produto
           supabase.from("product_categories").select("*").eq("shopify_product_id", productId),
+          // leitura-limitada: atributos de UM produto
           supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
           supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
         ]);

@@ -35,6 +35,7 @@ import { goToCheckout } from "@/lib/checkout";
 import { ProductImage } from "@/components/ProductImage";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
 import { notifyCartItemAdded, notifyCartItemAddFailed } from "@/lib/cartNotifications";
+import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 
 const ProductDetail = () => {
   const navigate = useNavigate();
@@ -194,11 +195,13 @@ const ProductDetail = () => {
 
       // Fetch categories, brand, attributes
       const [pcRes, contentRes, attrsRes, catsAllRes, brandsAllRes] = await Promise.all([
+        // leitura-limitada: vinculos de UM produto
         supabase.from("product_categories").select("category_id").eq("shopify_product_id", pid),
         supabase.from("product_content").select("brand_id").eq("shopify_product_id", pid).maybeSingle(),
+        // leitura-limitada: atributos de UM produto
         supabase.from("product_attributes").select("attr_key, attr_value").eq("shopify_product_id", pid).order("sort_order"),
-        supabase.from("categories").select("id, name, parent_id"),
-        supabase.from("brands").select("id, name"),
+        fetchAllRowsResult("categories", "id, name, parent_id", { orderBy: "id" }),
+        fetchAllRowsResult("brands", "id, name", { orderBy: "id" }),
       ]);
       const allCats = (catsAllRes.data || []) as { id: string; name: string; parent_id: string | null }[];
       const allBrands = (brandsAllRes.data || []) as { id: string; name: string }[];
