@@ -34,6 +34,7 @@ import {
   getOlistReceivable,
   issueOlistInvoice,
   type OlistFranchiseOrderInput,
+  type OlistInvoice,
 } from "../_shared/olist.ts";
 import {
   franchisePaymentDueDate,
@@ -615,19 +616,29 @@ Deno.serve(async (req) => {
       if (paymentSaveError) throw paymentSaveError;
 
       olistStage = "invoice";
-      let invoice = session.olist_invoice_id
+      let invoice: OlistInvoice | null = session.olist_invoice_id
         ? {
           id: String(session.olist_invoice_id),
           number: String(session.olist_invoice_number || ""),
           issued: false,
         }
-        : await generateOlistInvoice(order.id, olistToken);
-      const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
-        olist_invoice_id: invoice.id,
-        olist_invoice_number: invoice.number,
-      }).eq("id", sessionId);
-      if (invoiceSaveError) throw invoiceSaveError;
-      invoice = await issueOlistInvoice(invoice, olistToken);
+        : null;
+      let invoiceError: string | null = null;
+      try {
+        if (!invoice) invoice = await generateOlistInvoice(order.id, olistToken);
+        const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
+          olist_invoice_id: invoice.id,
+          olist_invoice_number: invoice.number,
+        }).eq("id", sessionId);
+        if (invoiceSaveError) throw invoiceSaveError;
+        invoice = await issueOlistInvoice(invoice, olistToken);
+      } catch (error) {
+        // A nota e uma etapa fiscal posterior ao pedido. Rejeicao, indisponibilidade
+        // ou pendencia da NF-e ficam registradas para correcao/reprocessamento, mas
+        // nao impedem o pedido com prazo de nascer na Shopify.
+        invoiceError = error instanceof Error ? error.message : String(error);
+        console.error(`NF-e da franquia ${sessionId} pendente/rejeitada:`, error);
+      }
 
       olistStage = "shopify";
       const shopifyToken = shopifyAdminToken();
@@ -646,8 +657,8 @@ Deno.serve(async (req) => {
       const { error: completedSaveError } = await admin.from("checkout_sessions").update({
         status: "credit_approved",
         shopify_order_id: completed.orderId,
-        olist_invoice_number: invoice.number,
-        olist_invoice_url: invoice.accessUrl || null,
+        ...(invoice?.number ? { olist_invoice_number: invoice.number } : {}),
+        ...(invoice?.accessUrl ? { olist_invoice_url: invoice.accessUrl } : {}),
       }).eq("id", sessionId);
       if (completedSaveError) throw completedSaveError;
       await writeCheckoutAttemptLog(admin, {
@@ -662,7 +673,9 @@ Deno.serve(async (req) => {
         metadata: {
           provider: "olist",
           olistOrderId: order.id,
-          olistInvoiceId: invoice.id,
+          olistInvoiceId: invoice?.id || session.olist_invoice_id || null,
+          invoiceIssued: invoice?.issued === true,
+          invoiceError,
           dueDate,
           paymentTermDays: termDays,
           paymentScheduleType,
