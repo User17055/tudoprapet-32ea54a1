@@ -474,11 +474,9 @@ export async function issueOlistInvoice(
   const issued = payload?.retorno?.nota_fiscal;
   if (!issued && payload?.retorno?.status !== "OK") throw new Error(responseErrors(payload));
   const confirmed = await getOlistInvoice(String(issued?.id ?? invoice.id), token);
-  if (!confirmed.issued) {
-    throw new Error(
-      "A nota fiscal foi enviada para emissão, mas ainda não foi autorizada pela SEFAZ",
-    );
-  }
+  // Emissão aceita pela Olist mas ainda pendente na SEFAZ não interrompe o
+  // fluxo: o pedido na Shopify segue com pagamento pendente e a nota é
+  // conferida depois pela conciliação.
   return confirmed;
 }
 
