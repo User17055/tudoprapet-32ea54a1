@@ -24,7 +24,13 @@ import { STANDARD_ATTR_KEYS } from "@/lib/productAttributes";
 import { useProductAudience } from "@/hooks/useProductAudience";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { useProductVariations } from "@/hooks/useProductVariations";
-import { fuzzySearch } from "@/lib/fuzzySearch";
+import {
+  buildSearchVocabulary,
+  productSearchFields,
+  searchProducts,
+  suggestSearchCorrection,
+  type SearchField,
+} from "@/lib/productSearch";
 import { isProductAvailable, selectVariationRepresentative } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
@@ -219,24 +225,43 @@ const Catalog = () => {
     [audienceVisibleProducts, hasSearch],
   );
 
-  // busca tolerante a erros de digitacao; define o universo sobre o qual os filtros contam
+  // Campos da busca por produto: os mesmos da barra do topo, mais as categorias e as
+  // variacoes visiveis, que so o catalogo carrega.
+  const searchFieldsById = useMemo(() => {
+    const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
+    const categoryNames = new Map<string, string[]>();
+    for (const row of productCats) {
+      const name = categoryNameById.get(row.category_id);
+      if (!name) continue;
+      if (!categoryNames.has(row.shopify_product_id)) categoryNames.set(row.shopify_product_id, []);
+      categoryNames.get(row.shopify_product_id)!.push(name);
+    }
+    return new Map<string, SearchField[]>(discoverableProducts.map((p) => [p.node.id, productSearchFields({
+      title: p.node.title,
+      vendor: p.node.vendor,
+      productType: p.node.productType,
+      tags: p.node.tags,
+      description: p.node.description,
+      categoryNames: categoryNames.get(p.node.id),
+      variationGroupName: getVariationGroupName(p.node.id),
+      variationTexts: getVariations(p.node.id)
+        .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
+        .flatMap((item) => [item.label, item.shopify_product_title]),
+    })]));
+  }, [discoverableProducts, categories, productCats, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+
+  // Toda palavra digitada precisa casar; define o universo sobre o qual os filtros contam.
+  // Na relevancia, o que esta em estoque vem antes do esgotado, mantendo a ordem da busca.
   const searchedProducts = useMemo(() => {
     if (!hasSearch) return discoverableProducts;
-    return fuzzySearch(filters.search, discoverableProducts, (p) => [
-      { value: p.node.title, weight: 1 },
-      { value: getVariationGroupName(p.node.id) || "", weight: 1 },
-      ...getVariations(p.node.id)
-        .filter((item) => isVisibleTo(item.shopify_product_id, isFranchisee))
-        .flatMap((item) => [
-          { value: item.label, weight: 1 },
-          { value: item.shopify_product_title, weight: 1 },
-        ]),
-      { value: p.node.vendor, weight: 0.9 },
-      { value: p.node.productType, weight: 0.85 },
-      { value: (p.node.tags || []).join(" "), weight: 0.8 },
-      { value: p.node.description?.slice(0, 300), weight: 0.6 },
-    ]);
-  }, [discoverableProducts, hasSearch, filters.search, getVariationGroupName, getVariations, isVisibleTo, isFranchisee]);
+    const ranked = searchProducts(filters.search, discoverableProducts, (p) => searchFieldsById.get(p.node.id) || []);
+    return [...ranked.filter(isProductAvailable), ...ranked.filter((p) => !isProductAvailable(p))];
+  }, [discoverableProducts, hasSearch, filters.search, searchFieldsById]);
+
+  const searchSuggestion = useMemo(() => {
+    if (!hasSearch || searchedProducts.length > 0) return null;
+    return suggestSearchCorrection(filters.search, buildSearchVocabulary(searchFieldsById.values()));
+  }, [hasSearch, searchedProducts.length, filters.search, searchFieldsById]);
 
   const facetProducts = useMemo<FacetProduct[]>(() => {
     const catsByProduct = new Map<string, Set<string>>();
@@ -787,8 +812,40 @@ const Catalog = () => {
               ) : filteredProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <PackageOpen className="h-16 w-16 text-muted-foreground mb-4" />
-                  <h3 className="font-display font-bold text-xl mb-2">Nenhum produto encontrado</h3>
-                  <p className="text-muted-foreground max-w-md">Tente ajustar os filtros ou buscar por outro termo.</p>
+                  <h3 className="font-display font-bold text-xl mb-2">
+                    {hasSearch ? `Nenhum resultado para "${filters.search}"` : "Nenhum produto encontrado"}
+                  </h3>
+                  {searchSuggestion ? (
+                    <p className="text-muted-foreground max-w-md">
+                      Você quis dizer{" "}
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => updateFilters((draft) => { draft.search = searchSuggestion; }, { replace: false })}
+                      >
+                        {searchSuggestion}
+                      </button>
+                      ?
+                    </p>
+                  ) : hasSearch && searchedProducts.length > 0 ? (
+                    // A busca acha produtos, mas os filtros marcados escondem todos.
+                    <p className="text-muted-foreground max-w-md">
+                      A busca encontrou {searchedProducts.length} {searchedProducts.length === 1 ? "produto" : "produtos"}, mas nenhum passa pelos filtros marcados.{" "}
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => setSearchParams(buildCatalogParams({ ...parseCatalogParams(new URLSearchParams()), search: filters.search }))}
+                      >
+                        Ver todos
+                      </button>
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground max-w-md">
+                      {hasSearch
+                        ? "Confira a ortografia ou use menos palavras, como o nome da marca ou do produto."
+                        : "Tente ajustar os filtros."}
+                    </p>
+                  )}
                   {hasActiveFilters && (
                     <Button variant="outline" className="mt-4" onClick={clearFilters}>Limpar filtros</Button>
                   )}
