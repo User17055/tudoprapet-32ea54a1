@@ -121,8 +121,13 @@ export const ProductCard = ({
 
   const subscriberPrice = variant ? getSubscriberPrice(variant.id) : null;
   const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
+  const isFranchiseOnly = Boolean(
+    blockedVariantIds &&
+    node.variants.edges.length > 0 &&
+    node.variants.edges.every(({ node: v }) => blockedVariantIds.has(v.id))
+  );
   const hasFranchiseDiscount =
-    isFranchisee && franchisePrice !== null && franchisePrice < price;
+    isFranchisee && !isFranchiseOnly && franchisePrice !== null && franchisePrice < price;
   const franchiseDiscountPercent = hasFranchiseDiscount && franchisePrice !== null
     ? Math.round(((price - franchisePrice) / price) * 100)
     : 0;
