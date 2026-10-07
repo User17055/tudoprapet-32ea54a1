@@ -495,7 +495,10 @@ Deno.serve(async (req) => {
         : undefined;
       const unitPrice = applyCostFloor(resolvedPrice, costFloor)!;
       finalPriceMap.set(item.variantId, unitPrice);
-      subtotal += catalogPrice * item.quantity;
+      // O piso de custo da franquia pode deixar o valor final acima do preço do
+      // catálogo. Nesse caso a referência do subtotal é o próprio valor final:
+      // o desconto representa só economia real e nunca fica negativo.
+      subtotal += Math.max(catalogPrice, unitPrice) * item.quantity;
       total += unitPrice * item.quantity;
       const lineTotal = money(unitPrice * item.quantity);
       const appliedRule = commissionEligible
