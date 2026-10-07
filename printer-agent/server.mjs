@@ -69,10 +69,16 @@ async function fetchLabelOrders(){
 
 async function fetchLabelOrder(orderId){
   const data=await agentPost({action:"print_order",orderId:String(orderId)});
-  if(!data.order||!Array.isArray(data.order.line_items)||data.order.line_items.length===0){
-    throw new Error("O pedido ainda nao esta completo na Shopify. Aguarde alguns segundos e tente novamente.");
+  if(data.order&&Array.isArray(data.order.line_items)&&data.order.line_items.length>0)return data.order;
+  // Compatibilidade com admin-orders antigo: ele ignora a action desconhecida
+  // e devolve `orders` em vez de `order`.
+  const orders=Array.isArray(data.orders)?data.orders:await fetchLabelOrders();
+  const fallback=orders.find(item=>String(item.id)===String(orderId));
+  if(fallback&&Array.isArray(fallback.line_items)&&fallback.line_items.length>0)return fallback;
+  if(fallback){
+    throw new Error("A Shopify ainda nao devolveu os itens deste pedido. Aguarde alguns segundos e tente novamente.");
   }
-  return data.order;
+  throw new Error("Pedido nao encontrado entre os pedidos recentes da Shopify.");
 }
 
 function invoiceLabelZpl(invoice,order){
@@ -219,7 +225,7 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.5",printer:config.printerName,printerConfigured:Boolean(String(config.printerName||"").trim()),autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.6",printer:config.printerName,printerConfigured:Boolean(String(config.printerName||"").trim()),autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}

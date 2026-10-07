@@ -38,6 +38,10 @@ import {
 } from "../_shared/commission.ts";
 import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
 import { franchiseOrderFingerprint } from "../_shared/franchise-order-dedup.ts";
+import {
+  externalPaymentAttributes,
+  externalPaymentTags,
+} from "../_shared/shopify-payment.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -730,6 +734,7 @@ Deno.serve(async (req) => {
         "checkout-proprio",
         customerType === "franchise" ? "olist" : "asaas",
         customerType,
+        ...(customerType === "franchise" ? [] : externalPaymentTags(intendedMethod)),
         ...(customerType === "franchise" && input.invoicePurpose
           ? [`nfe-${input.invoicePurpose === "resale" ? "revenda" : "consumo-final"}`]
           : []),
@@ -739,6 +744,7 @@ Deno.serve(async (req) => {
       note: `Checkout TudoPraPet ${session.id}`,
       customAttributes: [
         { key: "checkout_session_id", value: session.id },
+        ...(customerType === "franchise" ? [] : externalPaymentAttributes(intendedMethod)),
         ...(customerType === "franchise" && input.invoicePurpose
           ? [
             { key: "finalidade_nfe", value: input.invoicePurpose },

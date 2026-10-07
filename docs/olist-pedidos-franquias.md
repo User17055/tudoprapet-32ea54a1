@@ -33,6 +33,19 @@ npx supabase secrets set OLIST_FINAL_CONSUMPTION_NATURE_OPERATION_ID="id-consumo
 
 `OLIST_FRANCHISE_PAYMENT_METHOD` usa `boleto` por padrão. O valor é normalizado para minúsculas antes de ser enviado à Olist.
 
+## Pagamentos Asaas importados da Shopify
+
+Pedidos comuns e de assinantes pagos por Pix ou cartão no Asaas são concluídos
+na Shopify como pagos. O pedido também leva `note_attributes` com
+`payment_method`, `meio_pagamento`, `payment_gateway` e `provedor_pagamento`,
+permitindo que a integração da Olist reconheça o intermediador real.
+
+Na integração Shopify do ERP, habilite **Importar forma de recebimento nos
+pedidos** e **Utilizar meio pagamento informado no note_attributes**. Depois,
+na aba **Formas de Recebimento**, mapeie o código `pix` para a forma **Pix** e
+para um meio/gateway financeiro chamado **Asaas**. Esse cadastro é apenas a
+conciliação do ERP; a confirmação real continua vindo do webhook do Asaas.
+
 Os dois IDs de natureza de operação são obrigatórios para novos pedidos de franquia. Obtenha-os no cadastro fiscal da Olist com o contador; o sistema não presume CFOP ou tributação. A escolha **Revenda** ou **Consumo final** feita no checkout seleciona o ID correspondente no campo `id_natureza_operacao` do pedido da Olist.
 
 No painel da Olist, confirme antes da publicação:
