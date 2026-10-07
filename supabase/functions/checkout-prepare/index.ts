@@ -94,7 +94,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
   let dedupAdmin: any = null;
-  let dedupUserId: string | null = null;
   let dedupFingerprint: string | null = null;
   let keepDedupLock = false;
   try {
@@ -596,27 +595,27 @@ Deno.serve(async (req) => {
       return errorResponse(belowMinimumChargeMessage(total), 422);
     }
     if (customerType === "franchise" && auth.user) {
-      dedupUserId = auth.user.id;
       dedupFingerprint = await franchiseOrderFingerprint(
         auth.user.id,
         input.items,
         shippingCode,
         input.invoicePurpose || "",
       );
-      const { data: claimed, error: claimError } = await admin.rpc(
-        "claim_franchise_order_submission",
-        {
-          p_user_id: dedupUserId,
-          p_fingerprint: dedupFingerprint,
-          p_window_seconds: 60 * 60,
-        },
-      );
-      if (claimError) throw claimError;
-      if (claimed !== true) {
-        return errorResponse(
-          "Este mesmo pedido já está sendo processado ou foi enviado há menos de 1 hora.",
-          409,
-        );
+      // Reaproveita a trava atomica que ja existe em producao. A chave inclui
+      // finalidade fiscal, entao Revenda e Consumo final nao se bloqueiam.
+      const { error: claimError } = await admin.rpc("consume_checkout_rate_limit", {
+        p_key_hash: dedupFingerprint,
+        p_limit: 1,
+        p_window_seconds: 60 * 60,
+      });
+      if (claimError) {
+        if (claimError.message?.includes("checkout_rate_limit_exceeded")) {
+          return errorResponse(
+            "Este mesmo pedido já está sendo processado ou foi enviado há menos de 1 hora.",
+            409,
+          );
+        }
+        throw claimError;
       }
     }
     const accessToken = newCheckoutAccessToken();
@@ -790,11 +789,8 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      if (dedupUserId && dedupFingerprint) {
-        await admin.rpc("release_franchise_order_submission", {
-          p_user_id: dedupUserId,
-          p_fingerprint: dedupFingerprint,
-        });
+      if (dedupFingerprint) {
+        await admin.from("checkout_rate_limits").delete().eq("key_hash", dedupFingerprint);
         dedupFingerprint = null;
       }
       return errorResponse(customerFacingDraftError(userErrors, draft.error), 502);
@@ -832,23 +828,13 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
-      if (dedupUserId && dedupFingerprint) {
-        await admin.rpc("release_franchise_order_submission", {
-          p_user_id: dedupUserId,
-          p_fingerprint: dedupFingerprint,
-        });
+      if (dedupFingerprint) {
+        await admin.from("checkout_rate_limits").delete().eq("key_hash", dedupFingerprint);
         dedupFingerprint = null;
       }
       return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
     }
-    keepDedupLock = Boolean(dedupUserId && dedupFingerprint);
-    if (keepDedupLock) {
-      const { error: linkError } = await admin.from("franchise_order_submission_locks")
-        .update({ checkout_session_id: session.id, updated_at: new Date().toISOString() })
-        .eq("user_id", dedupUserId!)
-        .eq("fingerprint", dedupFingerprint!);
-      if (linkError) console.error("Falha ao vincular trava de pedido duplicado:", linkError);
-    }
+    keepDedupLock = Boolean(dedupFingerprint);
     if (!draft.taxCredentialStored) {
       console.warn(
         `Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`,
@@ -907,11 +893,10 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
-    if (dedupAdmin && dedupUserId && dedupFingerprint && !keepDedupLock) {
-      const { error: releaseError } = await dedupAdmin.rpc("release_franchise_order_submission", {
-        p_user_id: dedupUserId,
-        p_fingerprint: dedupFingerprint,
-      });
+    if (dedupAdmin && dedupFingerprint && !keepDedupLock) {
+      const { error: releaseError } = await dedupAdmin.from("checkout_rate_limits")
+        .delete()
+        .eq("key_hash", dedupFingerprint);
       if (releaseError) console.error("Falha ao liberar trava de pedido duplicado:", releaseError);
     }
     console.error("checkout-prepare:", error);

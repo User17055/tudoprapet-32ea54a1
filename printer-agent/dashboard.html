@@ -19,6 +19,13 @@
     </section>
 
     <section class="panel">
+      <h2>Teste da impressora</h2>
+      <p>Use este botão depois da instalação. Uma etiqueta curta de confirmação deve sair imediatamente.</p>
+      <div class="actions"><button id="test-printer">Imprimir etiqueta de teste</button></div>
+      <div id="test-message" class="message"></div>
+    </section>
+
+    <section class="panel">
       <h2>Gerar etiqueta do pedido</h2>
       <p>Selecione um pedido. A forma de entrega e os dados do cliente vêm diretamente da Shopify, sem precisar carregar XML.</p>
       <div class="form">
@@ -49,6 +56,7 @@
     $('order').addEventListener('change',updateButtons);
     async function requestLabel(print){const button=print?$('print'):$('generate');button.disabled=true;setMessage(print?'Enviando para a impressora…':'Gerando etiqueta…');try{const response=await fetch('/order-label',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({orderId:$('order').value,print})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Falha ao gerar etiqueta');$('zpl').value=data.zpl;$('download').disabled=false;setMessage(print?'Etiqueta aceita pela fila de impressão do Windows.':'Código ZPL gerado com sucesso.')}catch(error){setMessage(error.message||String(error),true)}finally{button.disabled=false}}
     $('generate').addEventListener('click',()=>requestLabel(false));$('print').addEventListener('click',()=>requestLabel(true));$('download').addEventListener('click',()=>{const blob=new Blob([$('zpl').value],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);const order=orders.find(item=>String(item.id)===$('order').value);a.download=`etiqueta-${String(order?.name||'tudoprapet').replace(/\D/g,'')}.zpl`;a.click();URL.revokeObjectURL(a.href)});
+    $('test-printer').addEventListener('click',async()=>{const button=$('test-printer'),message=$('test-message');button.disabled=true;message.textContent='Enviando teste para a impressora…';message.className='message show';try{const response=await fetch('/test-print',{method:'POST'}),data=await response.json();if(!response.ok)throw new Error(data.error||'Falha ao testar a impressora');message.textContent='Etiqueta de teste enviada com sucesso.';message.className='message show'}catch(error){message.textContent=error.message||String(error);message.className='message show bad'}finally{button.disabled=false}});
     loadStatus();loadHistory();loadOrders();setInterval(()=>{loadStatus();loadHistory()},5000);setInterval(loadOrders,15000);
   </script>
 </body>

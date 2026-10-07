@@ -21,7 +21,7 @@ let lastError=null,lastPrintAt=null,polling=false,pollingJobs=false;
 const saveState=async()=>{state.printedOrderIds=state.printedOrderIds.slice(-2000);state.printedJobIds=state.printedJobIds.slice(-2000);state.history=state.history.slice(0,50);await writeFile(statePath,JSON.stringify(state,null,2))};
 const recordHistory=async(entry)=>{state.history.unshift({at:new Date().toISOString(),...entry});await saveState()};
 
-function sendRaw(zpl){return new Promise(async(resolve,reject)=>{const temp=join(tmpdir(),`tpp-${randomUUID()}.zpl`);await writeFile(temp,zpl,"ascii");const child=spawn("powershell.exe",["-NoProfile","-ExecutionPolicy","Bypass","-File",join(here,"print-raw.ps1"),"-PrinterName",config.printerName,"-FilePath",temp],{windowsHide:true});let err="";child.stderr.on("data",c=>err+=c);child.on("error",reject);child.on("close",async code=>{await unlink(temp).catch(()=>{});if(code===0){lastPrintAt=new Date().toISOString();lastError=null;resolve()}else{lastError=err.trim()||`PowerShell terminou com código ${code}`;reject(new Error(lastError))}})})}
+function sendRaw(zpl){if(!String(config.printerName||"").trim())return Promise.reject(new Error("Impressora nao configurada. Execute INSTALAR.cmd e escolha a Zebra."));return new Promise(async(resolve,reject)=>{const temp=join(tmpdir(),`tpp-${randomUUID()}.zpl`);await writeFile(temp,zpl,"ascii");const child=spawn("powershell.exe",["-NoProfile","-ExecutionPolicy","Bypass","-File",join(here,"print-raw.ps1"),"-PrinterName",config.printerName,"-FilePath",temp],{windowsHide:true});let err="";child.stderr.on("data",c=>err+=c);child.on("error",reject);child.on("close",async code=>{await unlink(temp).catch(()=>{});if(code===0){lastPrintAt=new Date().toISOString();lastError=null;resolve()}else{lastError=err.trim()||`PowerShell terminou com código ${code}`;reject(new Error(lastError))}})})}
 const clean=(v,max=50)=>String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[\^~]/g," ").replace(/[^\x20-\x7e]/g," ").slice(0,max);
 const brl=v=>`R$ ${Number(v||0).toFixed(2).replace(".",",")}`;
 function orderToZpl(o){
@@ -33,7 +33,7 @@ function orderToZpl(o){
     let y=755;
     const items=pageItems.map((item,index)=>{if(index>0)y+=58;const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${clean(label,85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${clean(brl(item.price*item.quantity),20)}^FS`}).join("\n")||"^FO25,755^A0N,24,24^FDNenhum item informado^FS";
     const totalY=y+82,pageNumber=pageIndex+1,pageCount=pages.length,itemStart=pageIndex*itemsPerLabel+1,itemEnd=itemStart+pageItems.length-1;
-    const pageDescription=pageCount>1?`ITENS ${itemStart}-${itemEnd} DE ${allItems.length} - FOLHA ${pageNumber}/${pageCount}`:"ITENS DO PEDIDO";
+    const pageDescription=pageCount>1?`ITENS ${itemStart}-${itemEnd} DE ${allItems.length} - PARTE ${pageNumber}/${pageCount}`:"ITENS DO PEDIDO";
     return `^XA
 ^CI28
 ^FX TPP-ZPL-V3
@@ -44,7 +44,7 @@ function orderToZpl(o){
 ^FO25,145^GB750,90,90^FS
 ^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
 ^FO25,255^A0N,30,30^FDPEDIDO ${clean(o.name,24)}^FS
-^FO545,255^A0N,24,24^FB230,1,0,R^FDFOLHA ${pageNumber}/${pageCount}^FS
+^FO545,255^A0N,24,24^FB230,1,0,R^FDPARTE ${pageNumber}/${pageCount}^FS
 ^FO25,295^A0N,22,22^FDMETODO: ${clean(o.shipping_method||delivery,48)}^FS
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS
@@ -180,7 +180,11 @@ async function pollPrintJobs(){
         continue;
       }
       try{
-        await sendRaw(job.zpl);
+        // A fila pode ter sido criada por uma versao antiga do site, com ZPL
+        // de uma unica pagina. O agente sempre remonta a etiqueta localmente
+        // para aplicar a paginacao atual antes de enviar para a Zebra.
+        const freshOrder=await fetchLabelOrder(job.order_id);
+        await sendRaw(orderToZpl(freshOrder));
       }catch(error){
         await recordHistory({jobId:String(job.id),orderName:job.order_name||job.order_id||"Pedido",source:"manual",status:"error",error:error instanceof Error?error.message:String(error)});
         await agentPost({action:"ack_print",jobId:job.id,status:"error",error:error instanceof Error?error.message:String(error)}).catch(()=>{});
@@ -215,7 +219,7 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.3",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.5",printer:config.printerName,printerConfigured:Boolean(String(config.printerName||"").trim()),autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}
@@ -261,6 +265,18 @@ const server=http.createServer(async(req,res)=>{
       await sendRaw(body.zpl);
       return reply(res,200,{ok:true},origin);
     }catch(error){return reply(res,400,{error:error instanceof Error?error.message:"Falha ao imprimir"},origin)}
+  }
+  if(req.method==="POST"&&req.url==="/test-print"){
+    try{
+      const zpl=`^XA\n^CI28\n^PW800\n^LL500\n^FO40,45^A0N,48,48^FDTUDOPRAPET^FS\n^FO40,120^A0N,34,34^FDIMPRESSORA CONFIGURADA^FS\n^FO40,185^A0N,26,26^FD${clean(config.printerName,60)}^FS\n^FO40,245^GB720,3,3^FS\n^FO40,280^A0N,24,24^FDTeste realizado em ${clean(new Date().toLocaleString("pt-BR"),35)}^FS\n^XZ`;
+      await sendRaw(zpl);
+      await recordHistory({orderName:"Teste da impressora",source:"test",status:"printed"});
+      return reply(res,200,{ok:true},origin);
+    }catch(error){
+      const message=error instanceof Error?error.message:"Falha ao testar a impressora";
+      await recordHistory({orderName:"Teste da impressora",source:"test",status:"error",error:message}).catch(()=>{});
+      return reply(res,400,{error:message},origin);
+    }
   }
   return reply(res,404,{error:"Rota não encontrada"},origin);
 });

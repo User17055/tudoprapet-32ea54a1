@@ -69,7 +69,7 @@ export function orderToZpl(order: PrintableOrder): string {
     const itemStart = pageIndex * itemsPerLabel + 1;
     const itemEnd = itemStart + pageItems.length - 1;
     const pageDescription = pageCount > 1
-      ? `ITENS ${itemStart}-${itemEnd} DE ${order.line_items.length} - FOLHA ${pageNumber}/${pageCount}`
+      ? `ITENS ${itemStart}-${itemEnd} DE ${order.line_items.length} - PARTE ${pageNumber}/${pageCount}`
       : "ITENS DO PEDIDO";
 
     return `^XA
@@ -82,7 +82,7 @@ export function orderToZpl(order: PrintableOrder): string {
 ^FO25,145^GB750,90,90^FS
 ^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
 ^FO25,255^A0N,30,30^FDPEDIDO ${zplText(order.name, 24)}^FS
-^FO545,255^A0N,24,24^FB230,1,0,R^FDFOLHA ${pageNumber}/${pageCount}^FS
+^FO545,255^A0N,24,24^FB230,1,0,R^FDPARTE ${pageNumber}/${pageCount}^FS
 ^FO25,295^A0N,22,22^FDMETODO: ${zplText(order.shipping_method || delivery, 48)}^FS
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS

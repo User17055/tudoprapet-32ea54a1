@@ -45,8 +45,8 @@ describe("impressão de pedido", () => {
     expect(zpl.match(/\^XA/g)).toHaveLength(3);
     expect(zpl.match(/\^XZ/g)).toHaveLength(3);
     expect(zpl.match(/\^LL1200/g)).toHaveLength(3);
-    expect(zpl).toContain("ITENS 1-5 DE 12 - FOLHA 1/3");
-    expect(zpl).toContain("ITENS 11-12 DE 12 - FOLHA 3/3");
+    expect(zpl).toContain("ITENS 1-5 DE 12 - PARTE 1/3");
+    expect(zpl).toContain("ITENS 11-12 DE 12 - PARTE 3/3");
     for (let index = 1; index <= 12; index += 1) {
       expect(zpl).toContain(`1x Produto ${index}`);
     }
