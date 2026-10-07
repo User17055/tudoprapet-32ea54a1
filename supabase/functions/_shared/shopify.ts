@@ -29,6 +29,35 @@ export function shopifyAdminToken(): string {
 export const ADMIN_API = `https://${SHOP_DOMAIN}/admin/api/2025-07`;
 export const STOREFRONT_API = `https://${SHOP_DOMAIN}/api/2025-07/graphql.json`;
 
+export interface ShopifyOrderReference {
+  id: string;
+  name: string;
+  orderNumber: string;
+  financialStatus: string;
+}
+
+/** Dados mínimos para relacionar o pedido Shopify ao pedido importado no ERP. */
+export async function getShopifyOrderReference(
+  orderId: string,
+  token: string,
+): Promise<ShopifyOrderReference> {
+  const id = String(orderId || "").replace(/\D/g, "");
+  if (!id) throw new Error("Pedido Shopify inválido para conciliação Olist");
+  const response = await fetch(
+    `${ADMIN_API}/orders/${encodeURIComponent(id)}.json?fields=id,name,order_number,financial_status`,
+    { headers: { "X-Shopify-Access-Token": token } },
+  );
+  if (!response.ok) throw new Error(`Shopify respondeu HTTP ${response.status} ao consultar pedido pago`);
+  const order = (await response.json())?.order;
+  if (!order?.id) throw new Error("Shopify não devolveu o pedido pago");
+  return {
+    id: String(order.id),
+    name: String(order.name || ""),
+    orderNumber: String(order.order_number || ""),
+    financialStatus: String(order.financial_status || "").toLowerCase(),
+  };
+}
+
 export interface ShopifyCustomerDetails {
   name?: string;
   phone?: string;

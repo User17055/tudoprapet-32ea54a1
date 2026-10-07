@@ -46,6 +46,19 @@ na aba **Formas de Recebimento**, mapeie o código `pix` para a forma **Pix** e
 para um meio/gateway financeiro chamado **Asaas**. Esse cadastro é apenas a
 conciliação do ERP; a confirmação real continua vindo do webhook do Asaas.
 
+Para baixar automaticamente na Olist os Pix e cartões confirmados pelo Asaas,
+cadastre uma conta financeira chamada **Asaas** no ERP e publique o secret com
+o nome exatamente igual ao cadastro:
+
+```bash
+npx supabase secrets set OLIST_ASAAS_ACCOUNT_NAME="Asaas"
+```
+
+O cron de `olist-reconcile-franchise` também executa essa ponte. Ele aguarda a
+integração importar o pedido Shopify, confere pedido, valor e status pago,
+localiza a conta a receber e chama a baixa oficial da API Olist. A sessão guarda
+o resultado e as retentativas para impedir baixa duplicada.
+
 Os dois IDs de natureza de operação são obrigatórios para novos pedidos de franquia. Obtenha-os no cadastro fiscal da Olist com o contador; o sistema não presume CFOP ou tributação. A escolha **Revenda** ou **Consumo final** feita no checkout seleciona o ID correspondente no campo `id_natureza_operacao` do pedido da Olist.
 
 No painel da Olist, confirme antes da publicação:

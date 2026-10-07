@@ -6,12 +6,20 @@ import {
   issueOlistInvoice,
   normalizeOlistId,
   normalizeSku,
+  olistExternalReferenceMatches,
   roundMoney,
+  settleOlistReceivable,
   subscriberPriceFromCost,
 } from "./olist.ts";
 
 Deno.test("normaliza SKU sem remover pontuacao significativa", () => {
   assertEquals(normalizeSku("  ab-12.3 "), "AB-12.3");
+});
+
+Deno.test("relaciona o numero Shopify com ou sem cerquilha", () => {
+  assertEquals(olistExternalReferenceMatches("#1542", ["1542"]), true);
+  assertEquals(olistExternalReferenceMatches("1542", ["#1542"]), true);
+  assertEquals(olistExternalReferenceMatches("1542", ["1543"]), false);
 });
 
 Deno.test("nao trata o identificador zero da Olist como nota fiscal existente", () => {
@@ -48,6 +56,41 @@ Deno.test("permite seguir com o pedido quando a emissao da nota foi aceita e seg
       accessUrl: null,
     });
     assertEquals(responses.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("baixa conta Olist com valor, data e conta Asaas", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: URLSearchParams }> = [];
+  const responses = [
+    { retorno: { status: "OK", conta: { id: 77, situacao: "aberto", valor: 50, saldo: 50 } } },
+    { retorno: { status: "OK", registros: [{ registro: { status: "OK", id: 77 } }] } },
+  ];
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), body: new URLSearchParams(String(init?.body || "")) });
+    return Promise.resolve(new Response(JSON.stringify(responses.shift()), { status: 200 }));
+  }) as typeof fetch;
+
+  try {
+    await settleOlistReceivable("77", "token-test", {
+      paidAt: new Date("2026-10-07T15:00:00-03:00"),
+      amount: 50,
+      destinationAccount: "Asaas",
+      history: "Pagamento Pix confirmado",
+    });
+    assertEquals(calls.length, 2);
+    assertEquals(calls[1].url.endsWith("conta.receber.baixar.php"), true);
+    assertEquals(JSON.parse(calls[1].body.get("conta") || "{}"), {
+      conta: {
+        id: "77",
+        data: "07/10/2026",
+        valorPago: 50,
+        contaDestino: "Asaas",
+        historico: "Pagamento Pix confirmado",
+      },
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
