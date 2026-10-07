@@ -3,6 +3,7 @@ import { errorResponse, jsonResponse } from "../_shared/cors.ts";
 import {
   ensureOlistOrderReceivable,
   findImportedOlistOrders,
+  getOlistOrderReconciliationDetails,
   getOlistReceivable,
   olistExternalReferenceMatches,
   settleOlistReceivable,
@@ -22,6 +23,13 @@ function retryAt(attempt: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+class AwaitingOlistImportError extends Error {
+  constructor() {
+    super("Pedido pago ainda não foi importado da Shopify para a Olist");
+    this.name = "AwaitingOlistImportError";
+  }
+}
+
 interface BridgeSession {
   id: string;
   customer_type: "common" | "subscriber";
@@ -30,6 +38,7 @@ interface BridgeSession {
   olist_receivable_id: string | null;
   olist_payment_sync_attempts: number;
   total: number;
+  customer_snapshot: { cpfCnpj?: string; email?: string } | null;
 }
 
 interface BridgePayment {
@@ -47,7 +56,9 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
   const now = new Date().toISOString();
   const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60_000).toISOString();
   const { data: sessions, error } = await admin.from("checkout_sessions")
-    .select("id,customer_type,shopify_order_id,olist_order_id,olist_receivable_id,olist_payment_sync_attempts,total")
+    .select(
+      "id,customer_type,shopify_order_id,olist_order_id,olist_receivable_id,olist_payment_sync_attempts,total,customer_snapshot",
+    )
     .in("customer_type", ["common", "subscriber"])
     .eq("status", "shopify_created")
     .not("shopify_order_id", "is", null)
@@ -62,7 +73,9 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
 
   const sessionIds = pendingSessions.map((session) => session.id);
   const { data: payments, error: paymentsError } = await admin.from("payments")
-    .select("id,checkout_session_id,provider_payment_id,method,status,amount,confirmed_at,received_at")
+    .select(
+      "id,checkout_session_id,provider_payment_id,method,status,amount,confirmed_at,received_at",
+    )
     .in("checkout_session_id", sessionIds)
     .eq("provider", "asaas")
     .in("status", ["confirmed", "received"])
@@ -119,7 +132,44 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
         );
       if (!imported) {
         awaitingImport++;
-        throw new Error("Pedido pago ainda não foi importado da Shopify para a Olist");
+        throw new AwaitingOlistImportError();
+      }
+
+      // O numero externo sozinho pode se repetir entre canais. Antes de tocar
+      // no financeiro, confirme no pedido completo da Olist o canal, o valor e
+      // a identidade do comprador.
+      const olistOrder = await getOlistOrderReconciliationDetails(imported.id, token);
+      if (
+        !olistExternalReferenceMatches(olistOrder.externalReference, [
+          shopify.id,
+          shopify.name,
+          shopify.orderNumber,
+        ])
+      ) {
+        throw new Error("Referência do pedido Olist diverge do pedido Shopify");
+      }
+      const orderAmount = Number(session.total);
+      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+        throw new Error("Valor do pedido inválido para baixa na Olist");
+      }
+      if (!Number.isFinite(olistOrder.total) || Math.abs(olistOrder.total - orderAmount) > 0.01) {
+        throw new Error(
+          `Total do pedido Olist (${olistOrder.total}) diverge da Shopify (${orderAmount})`,
+        );
+      }
+      const expectedCpfCnpj = String(session.customer_snapshot?.cpfCnpj || "").replace(/\D/g, "");
+      const expectedEmail = String(session.customer_snapshot?.email || "").trim().toLowerCase();
+      if (
+        expectedCpfCnpj && olistOrder.customerCpfCnpj &&
+        expectedCpfCnpj !== olistOrder.customerCpfCnpj
+      ) {
+        throw new Error("CPF/CNPJ do pedido Olist diverge do checkout");
+      }
+      const identityConfirmed = Boolean(
+        expectedCpfCnpj && olistOrder.customerCpfCnpj === expectedCpfCnpj,
+      ) || Boolean(expectedEmail && olistOrder.customerEmail === expectedEmail);
+      if (!identityConfirmed) {
+        throw new Error("Não foi possível confirmar o cliente do pedido antes da baixa");
       }
 
       const receivableRef = session.olist_receivable_id
@@ -127,12 +177,8 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
         : await ensureOlistOrderReceivable(imported.id, token);
       const receivable = await getOlistReceivable(receivableRef.id, token);
       const paidAmount = Number(payment.amount);
-      const orderAmount = Number(session.total);
       if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
         throw new Error("Valor pago inválido para baixa na Olist");
-      }
-      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
-        throw new Error("Valor do pedido inválido para baixa na Olist");
       }
       if (
         Number.isFinite(receivable.amount) &&
@@ -152,7 +198,9 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
         // pelo próprio valor; a diferença permanece identificada no histórico.
         amount: Number.isFinite(receivable.amount) ? Number(receivable.amount) : orderAmount,
         destinationAccount,
-        history: `Pagamento ${String(payment.method).toUpperCase()} confirmado no Asaas ${payment.provider_payment_id}; cobrado R$ ${paidAmount.toFixed(2)}`,
+        history: `Pagamento ${
+          String(payment.method).toUpperCase()
+        } confirmado no Asaas ${payment.provider_payment_id}; cobrado R$ ${paidAmount.toFixed(2)}`,
       });
       const { error: updateError } = await admin.from("checkout_sessions").update({
         olist_order_id: imported.id,
@@ -166,14 +214,16 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
       if (updateError) throw updateError;
       settled++;
     } catch (entryError) {
-      failed++;
+      if (!(entryError instanceof AwaitingOlistImportError)) failed++;
       const message = entryError instanceof Error ? entryError.message : String(entryError);
       const { error: updateError } = await admin.from("checkout_sessions").update({
         olist_payment_sync_attempts: attempt,
         olist_payment_sync_next_attempt_at: retryAt(attempt),
         olist_payment_sync_error: message.slice(0, 2000),
       }).eq("id", session.id).is("olist_payment_synced_at", null);
-      if (updateError) console.error(`Falha ao guardar retentativa Olist ${session.id}:`, updateError);
+      if (updateError) {
+        console.error(`Falha ao guardar retentativa Olist ${session.id}:`, updateError);
+      }
       console.error(`Ponte Asaas -> Olist pendente para ${session.id}:`, message);
     }
   }

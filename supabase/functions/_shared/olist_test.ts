@@ -3,6 +3,7 @@ import {
   buildOlistFranchiseOrder,
   buildOlistReceivable,
   findExactOlistCost,
+  getOlistOrderReconciliationDetails,
   issueOlistInvoice,
   normalizeOlistId,
   normalizeSku,
@@ -37,10 +38,12 @@ Deno.test("permite seguir com o pedido quando a emissao da nota foi aceita e seg
     { retorno: { nota_fiscal: { id: 321, numero: 42, situacao: "Pendente" } } },
   ];
   globalThis.fetch = (() =>
-    Promise.resolve(new Response(JSON.stringify(responses.shift()), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }))) as typeof fetch;
+    Promise.resolve(
+      new Response(JSON.stringify(responses.shift()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )) as typeof fetch;
 
   try {
     const invoice = await issueOlistInvoice(
@@ -90,6 +93,45 @@ Deno.test("baixa conta Olist com valor, data e conta Asaas", async () => {
         contaDestino: "Asaas",
         historico: "Pagamento Pix confirmado",
       },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("confere referencia, total e cliente no pedido completo da Olist", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          retorno: {
+            pedido: {
+              id: 501,
+              numero: 156,
+              numero_ecommerce: "#1042",
+              total_pedido: "1106.99",
+              cliente: {
+                cpf_cnpj: "123.456.789-00",
+                email: "CLIENTE@EXEMPLO.COM",
+              },
+              ecommerce: { nomeEcommerce: "Loja TudoPraPet" },
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    )) as typeof fetch;
+
+  try {
+    assertEquals(await getOlistOrderReconciliationDetails("501", "token-test"), {
+      id: "501",
+      number: "156",
+      externalReference: "#1042",
+      total: 1106.99,
+      customerCpfCnpj: "12345678900",
+      customerEmail: "cliente@exemplo.com",
+      ecommerceName: "Loja TudoPraPet",
     });
   } finally {
     globalThis.fetch = originalFetch;

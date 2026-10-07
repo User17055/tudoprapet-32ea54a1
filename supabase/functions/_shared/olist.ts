@@ -70,6 +70,13 @@ export interface OlistImportedOrder extends OlistCreatedOrder {
   externalReference: string;
 }
 
+export interface OlistOrderReconciliationDetails extends OlistImportedOrder {
+  total: number;
+  customerCpfCnpj: string;
+  customerEmail: string;
+  ecommerceName: string;
+}
+
 export interface OlistReceivable {
   id: string;
   status: "aberto" | "pago" | "cancelado" | "cancelada" | "parcial" | string;
@@ -384,6 +391,26 @@ export async function findImportedOlistOrders(
     if (!orders.length || !Number.isFinite(totalPages) || page >= totalPages) break;
   }
   return [...found.values()];
+}
+
+export async function getOlistOrderReconciliationDetails(
+  id: string,
+  token: string,
+): Promise<OlistOrderReconciliationDetails> {
+  const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id });
+  const order = payload?.retorno?.pedido;
+  if (!order?.id) throw new Error(responseErrors(payload));
+  return {
+    id: String(order.id),
+    number: String(order.numero ?? order.id),
+    externalReference: String(
+      order.numero_ecommerce || order.ecommerce?.numeroPedidoEcommerce || "",
+    ).trim(),
+    total: Number(order.total_pedido),
+    customerCpfCnpj: String(order.cliente?.cpf_cnpj || "").replace(/\D/g, ""),
+    customerEmail: String(order.cliente?.email || "").trim().toLowerCase(),
+    ecommerceName: String(order.ecommerce?.nomeEcommerce || "").trim(),
+  };
 }
 
 export async function findOlistReceivableByDocument(
