@@ -183,8 +183,8 @@ Deno.serve(async (req) => {
         return errorResponse("Informe uma inscrição estadual válida", 400);
       }
       const { error } = await admin.from("profiles").update({
+        // CPF pessoal e nome pessoal ficam intactos; só os dados da empresa mudam.
         person_type: "company",
-        cpf: null,
         cnpj,
         company_legal_name: legalName,
         company_trade_name: tradeName || null,
@@ -193,7 +193,7 @@ Deno.serve(async (req) => {
       }).eq("user_id", userId);
       if (error) throw error;
       const { error: checkoutProfileError } = await admin.from("checkout_customer_profiles")
-        .update({ full_name: legalName, cpf_cnpj: cnpj }).eq("user_id", userId);
+        .update({ cpf_cnpj: cnpj }).eq("user_id", userId);
       if (checkoutProfileError) throw checkoutProfileError;
       return jsonResponse({ saved: true });
     }
