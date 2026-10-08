@@ -103,7 +103,7 @@ export function resolveFranchiseFiscalIdentity(
 
 /** Confere se um snapshot salvo ainda é uma identidade fiscal válida para a finalidade. */
 export function validateFiscalSnapshot(
-  snapshot: Partial<FranchiseFiscalIdentity> | null | undefined,
+  snapshot: (Omit<Partial<FranchiseFiscalIdentity>, "stateRegistrationIndicator"> & { stateRegistrationIndicator?: string }) | null | undefined,
   purpose: InvoicePurpose | null | undefined,
 ): string | null {
   if (!snapshot) return "Complete o perfil fiscal da franquia";

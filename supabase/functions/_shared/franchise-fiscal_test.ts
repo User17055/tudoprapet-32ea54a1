@@ -80,7 +80,11 @@ async function captureShopifyBodies(cpfCnpj: string, name: string) {
   const bodies: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
-    bodies.push(String(init?.body ?? ""));
+    const body = String(init?.body ?? "");
+    bodies.push(body);
+    if (body.startsWith('{"customer"')) {
+      return new Response(JSON.stringify({ customer: { id: 1, email: "maria@exemplo.com" } }), { status: 201 });
+    }
     return new Response(JSON.stringify({ data: {} }), { status: 200 });
   }) as typeof fetch;
   try {
