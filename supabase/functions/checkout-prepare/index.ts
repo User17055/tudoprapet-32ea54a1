@@ -36,7 +36,11 @@ import {
   type CommissionRule,
   selectCommissionRule,
 } from "../_shared/commission.ts";
-import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
+import {
+  type FranchiseFiscalIdentity,
+  type FranchiseFiscalProfile,
+  resolveFranchiseFiscalIdentity,
+} from "../_shared/franchise-fiscal.ts";
 import { fetchAllRows, fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
 import { franchiseOrderFingerprint } from "../_shared/franchise-order-dedup.ts";
 import {
@@ -171,13 +175,14 @@ Deno.serve(async (req) => {
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
     let franchiseFiscalProfile: FranchiseFiscalProfile | null = null;
+    let fiscalIdentity: FranchiseFiscalIdentity | null = null;
     let franchisePaymentTermDays = 7;
     let franchisePaymentScheduleType: "days_after_order" | "fixed_day_next_month" = "days_after_order";
     let franchisePaymentDueDay: number | null = null;
     let openOrder: { id: string; shopify_draft_order_id: string; items: Array<{ variantId: string; quantity: number }>; reserved_until: string } | null = null;
     if (auth.user) {
       const [{ data: profile }, { data: clubMember }] = await Promise.all([
-        admin.from("profiles").select("is_franchisee,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", auth.user.id).maybeSingle(),
+        admin.from("profiles").select("is_franchisee,name,cpf,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", auth.user.id).maybeSingle(),
         admin.from("club_members").select("is_active")
           .eq("email", (auth.user.email || input.customer.email).toLowerCase())
           .eq("is_active", true).maybeSingle(),
@@ -193,7 +198,11 @@ Deno.serve(async (req) => {
       if (!input.invoicePurpose) {
         return errorResponse("Escolha se a nota fiscal será para revenda ou consumo final", 400);
       }
-      const fiscalError = franchiseFiscalError(franchiseFiscalProfile, input.invoicePurpose);
+      // Identidade fiscal única, vinda só do perfil salvo; o documento digitado
+      // no navegador nunca entra no pedido da franquia.
+      const resolved = resolveFranchiseFiscalIdentity(franchiseFiscalProfile, input.invoicePurpose);
+      const fiscalError = resolved.ok ? null : resolved.error;
+      if (resolved.ok) fiscalIdentity = resolved.identity;
       const { count: savedAddressCount, error: addressCountError } = await admin.from("customer_addresses")
         .select("id", { count: "exact", head: true }).eq("user_id", auth.user!.id);
       if (addressCountError) throw addressCountError;
@@ -659,12 +668,7 @@ Deno.serve(async (req) => {
       customer_snapshot: customerType === "franchise"
         ? {
           ...input.customer,
-          name: franchiseFiscalProfile!.company_legal_name,
-          cpfCnpj: String(franchiseFiscalProfile!.cnpj || "").replace(/\D/g, ""),
-          legalName: franchiseFiscalProfile!.company_legal_name,
-          tradeName: franchiseFiscalProfile!.company_trade_name || "",
-          stateRegistration: franchiseFiscalProfile!.state_registration || "",
-          stateRegistrationIndicator: franchiseFiscalProfile!.state_registration_indicator,
+          ...fiscalIdentity!,
         }
         : input.customer,
       address_snapshot: input.delivery.address ?? {},
@@ -718,13 +722,16 @@ Deno.serve(async (req) => {
     const serviceFeeLine = buildServiceFeeLine(serviceFee);
     if (serviceFeeLine) lineItems.push(serviceFeeLine);
 
+    // Mesmo nome/documento do customer_snapshot em todos os destinos.
+    const draftCustomerName = fiscalIdentity ? fiscalIdentity.name : input.customer.name;
+    const draftCpfCnpj = fiscalIdentity ? fiscalIdentity.cpfCnpj : input.customer.cpfCnpj;
     const draft = await createFiscalDraftOrder({
       ...(openOrder ? { draftOrderId: openOrder.shopify_draft_order_id } : {}),
       lineItems,
       email: input.customer.email,
-      customerName: input.customer.name,
+      customerName: draftCustomerName,
       phone: input.customer.mobilePhone,
-      cpfCnpj: input.customer.cpfCnpj,
+      cpfCnpj: draftCpfCnpj,
       shippingLine: {
         ...buildShippingLine(shippingMethod, shippingAmount),
         shippingRateHandle,
@@ -735,17 +742,17 @@ Deno.serve(async (req) => {
       shippingAddress: (input.delivery.address || input.billingAddress)
         ? shopifyAddress(
           input.delivery.address || input.billingAddress!,
-          input.customer.name,
+          draftCustomerName,
           input.customer.mobilePhone,
-          input.customer.cpfCnpj,
+          draftCpfCnpj,
         )
         : undefined,
       billingAddress: (input.billingAddress || input.delivery.address)
         ? shopifyAddress(
           input.billingAddress || input.delivery.address!,
-          input.customer.name,
+          draftCustomerName,
           input.customer.mobilePhone,
-          input.customer.cpfCnpj,
+          draftCpfCnpj,
         )
         : undefined,
       tags: [
