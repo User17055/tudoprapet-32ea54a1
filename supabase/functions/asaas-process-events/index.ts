@@ -674,6 +674,7 @@ Deno.serve(async (req) => {
   let reconciliation = { checked: 0, paid: 0, pending: 0, failed: 0, budgetExhausted: false };
   let recovery = { checked: 0, recovered: 0, skipped: 0, failed: 0, budgetExhausted: false };
   let actions;
+  let olistReconciliationScheduled = false;
   try {
     if (runScheduled) {
       try {
@@ -696,6 +697,35 @@ Deno.serve(async (req) => {
       } catch (reconciliationError) {
         console.error("Falha na conciliação financeira:", reconciliationError);
         return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
+      }
+
+      // O cron do banco nao deve guardar uma segunda copia da service role.
+      // O worker, que ja foi autenticado, encaminha a conciliacao Olist com a
+      // credencial atual do ambiente. Uma falha aqui nunca cancela o worker.
+      try {
+        const task = fetch(
+          `${Deno.env.get("SUPABASE_URL")!}/functions/v1/olist-reconcile-franchise`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${serviceRole}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ source: "asaas-process-events", requested_at: new Date().toISOString() }),
+          },
+        ).then(async (response) => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            console.error("Conciliação Olist recusada:", response.status, result);
+          }
+        }).catch((error) => console.error("Falha isolada na conciliação Olist:", error));
+        const runtime = (globalThis as unknown as {
+          EdgeRuntime?: { waitUntil(value: Promise<unknown>): void };
+        }).EdgeRuntime;
+        runtime?.waitUntil(task);
+        olistReconciliationScheduled = true;
+      } catch (olistError) {
+        console.error("Falha isolada na conciliação Olist:", olistError);
       }
     }
   } finally {
@@ -768,5 +798,6 @@ Deno.serve(async (req) => {
     expirations,
     reconciliation,
     recovery,
+    olistReconciliationScheduled,
   });
 });

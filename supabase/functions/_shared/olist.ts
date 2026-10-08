@@ -75,6 +75,7 @@ export interface OlistOrderReconciliationDetails extends OlistImportedOrder {
   customerCpfCnpj: string;
   customerEmail: string;
   ecommerceName: string;
+  invoiceId: string | null;
 }
 
 export interface OlistReceivable {
@@ -410,6 +411,7 @@ export async function getOlistOrderReconciliationDetails(
     customerCpfCnpj: String(order.cliente?.cpf_cnpj || "").replace(/\D/g, ""),
     customerEmail: String(order.cliente?.email || "").trim().toLowerCase(),
     ecommerceName: String(order.ecommerce?.nomeEcommerce || "").trim(),
+    invoiceId: normalizeOlistId(order.id_nota_fiscal),
   };
 }
 
@@ -474,8 +476,32 @@ export async function ensureOlistOrderReceivable(
 ): Promise<OlistReceivable> {
   const existing = await findOlistReceivableByOrder(orderId, token);
   if (existing) return existing;
-  await olistPost(OLIST_ORDER_LAUNCH_RECEIVABLES_URL, token, { id: orderId });
-  const created = await findOlistReceivableByOrder(orderId, token);
+
+  // Depois que uma NF-e e gerada, a Olist troca a origem financeira do pedido
+  // pela nota. Nesse estado `id_origem = pedido` nao encontra a conta e tentar
+  // lanca-la outra vez e recusado. Consulte tambem a nota antes e depois da
+  // tentativa para reaproveitar a conta que a Olist ja criou.
+  let invoiceId = await getOlistOrderInvoiceId(orderId, token);
+  if (invoiceId) {
+    const invoiceReceivable = await findOlistReceivableByOrder(invoiceId, token);
+    if (invoiceReceivable) return invoiceReceivable;
+  }
+
+  try {
+    await olistPost(OLIST_ORDER_LAUNCH_RECEIVABLES_URL, token, { id: orderId });
+  } catch (error) {
+    // A nota pode ter sido gerada entre as consultas. Recupere a conta antes
+    // de propagar o erro; se ela nao existir, preserve a falha original.
+    invoiceId = await getOlistOrderInvoiceId(orderId, token);
+    if (invoiceId) {
+      const invoiceReceivable = await findOlistReceivableByOrder(invoiceId, token);
+      if (invoiceReceivable) return invoiceReceivable;
+    }
+    throw error;
+  }
+
+  const created = await findOlistReceivableByOrder(orderId, token) ||
+    (invoiceId ? await findOlistReceivableByOrder(invoiceId, token) : null);
   if (!created) throw new Error("A Olist não devolveu a conta a receber do pedido");
   return created;
 }

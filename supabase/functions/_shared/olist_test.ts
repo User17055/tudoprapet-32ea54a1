@@ -3,6 +3,7 @@ import {
   buildOlistFranchiseOrder,
   buildOlistReceivable,
   findExactOlistCost,
+  ensureOlistOrderReceivable,
   issueFranchiseInvoiceSafely,
   getOlistOrderReconciliationDetails,
   issueOlistInvoice,
@@ -133,7 +134,38 @@ Deno.test("confere referencia, total e cliente no pedido completo da Olist", asy
       customerCpfCnpj: "12345678900",
       customerEmail: "cliente@exemplo.com",
       ecommerceName: "Loja TudoPraPet",
+      invoiceId: null,
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("reaproveita conta a receber vinculada a nota fiscal do pedido", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: URLSearchParams }> = [];
+  const responses = [
+    { retorno: { status: "Erro", codigo_erro: 20, erros: [{ erro: "sem registros" }] } },
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 9001 } } },
+    {
+      retorno: {
+        status: "OK",
+        contas: [{ conta: { id: 77, situacao: "aberto", valor: "110.00", saldo: "110.00" } }],
+      },
+    },
+  ];
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), body: new URLSearchParams(String(init?.body || "")) });
+    return Promise.resolve(new Response(JSON.stringify(responses.shift()), { status: 200 }));
+  }) as typeof fetch;
+
+  try {
+    const receivable = await ensureOlistOrderReceivable("501", "token-test");
+    assertEquals(receivable.id, "77");
+    assertEquals(calls.length, 3);
+    assertEquals(calls[0].body.get("id_origem"), "501");
+    assertEquals(calls[2].body.get("id_origem"), "9001");
+    assertEquals(calls.some((call) => call.url.includes("pedido.lancar.contas.php")), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

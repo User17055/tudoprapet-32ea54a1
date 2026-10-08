@@ -134,7 +134,17 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
         );
       if (!imported) {
         awaitingImport++;
-        throw new AwaitingOlistImportError();
+        const waiting = new AwaitingOlistImportError();
+        const { error: updateError } = await admin.from("checkout_sessions").update({
+          olist_payment_sync_attempts: attempt,
+          olist_payment_sync_next_attempt_at: retryAt(attempt),
+          olist_payment_sync_error: waiting.message,
+        }).eq("id", session.id).is("olist_payment_synced_at", null);
+        if (updateError) {
+          console.error(`Falha ao guardar espera de importação Olist ${session.id}:`, updateError);
+        }
+        console.warn(`Ponte Asaas -> Olist aguardando importação para ${session.id}`);
+        continue;
       }
 
       // O numero externo sozinho pode se repetir entre canais. Antes de tocar

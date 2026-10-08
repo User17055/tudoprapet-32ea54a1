@@ -54,10 +54,12 @@ o nome exatamente igual ao cadastro:
 npx supabase secrets set OLIST_ASAAS_ACCOUNT_NAME="Asaas"
 ```
 
-O cron de `olist-reconcile-franchise` também executa essa ponte. Ele aguarda a
+O cron de `asaas-process-events` também executa essa ponte a cada 10 minutos. Ele
+chama `olist-reconcile-franchise` com a credencial atual do ambiente, aguarda a
 integração importar o pedido Shopify, confere pedido, valor e status pago,
-localiza a conta a receber e chama a baixa oficial da API Olist. A sessão guarda
-o resultado e as retentativas para impedir baixa duplicada.
+localiza a conta a receber (pelo pedido ou pela NF-e) e chama a baixa oficial da
+API Olist. A sessão guarda o resultado e as retentativas para impedir baixa
+duplicada.
 
 Os dois IDs de natureza de operação são obrigatórios para novos pedidos de franquia. Obtenha-os no cadastro fiscal da Olist com o contador; o sistema não presume CFOP ou tributação. A escolha **Revenda** ou **Consumo final** feita no checkout seleciona o ID correspondente no campo `id_natureza_operacao` do pedido da Olist.
 
@@ -87,11 +89,18 @@ npx supabase functions deploy checkout-customer-data
 npx supabase functions deploy franchise-payments
 npx supabase functions deploy admin-franchise-settings
 npx supabase functions deploy admin-orders --no-verify-jwt
+npx supabase functions deploy asaas-process-events --no-verify-jwt
 npx supabase functions deploy olist-reconcile-franchise --no-verify-jwt
 ```
 
-A migration agenda a conciliação a cada 10 minutos. Ela precisa encontrar o segredo `service_role_key` (ou `supabase_service_role_key`) no Vault do projeto, caso `app.settings.service_role_key` não esteja definido.
+A migration remove o cron Olist direto, que dependia de uma cópia da service
+role no Vault. O cron `reconcile-paid-shopify-orders`, já agendado a cada 10
+minutos, passa a encaminhar a conciliação com a credencial vigente da função.
 
 ## Comportamento em falhas
 
-Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a Shopify falhar no meio do processo, uma nova tentativa retoma os registros existentes em vez de gerar uma duplicidade. Depois que a Olist aceita a solicitação de emissão, o pedido é concluído na Shopify mesmo que a NF-e ainda esteja pendente de autorização pela SEFAZ. Uma recusa real da solicitação de emissão continua interrompendo o fluxo.
+Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a
+Shopify falhar no meio do processo, uma nova tentativa retoma os registros
+existentes em vez de gerar uma duplicidade. Falhas de geração, emissão ou
+autorização da NF-e ficam registradas em `checkout_sessions.olist_invoice_status`
+e são retomadas pela conciliação, sem bloquear a conclusão da venda.
