@@ -30,7 +30,7 @@ import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
-import { hasSufficientInventory } from "../_shared/inventory.ts";
+import { hasSufficientFranchiseInventory, hasSufficientInventory } from "../_shared/inventory.ts";
 import {
   commissionForLine,
   type CommissionRule,
@@ -38,6 +38,11 @@ import {
 } from "../_shared/commission.ts";
 import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
 import { fetchAllRows, fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
+import { franchiseOrderFingerprint } from "../_shared/franchise-order-dedup.ts";
+import {
+  externalPaymentAttributes,
+  externalPaymentTags,
+} from "../_shared/shopify-payment.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -93,6 +98,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
+  let dedupAdmin: any = null;
+  let dedupFingerprint: string | null = null;
+  let keepDedupLock = false;
   try {
     const auth = await optionalCheckoutUser(req);
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
@@ -115,6 +123,7 @@ Deno.serve(async (req) => {
     // lá, o checkout existente continua sendo o fallback seguro para envio.
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+    dedupAdmin = admin;
     const { error: rateError } = await admin.rpc("consume_checkout_rate_limit", {
       p_key_hash: await requestKey(req, auth.user?.id ?? null),
       p_limit: 8,
@@ -329,7 +338,10 @@ Deno.serve(async (req) => {
         });
         return false;
       }
-      if (!hasSufficientInventory(detail, item.quantity)) {
+      const hasInventory = customerType === "franchise"
+        ? hasSufficientFranchiseInventory(detail, item.quantity)
+        : hasSufficientInventory(detail, item.quantity);
+      if (!hasInventory) {
         unavailableItems.push({
           variantId: item.variantId,
           productTitle: detail.productTitle,
@@ -604,6 +616,30 @@ Deno.serve(async (req) => {
     if (total < MIN_CHARGE_VALUE) {
       return errorResponse(belowMinimumChargeMessage(total), 422);
     }
+    if (customerType === "franchise" && auth.user) {
+      dedupFingerprint = await franchiseOrderFingerprint(
+        auth.user.id,
+        input.items,
+        shippingCode,
+        input.invoicePurpose || "",
+      );
+      // Reaproveita a trava atomica que ja existe em producao. A chave inclui
+      // finalidade fiscal, entao Revenda e Consumo final nao se bloqueiam.
+      const { error: claimError } = await admin.rpc("consume_checkout_rate_limit", {
+        p_key_hash: dedupFingerprint,
+        p_limit: 1,
+        p_window_seconds: 60 * 60,
+      });
+      if (claimError) {
+        if (claimError.message?.includes("checkout_rate_limit_exceeded")) {
+          return errorResponse(
+            "Este mesmo pedido já está sendo processado ou foi enviado há menos de 1 hora.",
+            409,
+          );
+        }
+        throw claimError;
+      }
+    }
     const accessToken = newCheckoutAccessToken();
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);
     const tokenExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
@@ -716,6 +752,7 @@ Deno.serve(async (req) => {
         "checkout-proprio",
         customerType === "franchise" ? "olist" : "asaas",
         customerType,
+        ...(customerType === "franchise" ? [] : externalPaymentTags(intendedMethod)),
         ...(customerType === "franchise" && input.invoicePurpose
           ? [`nfe-${input.invoicePurpose === "resale" ? "revenda" : "consumo-final"}`]
           : []),
@@ -725,6 +762,7 @@ Deno.serve(async (req) => {
       note: `Checkout TudoPraPet ${session.id}`,
       customAttributes: [
         { key: "checkout_session_id", value: session.id },
+        ...(customerType === "franchise" ? [] : externalPaymentAttributes(intendedMethod)),
         ...(customerType === "franchise" && input.invoicePurpose
           ? [
             { key: "finalidade_nfe", value: input.invoicePurpose },
@@ -775,6 +813,10 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
+      if (dedupFingerprint) {
+        await admin.from("checkout_rate_limits").delete().eq("key_hash", dedupFingerprint);
+        dedupFingerprint = null;
+      }
       return errorResponse(customerFacingDraftError(userErrors, draft.error), 502);
     }
 
@@ -810,8 +852,13 @@ Deno.serve(async (req) => {
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
+      if (dedupFingerprint) {
+        await admin.from("checkout_rate_limits").delete().eq("key_hash", dedupFingerprint);
+        dedupFingerprint = null;
+      }
       return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
     }
+    keepDedupLock = Boolean(dedupFingerprint);
     if (!draft.taxCredentialStored) {
       console.warn(
         `Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`,
@@ -870,6 +917,12 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
+    if (dedupAdmin && dedupFingerprint && !keepDedupLock) {
+      const { error: releaseError } = await dedupAdmin.from("checkout_rate_limits")
+        .delete()
+        .eq("key_hash", dedupFingerprint);
+      if (releaseError) console.error("Falha ao liberar trava de pedido duplicado:", releaseError);
+    }
     console.error("checkout-prepare:", error);
     return errorResponse("Não foi possível preparar o checkout", 500);
   }

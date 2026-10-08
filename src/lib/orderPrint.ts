@@ -48,40 +48,56 @@ const zplText = (value: unknown, max = 42) =>
     .slice(0, max);
 
 export function orderToZpl(order: PrintableOrder): string {
-  let y = 755;
-  const renderedItems = order.line_items.map((item, index) => {
-    if (index > 0) y += 58;
-    const name = `${item.quantity}x ${item.title}${item.variant_title ? ` - ${item.variant_title}` : ""}`;
-    return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${zplText(name, 85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${zplText(money(item.price * item.quantity, order.currency), 20)}^FS`;
-  }).join("\n");
-  const totalY = y + 82;
-  const height = Math.max(950, totalY + 165);
+  const itemsPerLabel = 5;
+  const itemPages = order.line_items.length
+    ? Array.from({ length: Math.ceil(order.line_items.length / itemsPerLabel) }, (_, index) =>
+      order.line_items.slice(index * itemsPerLabel, (index + 1) * itemsPerLabel))
+    : [[]];
   const delivery = zplText(order.delivery_label || order.shipping_method || "ENVIO", 18).toUpperCase();
   const barcode = String(order.id || order.name).replace(/\D/g, "").slice(-20) || "0";
 
-  return `^XA
+  return itemPages.map((pageItems, pageIndex) => {
+    let y = 755;
+    const renderedItems = pageItems.map((item, index) => {
+      if (index > 0) y += 58;
+      const name = `${item.quantity}x ${item.title}${item.variant_title ? ` - ${item.variant_title}` : ""}`;
+      return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${zplText(name, 85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${zplText(money(item.price * item.quantity, order.currency), 20)}^FS`;
+    }).join("\n") || `^FO25,755^A0N,24,24^FDNenhum item informado^FS`;
+    const totalY = y + 82;
+    const pageNumber = pageIndex + 1;
+    const pageCount = itemPages.length;
+    const itemStart = pageIndex * itemsPerLabel + 1;
+    const itemEnd = itemStart + pageItems.length - 1;
+    const pageDescription = pageCount > 1
+      ? `ITENS ${itemStart}-${itemEnd} DE ${order.line_items.length} - PARTE ${pageNumber}/${pageCount}`
+      : "ITENS DO PEDIDO";
+
+    return `^XA
 ^CI28
-^FX TPP-ZPL-V2
+^FX TPP-ZPL-V3
 ^PW800
-^LL${height}
+^LL1200
 ^FO160,20${logoGfa.trim()}^FS
 ^FO25,120^GB750,4,4^FS
 ^FO25,145^GB750,90,90^FS
 ^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
 ^FO25,255^A0N,30,30^FDPEDIDO ${zplText(order.name, 24)}^FS
+^FO545,255^A0N,24,24^FB230,1,0,R^FDPARTE ${pageNumber}/${pageCount}^FS
 ^FO25,295^A0N,22,22^FDMETODO: ${zplText(order.shipping_method || delivery, 48)}^FS
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS
 ^FO25,525^A0N,24,24^FDDESTINATARIO^FS
 ^FO25,560^A0N,31,31^FB730,2,5,L^FD${zplText(order.customer_name, 60)}^FS
 ^FO25,640^A0N,22,22^FB730,3,5,L^FD${delivery === "RETIRADA" ? "RETIRAR NA LOJA TUDOPRAPET" : zplText(order.address || "Nao informado", 100)}^FS
-^FO25,735^GB750,2,2^FS
+^FO25,715^A0N,20,20^FD${pageDescription}^FS
+^FO25,742^GB750,2,2^FS
 ${renderedItems}
 ^FO25,${totalY}^GB750,2,2^FS
-^FO25,${totalY + 25}^A0N,32,32^FDTotal^FS
+^FO25,${totalY + 25}^A0N,32,32^FDTotal do pedido^FS
 ^FO500,${totalY + 25}^A0N,32,32^FB275,1,0,R^FD${zplText(money(order.total_price, order.currency), 22)}^FS
 ^FO25,${totalY + 75}^A0N,20,20^FDPAGAMENTO: ${zplText(order.financial_status, 25)}^FS
 ^XZ`;
+  }).join("\n");
 }
 
 const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (char) => ({

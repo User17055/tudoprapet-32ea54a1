@@ -21,48 +21,64 @@ let lastError=null,lastPrintAt=null,polling=false,pollingJobs=false;
 const saveState=async()=>{state.printedOrderIds=state.printedOrderIds.slice(-2000);state.printedJobIds=state.printedJobIds.slice(-2000);state.history=state.history.slice(0,50);await writeFile(statePath,JSON.stringify(state,null,2))};
 const recordHistory=async(entry)=>{state.history.unshift({at:new Date().toISOString(),...entry});await saveState()};
 
-function sendRaw(zpl){return new Promise(async(resolve,reject)=>{const temp=join(tmpdir(),`tpp-${randomUUID()}.zpl`);await writeFile(temp,zpl,"ascii");const child=spawn("powershell.exe",["-NoProfile","-ExecutionPolicy","Bypass","-File",join(here,"print-raw.ps1"),"-PrinterName",config.printerName,"-FilePath",temp],{windowsHide:true});let err="";child.stderr.on("data",c=>err+=c);child.on("error",reject);child.on("close",async code=>{await unlink(temp).catch(()=>{});if(code===0){lastPrintAt=new Date().toISOString();lastError=null;resolve()}else{lastError=err.trim()||`PowerShell terminou com código ${code}`;reject(new Error(lastError))}})})}
+function sendRaw(zpl){if(!String(config.printerName||"").trim())return Promise.reject(new Error("Impressora nao configurada. Execute INSTALAR.cmd e escolha a Zebra."));return new Promise(async(resolve,reject)=>{const temp=join(tmpdir(),`tpp-${randomUUID()}.zpl`);await writeFile(temp,zpl,"ascii");const child=spawn("powershell.exe",["-NoProfile","-ExecutionPolicy","Bypass","-File",join(here,"print-raw.ps1"),"-PrinterName",config.printerName,"-FilePath",temp],{windowsHide:true});let err="";child.stderr.on("data",c=>err+=c);child.on("error",reject);child.on("close",async code=>{await unlink(temp).catch(()=>{});if(code===0){lastPrintAt=new Date().toISOString();lastError=null;resolve()}else{lastError=err.trim()||`PowerShell terminou com código ${code}`;reject(new Error(lastError))}})})}
 const clean=(v,max=50)=>String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[\^~]/g," ").replace(/[^\x20-\x7e]/g," ").slice(0,max);
 const brl=v=>`R$ ${Number(v||0).toFixed(2).replace(".",",")}`;
 function orderToZpl(o){
-  let y=755;
-  const items=(o.line_items||[]).map((item,index)=>{
-    if(index>0)y+=58;
-    const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;
-    return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${clean(label,85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${clean(brl(item.price*item.quantity),20)}^FS`;
-  }).join("\n");
-  const totalY=y+82,height=Math.max(950,totalY+165);
+  const allItems=o.line_items||[],itemsPerLabel=5;
+  const pages=allItems.length?Array.from({length:Math.ceil(allItems.length/itemsPerLabel)},(_,index)=>allItems.slice(index*itemsPerLabel,(index+1)*itemsPerLabel)):[[]];
   const delivery=clean(o.delivery_label||o.shipping_method||"ENVIO",18).toUpperCase();
   const barcode=String(o.id||o.name).replace(/\D/g,"").slice(-20)||"0";
-  return `^XA
+  return pages.map((pageItems,pageIndex)=>{
+    let y=755;
+    const items=pageItems.map((item,index)=>{if(index>0)y+=58;const label=`${item.quantity}x ${item.title}${item.variant_title?` - ${item.variant_title}`:""}`;return `^FO25,${y}^A0N,24,24^FB540,2,2,L^FD${clean(label,85)}^FS\n^FO575,${y}^A0N,24,24^FB200,1,0,R^FD${clean(brl(item.price*item.quantity),20)}^FS`}).join("\n")||"^FO25,755^A0N,24,24^FDNenhum item informado^FS";
+    const totalY=y+82,pageNumber=pageIndex+1,pageCount=pages.length,itemStart=pageIndex*itemsPerLabel+1,itemEnd=itemStart+pageItems.length-1;
+    const pageDescription=pageCount>1?`ITENS ${itemStart}-${itemEnd} DE ${allItems.length} - PARTE ${pageNumber}/${pageCount}`:"ITENS DO PEDIDO";
+    return `^XA
 ^CI28
-^FX TPP-ZPL-V2
+^FX TPP-ZPL-V3
 ^PW800
-^LL${height}
+^LL1200
 ^FO160,20${logoGfa.trim()}^FS
 ^FO25,120^GB750,4,4^FS
 ^FO25,145^GB750,90,90^FS
 ^FO25,158^A0N,68,68^FB750,1,0,C^FR^FD${delivery}^FS
 ^FO25,255^A0N,30,30^FDPEDIDO ${clean(o.name,24)}^FS
+^FO545,255^A0N,24,24^FB230,1,0,R^FDPARTE ${pageNumber}/${pageCount}^FS
 ^FO25,295^A0N,22,22^FDMETODO: ${clean(o.shipping_method||delivery,48)}^FS
 ^FO175,335^BY3,,0^BCN,120,Y,N,N^FD${barcode}^FS
 ^FO25,505^GB750,3,3^FS
 ^FO25,525^A0N,24,24^FDDESTINATARIO^FS
 ^FO25,560^A0N,31,31^FB730,2,5,L^FD${clean(o.customer_name,60)}^FS
 ^FO25,640^A0N,22,22^FB730,3,5,L^FD${delivery==="RETIRADA"?"RETIRAR NA LOJA TUDOPRAPET":clean(o.address||"Nao informado",100)}^FS
-^FO25,735^GB750,2,2^FS
+^FO25,715^A0N,20,20^FD${pageDescription}^FS
+^FO25,742^GB750,2,2^FS
 ${items}
 ^FO25,${totalY}^GB750,2,2^FS
-^FO25,${totalY+25}^A0N,32,32^FDTotal^FS
+^FO25,${totalY+25}^A0N,32,32^FDTotal do pedido^FS
 ^FO500,${totalY+25}^A0N,32,32^FB275,1,0,R^FD${clean(brl(o.total_price),22)}^FS
 ^FO25,${totalY+75}^A0N,20,20^FDPAGAMENTO: ${clean(o.financial_status,25)}^FS
-^XZ`;
+^XZ`}).join("\n");
 }
 
 async function fetchLabelOrders(){
   const since=new Date(Date.now()-30*86400000).toISOString();
   const data=await agentPost({action:"list",since,limit:200});
   return data.orders||[];
+}
+
+async function fetchLabelOrder(orderId){
+  const data=await agentPost({action:"print_order",orderId:String(orderId)});
+  if(data.order&&Array.isArray(data.order.line_items)&&data.order.line_items.length>0)return data.order;
+  // Compatibilidade com admin-orders antigo: ele ignora a action desconhecida
+  // e devolve `orders` em vez de `order`.
+  const orders=Array.isArray(data.orders)?data.orders:await fetchLabelOrders();
+  const fallback=orders.find(item=>String(item.id)===String(orderId));
+  if(fallback&&Array.isArray(fallback.line_items)&&fallback.line_items.length>0)return fallback;
+  if(fallback){
+    throw new Error("A Shopify ainda nao devolveu os itens deste pedido. Aguarde alguns segundos e tente novamente.");
+  }
+  throw new Error("Pedido nao encontrado entre os pedidos recentes da Shopify.");
 }
 
 function invoiceLabelZpl(invoice,order){
@@ -138,9 +154,10 @@ async function pollOrders(){if(polling||!config.autoPrint)return;if(!config.prin
   const pending=orders.filter(o=>new Date(o.created_at).getTime()>activatedAt&&!state.printedOrderIds.includes(String(o.id))).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
   for(const order of pending){
     try{
-      await sendRaw(orderToZpl(order));
-      state.printedOrderIds.push(String(order.id));
-      await recordHistory({orderId:String(order.id),orderName:order.name||String(order.id),source:"automatic",status:"printed"});
+      const freshOrder=await fetchLabelOrder(order.id);
+      await sendRaw(orderToZpl(freshOrder));
+      state.printedOrderIds.push(String(freshOrder.id));
+      await recordHistory({orderId:String(freshOrder.id),orderName:freshOrder.name||String(freshOrder.id),source:"automatic",status:"printed"});
     }catch(error){
       await recordHistory({orderId:String(order.id),orderName:order.name||String(order.id),source:"automatic",status:"error",error:error instanceof Error?error.message:String(error)});
       throw error;
@@ -169,7 +186,11 @@ async function pollPrintJobs(){
         continue;
       }
       try{
-        await sendRaw(job.zpl);
+        // A fila pode ter sido criada por uma versao antiga do site, com ZPL
+        // de uma unica pagina. O agente sempre remonta a etiqueta localmente
+        // para aplicar a paginacao atual antes de enviar para a Zebra.
+        const freshOrder=await fetchLabelOrder(job.order_id);
+        await sendRaw(orderToZpl(freshOrder));
       }catch(error){
         await recordHistory({jobId:String(job.id),orderName:job.order_name||job.order_id||"Pedido",source:"manual",status:"error",error:error instanceof Error?error.message:String(error)});
         await agentPost({action:"ack_print",jobId:job.id,status:"error",error:error instanceof Error?error.message:String(error)}).catch(()=>{});
@@ -204,7 +225,7 @@ const server=http.createServer(async(req,res)=>{
     return res.end(dashboardTemplate);
   }
   if(req.method==="GET"&&req.url==="/history")return reply(res,200,{history:state.history},origin);
-  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.2",printer:config.printerName,autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
+  if(req.method==="GET"&&req.url==="/status")return reply(res,200,{ok:true,version:"1.5.6",printer:config.printerName,printerConfigured:Boolean(String(config.printerName||"").trim()),autoPrint:!!config.autoPrint,baselineComplete:state.baselineComplete===true,lastPrintAt,lastError},origin);
   if(req.method==="GET"&&req.url==="/label-orders"){
     try{return reply(res,200,{orders:await fetchLabelOrders()},origin)}
     catch(error){return reply(res,502,{error:error instanceof Error?error.message:"Falha ao carregar pedidos"},origin)}
@@ -214,9 +235,7 @@ const server=http.createServer(async(req,res)=>{
     try{
       body=await readJson(req);
       if(!body.orderId)throw new Error("Selecione um pedido");
-      const orders=await fetchLabelOrders();
-      order=orders.find(item=>String(item.id)===String(body.orderId));
-      if(!order)throw new Error("Pedido não encontrado entre os pedidos recentes");
+      order=await fetchLabelOrder(body.orderId);
       const zpl=orderToZpl(order);
       if(body.print===true){
         await sendRaw(zpl);
@@ -233,9 +252,7 @@ const server=http.createServer(async(req,res)=>{
     try{
       body=await readJson(req);
       if(!body.orderId||!body.invoice||typeof body.invoice!=="object")throw new Error("Selecione o pedido e o XML da nota fiscal");
-      const orders=await fetchLabelOrders();
-      order=orders.find(item=>String(item.id)===String(body.orderId));
-      if(!order)throw new Error("Pedido não encontrado entre os pedidos recentes");
+      order=await fetchLabelOrder(body.orderId);
       const zpl=invoiceLabelZpl(body.invoice,order);
       if(body.print===true){
         await sendRaw(zpl);
@@ -254,6 +271,18 @@ const server=http.createServer(async(req,res)=>{
       await sendRaw(body.zpl);
       return reply(res,200,{ok:true},origin);
     }catch(error){return reply(res,400,{error:error instanceof Error?error.message:"Falha ao imprimir"},origin)}
+  }
+  if(req.method==="POST"&&req.url==="/test-print"){
+    try{
+      const zpl=`^XA\n^CI28\n^PW800\n^LL500\n^FO40,45^A0N,48,48^FDTUDOPRAPET^FS\n^FO40,120^A0N,34,34^FDIMPRESSORA CONFIGURADA^FS\n^FO40,185^A0N,26,26^FD${clean(config.printerName,60)}^FS\n^FO40,245^GB720,3,3^FS\n^FO40,280^A0N,24,24^FDTeste realizado em ${clean(new Date().toLocaleString("pt-BR"),35)}^FS\n^XZ`;
+      await sendRaw(zpl);
+      await recordHistory({orderName:"Teste da impressora",source:"test",status:"printed"});
+      return reply(res,200,{ok:true},origin);
+    }catch(error){
+      const message=error instanceof Error?error.message:"Falha ao testar a impressora";
+      await recordHistory({orderName:"Teste da impressora",source:"test",status:"error",error:message}).catch(()=>{});
+      return reply(res,400,{error:message},origin);
+    }
   }
   return reply(res,404,{error:"Rota não encontrada"},origin);
 });

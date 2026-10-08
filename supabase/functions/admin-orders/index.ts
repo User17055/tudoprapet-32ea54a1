@@ -493,6 +493,27 @@ Deno.serve(async (req) => {
   if (!shopifyToken) return errorResponse("SHOPIFY_ACCESS_TOKEN não configurado", 500);
 
   try {
+    if (action === "print_order") {
+      if (!body.orderId || !/^\d+$/.test(String(body.orderId))) {
+        return errorResponse("Pedido inválido", 400);
+      }
+      const orderResponse = await fetch(
+        `https://${SHOP}/admin/api/${API}/orders/${body.orderId}.json?fields=${encodeURIComponent(FIELDS)}`,
+        { headers: { "X-Shopify-Access-Token": shopifyToken } },
+      );
+      if (orderResponse.status === 404) return errorResponse("Pedido não encontrado na Shopify", 404);
+      if (!orderResponse.ok) {
+        console.error("Shopify print order:", orderResponse.status, await orderResponse.text());
+        return errorResponse("Falha ao atualizar o pedido na Shopify", 502);
+      }
+      const payload = await orderResponse.json();
+      if (!payload?.order || !Array.isArray(payload.order.line_items) || payload.order.line_items.length === 0) {
+        return errorResponse("O pedido ainda não está completo na Shopify. Aguarde alguns segundos e tente novamente.", 409);
+      }
+      const delivery = await resolvedDeliveryLabel(payload.order, shopifyToken);
+      return jsonResponse({ order: normalize(payload.order, delivery) });
+    }
+
     if (action === "fulfill_with_tracking") {
       if (isAgent) return errorResponse("Ação restrita ao administrador", 403);
       if (!body.orderId) return errorResponse("Pedido inválido", 400);

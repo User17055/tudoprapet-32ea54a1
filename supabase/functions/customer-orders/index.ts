@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
+import { shouldShowCustomerOrder } from "../_shared/customer-order-visibility.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -56,12 +57,10 @@ Deno.serve(async (req) => {
     const linkedOrderIds = [...new Set((linkedSessions ?? [])
       .map((row) => numericOrderId(row.shopify_order_id))
       .filter(Boolean))];
-    // Pedidos de franquia sao concluidos com pagamento pendente (boleto/Pix a prazo).
-    // So esses, vinculados por sessao aprovada, podem aparecer pendentes.
-    const franchisePendingAllowed = new Set((linkedSessions ?? [])
-      .filter((row) => row.customer_type === "franchise" && row.status === "credit_approved")
-      .map((row) => numericOrderId(row.shopify_order_id))
-      .filter(Boolean));
+    const linkedSessionsByOrderId = new Map((linkedSessions ?? []).map((row) => [
+      numericOrderId(row.shopify_order_id),
+      row,
+    ]));
 
     const emailOrdersUrl = `https://${shopDomain}/admin/api/2025-07/orders.json?email=${encodeURIComponent(
       user.email
@@ -102,13 +101,14 @@ Deno.serve(async (req) => {
     const rawOrders = [...ordersById.values()]
       .sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || ""));
 
-    // Only show orders that were actually completed (paid/partially paid).
-    // Exclude cancelled, refunded, pending and unpaid orders entirely.
     const validatedRaw = rawOrders.filter((o: any) => {
-      if (o.cancelled_at) return false;
-      const fs = (o.financial_status || "").toLowerCase();
-      if (["paid", "partially_paid"].includes(fs)) return true;
-      return ["pending", "authorized"].includes(fs) && franchisePendingAllowed.has(String(o.id));
+      const linkedSession = linkedSessionsByOrderId.get(String(o.id));
+      return shouldShowCustomerOrder({
+        financialStatus: String(o.financial_status || ""),
+        cancelled: Boolean(o.cancelled_at),
+        linkedCustomerType: linkedSession?.customer_type,
+        linkedSessionStatus: linkedSession?.status,
+      });
     });
 
 

@@ -37,7 +37,7 @@ describe("margem de assinante por categoria", () => {
   });
 });
 
-describe("regra automatica de racao por peso", () => {
+describe("regra automatica de racao", () => {
   const feedCategories = [
     { id: "feed", name: "Ração", parent_id: null },
     { id: "dog-feed", name: "Cães adultos", parent_id: "feed" },

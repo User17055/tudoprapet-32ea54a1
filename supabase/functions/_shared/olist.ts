@@ -13,6 +13,7 @@ export const OLIST_INVOICE_LINK_URL = "https://api.tiny.com.br/api2/nota.fiscal.
 export const OLIST_INVOICE_ISSUE_URL = "https://api.tiny.com.br/api2/nota.fiscal.emitir.php";
 export const OLIST_ORDER_LAUNCH_RECEIVABLES_URL =
   "https://api.tiny.com.br/api2/pedido.lancar.contas.php";
+export const OLIST_RECEIVABLE_SETTLE_URL = "https://api.tiny.com.br/api2/conta.receber.baixar.php";
 
 export interface OlistCost {
   id: string;
@@ -65,6 +66,17 @@ export interface OlistCreatedOrder {
   number: string;
 }
 
+export interface OlistImportedOrder extends OlistCreatedOrder {
+  externalReference: string;
+}
+
+export interface OlistOrderReconciliationDetails extends OlistImportedOrder {
+  total: number;
+  customerCpfCnpj: string;
+  customerEmail: string;
+  ecommerceName: string;
+}
+
 export interface OlistReceivable {
   id: string;
   status: "aberto" | "pago" | "cancelado" | "cancelada" | "parcial" | string;
@@ -115,6 +127,23 @@ export function subscriberPriceFromCost(cost: number): number {
 export function normalizeOlistId(value: unknown): string | null {
   const id = String(value ?? "").trim();
   return !id || /^0+$/.test(id) ? null : id;
+}
+
+export function normalizedExternalOrderReferences(value: unknown): string[] {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return [];
+  const withoutHash = raw.replace(/^#+/, "");
+  return [...new Set([raw, withoutHash].filter(Boolean))];
+}
+
+export function olistExternalReferenceMatches(
+  externalReference: unknown,
+  references: unknown[],
+): boolean {
+  const external = new Set(normalizedExternalOrderReferences(externalReference));
+  return references.some((reference) =>
+    normalizedExternalOrderReferences(reference).some((candidate) => external.has(candidate))
+  );
 }
 
 function truncate(value: unknown, max: number): string {
@@ -322,6 +351,68 @@ export async function findOlistOrderByExternalReference(
   return null;
 }
 
+/**
+ * Localiza pedidos que a integração Shopify já importou no ERP. Uma única
+ * varredura atende vários checkouts e evita uma chamada Olist por pedido.
+ */
+export async function findImportedOlistOrders(
+  references: unknown[],
+  token: string,
+  lookbackDays = 14,
+): Promise<OlistImportedOrder[]> {
+  const wanted = references.flatMap(normalizedExternalOrderReferences);
+  if (!wanted.length) return [];
+  const todayDate = new Date();
+  const initialDate = new Date(todayDate);
+  initialDate.setDate(todayDate.getDate() - Math.max(1, lookbackDays));
+  const found = new Map<string, OlistImportedOrder>();
+
+  // A API pagina a pesquisa. Cinco páginas cobrem o volume normal sem deixar
+  // uma conta com histórico grande transformar o cron em uma varredura infinita.
+  for (let page = 1; page <= 5; page++) {
+    const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, {
+      dataInicial: toOlistDate(initialDate),
+      dataFinal: toOlistDate(todayDate),
+      pagina: String(page),
+    });
+    if (Number(payload?.retorno?.codigo_erro) === 20) break;
+    const orders = payload?.retorno?.pedidos ?? [];
+    for (const entry of orders) {
+      const order = entry?.pedido ?? entry;
+      const externalReference = String(order?.numero_ecommerce || "").trim();
+      if (!order?.id || !olistExternalReferenceMatches(externalReference, wanted)) continue;
+      found.set(String(order.id), {
+        id: String(order.id),
+        number: String(order.numero ?? order.id),
+        externalReference,
+      });
+    }
+    const totalPages = Number(payload?.retorno?.numero_paginas || 1);
+    if (!orders.length || !Number.isFinite(totalPages) || page >= totalPages) break;
+  }
+  return [...found.values()];
+}
+
+export async function getOlistOrderReconciliationDetails(
+  id: string,
+  token: string,
+): Promise<OlistOrderReconciliationDetails> {
+  const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id });
+  const order = payload?.retorno?.pedido;
+  if (!order?.id) throw new Error(responseErrors(payload));
+  return {
+    id: String(order.id),
+    number: String(order.numero ?? order.id),
+    externalReference: String(
+      order.numero_ecommerce || order.ecommerce?.numeroPedidoEcommerce || "",
+    ).trim(),
+    total: Number(order.total_pedido),
+    customerCpfCnpj: String(order.cliente?.cpf_cnpj || "").replace(/\D/g, ""),
+    customerEmail: String(order.cliente?.email || "").trim().toLowerCase(),
+    ecommerceName: String(order.ecommerce?.nomeEcommerce || "").trim(),
+  };
+}
+
 export async function findOlistReceivableByDocument(
   documentNumber: string,
   token: string,
@@ -407,6 +498,46 @@ export async function getOlistReceivable(id: string, token: string): Promise<Oli
   };
 }
 
+export async function settleOlistReceivable(
+  id: string,
+  token: string,
+  input: {
+    paidAt: Date;
+    amount: number;
+    destinationAccount?: string;
+    history?: string;
+  },
+): Promise<void> {
+  const current = await getOlistReceivable(id, token);
+  if (current.status.toLowerCase() === "pago") return;
+  if (["cancelado", "cancelada"].includes(current.status.toLowerCase())) {
+    throw new Error("A conta a receber da Olist está cancelada");
+  }
+  const account = {
+    id,
+    data: toOlistDate(input.paidAt),
+    valorPago: roundMoney(input.amount),
+    ...(input.destinationAccount
+      ? { contaDestino: truncate(input.destinationAccount, 100) }
+      : {}),
+    ...(input.history ? { historico: truncate(input.history, 300) } : {}),
+  };
+  try {
+    const payload = await olistPost(OLIST_RECEIVABLE_SETTLE_URL, token, {
+      conta: JSON.stringify({ conta: account }),
+    });
+    const record = firstRecord(payload);
+    if (record?.status && String(record.status).toLowerCase() !== "ok") {
+      throw new Error(responseErrors(payload));
+    }
+  } catch (error) {
+    // Duas execuções podem observar "aberto" quase juntas. A segunda recebe
+    // este retorno da Olist; financeiramente o resultado desejado já ocorreu.
+    if (/j[aá] foi paga/i.test(error instanceof Error ? error.message : String(error))) return;
+    throw error;
+  }
+}
+
 export async function getOlistOrderInvoiceId(
   orderId: string,
   token: string,
@@ -474,9 +605,10 @@ export async function issueOlistInvoice(
   const issued = payload?.retorno?.nota_fiscal;
   if (!issued && payload?.retorno?.status !== "OK") throw new Error(responseErrors(payload));
   const confirmed = await getOlistInvoice(String(issued?.id ?? invoice.id), token);
-  // Emissão aceita pela Olist mas ainda pendente na SEFAZ não interrompe o
-  // fluxo: o pedido na Shopify segue com pagamento pendente e a nota é
-  // conferida depois pela conciliação.
+  // A autorizacao da SEFAZ e assincrona. Quando a Olist aceitou a emissao, a
+  // nota pode continuar pendente por algum tempo; isso nao deve impedir que o
+  // rascunho seja concluido como pedido na Shopify. Falhas reais da chamada de
+  // emissao continuam sendo lancadas acima por `olistPost`.
   return confirmed;
 }
 

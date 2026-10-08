@@ -33,6 +33,32 @@ npx supabase secrets set OLIST_FINAL_CONSUMPTION_NATURE_OPERATION_ID="id-consumo
 
 `OLIST_FRANCHISE_PAYMENT_METHOD` usa `boleto` por padrão. O valor é normalizado para minúsculas antes de ser enviado à Olist.
 
+## Pagamentos Asaas importados da Shopify
+
+Pedidos comuns e de assinantes pagos por Pix ou cartão no Asaas são concluídos
+na Shopify como pagos. O pedido também leva `note_attributes` com
+`payment_method`, `meio_pagamento`, `payment_gateway` e `provedor_pagamento`,
+permitindo que a integração da Olist reconheça o intermediador real.
+
+Na integração Shopify do ERP, habilite **Importar forma de recebimento nos
+pedidos** e **Utilizar meio pagamento informado no note_attributes**. Depois,
+na aba **Formas de Recebimento**, mapeie o código `pix` para a forma **Pix** e
+para um meio/gateway financeiro chamado **Asaas**. Esse cadastro é apenas a
+conciliação do ERP; a confirmação real continua vindo do webhook do Asaas.
+
+Para baixar automaticamente na Olist os Pix e cartões confirmados pelo Asaas,
+cadastre uma conta financeira chamada **Asaas** no ERP e publique o secret com
+o nome exatamente igual ao cadastro:
+
+```bash
+npx supabase secrets set OLIST_ASAAS_ACCOUNT_NAME="Asaas"
+```
+
+O cron de `olist-reconcile-franchise` também executa essa ponte. Ele aguarda a
+integração importar o pedido Shopify, confere pedido, valor e status pago,
+localiza a conta a receber e chama a baixa oficial da API Olist. A sessão guarda
+o resultado e as retentativas para impedir baixa duplicada.
+
 Os dois IDs de natureza de operação são obrigatórios para novos pedidos de franquia. Obtenha-os no cadastro fiscal da Olist com o contador; o sistema não presume CFOP ou tributação. A escolha **Revenda** ou **Consumo final** feita no checkout seleciona o ID correspondente no campo `id_natureza_operacao` do pedido da Olist.
 
 No painel da Olist, confirme antes da publicação:
@@ -68,4 +94,4 @@ A migration agenda a conciliação a cada 10 minutos. Ela precisa encontrar o se
 
 ## Comportamento em falhas
 
-Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a Shopify falhar no meio do processo, uma nova tentativa retoma os registros existentes em vez de gerar uma duplicidade. O checkout só informa sucesso depois de confirmar que a NF-e foi autorizada.
+Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a Shopify falhar no meio do processo, uma nova tentativa retoma os registros existentes em vez de gerar uma duplicidade. Depois que a Olist aceita a solicitação de emissão, o pedido é concluído na Shopify mesmo que a NF-e ainda esteja pendente de autorização pela SEFAZ. Uma recusa real da solicitação de emissão continua interrompendo o fluxo.
