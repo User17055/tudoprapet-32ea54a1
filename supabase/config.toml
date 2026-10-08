@@ -31,6 +31,3 @@ verify_jwt = true
 # O MCP valida o bearer token OAuth por conta propria (mcp-js resource server).
 [functions.mcp]
 verify_jwt = false
-
-[functions.tmp-run-reconcile]
-verify_jwt = false
