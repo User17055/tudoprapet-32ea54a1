@@ -38,7 +38,7 @@ import {
   franchisePaymentDueDate,
   type FranchisePaymentScheduleType,
 } from "../_shared/franchise-payment.ts";
-import { franchiseFiscalError } from "../_shared/franchise-fiscal.ts";
+import { resolveFranchiseFiscalIdentity, validateFiscalSnapshot } from "../_shared/franchise-fiscal.ts";
 
 const FRANCHISE_PAYMENT_TERM_DAYS = 7;
 
@@ -468,28 +468,17 @@ Deno.serve(async (req) => {
           return jsonResponse({ error: "Cadastre um endereço fiscal no perfil da franquia", profileRequired: true });
         }
       }
-      let fiscalError = franchiseFiscalError({
-        cnpj: customer.cpfCnpj,
-        company_legal_name: customer.legalName || customer.name,
-        company_trade_name: customer.tradeName,
-        state_registration: customer.stateRegistration,
-        state_registration_indicator: customer.stateRegistrationIndicator,
-      }, invoicePurpose);
+      let fiscalError = validateFiscalSnapshot(customer, invoicePurpose);
       if (fiscalError && session.user_id) {
         const { data: currentFiscalProfile, error: currentFiscalError } = await admin.from("profiles")
-          .select("cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator")
+          .select("name,cpf,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator")
           .eq("user_id", session.user_id).maybeSingle();
         if (currentFiscalError) throw currentFiscalError;
-        fiscalError = franchiseFiscalError(currentFiscalProfile, invoicePurpose);
-        if (!fiscalError && currentFiscalProfile) {
-          Object.assign(customer, {
-            name: currentFiscalProfile.company_legal_name,
-            legalName: currentFiscalProfile.company_legal_name,
-            tradeName: currentFiscalProfile.company_trade_name || "",
-            cpfCnpj: currentFiscalProfile.cnpj,
-            stateRegistration: currentFiscalProfile.state_registration || "",
-            stateRegistrationIndicator: currentFiscalProfile.state_registration_indicator,
-          });
+        const resolved = resolveFranchiseFiscalIdentity(currentFiscalProfile, invoicePurpose);
+        fiscalError = resolved.ok ? null : resolved.error;
+        if (resolved.ok) {
+          // Atualiza o snapshot; Olist, NF-e e Shopify leem só dele.
+          Object.assign(customer, resolved.identity);
           const { error: snapshotError } = await admin.from("checkout_sessions")
             .update({ customer_snapshot: customer }).eq("id", sessionId);
           if (snapshotError) throw snapshotError;
