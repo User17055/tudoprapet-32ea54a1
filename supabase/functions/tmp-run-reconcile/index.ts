@@ -9,11 +9,12 @@ async function raw(url: string, token: string, body: Record<string, string>) {
   return await r.json().catch(() => null);
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const sid = new URL(req.url).searchParams.get("sid")!;
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const token = Deno.env.get("OLIST_API_TOKEN")!;
   const { data: s } = await admin.from("checkout_sessions").select("id,shopify_order_id,total")
-    .eq("id", "208fd540-3813-4ee2-abb3-cfc6fd4e6129").single();
+    .eq("id", sid).single();
   const ref = await getShopifyOrderReference(String(s!.shopify_order_id), shopifyAdminToken()!);
   const orders = await findImportedOlistOrders([ref.id, ref.name, ref.orderNumber], token);
   const order = orders[0];
