@@ -606,24 +606,14 @@ async function processEvent(admin: SupabaseClient, row: EventRow) {
   }
 }
 
-// Mantem a copia do Vault (lida pelo cron) igual ao secret CRON_WORKER_TOKEN.
-// O valor vem so do ambiente da funcao, nunca da requisicao; roda uma vez por isolate.
-let cronTokenSynced = false;
-async function syncCronWorkerToken(): Promise<void> {
-  if (cronTokenSynced) return;
-  const token = Deno.env.get("CRON_WORKER_TOKEN") || "";
-  if (token.length < 32) return;
-  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { error } = await admin.rpc("ensure_cron_worker_token", { p_token: token });
-  if (error) console.error("Falha ao sincronizar credencial do agendamento:", error.code ?? "sem codigo");
-  else cronTokenSynced = true;
-}
+// O agendamento le a credencial do Vault ('cron_worker_token') e a envia em
+// x-cron-worker-token. A funcao compara com o secret CRON_WORKER_TOKEN. Os dois
+// valores sao cadastrados manualmente; a funcao nunca grava nem devolve a credencial.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token, x-cron-worker-token") });
   if (req.method !== "POST") return jsonResponse({ error: "Método não permitido" }, 405);
 
-  await syncCronWorkerToken().catch(() => console.error("Falha ao sincronizar credencial do agendamento"));
 
   const expected = Deno.env.get("PAYMENT_WORKER_TOKEN") || "";
   const received = req.headers.get("x-payment-worker-token") || "";
