@@ -128,6 +128,7 @@ for (const purpose of ["resale", "final_consumption"] as const) {
     assertEquals(order.pedido.cliente.ie, purpose === "resale" ? "123456789" : undefined);
 
     const shopify = await captureShopifyBodies(snapshot.cpfCnpj, snapshot.name);
+    if (!shopify.includes(`"key":"CPF/CNPJ","value":"${snapshot.cpfCnpj}"`)) console.log(shopify.slice(0, 3000));
     assertEquals(shopify.includes(`"key":"CPF/CNPJ","value":"${snapshot.cpfCnpj}"`), true);
     assertEquals(shopify.includes("11144477735"), false);
   });
