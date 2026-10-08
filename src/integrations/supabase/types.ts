@@ -258,6 +258,10 @@ export type Database = {
           olist_invoice_url: string | null
           olist_order_id: string | null
           olist_order_number: string | null
+          olist_payment_sync_attempts: number
+          olist_payment_sync_error: string | null
+          olist_payment_sync_next_attempt_at: string | null
+          olist_payment_synced_at: string | null
           olist_receivable_id: string | null
           pricing_snapshot: Json
           referral_code: string | null
@@ -301,6 +305,10 @@ export type Database = {
           olist_invoice_url?: string | null
           olist_order_id?: string | null
           olist_order_number?: string | null
+          olist_payment_sync_attempts?: number
+          olist_payment_sync_error?: string | null
+          olist_payment_sync_next_attempt_at?: string | null
+          olist_payment_synced_at?: string | null
           olist_receivable_id?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
@@ -344,6 +352,10 @@ export type Database = {
           olist_invoice_url?: string | null
           olist_order_id?: string | null
           olist_order_number?: string | null
+          olist_payment_sync_attempts?: number
+          olist_payment_sync_error?: string | null
+          olist_payment_sync_next_attempt_at?: string | null
+          olist_payment_synced_at?: string | null
           olist_receivable_id?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
