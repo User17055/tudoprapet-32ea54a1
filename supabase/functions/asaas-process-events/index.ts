@@ -606,17 +606,35 @@ async function processEvent(admin: SupabaseClient, row: EventRow) {
   }
 }
 
+// Mantem a copia do Vault (lida pelo cron) igual ao secret CRON_WORKER_TOKEN.
+// O valor vem so do ambiente da funcao, nunca da requisicao; roda uma vez por isolate.
+let cronTokenSynced = false;
+async function syncCronWorkerToken(): Promise<void> {
+  if (cronTokenSynced) return;
+  const token = Deno.env.get("CRON_WORKER_TOKEN") || "";
+  if (token.length < 32) return;
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { error } = await admin.rpc("ensure_cron_worker_token", { p_token: token });
+  if (error) console.error("Falha ao sincronizar credencial do agendamento:", error.code ?? "sem codigo");
+  else cronTokenSynced = true;
+}
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token") });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token, x-cron-worker-token") });
   if (req.method !== "POST") return jsonResponse({ error: "Método não permitido" }, 405);
+
+  await syncCronWorkerToken().catch(() => console.error("Falha ao sincronizar credencial do agendamento"));
 
   const expected = Deno.env.get("PAYMENT_WORKER_TOKEN") || "";
   const received = req.headers.get("x-payment-worker-token") || "";
+  const cronExpected = Deno.env.get("CRON_WORKER_TOKEN") || "";
+  const cronReceived = req.headers.get("x-cron-worker-token") || "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const workerAuthorized = Boolean(expected && timingSafeEqual(expected, received));
+  const scheduleAuthorized = Boolean(cronExpected.length >= 32 && cronReceived && timingSafeEqual(cronExpected, cronReceived));
   const cronAuthorized = Boolean(serviceRole && timingSafeEqual(serviceRole, bearer));
-  if (!workerAuthorized && !cronAuthorized) {
+  if (!workerAuthorized && !scheduleAuthorized && !cronAuthorized) {
     return jsonResponse({ error: "Não autorizado" }, 401);
   }
 
