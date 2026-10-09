@@ -10,7 +10,7 @@ async function olist(path: string, params: Record<string, string>) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   void normalizeSku;
-  const shop = "tudoprapet.myshopify.com";
+  const shop = "petjoy-deals-hb8r9.myshopify.com";
   const sr = await fetch(`https://${shop}/admin/api/2025-07/orders/9917940236374.json?fields=name,order_number,financial_status,total_price`, {
     headers: { "X-Shopify-Access-Token": Deno.env.get("SHOPIFY_ACCESS_TOKEN")! },
   });
