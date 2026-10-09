@@ -542,6 +542,9 @@ Deno.serve(async (req) => {
         quantity: item.quantity,
         catalogUnitPrice: money(catalogPrice),
         unitPrice: money(unitPrice),
+        ...(customerType === "franchise" && costFloor !== undefined
+          ? { costUnitPrice: money(costFloor) }
+          : {}),
         lineTotal,
         ...(appliedRule
           ? {

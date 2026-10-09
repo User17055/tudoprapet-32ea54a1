@@ -318,17 +318,30 @@ Deno.serve(async (req) => {
     // Reprocessa NF-e pendentes/rejeitadas de pedidos já concluídos na Shopify.
     // Reaproveita a nota salva; só gera nota quando o pedido ainda não tem uma.
     const invoiceSummary = { checked: 0, issued: 0, pending: 0, rejected: 0 };
+    const staleInvoiceClaim = new Date(Date.now() - 10 * 60_000).toISOString();
     const { data: invoiceRows, error: invoiceRowsError } = await admin.from("checkout_sessions")
-      .select("id,olist_order_id,olist_invoice_id,olist_invoice_number")
+      .select("id,olist_order_id,olist_invoice_id,olist_invoice_number,olist_invoice_status")
       .eq("customer_type", "franchise")
       .eq("status", "credit_approved")
       .not("olist_order_id", "is", null)
-      .in("olist_invoice_status", ["pending", "rejected"])
+      .in("olist_invoice_status", ["generating", "pending", "rejected"])
+      .or(`olist_invoice_status.in.(pending,rejected),olist_invoice_checked_at.lt.${staleInvoiceClaim}`)
       .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
       .limit(15);
     if (invoiceRowsError) console.error("Falha ao listar NF-e pendentes:", invoiceRowsError);
     for (const row of invoiceRows || []) {
       invoiceSummary.checked++;
+      const { data: claimed, error: claimError } = await admin.rpc(
+        "claim_olist_invoice_processing",
+        { p_session_id: row.id },
+      );
+      if (claimError) {
+        invoiceSummary.rejected++;
+        console.error(`Falha ao reservar NF-e da sessão ${row.id}:`, claimError);
+        continue;
+      }
+      // Outro checkout/worker já está gerando ou emitindo esta mesma nota.
+      if (!claimed) continue;
       const outcome = await issueFranchiseInvoiceSafely({
         orderId: String(row.olist_order_id),
         token,

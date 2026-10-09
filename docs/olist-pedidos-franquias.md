@@ -3,13 +3,18 @@
 O checkout de franquia usa a Olist como origem financeira. Depois da confirmação final do franqueado, o sistema:
 
 1. cria o pedido de venda na Olist;
-2. acrescenta R$ 2,00 em `outras_despesas`;
+2. registra em `outras_despesas` a taxa operacional e a diferença entre custo e preço comercial;
 3. lança a conta a receber com vencimento em 7 ou 30 dias, conforme o cadastro do franqueado;
 4. gera e emite a NF-e imediatamente;
 5. conclui o rascunho do pedido na Shopify como pagamento pendente;
 6. consulta a Olist a cada 10 minutos e dá baixa local quando a conta estiver paga.
 
 O boleto usa a mesma conta a receber e pode oferecer Pix por QR Code ou copia e cola. Não devem ser criadas duas cobranças separadas.
+
+Os itens do pedido e da NF-e usam o custo salvo em `product_costs`, capturado no
+snapshot do checkout. Quando o preço cobrado da franquia for maior que o custo,
+a diferença, junto da taxa operacional, segue em `outras_despesas`. A parcela e
+a conta a receber preservam o total comercial confirmado no checkout.
 
 A condição de pagamento é individual por franquia e pode ser configurada no
 Admin em dois modos:
@@ -104,3 +109,8 @@ Shopify falhar no meio do processo, uma nova tentativa retoma os registros
 existentes em vez de gerar uma duplicidade. Falhas de geração, emissão ou
 autorização da NF-e ficam registradas em `checkout_sessions.olist_invoice_status`
 e são retomadas pela conciliação, sem bloquear a conclusão da venda.
+Antes de criar pedido, cobrança, gerar ou emitir nota, o checkout obtém uma
+trava atômica no banco. A emissão também tem uma trava própria compartilhada com
+o conciliador. Apenas o vencedor chama a Olist; uma trava abandonada é retomada
+depois de dez minutos. Isso impede pedidos e NF-e duplicados quando o cliente
+repete a confirmação ou quando checkout e cron executam ao mesmo tempo.

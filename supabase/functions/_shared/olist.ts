@@ -61,6 +61,22 @@ export interface OlistFranchiseOrderInput {
   natureOperationId?: string;
 }
 
+export function olistOtherExpensesForTotal(
+  items: OlistFranchiseOrderItem[],
+  shippingAmount: number,
+  total: number,
+): number {
+  const productsTotal = items.reduce(
+    (sum, item) => sum + roundMoney(item.unitPrice) * item.quantity,
+    0,
+  );
+  const otherExpenses = roundMoney(total - shippingAmount - productsTotal);
+  if (!Number.isFinite(otherExpenses) || otherExpenses < 0) {
+    throw new Error("Custo dos itens da Olist excede o total do pedido");
+  }
+  return otherExpenses;
+}
+
 export interface OlistCreatedOrder {
   id: string;
   number: string;
@@ -248,7 +264,7 @@ export function buildOlistFranchiseOrder(input: OlistFranchiseOrderInput): Recor
         100,
       ),
       obs_internas: truncate(
-        `Taxa operacional R$ ${roundMoney(input.serviceFee).toFixed(2)} - Finalidade: ${
+        `Outras despesas R$ ${roundMoney(input.serviceFee).toFixed(2)} - Finalidade: ${
           input.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"
         }`,
         100,

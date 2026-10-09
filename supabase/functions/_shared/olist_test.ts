@@ -5,6 +5,7 @@ import {
   findExactOlistCost,
   ensureOlistOrderReceivable,
   issueFranchiseInvoiceSafely,
+  olistOtherExpensesForTotal,
   getOlistOrderReconciliationDetails,
   issueOlistInvoice,
   normalizeOlistId,
@@ -241,6 +242,28 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   assertEquals(receivable.conta.valor, 62);
   assertEquals(receivable.conta.cliente.ie, "123456789");
   assertEquals(receivable.conta.vencimento, "02/10/2026");
+});
+
+Deno.test("concilia preco fiscal de custo com o total comercial", () => {
+  const items = [
+    { sku: "A", description: "Produto A", quantity: 2, unitPrice: 20 },
+    { sku: "B", description: "Produto B", quantity: 1, unitPrice: 30 },
+  ];
+  assertEquals(olistOtherExpensesForTotal(items, 10, 102), 22);
+});
+
+Deno.test("recusa custo fiscal maior que o total comercial", () => {
+  let message = "";
+  try {
+    olistOtherExpensesForTotal(
+      [{ sku: "A", description: "Produto A", quantity: 1, unitPrice: 100 }],
+      10,
+      90,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assertEquals(message, "Custo dos itens da Olist excede o total do pedido");
 });
 
 Deno.test("emissao aceita pela Olist mas pendente na SEFAZ nao interrompe o fluxo", async () => {
