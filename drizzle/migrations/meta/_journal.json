@@ -15,6 +15,13 @@
       "when": 1791474626010,
       "tag": "0001_route_olist_reconciliation_through_worker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791575683007,
+      "tag": "0002_lock_olist_invoice_generation",
+      "breakpoints": true
     }
   ]
 }

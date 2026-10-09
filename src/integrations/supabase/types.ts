@@ -1602,6 +1602,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_olist_franchise_checkout: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
+      claim_olist_invoice_processing: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       claim_payment_actions: {
         Args: { p_limit?: number }
         Returns: {
