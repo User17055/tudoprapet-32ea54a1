@@ -34,6 +34,7 @@
     "npm:@radix-ui/react-toggle-group@^1.1.10": "1.1.19_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@radix-ui/react-toggle@^1.1.9": "1.1.18_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@radix-ui/react-tooltip@^1.2.7": "1.2.16_@types+react@18.3.31_@types+react-dom@18.3.7__@types+react@18.3.31_react@18.3.1_react-dom@18.3.1__react@18.3.1",
+    "npm:@supabase/supabase-js@2": "2.75.0",
     "npm:@supabase/supabase-js@2.75.0": "2.75.0",
     "npm:@supabase/supabase-js@^2.102.1": "2.112.0",
     "npm:@tailwindcss/typography@~0.5.16": "0.5.20_tailwindcss@3.4.19__postcss@8.5.25__jiti@1.21.7",
