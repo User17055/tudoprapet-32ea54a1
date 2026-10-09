@@ -57,6 +57,7 @@ export interface OlistFranchiseOrderInput {
   shippingMethod?: string;
   paymentMethod?: string;
   paymentHolder?: string;
+  ecommerceName?: string;
   invoicePurpose?: "resale" | "final_consumption";
   natureOperationId?: string;
 }
@@ -256,7 +257,7 @@ export function buildOlistFranchiseOrder(input: OlistFranchiseOrderInput): Recor
       }],
       situacao: "aprovado",
       numero_pedido_ecommerce: truncate(input.externalReference, 50),
-      ecommerce: "TudoPraPet",
+      ecommerce: truncate(input.ecommerceName || "TudoPraPet", 50),
       obs: truncate(
         `Pedido de franquia TudoPraPet ${input.externalReference} - NF-e: ${
           input.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"

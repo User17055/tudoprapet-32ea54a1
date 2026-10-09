@@ -11,6 +11,11 @@ O checkout de franquia usa a Olist como origem financeira. Depois da confirmaç�
 
 O boleto usa a mesma conta a receber e pode oferecer Pix por QR Code ou copia e cola. Não devem ser criadas duas cobranças separadas.
 
+O pedido é concluído primeiro na Shopify para obter seu número definitivo. A
+inclusão pela API usa esse mesmo número e o mesmo nome da integração Shopify na
+Olist, impedindo que a recepção automática do e-commerce crie outra venda e
+outra NF-e para a mesma compra.
+
 Os itens do pedido e da NF-e usam o custo salvo em `product_costs`, capturado no
 snapshot do checkout. Quando o preço cobrado da franquia for maior que o custo,
 a diferença, junto da taxa operacional, segue em `outras_despesas`. A parcela e
@@ -32,6 +37,7 @@ Defina os segredos das Edge Functions:
 ```powershell
 npx supabase secrets set OLIST_API_TOKEN="token-da-api-v2"
 npx supabase secrets set OLIST_FRANCHISE_PAYMENT_METHOD="boleto"
+npx supabase secrets set OLIST_SHOPIFY_ECOMMERCE_NAME="nome-exato-da-integracao-Shopify-na-Olist"
 npx supabase secrets set OLIST_RESALE_NATURE_OPERATION_ID="id-revenda-na-olist"
 npx supabase secrets set OLIST_FINAL_CONSUMPTION_NATURE_OPERATION_ID="id-consumo-final-na-olist"
 ```

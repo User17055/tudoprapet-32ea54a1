@@ -13,7 +13,11 @@ import {
   getAsaasPixQrCode,
   tokenizeAsaasCreditCard,
 } from "../_shared/asaas.ts";
-import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
+import {
+  completeDraftOrder,
+  getShopifyOrderReference,
+  shopifyAdminToken,
+} from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 import {
@@ -546,6 +550,36 @@ Deno.serve(async (req) => {
             : "Natureza de operação da Olist para revenda não configurada",
         );
       }
+      // A Shopify também envia pedidos para a integração nativa da Olist.
+      // Conclua primeiro para usar o mesmo número externo nas duas origens;
+      // assim a Olist reconhece a venda em vez de criar outro pedido/nota.
+      olistStage = "shopify";
+      const shopifyToken = shopifyAdminToken();
+      if (!shopifyToken || !session.shopify_draft_order_id) {
+        throw new Error("Shopify não configurada para concluir pedido da franquia");
+      }
+      let completedOrderId = session.shopify_order_id
+        ? String(session.shopify_order_id)
+        : "";
+      if (!completedOrderId) {
+        const completed = await completeDraftOrder(
+          session.shopify_draft_order_id,
+          shopifyToken,
+          true,
+          customer.cpfCnpj,
+        );
+        if (!completed.requestOk || !completed.orderId) {
+          throw new Error("Falha ao concluir pedido com prazo na Shopify");
+        }
+        completedOrderId = completed.orderId;
+        const { error: shopifySaveError } = await admin.from("checkout_sessions").update({
+          shopify_order_id: completedOrderId,
+        }).eq("id", sessionId);
+        if (shopifySaveError) throw shopifySaveError;
+      }
+      const shopifyOrder = await getShopifyOrderReference(completedOrderId, shopifyToken);
+      const olistExternalReference = shopifyOrder.orderNumber ||
+        shopifyOrder.name.replace(/^#/, "") || completedOrderId;
       const billing = olistCustomer(customer, customerAddress);
       const deliveryAddress =
         session.address_snapshot && Object.keys(session.address_snapshot).length
@@ -590,7 +624,7 @@ Deno.serve(async (req) => {
         Number(session.total),
       );
       const olistInput: OlistFranchiseOrderInput = {
-        externalReference: sessionId,
+        externalReference: olistExternalReference,
         customer: billing,
         deliveryAddress,
         items: olistItems,
@@ -605,6 +639,8 @@ Deno.serve(async (req) => {
         paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || "boleto")
           .trim()
           .toLowerCase(),
+        ecommerceName: String(Deno.env.get("OLIST_SHOPIFY_ECOMMERCE_NAME") || "TudoPraPet")
+          .trim(),
         invoicePurpose: invoicePurpose!,
         natureOperationId,
       };
@@ -706,23 +742,9 @@ Deno.serve(async (req) => {
         });
       }
 
-      olistStage = "shopify";
-      const shopifyToken = shopifyAdminToken();
-      if (!shopifyToken || !session.shopify_draft_order_id) {
-        throw new Error("Shopify não configurada para concluir pedido da franquia");
-      }
-      const completed = await completeDraftOrder(
-        session.shopify_draft_order_id,
-        shopifyToken,
-        true,
-        customer.cpfCnpj,
-      );
-      if (!completed.requestOk || !completed.orderId) {
-        throw new Error("Falha ao concluir pedido com prazo na Shopify");
-      }
       const { error: completedSaveError } = await admin.from("checkout_sessions").update({
         status: "credit_approved",
-        shopify_order_id: completed.orderId,
+        shopify_order_id: completedOrderId,
         ...(ownsInvoiceProcessing
           ? {
             olist_invoice_status: invoiceOutcome.status,
