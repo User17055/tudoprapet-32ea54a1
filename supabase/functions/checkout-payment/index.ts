@@ -550,6 +550,12 @@ Deno.serve(async (req) => {
             : "Natureza de operação da Olist para revenda não configurada",
         );
       }
+      // Precisa ser o nome exato da integração Shopify na Olist; sem ele a
+      // importação automática não reconhece o pedido e cria uma segunda venda.
+      const olistEcommerceName = String(Deno.env.get("OLIST_SHOPIFY_ECOMMERCE_NAME") || "").trim();
+      if (!olistEcommerceName) {
+        throw new Error("Nome da integração Shopify na Olist não configurado");
+      }
       // A Shopify também envia pedidos para a integração nativa da Olist.
       // Conclua primeiro para usar o mesmo número externo nas duas origens;
       // assim a Olist reconhece a venda em vez de criar outro pedido/nota.
@@ -639,8 +645,7 @@ Deno.serve(async (req) => {
         paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || "boleto")
           .trim()
           .toLowerCase(),
-        ecommerceName: String(Deno.env.get("OLIST_SHOPIFY_ECOMMERCE_NAME") || "TudoPraPet")
-          .trim(),
+        ecommerceName: olistEcommerceName,
         invoicePurpose: invoicePurpose!,
         natureOperationId,
       };
