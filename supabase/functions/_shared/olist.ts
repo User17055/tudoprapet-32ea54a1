@@ -362,7 +362,8 @@ export async function findOlistOrderByExternalReference(
   if (Number(payload?.retorno?.codigo_erro) === 20) return null;
   for (const entry of payload?.retorno?.pedidos ?? []) {
     const order = entry?.pedido ?? entry;
-    if (String(order?.numero_ecommerce || "") !== externalReference) continue;
+    // Aceita "#1235" e "1235": a importação Shopify pode gravar com cerquilha.
+    if (!olistExternalReferenceMatches(order?.numero_ecommerce, [externalReference])) continue;
     if (!order?.id) continue;
     return { id: String(order.id), number: String(order.numero ?? order.id) };
   }
