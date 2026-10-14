@@ -29,6 +29,13 @@
       "when": 1792004154345,
       "tag": "0003_invoice_claim_all_customers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792006772275,
+      "tag": "0004_cron_worker_credential_in_db",
+      "breakpoints": true
     }
   ]
 }
