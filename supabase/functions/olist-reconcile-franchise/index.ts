@@ -438,6 +438,7 @@ Deno.serve(async (req) => {
     }
 
     const asaasBridge = await reconcileAsaasPayments(admin, token);
+    const customerInvoices = await issueCustomerInvoices(admin, token);
     return jsonResponse({
       // Mantém o contrato anterior para quem já monitora a conciliação de
       // franquias; a ponte nova entra em um bloco adicional.
@@ -448,6 +449,7 @@ Deno.serve(async (req) => {
       failed,
       invoices: invoiceSummary,
       asaasBridge,
+      customerInvoices,
     });
   } catch (error) {
     console.error("olist-reconcile-franchise:", error);
