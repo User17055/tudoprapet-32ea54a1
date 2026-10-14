@@ -183,6 +183,15 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
       if (!identityConfirmed) {
         throw new Error("Não foi possível confirmar o cliente do pedido antes da baixa");
       }
+      // Pedido confirmado: guarda o vínculo já agora para a NF-e poder ser
+      // emitida mesmo que a baixa da conta falhe nesta rodada.
+      if (!session.olist_order_id) {
+        await admin.from("checkout_sessions").update({
+          olist_order_id: imported.id,
+          olist_order_number: imported.number,
+        }).eq("id", session.id).is("olist_order_id", null);
+      }
+
 
       const receivableRef = session.olist_receivable_id
         ? { id: String(session.olist_receivable_id) }
@@ -240,6 +249,67 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
     }
   }
   return { checked: pendingSessions.length, settled, awaitingImport, failed };
+}
+
+/**
+ * NF-e dos pedidos pagos de clientes (comum e Clube). Usa o pedido importado
+ * da Shopify na Olist (a natureza vem da integração). Reaproveita a nota já
+ * existente no pedido; a trava impede duas emissões simultâneas.
+ */
+async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
+  const summary = { checked: 0, issued: 0, pending: 0, rejected: 0 };
+  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60_000).toISOString();
+  const stale = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: rows, error } = await admin.from("checkout_sessions")
+    .select("id,olist_order_id,olist_invoice_id,olist_invoice_number,olist_invoice_status")
+    .in("customer_type", ["common", "subscriber"])
+    .eq("status", "shopify_created")
+    .not("olist_order_id", "is", null)
+    .gte("created_at", cutoff)
+    .or(
+      `olist_invoice_status.is.null,olist_invoice_status.in.(pending,rejected),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${stale})`,
+    )
+    .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
+    .limit(15);
+  if (error) {
+    console.error("Falha ao listar NF-e de clientes:", error);
+    return summary;
+  }
+  for (const row of rows || []) {
+    summary.checked++;
+    const { data: claimed, error: claimError } = await admin.rpc(
+      "claim_olist_invoice_processing",
+      { p_session_id: row.id },
+    );
+    if (claimError || !claimed) {
+      if (claimError) console.error(`Falha ao reservar NF-e ${row.id}:`, claimError);
+      continue;
+    }
+    const outcome = await issueFranchiseInvoiceSafely({
+      orderId: String(row.olist_order_id),
+      token,
+      savedInvoice: row.olist_invoice_id
+        ? { id: String(row.olist_invoice_id), number: String(row.olist_invoice_number || ""), issued: false }
+        : null,
+      onInvoiceGenerated: async (generated) => {
+        const { error: saveError } = await admin.from("checkout_sessions").update({
+          olist_invoice_id: generated.id,
+          olist_invoice_number: generated.number,
+        }).eq("id", row.id);
+        if (saveError) throw saveError;
+      },
+    });
+    summary[outcome.status]++;
+    if (outcome.error) console.warn(`NF-e do cliente ${row.id} pendente:`, outcome.error);
+    await admin.from("checkout_sessions").update({
+      olist_invoice_status: outcome.status,
+      olist_invoice_checked_at: new Date().toISOString(),
+      ...(outcome.invoice?.id ? { olist_invoice_id: outcome.invoice.id } : {}),
+      ...(outcome.invoice?.number ? { olist_invoice_number: outcome.invoice.number } : {}),
+      ...(outcome.invoice?.accessUrl ? { olist_invoice_url: outcome.invoice.accessUrl } : {}),
+    }).eq("id", row.id);
+  }
+  return summary;
 }
 
 Deno.serve(async (req) => {
@@ -368,6 +438,7 @@ Deno.serve(async (req) => {
     }
 
     const asaasBridge = await reconcileAsaasPayments(admin, token);
+    const customerInvoices = await issueCustomerInvoices(admin, token);
     return jsonResponse({
       // Mantém o contrato anterior para quem já monitora a conciliação de
       // franquias; a ponte nova entra em um bloco adicional.
@@ -378,6 +449,7 @@ Deno.serve(async (req) => {
       failed,
       invoices: invoiceSummary,
       asaasBridge,
+      customerInvoices,
     });
   } catch (error) {
     console.error("olist-reconcile-franchise:", error);
