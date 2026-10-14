@@ -13,6 +13,7 @@ import {
   buildDraftLineItems,
   buildPriceAdjustmentLine,
   buildServiceFeeLine,
+  buildPricedDraftLineItems,
   buildShippingLine,
   checkoutServiceFee,
   MIN_CHARGE_VALUE,
@@ -710,19 +711,11 @@ Deno.serve(async (req) => {
       : customerType === "subscriber"
       ? "Clube TudoPraPet"
       : "TudoPraPet";
-    const lineItems = buildDraftLineItems(
-      input.items,
-      finalPriceMap,
-      currentPriceMap,
-      discountTitle,
-    );
-    // Sem checagem de variante sem preço aqui, ao contrário de _shared/checkout.ts:
-    // input.items já foi reduzido a availableItems (linha 186), e todo item que
-    // sobrou tem detail -- logo, tem entrada em currentPriceMap. Quem não tinha
-    // saiu antes, como "Produto removido".
-    const adjustmentLine = buildPriceAdjustmentLine(input.items, finalPriceMap, currentPriceMap);
-    if (adjustmentLine) lineItems.push(adjustmentLine);
-    const serviceFeeLine = buildServiceFeeLine(serviceFee);
+    void discountTitle;
+    // Preço final (e a taxa da franquia, rateada) vai dentro de cada produto.
+    const priced = buildPricedDraftLineItems(input.items, finalPriceMap, serviceFee);
+    const lineItems = priced.lines;
+    const serviceFeeLine = buildServiceFeeLine(priced.residualFee);
     if (serviceFeeLine) lineItems.push(serviceFeeLine);
 
     // Mesmo nome/documento do customer_snapshot em todos os destinos.
