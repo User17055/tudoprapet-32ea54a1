@@ -606,9 +606,9 @@ async function processEvent(admin: SupabaseClient, row: EventRow) {
   }
 }
 
-// O agendamento le a credencial do Vault ('cron_worker_token') e a envia em
-// x-cron-worker-token. A funcao compara com o secret CRON_WORKER_TOKEN. Os dois
-// valores sao cadastrados manualmente; a funcao nunca grava nem devolve a credencial.
+// O agendamento le a credencial de public.cron_worker_credentials (so service_role
+// acessa) e a envia em x-cron-worker-token. A funcao compara com o mesmo valor
+// lido do banco. Nunca grava em log nem devolve a credencial.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token, x-cron-worker-token") });
@@ -617,12 +617,18 @@ Deno.serve(async (req) => {
 
   const expected = Deno.env.get("PAYMENT_WORKER_TOKEN") || "";
   const received = req.headers.get("x-payment-worker-token") || "";
-  const cronExpected = Deno.env.get("CRON_WORKER_TOKEN") || "";
   const cronReceived = req.headers.get("x-cron-worker-token") || "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const workerAuthorized = Boolean(expected && timingSafeEqual(expected, received));
-  const scheduleAuthorized = Boolean(cronExpected.length >= 32 && cronReceived && timingSafeEqual(cronExpected, cronReceived));
+  let scheduleAuthorized = false;
+  if (cronReceived.length >= 32) {
+    const authClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole);
+    const { data: cred } = await authClient.from("cron_worker_credentials")
+      .select("token").eq("id", true).maybeSingle();
+    const cronExpected = String(cred?.token || "");
+    scheduleAuthorized = cronExpected.length >= 32 && timingSafeEqual(cronExpected, cronReceived);
+  }
   const cronAuthorized = Boolean(serviceRole && timingSafeEqual(serviceRole, bearer));
   if (!workerAuthorized && !scheduleAuthorized && !cronAuthorized) {
     return jsonResponse({ error: "Não autorizado" }, 401);
