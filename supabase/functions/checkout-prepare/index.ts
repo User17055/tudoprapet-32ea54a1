@@ -10,8 +10,6 @@ import { parseCheckoutPrepareInput, shippingLabel } from "../_shared/checkout-in
 import {
   applyCostFloor,
   belowMinimumChargeMessage,
-  buildDraftLineItems,
-  buildPriceAdjustmentLine,
   buildServiceFeeLine,
   buildPricedDraftLineItems,
   buildShippingLine,
