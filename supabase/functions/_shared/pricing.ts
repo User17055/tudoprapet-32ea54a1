@@ -212,6 +212,13 @@ export function toGraphqlDraftLineItems(
         : `gid://shopify/ProductVariant/${numericVariantId}`,
       quantity,
     };
+    if (line.price_override !== undefined) {
+      graphqlLine.priceOverride = {
+        amount: Number(Number(line.price_override).toFixed(2)),
+        currencyCode: "BRL",
+      };
+      return graphqlLine;
+    }
 
     if (discount) {
       // DraftOrderLineItemInput aplica o desconto fixo a cada unidade da linha.
@@ -372,4 +379,53 @@ export function installmentOptions(total: number): InstallmentPlan[] {
   const options: InstallmentPlan[] = [];
   for (let n = 1; n <= max; n += 1) options.push(installmentPlan(total, n));
   return options;
+}
+
+/**
+ * Linhas do rascunho com o preço final DENTRO de cada produto (priceOverride
+ * da Shopify, API 2025-01+). Ajuste de preço e taxa da franquia não viram mais
+ * linhas avulsas: a taxa é rateada entre os produtos, em centavos, de modo que
+ * soma(preço x qtd) = soma(preço final x qtd) + taxa exatamente.
+ * Só sobra linha avulsa se for matematicamente impossível ratear (centavos que
+ * nenhuma quantidade divide) — caso raríssimo, devolvido em `residualFee`.
+ */
+export function buildPricedDraftLineItems(
+  items: LineItem[],
+  finalPrices: Map<string, number>,
+  fee: number,
+): { lines: Record<string, unknown>[]; residualFee: number } {
+  const cents = (v: number) => Math.round(v * 100);
+  const unit = items.map((item) => cents(finalPrices.get(item.variantId) ?? 0));
+  let feeCents = Number.isFinite(fee) && fee > 0 ? cents(fee) : 0;
+  const base = items.reduce((s, it, i) => s + unit[i] * it.quantity, 0);
+  const extra = items.map(() => 0);
+  if (feeCents > 0 && base > 0) {
+    // Rateio proporcional, arredondado para baixo por unidade.
+    items.forEach((it, i) => {
+      const share = Math.floor((feeCents * unit[i] * it.quantity) / base / it.quantity);
+      extra[i] = share;
+    });
+    let rest = feeCents - items.reduce((s, it, i) => s + extra[i] * it.quantity, 0);
+    // Distribui o resto em linhas cuja quantidade divide o valor.
+    for (let guard = 0; rest > 0 && guard < 10000; guard++) {
+      const idx = items.findIndex((it) => it.quantity <= rest && rest % it.quantity === 0);
+      const any = idx >= 0 ? idx : items.findIndex((it) => it.quantity <= rest);
+      if (any < 0) break;
+      const add = idx >= 0 ? rest / items[any].quantity : Math.floor(rest / items[any].quantity);
+      extra[any] += add;
+      rest -= add * items[any].quantity;
+    }
+    feeCents = rest;
+  }
+  const lines = items.map((item, i) => {
+    const li: Record<string, unknown> = {
+      variant_id: Number(gidToNumericId(item.variantId)),
+      quantity: item.quantity,
+    };
+    if (finalPrices.has(item.variantId)) {
+      li.price_override = ((unit[i] + extra[i]) / 100).toFixed(2);
+    }
+    return li;
+  });
+  return { lines, residualFee: feeCents / 100 };
 }
