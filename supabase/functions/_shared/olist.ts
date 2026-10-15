@@ -306,7 +306,33 @@ function responseErrors(payload: any): string {
   return [...direct, ...records].join("; ") || "A Olist recusou a operação";
 }
 
+// A Olist bloqueia a API por alguns minutos quando recebe chamadas demais em
+// sequência ("API Bloqueada - Excedido o número de acessos"). Como a
+// conciliação roda a cada 10 minutos e pode ter um acúmulo de dias para
+// processar, cada chamada espera um intervalo mínimo em relação à anterior e,
+// quando a Olist sinaliza bloqueio, as próximas chamadas esperam o bloqueio
+// passar em vez de insistir e renovar o bloqueio.
+let olistLastCallAt = 0;
+let olistBlockedUntil = 0;
+const OLIST_MIN_INTERVAL_MS = 400;
+const OLIST_BLOCK_BACKOFF_MS = 90_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function olistThrottle(): Promise<void> {
+  const now = Date.now();
+  const waitFor = Math.max(
+    olistBlockedUntil - now,
+    olistLastCallAt + OLIST_MIN_INTERVAL_MS - now,
+  );
+  if (waitFor > 0) await sleep(waitFor);
+  olistLastCallAt = Date.now();
+}
+
 async function olistPost(url: string, token: string, fields: Record<string, string>): Promise<any> {
+  await olistThrottle();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
@@ -315,7 +341,11 @@ async function olistPost(url: string, token: string, fields: Record<string, stri
   if (!response.ok) throw new Error(`Olist respondeu HTTP ${response.status}`);
   const payload = await response.json();
   if (payload?.retorno?.status === "Erro" && Number(payload?.retorno?.codigo_erro) !== 20) {
-    throw new Error(responseErrors(payload));
+    const message = responseErrors(payload);
+    if (message.includes("API Bloqueada")) {
+      olistBlockedUntil = Date.now() + OLIST_BLOCK_BACKOFF_MS;
+    }
+    throw new Error(message);
   }
   return payload;
 }

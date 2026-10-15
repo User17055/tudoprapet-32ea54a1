@@ -67,7 +67,7 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
     .gte("created_at", cutoff)
     .or(`olist_payment_sync_next_attempt_at.is.null,olist_payment_sync_next_attempt_at.lte.${now}`)
     .order("created_at", { ascending: true })
-    .limit(20);
+    .limit(8);
   if (error) throw error;
   const pendingSessions = (sessions ?? []) as BridgeSession[];
   if (!pendingSessions.length) return { checked: 0, settled: 0, awaitingImport: 0, failed: 0 };
@@ -270,7 +270,7 @@ async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
       `olist_invoice_status.is.null,olist_invoice_status.in.(pending,rejected),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${stale})`,
     )
     .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
-    .limit(15);
+    .limit(6);
   if (error) {
     console.error("Falha ao listar NF-e de clientes:", error);
     return summary;
@@ -328,7 +328,7 @@ Deno.serve(async (req) => {
       .in("status", ["pending", "processing", "confirmed", "overdue"])
       .not("provider_payment_id", "is", null)
       .order("created_at", { ascending: true })
-      .limit(40);
+      .limit(15);
     if (error) throw error;
 
     let paid = 0;
@@ -397,7 +397,7 @@ Deno.serve(async (req) => {
       .in("olist_invoice_status", ["generating", "pending", "rejected"])
       .or(`olist_invoice_status.in.(pending,rejected),olist_invoice_checked_at.lt.${staleInvoiceClaim}`)
       .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
-      .limit(15);
+      .limit(6);
     if (invoiceRowsError) console.error("Falha ao listar NF-e pendentes:", invoiceRowsError);
     for (const row of invoiceRows || []) {
       invoiceSummary.checked++;
