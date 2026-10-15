@@ -699,6 +699,7 @@ export type Database = {
           payment_term_days: number
           payment_term_updated_at: string | null
           payment_term_updated_by: string | null
+          skip_payment_block: boolean
           updated_at: string
           user_id: string
         }
@@ -714,6 +715,7 @@ export type Database = {
           payment_term_days?: number
           payment_term_updated_at?: string | null
           payment_term_updated_by?: string | null
+          skip_payment_block?: boolean
           updated_at?: string
           user_id: string
         }
@@ -729,6 +731,7 @@ export type Database = {
           payment_term_days?: number
           payment_term_updated_at?: string | null
           payment_term_updated_by?: string | null
+          skip_payment_block?: boolean
           updated_at?: string
           user_id?: string
         }

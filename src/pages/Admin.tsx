@@ -1460,12 +1460,14 @@ type FranchisePaymentSetting = {
   paymentScheduleType: "days_after_order" | "fixed_day_next_month";
   paymentTermDays: number;
   paymentDueDay: number | null;
+  skipPaymentBlock: boolean;
 };
 
 const defaultFranchisePaymentSetting = (): FranchisePaymentSetting => ({
   paymentScheduleType: "days_after_order",
   paymentTermDays: 7,
   paymentDueDay: null,
+  skipPaymentBlock: false,
 });
 
 function UsersTab() {
@@ -1512,6 +1514,7 @@ function UsersTab() {
           : "days_after_order",
         paymentTermDays: Number.isInteger(termDays) && termDays >= 1 && termDays <= 365 ? termDays : 7,
         paymentDueDay: Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31 ? dueDay : null,
+        skipPaymentBlock: account.skip_payment_block === true,
       };
     }
     setFranchiseTerms(terms);
@@ -1593,6 +1596,19 @@ function UsersTab() {
     toast.success(setting.paymentScheduleType === "fixed_day_next_month"
       ? `Vencimento atualizado para todo dia ${setting.paymentDueDay}`
       : `Prazo atualizado para ${setting.paymentTermDays} dias`);
+  };
+
+  const toggleSkipPaymentBlock = async (p: ProfileRow) => {
+    const setting = franchiseTerms[p.user_id] || defaultFranchisePaymentSetting();
+    const next = !setting.skipPaymentBlock;
+    setSavingTermId(p.user_id);
+    const { data, error } = await supabase.functions.invoke("admin-franchise-settings", {
+      body: { action: "update_payment_block", userId: p.user_id, skipPaymentBlock: next },
+    });
+    setSavingTermId(null);
+    if (error || data?.error) return toast.error(data?.error || "Erro ao atualizar o bloqueio");
+    setFranchiseTerms((current) => ({ ...current, [p.user_id]: { ...setting, skipPaymentBlock: next } }));
+    toast.success(next ? "Franqueado não será bloqueado por falta de pagamento" : "Bloqueio por falta de pagamento ligado");
   };
 
   const filtered = useMemo(() => {
@@ -1761,6 +1777,16 @@ function UsersTab() {
                             {savingTermId === p.user_id
                               ? <Loader2 className="h-4 w-4 animate-spin" />
                               : <Check className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                            variant={paymentSetting.skipPaymentBlock ? "default" : "outline"}
+                            size="sm"
+                            className="h-8 shrink-0 whitespace-nowrap text-xs"
+                            onClick={() => void toggleSkipPaymentBlock(p)}
+                            disabled={savingTermId === p.user_id}
+                            title="Quando ligado, o franqueado continua comprando mesmo com cobrança em aberto ou vencida"
+                          >
+                            {paymentSetting.skipPaymentBlock ? "Não bloqueia" : "Bloqueia se não pagar"}
                           </Button>
                         </div>
                       ) : <span className="text-xs text-muted-foreground">—</span>}

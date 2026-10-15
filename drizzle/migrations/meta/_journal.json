@@ -36,6 +36,13 @@
       "when": 1792006772275,
       "tag": "0004_cron_worker_credential_in_db",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792072383514,
+      "tag": "0005_franchise_skip_payment_block",
+      "breakpoints": true
     }
   ]
 }

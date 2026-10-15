@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
         });
       }
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,payment_term_days,payment_schedule_type,payment_due_day")
+        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,skip_payment_block,payment_term_days,payment_schedule_type,payment_due_day")
         .eq("user_id", auth.user!.id).maybeSingle();
       if (credit?.manually_blocked) {
         return jsonResponse({
@@ -238,7 +238,8 @@ Deno.serve(async (req) => {
         filter: (query) => query.eq("user_id", auth.user!.id).eq("customer_type", "franchise"),
       });
       const sessionIds = (financialSessions ?? []).map((row) => row.id);
-      if (sessionIds.length) {
+      // Admin pode liberar o franqueado para comprar mesmo com cobrança em aberto/vencida.
+      if (sessionIds.length && !credit?.skip_payment_block) {
         let overdueQuery = admin.from("payments").select("id", { count: "exact", head: true })
           .in("checkout_session_id", sessionIds);
         overdueQuery = credit?.block_on_any_open_invoice
