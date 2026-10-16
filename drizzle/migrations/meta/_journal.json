@@ -43,6 +43,13 @@
       "when": 1792072383514,
       "tag": "0005_franchise_skip_payment_block",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792161020076,
+      "tag": "0006_payment_attempt_respect_skip_block",
+      "breakpoints": true
     }
   ]
 }
