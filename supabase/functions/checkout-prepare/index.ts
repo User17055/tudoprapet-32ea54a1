@@ -808,7 +808,6 @@ Deno.serve(async (req) => {
           delivery: shippingCode,
           failurePoint: "draft_creation",
           itemCount: input.items.length,
-          hasPriceAdjustment: Boolean(adjustmentLine),
           // Campo exato recusado pela Shopify e quantas tentativas foram feitas.
           shopifyUserErrors: userErrors,
           rejectedFields: userErrors.map((error) => error.field).filter(Boolean),
@@ -848,7 +847,6 @@ Deno.serve(async (req) => {
           delivery: shippingCode,
           failurePoint: "draft_validation",
           itemCount: input.items.length,
-          hasPriceAdjustment: Boolean(adjustmentLine),
           shopifyUserErrors: draft.userErrors ?? [],
           rejectedFields: (draft.userErrors ?? []).map((error) => error.field).filter(Boolean),
           shopifyAttempts: draft.attempts ?? 1,
