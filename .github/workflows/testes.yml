@@ -28,7 +28,9 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # npm install, e não npm ci: o Lovable instala com bun e não atualiza o package-lock.json,
+      # que fica atrasado em relação ao package.json (o npm ci recusa).
+      - run: npm install --no-audit --no-fund
 
       - name: vitest
         run: npm test
@@ -46,8 +48,10 @@ jobs:
         with:
           deno-version: v2.x
 
+      # --no-lock: o deno.lock do Lovable aponta para o cache de npm dele, e o Deno novo recusa
+      # pacote que não venha do registry.npmjs.org.
       - name: deno check
-        run: deno check supabase/functions/*/index.ts
+        run: deno check --no-lock supabase/functions/*/index.ts
 
       - name: deno test
-        run: deno test --allow-env supabase/functions/
+        run: deno test --no-lock --allow-env supabase/functions/
