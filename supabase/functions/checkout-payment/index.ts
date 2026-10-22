@@ -600,6 +600,7 @@ Deno.serve(async (req) => {
         .filter(Boolean);
       const currentCostMap = new Map<string, number>();
       if (variantsWithoutSnapshotCost.length) {
+        // leitura-limitada: custos das variantes do carrinho desta sessao
         const { data: costRows, error: costError } = await admin.from("product_costs")
           .select("shopify_variant_id,cost")
           .in("shopify_variant_id", variantsWithoutSnapshotCost);
