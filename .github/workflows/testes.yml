@@ -1,0 +1,57 @@
+# Roda os testes do site e das edge functions em todo push e pull request.
+#
+# Por que existe: o Lovable commita direto na main, e os testes (vitest, tsc e Deno)
+# só rodavam quando alguém lembrava. A trava do corte de 1000 linhas
+# (src/test/paginationGuard.test.ts) já ficou vermelha na main sem ninguém ver.
+#
+# Só lê o código: não publica nada, não usa secrets e não muda o site.
+
+name: Testes
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    name: Site (vitest e tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # npm install, e não npm ci: o Lovable instala com bun e não atualiza o package-lock.json,
+      # que fica atrasado em relação ao package.json (o npm ci recusa).
+      - run: npm install --no-audit --no-fund
+
+      - name: vitest
+        run: npm test
+
+      - name: tsc
+        run: npx tsc --noEmit -p tsconfig.app.json
+
+  functions:
+    name: Edge functions (Deno)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # --no-lock: o deno.lock do Lovable aponta para o cache de npm dele, e o Deno novo recusa
+      # pacote que não venha do registry.npmjs.org.
+      - name: deno check
+        run: deno check --no-lock supabase/functions/*/index.ts
+
+      - name: deno test
+        run: deno test --no-lock --allow-env supabase/functions/
