@@ -1670,7 +1670,7 @@ function UsersTab() {
           <p className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</p>
         ) : (
           <div className="overflow-x-auto">
-          <Table className="min-w-[880px] [&_th]:h-9 [&_td]:py-2">
+          <Table className="w-full [&_th]:h-9 [&_th]:px-1.5 [&_td]:py-2 [&_td]:px-1.5 [&_td]:align-middle">
             <TableHeader>
               <TableRow>
                 <TableHead>E-mail</TableHead>
@@ -1689,7 +1689,7 @@ function UsersTab() {
                 const paymentSetting = franchiseTerms[p.user_id] || defaultFranchisePaymentSetting();
                 return (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.email || "—"}</TableCell>
+                    <TableCell className="text-xs font-medium">{p.email || "—"}</TableCell>
                     <TableCell>
                       {editing ? (
                         <Input
@@ -1719,7 +1719,7 @@ function UsersTab() {
                     </TableCell>
                     <TableCell>
                       {p.is_franchisee ? (
-                        <div className="flex min-w-[330px] items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Select
                             value={paymentSetting.paymentScheduleType}
                             onValueChange={(value: FranchisePaymentSetting["paymentScheduleType"]) => {
@@ -1736,7 +1736,7 @@ function UsersTab() {
                             }}
                             disabled={savingTermId === p.user_id}
                           >
-                            <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="days_after_order">Dias após compra</SelectItem>
                               <SelectItem value="fixed_day_next_month">Dia fixo/mês seguinte</SelectItem>
@@ -1786,53 +1786,52 @@ function UsersTab() {
                             disabled={savingTermId === p.user_id}
                             title="Quando ligado, o franqueado continua comprando mesmo com cobrança em aberto ou vencida"
                           >
-                            {paymentSetting.skipPaymentBlock ? "Não bloqueia" : "Bloqueia se não pagar"}
+                            {paymentSetting.skipPaymentBlock ? "Não bloqueia" : "Bloqueia"}
                           </Button>
                         </div>
                       ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                       {new Date(p.created_at).toLocaleDateString("pt-BR")}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {editing ? (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => saveEdit(p)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => saveEdit(p)}>
                               <Check className="h-4 w-4 text-emerald-600" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditId(null)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(null)}>
                               <X className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           </>
                         ) : (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(p)} title="Editar nome">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(p)} title="Editar nome">
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
                               variant={isMember ? "outline" : "default"}
-                              size="sm"
+                              size="icon"
                               disabled={!p.email || togglingEmail === (p.email || "").toLowerCase()}
                               onClick={() => toggleMembership(p)}
-                              className="h-8 gap-1"
+                              className="h-7 w-7 shrink-0"
+                              title={isMember ? "Remover do Clube" : "Adicionar ao Clube"}
                             >
                               {togglingEmail === (p.email || "").toLowerCase() ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <Crown className="h-3 w-3" />
+                                <Crown className="h-3.5 w-3.5" />
                               )}
-                              {isMember ? "Remover" : "Membro"}
                             </Button>
                             <Button
                               variant={p.is_franchisee ? "outline" : "secondary"}
-                              size="sm"
+                              size="icon"
                               onClick={() => toggleFranchisee(p)}
-                              className="h-8 gap-1"
+                              className="h-7 w-7 shrink-0"
                               title={p.is_franchisee ? "Remover franqueado" : "Marcar como franqueado"}
                             >
-                              <Store className="h-3 w-3" />
-                              {p.is_franchisee ? "Franq. ✓" : "Franquia"}
+                              <Store className="h-3.5 w-3.5" />
                             </Button>
                           </>
                         )}
