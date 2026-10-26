@@ -1678,7 +1678,7 @@ function UsersTab() {
                 <TableHead>Plano</TableHead>
                 <TableHead>Condição da franquia</TableHead>
                 <TableHead>Cadastrado em</TableHead>
-                <TableHead className="w-28">Ações</TableHead>
+                <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
