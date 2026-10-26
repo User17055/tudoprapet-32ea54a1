@@ -1736,7 +1736,7 @@ function UsersTab() {
                             }}
                             disabled={savingTermId === p.user_id}
                           >
-                            <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="days_after_order">Dias após compra</SelectItem>
                               <SelectItem value="fixed_day_next_month">Dia fixo/mês seguinte</SelectItem>
