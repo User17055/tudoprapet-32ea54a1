@@ -1689,7 +1689,7 @@ function UsersTab() {
                 const paymentSetting = franchiseTerms[p.user_id] || defaultFranchisePaymentSetting();
                 return (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.email || "—"}</TableCell>
+                    <TableCell className="text-xs font-medium">{p.email || "—"}</TableCell>
                     <TableCell>
                       {editing ? (
                         <Input
