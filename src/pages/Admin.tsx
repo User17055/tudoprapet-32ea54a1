@@ -1812,27 +1812,26 @@ function UsersTab() {
                             </Button>
                             <Button
                               variant={isMember ? "outline" : "default"}
-                              size="sm"
+                              size="icon"
                               disabled={!p.email || togglingEmail === (p.email || "").toLowerCase()}
                               onClick={() => toggleMembership(p)}
-                              className="h-8 gap-1"
+                              className="h-8 w-8 shrink-0"
+                              title={isMember ? "Remover do Clube" : "Adicionar ao Clube"}
                             >
                               {togglingEmail === (p.email || "").toLowerCase() ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
                                 <Crown className="h-3 w-3" />
                               )}
-                              {isMember ? "Remover" : "Membro"}
                             </Button>
                             <Button
                               variant={p.is_franchisee ? "outline" : "secondary"}
-                              size="sm"
+                              size="icon"
                               onClick={() => toggleFranchisee(p)}
-                              className="h-8 gap-1"
+                              className="h-8 w-8 shrink-0"
                               title={p.is_franchisee ? "Remover franqueado" : "Marcar como franqueado"}
                             >
                               <Store className="h-3 w-3" />
-                              {p.is_franchisee ? "Franq. ✓" : "Franquia"}
                             </Button>
                           </>
                         )}
