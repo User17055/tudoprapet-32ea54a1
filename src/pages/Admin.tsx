@@ -1736,7 +1736,7 @@ function UsersTab() {
                             }}
                             disabled={savingTermId === p.user_id}
                           >
-                            <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="days_after_order">Dias após compra</SelectItem>
                               <SelectItem value="fixed_day_next_month">Dia fixo/mês seguinte</SelectItem>
@@ -1798,16 +1798,16 @@ function UsersTab() {
                       <div className="flex items-center gap-1">
                         {editing ? (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => saveEdit(p)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => saveEdit(p)}>
                               <Check className="h-4 w-4 text-emerald-600" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditId(null)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditId(null)}>
                               <X className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           </>
                         ) : (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(p)} title="Editar nome">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(p)} title="Editar nome">
                               <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
