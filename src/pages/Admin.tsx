@@ -1786,7 +1786,7 @@ function UsersTab() {
                             disabled={savingTermId === p.user_id}
                             title="Quando ligado, o franqueado continua comprando mesmo com cobrança em aberto ou vencida"
                           >
-                            {paymentSetting.skipPaymentBlock ? "Não bloqueia" : "Bloqueia se não pagar"}
+                            {paymentSetting.skipPaymentBlock ? "Não bloqueia" : "Bloqueia"}
                           </Button>
                         </div>
                       ) : <span className="text-xs text-muted-foreground">—</span>}
