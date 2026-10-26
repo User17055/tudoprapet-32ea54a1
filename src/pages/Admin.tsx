@@ -1670,7 +1670,7 @@ function UsersTab() {
           <p className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</p>
         ) : (
           <div className="overflow-x-auto">
-          <Table className="w-full [&_th]:h-9 [&_td]:py-2 [&_td]:align-middle">
+          <Table className="w-full [&_th]:h-9 [&_th]:px-2.5 [&_td]:py-2 [&_td]:px-2.5 [&_td]:align-middle">
             <TableHeader>
               <TableRow>
                 <TableHead>E-mail</TableHead>
@@ -1791,7 +1791,7 @@ function UsersTab() {
                         </div>
                       ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                       {new Date(p.created_at).toLocaleDateString("pt-BR")}
                     </TableCell>
                     <TableCell>
