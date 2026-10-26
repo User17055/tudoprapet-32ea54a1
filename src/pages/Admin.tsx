@@ -1670,7 +1670,7 @@ function UsersTab() {
           <p className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</p>
         ) : (
           <div className="overflow-x-auto">
-          <Table className="w-full [&_th]:h-9 [&_th]:px-2 [&_td]:py-2 [&_td]:px-2 [&_td]:align-middle">
+          <Table className="w-full [&_th]:h-9 [&_th]:px-1.5 [&_td]:py-2 [&_td]:px-1.5 [&_td]:align-middle">
             <TableHeader>
               <TableRow>
                 <TableHead>E-mail</TableHead>
