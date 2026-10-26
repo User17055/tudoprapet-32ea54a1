@@ -1670,7 +1670,7 @@ function UsersTab() {
           <p className="py-8 text-center text-muted-foreground">Nenhum usuário encontrado.</p>
         ) : (
           <div className="overflow-x-auto">
-          <Table className="min-w-[880px] [&_th]:h-9 [&_td]:py-2">
+          <Table className="w-full [&_th]:h-9 [&_td]:py-2 [&_td]:align-middle">
             <TableHeader>
               <TableRow>
                 <TableHead>E-mail</TableHead>
@@ -1678,7 +1678,7 @@ function UsersTab() {
                 <TableHead>Plano</TableHead>
                 <TableHead>Condição da franquia</TableHead>
                 <TableHead>Cadastrado em</TableHead>
-                <TableHead className="w-24">Ações</TableHead>
+                <TableHead className="w-28">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1719,7 +1719,7 @@ function UsersTab() {
                     </TableCell>
                     <TableCell>
                       {p.is_franchisee ? (
-                        <div className="flex min-w-[330px] items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Select
                             value={paymentSetting.paymentScheduleType}
                             onValueChange={(value: FranchisePaymentSetting["paymentScheduleType"]) => {
