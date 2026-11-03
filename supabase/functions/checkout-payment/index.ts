@@ -13,7 +13,11 @@ import {
   getAsaasPixQrCode,
   tokenizeAsaasCreditCard,
 } from "../_shared/asaas.ts";
-import { completeDraftOrder, shopifyAdminToken } from "../_shared/shopify.ts";
+import {
+  completeDraftOrder,
+  getShopifyOrderReference,
+  shopifyAdminToken,
+} from "../_shared/shopify.ts";
 import { decryptPaymentToken, encryptPaymentToken } from "../_shared/token-crypto.ts";
 import { mapAsaasPaymentStatus } from "../_shared/payment-events.ts";
 import {
@@ -32,13 +36,14 @@ import {
   ensureOlistOrderReceivable,
   getOlistReceivable,
   issueFranchiseInvoiceSafely,
+  olistOtherExpensesForTotal,
   type OlistFranchiseOrderInput,
 } from "../_shared/olist.ts";
 import {
   franchisePaymentDueDate,
   type FranchisePaymentScheduleType,
 } from "../_shared/franchise-payment.ts";
-import { franchiseFiscalError } from "../_shared/franchise-fiscal.ts";
+import { resolveFranchiseFiscalIdentity, validateFiscalSnapshot } from "../_shared/franchise-fiscal.ts";
 
 const FRANCHISE_PAYMENT_TERM_DAYS = 7;
 
@@ -162,6 +167,7 @@ Deno.serve(async (req) => {
 
   let requestedAction = "";
   let olistStage = "";
+  let ownsFranchiseProcessing = false;
   let logAdmin: any = null;
   let logContext: {
     sessionId?: string;
@@ -468,28 +474,17 @@ Deno.serve(async (req) => {
           return jsonResponse({ error: "Cadastre um endereço fiscal no perfil da franquia", profileRequired: true });
         }
       }
-      let fiscalError = franchiseFiscalError({
-        cnpj: customer.cpfCnpj,
-        company_legal_name: customer.legalName || customer.name,
-        company_trade_name: customer.tradeName,
-        state_registration: customer.stateRegistration,
-        state_registration_indicator: customer.stateRegistrationIndicator,
-      }, invoicePurpose);
+      let fiscalError = validateFiscalSnapshot(customer, invoicePurpose);
       if (fiscalError && session.user_id) {
         const { data: currentFiscalProfile, error: currentFiscalError } = await admin.from("profiles")
-          .select("cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator")
+          .select("name,cpf,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator")
           .eq("user_id", session.user_id).maybeSingle();
         if (currentFiscalError) throw currentFiscalError;
-        fiscalError = franchiseFiscalError(currentFiscalProfile, invoicePurpose);
-        if (!fiscalError && currentFiscalProfile) {
-          Object.assign(customer, {
-            name: currentFiscalProfile.company_legal_name,
-            legalName: currentFiscalProfile.company_legal_name,
-            tradeName: currentFiscalProfile.company_trade_name || "",
-            cpfCnpj: currentFiscalProfile.cnpj,
-            stateRegistration: currentFiscalProfile.state_registration || "",
-            stateRegistrationIndicator: currentFiscalProfile.state_registration_indicator,
-          });
+        const resolved = resolveFranchiseFiscalIdentity(currentFiscalProfile, invoicePurpose);
+        fiscalError = resolved.ok ? null : resolved.error;
+        if (resolved.ok) {
+          // Atualiza o snapshot; Olist, NF-e e Shopify leem só dele.
+          Object.assign(customer, resolved.identity);
           const { error: snapshotError } = await admin.from("checkout_sessions")
             .update({ customer_snapshot: customer }).eq("id", sessionId);
           if (snapshotError) throw snapshotError;
@@ -531,6 +526,17 @@ Deno.serve(async (req) => {
     if (!paymentAttempt?.id) throw new Error("Falha ao criar tentativa financeira");
 
     if (session.customer_type === "franchise") {
+      const { data: franchiseClaimed, error: franchiseClaimError } = await admin.rpc(
+        "claim_olist_franchise_checkout",
+        { p_session_id: sessionId },
+      );
+      if (franchiseClaimError) throw franchiseClaimError;
+      ownsFranchiseProcessing = Boolean(franchiseClaimed);
+      if (!ownsFranchiseProcessing) {
+        return jsonResponse(
+          safePaymentResponse(sessionId, paymentAttempt.id, "processing", null),
+        );
+      }
       olistStage = "configuration";
       const olistToken = Deno.env.get("OLIST_API_TOKEN") || Deno.env.get("TINY_API_TOKEN") || "";
       if (!olistToken) throw new Error("Olist não configurada para pedidos de franquia");
@@ -544,6 +550,42 @@ Deno.serve(async (req) => {
             : "Natureza de operação da Olist para revenda não configurada",
         );
       }
+      // Precisa ser o nome exato da integração Shopify na Olist; sem ele a
+      // importação automática não reconhece o pedido e cria uma segunda venda.
+      const olistEcommerceName = String(Deno.env.get("OLIST_SHOPIFY_ECOMMERCE_NAME") || "").trim();
+      if (!olistEcommerceName) {
+        throw new Error("Nome da integração Shopify na Olist não configurado");
+      }
+      // A Shopify também envia pedidos para a integração nativa da Olist.
+      // Conclua primeiro para usar o mesmo número externo nas duas origens;
+      // assim a Olist reconhece a venda em vez de criar outro pedido/nota.
+      olistStage = "shopify";
+      const shopifyToken = shopifyAdminToken();
+      if (!shopifyToken || !session.shopify_draft_order_id) {
+        throw new Error("Shopify não configurada para concluir pedido da franquia");
+      }
+      let completedOrderId = session.shopify_order_id
+        ? String(session.shopify_order_id)
+        : "";
+      if (!completedOrderId) {
+        const completed = await completeDraftOrder(
+          session.shopify_draft_order_id,
+          shopifyToken,
+          true,
+          customer.cpfCnpj,
+        );
+        if (!completed.requestOk || !completed.orderId) {
+          throw new Error("Falha ao concluir pedido com prazo na Shopify");
+        }
+        completedOrderId = completed.orderId;
+        const { error: shopifySaveError } = await admin.from("checkout_sessions").update({
+          shopify_order_id: completedOrderId,
+        }).eq("id", sessionId);
+        if (shopifySaveError) throw shopifySaveError;
+      }
+      const shopifyOrder = await getShopifyOrderReference(completedOrderId, shopifyToken);
+      const olistExternalReference = shopifyOrder.orderNumber ||
+        shopifyOrder.name.replace(/^#/, "") || completedOrderId;
       const billing = olistCustomer(customer, customerAddress);
       const deliveryAddress =
         session.address_snapshot && Object.keys(session.address_snapshot).length
@@ -552,18 +594,51 @@ Deno.serve(async (req) => {
       const items = (Array.isArray(session.items_snapshot) ? session.items_snapshot : []) as Array<
         Record<string, unknown>
       >;
-      const olistInput: OlistFranchiseOrderInput = {
-        externalReference: sessionId,
-        customer: billing,
-        deliveryAddress,
-        items: items.map((item) => ({
+      const variantsWithoutSnapshotCost = items
+        .filter((item) => !Number.isFinite(Number(item.costUnitPrice)) || Number(item.costUnitPrice) <= 0)
+        .map((item) => String(item.variantId || ""))
+        .filter(Boolean);
+      const currentCostMap = new Map<string, number>();
+      if (variantsWithoutSnapshotCost.length) {
+        // leitura-limitada: custos das variantes do carrinho desta sessao
+        const { data: costRows, error: costError } = await admin.from("product_costs")
+          .select("shopify_variant_id,cost")
+          .in("shopify_variant_id", variantsWithoutSnapshotCost);
+        if (costError) throw costError;
+        for (const row of costRows ?? []) {
+          const cost = Number(row.cost);
+          if (Number.isFinite(cost) && cost > 0) currentCostMap.set(row.shopify_variant_id, cost);
+        }
+      }
+      const olistItems = items.map((item) => {
+        const snapshotCost = Number(item.costUnitPrice);
+        const unitCost = Number.isFinite(snapshotCost) && snapshotCost > 0
+          ? snapshotCost
+          : currentCostMap.get(String(item.variantId || ""));
+        if (unitCost === undefined) {
+          throw new Error(`Produto ${String(item.sku || item.productTitle || "sem SKU")} sem custo para a NF-e`);
+        }
+        return {
           sku: String(item.sku || ""),
           description: [item.productTitle, item.variantTitle].filter(Boolean).join(" - "),
           quantity: Number(item.quantity),
-          unitPrice: Number(item.unitPrice),
-        })),
+          unitPrice: unitCost,
+        };
+      });
+      const olistOtherExpenses = olistOtherExpensesForTotal(
+        olistItems,
+        Number(session.shipping_amount),
+        Number(session.total),
+      );
+      const olistInput: OlistFranchiseOrderInput = {
+        externalReference: olistExternalReference,
+        customer: billing,
+        deliveryAddress,
+        items: olistItems,
         shippingAmount: Number(session.shipping_amount),
-        serviceFee: Number(session.service_fee),
+        // A NF-e usa o custo por item. A diferença até o total comercial
+        // fica em outras despesas para pedido e cobrança continuarem conciliados.
+        serviceFee: olistOtherExpenses,
         total: Number(session.total),
         // Nova tentativa reaproveita o vencimento original (7 dias da confirmação).
         dueDate: String(paymentAttempt.due_date || dueDate),
@@ -571,6 +646,7 @@ Deno.serve(async (req) => {
         paymentMethod: String(Deno.env.get("OLIST_FRANCHISE_PAYMENT_METHOD") || "boleto")
           .trim()
           .toLowerCase(),
+        ecommerceName: olistEcommerceName,
         invoicePurpose: invoicePurpose!,
         natureOperationId,
       };
@@ -616,24 +692,39 @@ Deno.serve(async (req) => {
       // NF-e nunca bloqueia o pedido: só pedido/cobrança Olist e Shopify
       // interrompem o checkout. Rejeição fiscal vira alerta e reprocessamento.
       olistStage = "invoice";
-      const invoiceOutcome = await issueFranchiseInvoiceSafely({
-        orderId: order.id,
-        token: olistToken,
-        savedInvoice: session.olist_invoice_id
-          ? {
-            id: String(session.olist_invoice_id),
-            number: String(session.olist_invoice_number || ""),
-            issued: false,
-          }
-          : null,
-        onInvoiceGenerated: async (generated) => {
-          const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
-            olist_invoice_id: generated.id,
-            olist_invoice_number: generated.number,
-          }).eq("id", sessionId);
-          if (invoiceSaveError) throw invoiceSaveError;
-        },
-      });
+      const { data: invoiceClaimed, error: invoiceClaimError } = await admin.rpc(
+        "claim_olist_invoice_processing",
+        { p_session_id: sessionId },
+      );
+      let ownsInvoiceProcessing = Boolean(invoiceClaimed);
+      const invoiceOutcome = invoiceClaimError
+        ? {
+          invoice: null,
+          status: "rejected" as const,
+          error: `Não foi possível reservar a emissão da NF-e: ${invoiceClaimError.message}`,
+        }
+        : ownsInvoiceProcessing
+        ? await issueFranchiseInvoiceSafely({
+          orderId: order.id,
+          token: olistToken,
+          savedInvoice: session.olist_invoice_id
+            ? {
+              id: String(session.olist_invoice_id),
+              number: String(session.olist_invoice_number || ""),
+              issued: false,
+            }
+            : null,
+          onInvoiceGenerated: async (generated) => {
+            const { error: invoiceSaveError } = await admin.from("checkout_sessions").update({
+              olist_invoice_id: generated.id,
+              olist_invoice_number: generated.number,
+            }).eq("id", sessionId);
+            if (invoiceSaveError) throw invoiceSaveError;
+          },
+        })
+        : { invoice: null, status: "pending" as const, error: null };
+      // Falha na própria trava também vira pendência fiscal e nunca segura a venda.
+      if (invoiceClaimError) ownsInvoiceProcessing = true;
       const invoice = invoiceOutcome.invoice;
       if (invoiceOutcome.status === "rejected") {
         console.warn(`checkout-payment: NF-e da sessão ${sessionId} pendente de correção:`, invoiceOutcome.error);
@@ -657,25 +748,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      olistStage = "shopify";
-      const shopifyToken = shopifyAdminToken();
-      if (!shopifyToken || !session.shopify_draft_order_id) {
-        throw new Error("Shopify não configurada para concluir pedido da franquia");
-      }
-      const completed = await completeDraftOrder(
-        session.shopify_draft_order_id,
-        shopifyToken,
-        true,
-        customer.cpfCnpj,
-      );
-      if (!completed.requestOk || !completed.orderId) {
-        throw new Error("Falha ao concluir pedido com prazo na Shopify");
-      }
       const { error: completedSaveError } = await admin.from("checkout_sessions").update({
         status: "credit_approved",
-        shopify_order_id: completed.orderId,
-        olist_invoice_status: invoiceOutcome.status,
-        olist_invoice_checked_at: new Date().toISOString(),
+        shopify_order_id: completedOrderId,
+        ...(ownsInvoiceProcessing
+          ? {
+            olist_invoice_status: invoiceOutcome.status,
+            olist_invoice_checked_at: new Date().toISOString(),
+          }
+          : {}),
         ...(invoice?.number ? { olist_invoice_number: invoice.number } : {}),
         ...(invoice?.accessUrl ? { olist_invoice_url: invoice.accessUrl } : {}),
       }).eq("id", sessionId);
@@ -1054,6 +1135,13 @@ Deno.serve(async (req) => {
       );
     }
     if (logContext.method === "terms") {
+      if (ownsFranchiseProcessing && logAdmin && logContext.sessionId) {
+        const { error: releaseError } = await logAdmin.from("checkout_sessions")
+          .update({ status: "awaiting_payment" })
+          .eq("id", logContext.sessionId)
+          .eq("status", "payment_processing");
+        if (releaseError) console.error("Falha ao liberar checkout de franquia:", releaseError);
+      }
       if (/Olist n.o configurada/i.test(message)) {
         return errorResponse(
           "A integração com a Olist ainda não está configurada. Cadastre OLIST_API_TOKEN no Supabase.",

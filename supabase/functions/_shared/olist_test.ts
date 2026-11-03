@@ -3,11 +3,16 @@ import {
   buildOlistFranchiseOrder,
   buildOlistReceivable,
   findExactOlistCost,
+  ensureOlistOrderReceivable,
   issueFranchiseInvoiceSafely,
+  olistOtherExpensesForTotal,
+  getOlistOrderReconciliationDetails,
   issueOlistInvoice,
   normalizeOlistId,
   normalizeSku,
+  olistExternalReferenceMatches,
   roundMoney,
+  settleOlistReceivable,
   subscriberPriceFromCost,
 } from "./olist.ts";
 
@@ -15,11 +20,156 @@ Deno.test("normaliza SKU sem remover pontuacao significativa", () => {
   assertEquals(normalizeSku("  ab-12.3 "), "AB-12.3");
 });
 
+Deno.test("relaciona o numero Shopify com ou sem cerquilha", () => {
+  assertEquals(olistExternalReferenceMatches("#1542", ["1542"]), true);
+  assertEquals(olistExternalReferenceMatches("1542", ["#1542"]), true);
+  assertEquals(olistExternalReferenceMatches("1542", ["1543"]), false);
+});
+
 Deno.test("nao trata o identificador zero da Olist como nota fiscal existente", () => {
   assertEquals(normalizeOlistId("0"), null);
   assertEquals(normalizeOlistId(0), null);
   assertEquals(normalizeOlistId("000"), null);
   assertEquals(normalizeOlistId(" 123 "), "123");
+});
+
+Deno.test("permite seguir com o pedido quando a emissao da nota foi aceita e segue pendente", async () => {
+  const originalFetch = globalThis.fetch;
+  const responses = [
+    { retorno: { nota_fiscal: { id: 321, numero: 42, situacao: "Pendente" } } },
+    { retorno: { status: "OK", nota_fiscal: { id: 321 } } },
+    { retorno: { nota_fiscal: { id: 321, numero: 42, situacao: "Pendente" } } },
+  ];
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(JSON.stringify(responses.shift()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )) as typeof fetch;
+
+  try {
+    const invoice = await issueOlistInvoice(
+      { id: "321", number: "42", issued: false },
+      "token-test",
+    );
+    assertEquals(invoice, {
+      id: "321",
+      number: "42",
+      series: undefined,
+      issued: false,
+      accessKey: null,
+      accessUrl: null,
+    });
+    assertEquals(responses.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("baixa conta Olist com valor, data e conta Asaas", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: URLSearchParams }> = [];
+  const responses = [
+    { retorno: { status: "OK", conta: { id: 77, situacao: "aberto", valor: 50, saldo: 50 } } },
+    { retorno: { status: "OK", registros: [{ registro: { status: "OK", id: 77 } }] } },
+  ];
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), body: new URLSearchParams(String(init?.body || "")) });
+    return Promise.resolve(new Response(JSON.stringify(responses.shift()), { status: 200 }));
+  }) as typeof fetch;
+
+  try {
+    await settleOlistReceivable("77", "token-test", {
+      paidAt: new Date("2026-10-07T15:00:00-03:00"),
+      amount: 50,
+      destinationAccount: "Asaas",
+      history: "Pagamento Pix confirmado",
+    });
+    assertEquals(calls.length, 2);
+    assertEquals(calls[1].url.endsWith("conta.receber.baixar.php"), true);
+    assertEquals(JSON.parse(calls[1].body.get("conta") || "{}"), {
+      conta: {
+        id: "77",
+        data: "07/10/2026",
+        valorPago: 50,
+        contaDestino: "Asaas",
+        historico: "Pagamento Pix confirmado",
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("confere referencia, total e cliente no pedido completo da Olist", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          retorno: {
+            pedido: {
+              id: 501,
+              numero: 156,
+              numero_ecommerce: "#1042",
+              total_pedido: "1106.99",
+              cliente: {
+                cpf_cnpj: "123.456.789-00",
+                email: "CLIENTE@EXEMPLO.COM",
+              },
+              ecommerce: { nomeEcommerce: "Loja TudoPraPet" },
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    )) as typeof fetch;
+
+  try {
+    assertEquals(await getOlistOrderReconciliationDetails("501", "token-test"), {
+      id: "501",
+      number: "156",
+      externalReference: "#1042",
+      total: 1106.99,
+      customerCpfCnpj: "12345678900",
+      customerEmail: "cliente@exemplo.com",
+      ecommerceName: "Loja TudoPraPet",
+      invoiceId: null,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("reaproveita conta a receber vinculada a nota fiscal do pedido", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; body: URLSearchParams }> = [];
+  const responses = [
+    { retorno: { status: "Erro", codigo_erro: 20, erros: [{ erro: "sem registros" }] } },
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 9001 } } },
+    {
+      retorno: {
+        status: "OK",
+        contas: [{ conta: { id: 77, situacao: "aberto", valor: "110.00", saldo: "110.00" } }],
+      },
+    },
+  ];
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), body: new URLSearchParams(String(init?.body || "")) });
+    return Promise.resolve(new Response(JSON.stringify(responses.shift()), { status: 200 }));
+  }) as typeof fetch;
+
+  try {
+    const receivable = await ensureOlistOrderReceivable("501", "token-test");
+    assertEquals(receivable.id, "77");
+    assertEquals(calls.length, 3);
+    assertEquals(calls[0].body.get("id_origem"), "501");
+    assertEquals(calls[2].body.get("id_origem"), "9001");
+    assertEquals(calls.some((call) => call.url.includes("pedido.lancar.contas.php")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 Deno.test("seleciona somente o codigo exato e calcula centavos", () => {
@@ -75,6 +225,7 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
     serviceFee: 2,
     total: 62,
     dueDate: "2026-10-02",
+    ecommerceName: "Shopify TudoPraPet",
     invoicePurpose: "resale" as const,
     natureOperationId: "12345",
   };
@@ -85,6 +236,7 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   assertEquals(order.pedido.itens[0].item.codigo, "RACAO-1");
   assertEquals(order.pedido.situacao, "aprovado");
   assertEquals(order.pedido.id_natureza_operacao, "12345");
+  assertEquals(order.pedido.ecommerce, "Shopify TudoPraPet");
   assertEquals(order.pedido.obs.includes("revenda"), true);
   assertEquals(order.pedido.parcelas[0].parcela.data, "02/10/2026");
   assertEquals(order.pedido.parcelas[0].parcela.valor, 62);
@@ -92,6 +244,28 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   assertEquals(receivable.conta.valor, 62);
   assertEquals(receivable.conta.cliente.ie, "123456789");
   assertEquals(receivable.conta.vencimento, "02/10/2026");
+});
+
+Deno.test("concilia preco fiscal de custo com o total comercial", () => {
+  const items = [
+    { sku: "A", description: "Produto A", quantity: 2, unitPrice: 20 },
+    { sku: "B", description: "Produto B", quantity: 1, unitPrice: 30 },
+  ];
+  assertEquals(olistOtherExpensesForTotal(items, 10, 102), 22);
+});
+
+Deno.test("recusa custo fiscal maior que o total comercial", () => {
+  let message = "";
+  try {
+    olistOtherExpensesForTotal(
+      [{ sku: "A", description: "Produto A", quantity: 1, unitPrice: 100 }],
+      10,
+      90,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assertEquals(message, "Custo dos itens da Olist excede o total do pedido");
 });
 
 Deno.test("emissao aceita pela Olist mas pendente na SEFAZ nao interrompe o fluxo", async () => {

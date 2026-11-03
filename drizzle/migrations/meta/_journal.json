@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791471846714,
+      "tag": "0000_olist_external_payment_bridge",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791474626010,
+      "tag": "0001_route_olist_reconciliation_through_worker",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791575683007,
+      "tag": "0002_lock_olist_invoice_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792004154345,
+      "tag": "0003_invoice_claim_all_customers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792006772275,
+      "tag": "0004_cron_worker_credential_in_db",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792072383514,
+      "tag": "0005_franchise_skip_payment_block",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792161020076,
+      "tag": "0006_payment_attempt_respect_skip_block",
+      "breakpoints": true
+    }
+  ]
+}

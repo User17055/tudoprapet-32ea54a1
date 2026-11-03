@@ -258,6 +258,10 @@ export type Database = {
           olist_invoice_url: string | null
           olist_order_id: string | null
           olist_order_number: string | null
+          olist_payment_sync_attempts: number
+          olist_payment_sync_error: string | null
+          olist_payment_sync_next_attempt_at: string | null
+          olist_payment_synced_at: string | null
           olist_receivable_id: string | null
           pricing_snapshot: Json
           referral_code: string | null
@@ -301,6 +305,10 @@ export type Database = {
           olist_invoice_url?: string | null
           olist_order_id?: string | null
           olist_order_number?: string | null
+          olist_payment_sync_attempts?: number
+          olist_payment_sync_error?: string | null
+          olist_payment_sync_next_attempt_at?: string | null
+          olist_payment_synced_at?: string | null
           olist_receivable_id?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
@@ -344,6 +352,10 @@ export type Database = {
           olist_invoice_url?: string | null
           olist_order_id?: string | null
           olist_order_number?: string | null
+          olist_payment_sync_attempts?: number
+          olist_payment_sync_error?: string | null
+          olist_payment_sync_next_attempt_at?: string | null
+          olist_payment_synced_at?: string | null
           olist_receivable_id?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
@@ -467,6 +479,24 @@ export type Database = {
           store_percent?: number
           updated_at?: string
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      cron_worker_credentials: {
+        Row: {
+          created_at: string
+          id: boolean
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: boolean
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          id?: boolean
+          token?: string
         }
         Relationships: []
       }
@@ -669,6 +699,7 @@ export type Database = {
           payment_term_days: number
           payment_term_updated_at: string | null
           payment_term_updated_by: string | null
+          skip_payment_block: boolean
           updated_at: string
           user_id: string
         }
@@ -684,6 +715,7 @@ export type Database = {
           payment_term_days?: number
           payment_term_updated_at?: string | null
           payment_term_updated_by?: string | null
+          skip_payment_block?: boolean
           updated_at?: string
           user_id: string
         }
@@ -699,6 +731,7 @@ export type Database = {
           payment_term_days?: number
           payment_term_updated_at?: string | null
           payment_term_updated_by?: string | null
+          skip_payment_block?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -1590,6 +1623,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_olist_franchise_checkout: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
+      claim_olist_invoice_processing: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       claim_payment_actions: {
         Args: { p_limit?: number }
         Returns: {
@@ -1689,7 +1730,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      invoke_olist_franchise_reconciliation: { Args: never; Returns: undefined }
       invoke_payment_reconciliation: { Args: never; Returns: undefined }
       is_cpf_available: { Args: { _cpf: string }; Returns: boolean }
       is_franchisee: { Args: { _user_id: string }; Returns: boolean }

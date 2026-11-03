@@ -1,0 +1,1 @@
+ALTER TABLE public.franchise_credit_accounts ADD COLUMN IF NOT EXISTS skip_payment_block boolean NOT NULL DEFAULT false;

@@ -3544,6 +3544,7 @@ function SummaryTotals({
   showServiceFee?: boolean;
   cardPlan?: InstallmentPlan | null;
 }) {
+  const { isSubscribed } = useSubscription();
   const { getSubscriberPrice } = useSubscriberPrices();
   const { getFranchisePrice, isFranchisee } = useFranchisePrices();
   const { getCustomerPrice } = useCustomerPrices();
@@ -3551,12 +3552,15 @@ function SummaryTotals({
     (total, item) => total + (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
     0,
   );
-  // Antes da sessão de checkout existir, o desconto de assinante/franquia
-  // é calculado no cliente para já aparecer no resumo.
+  // Antes da sessão de checkout existir, o desconto só aparece para o perfil
+  // que realmente tem direito (franqueado ou assinante ativo).
   const cartDiscount = cartItems.reduce((acc, item) => {
     const catalogPrice = getCustomerPrice(item.variantId) ?? Number(item.price.amount);
-    const special =
-      getFranchisePrice(item.variantId) ?? getSubscriberPrice(item.variantId);
+    const special = isFranchisee
+      ? getFranchisePrice(item.variantId)
+      : isSubscribed
+        ? getSubscriberPrice(item.variantId)
+        : null;
     if (special === null || special >= catalogPrice) return acc;
     return acc + (catalogPrice - special) * item.quantity;
   }, 0);

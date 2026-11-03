@@ -20,3 +20,18 @@ export function hasSufficientInventory(
     Number.isInteger(state.quantityAvailable) &&
     state.quantityAvailable >= requestedQuantity;
 }
+
+/**
+ * Franquias so podem comprar itens cujo estoque seja efetivamente controlado
+ * pela Shopify. Um produto sem rastreamento nao tem quantidade comprovavel e,
+ * portanto, nao pode seguir para pedido, NF-e ou etiqueta da franquia.
+ */
+export function hasSufficientFranchiseInventory(
+  state: InventoryState,
+  requestedQuantity: number,
+): boolean {
+  if (!state.availableForSale || state.inventoryTracked !== true) return false;
+  return state.quantityAvailable !== null &&
+    Number.isInteger(state.quantityAvailable) &&
+    state.quantityAvailable >= requestedQuantity;
+}

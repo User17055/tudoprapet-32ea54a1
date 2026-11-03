@@ -39,7 +39,7 @@ export function digits(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-function validCpf(value: string): boolean {
+export function validCpf(value: string): boolean {
   if (!/^\d{11}$/.test(value) || /^(\d)\1{10}$/.test(value)) return false;
   const check = (length: number) => {
     let sum = 0;
@@ -50,7 +50,7 @@ function validCpf(value: string): boolean {
   return check(9) && check(10);
 }
 
-function validCnpj(value: string): boolean {
+export function validCnpj(value: string): boolean {
   if (!/^\d{14}$/.test(value) || /^(\d)\1{13}$/.test(value)) return false;
   const calculate = (length: 12 | 13) => {
     const weights = length === 12

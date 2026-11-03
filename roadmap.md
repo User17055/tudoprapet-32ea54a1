@@ -24,3 +24,7 @@
 - [x] subscriberPriceFromCost: 1,125 → 1,06 (+ teste)
 - [x] Recalcular subscriber_prices no banco
 - [x] Publicar admin-olist-cost-sync
+
+## Conta de teste (09/10/2026)
+- [x] Excluir pedido de teste #1236 (Olist pedido 209 cancelado + conta estornada; NF-e 000139 fica como "Rejeitada" na Olist — descarte manual; Shopify voided; sessão/cobrança canceladas no banco)
+- [x] Criar conta de teste separada: teste@tudoprapet.com.br (franqueada, CNPJ fictício 99.999.999/0001-91, IE isenta, prazo 7 dias, limite R$ 5.000, login confirmado)

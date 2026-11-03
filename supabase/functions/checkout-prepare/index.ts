@@ -10,9 +10,8 @@ import { parseCheckoutPrepareInput, shippingLabel } from "../_shared/checkout-in
 import {
   applyCostFloor,
   belowMinimumChargeMessage,
-  buildDraftLineItems,
-  buildPriceAdjustmentLine,
   buildServiceFeeLine,
+  buildPricedDraftLineItems,
   buildShippingLine,
   checkoutServiceFee,
   MIN_CHARGE_VALUE,
@@ -30,14 +29,23 @@ import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
-import { hasSufficientInventory } from "../_shared/inventory.ts";
+import { hasSufficientFranchiseInventory, hasSufficientInventory } from "../_shared/inventory.ts";
 import {
   commissionForLine,
   type CommissionRule,
   selectCommissionRule,
 } from "../_shared/commission.ts";
-import { franchiseFiscalError, type FranchiseFiscalProfile } from "../_shared/franchise-fiscal.ts";
+import {
+  type FranchiseFiscalIdentity,
+  type FranchiseFiscalProfile,
+  resolveFranchiseFiscalIdentity,
+} from "../_shared/franchise-fiscal.ts";
 import { fetchAllRows, fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
+import { franchiseOrderFingerprint } from "../_shared/franchise-order-dedup.ts";
+import {
+  externalPaymentAttributes,
+  externalPaymentTags,
+} from "../_shared/shopify-payment.ts";
 
 function readFirstEnv(keys: string[]): string {
   for (const key of keys) {
@@ -93,6 +101,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
 
+  let dedupAdmin: any = null;
+  let dedupFingerprint: string | null = null;
+  let keepDedupLock = false;
   try {
     const auth = await optionalCheckoutUser(req);
     if (auth.invalidAuthorization) return errorResponse("Sessão inválida", 401);
@@ -115,6 +126,7 @@ Deno.serve(async (req) => {
     // lá, o checkout existente continua sendo o fallback seguro para envio.
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+    dedupAdmin = admin;
     const { error: rateError } = await admin.rpc("consume_checkout_rate_limit", {
       p_key_hash: await requestKey(req, auth.user?.id ?? null),
       p_limit: 8,
@@ -162,13 +174,14 @@ Deno.serve(async (req) => {
 
     let customerType: "common" | "subscriber" | "franchise" = "common";
     let franchiseFiscalProfile: FranchiseFiscalProfile | null = null;
+    let fiscalIdentity: FranchiseFiscalIdentity | null = null;
     let franchisePaymentTermDays = 7;
     let franchisePaymentScheduleType: "days_after_order" | "fixed_day_next_month" = "days_after_order";
     let franchisePaymentDueDay: number | null = null;
     let openOrder: { id: string; shopify_draft_order_id: string; items: Array<{ variantId: string; quantity: number }>; reserved_until: string } | null = null;
     if (auth.user) {
       const [{ data: profile }, { data: clubMember }] = await Promise.all([
-        admin.from("profiles").select("is_franchisee,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", auth.user.id).maybeSingle(),
+        admin.from("profiles").select("is_franchisee,name,cpf,cnpj,company_legal_name,company_trade_name,state_registration,state_registration_indicator").eq("user_id", auth.user.id).maybeSingle(),
         admin.from("club_members").select("is_active")
           .eq("email", (auth.user.email || input.customer.email).toLowerCase())
           .eq("is_active", true).maybeSingle(),
@@ -184,7 +197,11 @@ Deno.serve(async (req) => {
       if (!input.invoicePurpose) {
         return errorResponse("Escolha se a nota fiscal será para revenda ou consumo final", 400);
       }
-      const fiscalError = franchiseFiscalError(franchiseFiscalProfile, input.invoicePurpose);
+      // Identidade fiscal única, vinda só do perfil salvo; o documento digitado
+      // no navegador nunca entra no pedido da franquia.
+      const resolved = resolveFranchiseFiscalIdentity(franchiseFiscalProfile, input.invoicePurpose);
+      const fiscalError = resolved.ok ? null : resolved.error;
+      if (resolved.ok) fiscalIdentity = resolved.identity;
       const { count: savedAddressCount, error: addressCountError } = await admin.from("customer_addresses")
         .select("id", { count: "exact", head: true }).eq("user_id", auth.user!.id);
       if (addressCountError) throw addressCountError;
@@ -195,7 +212,7 @@ Deno.serve(async (req) => {
         });
       }
       const { data: credit } = await admin.from("franchise_credit_accounts")
-        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,payment_term_days,payment_schedule_type,payment_due_day")
+        .select("manually_blocked,blocked_reason,block_on_any_open_invoice,skip_payment_block,payment_term_days,payment_schedule_type,payment_due_day")
         .eq("user_id", auth.user!.id).maybeSingle();
       if (credit?.manually_blocked) {
         return jsonResponse({
@@ -221,7 +238,8 @@ Deno.serve(async (req) => {
         filter: (query) => query.eq("user_id", auth.user!.id).eq("customer_type", "franchise"),
       });
       const sessionIds = (financialSessions ?? []).map((row) => row.id);
-      if (sessionIds.length) {
+      // Admin pode liberar o franqueado para comprar mesmo com cobrança em aberto/vencida.
+      if (sessionIds.length && !credit?.skip_payment_block) {
         let overdueQuery = admin.from("payments").select("id", { count: "exact", head: true })
           .in("checkout_session_id", sessionIds);
         overdueQuery = credit?.block_on_any_open_invoice
@@ -329,7 +347,10 @@ Deno.serve(async (req) => {
         });
         return false;
       }
-      if (!hasSufficientInventory(detail, item.quantity)) {
+      const hasInventory = customerType === "franchise"
+        ? hasSufficientFranchiseInventory(detail, item.quantity)
+        : hasSufficientInventory(detail, item.quantity);
+      if (!hasInventory) {
         unavailableItems.push({
           variantId: item.variantId,
           productTitle: detail.productTitle,
@@ -521,6 +542,9 @@ Deno.serve(async (req) => {
         quantity: item.quantity,
         catalogUnitPrice: money(catalogPrice),
         unitPrice: money(unitPrice),
+        ...(customerType === "franchise" && costFloor !== undefined
+          ? { costUnitPrice: money(costFloor) }
+          : {}),
         lineTotal,
         ...(appliedRule
           ? {
@@ -604,6 +628,30 @@ Deno.serve(async (req) => {
     if (total < MIN_CHARGE_VALUE) {
       return errorResponse(belowMinimumChargeMessage(total), 422);
     }
+    if (customerType === "franchise" && auth.user) {
+      dedupFingerprint = await franchiseOrderFingerprint(
+        auth.user.id,
+        input.items,
+        shippingCode,
+        input.invoicePurpose || "",
+      );
+      // Reaproveita a trava atomica que ja existe em producao. A chave inclui
+      // finalidade fiscal, entao Revenda e Consumo final nao se bloqueiam.
+      const { error: claimError } = await admin.rpc("consume_checkout_rate_limit", {
+        p_key_hash: dedupFingerprint,
+        p_limit: 1,
+        p_window_seconds: 60 * 60,
+      });
+      if (claimError) {
+        if (claimError.message?.includes("checkout_rate_limit_exceeded")) {
+          return errorResponse(
+            "Este mesmo pedido já está sendo processado ou foi enviado há menos de 1 hora.",
+            409,
+          );
+        }
+        throw claimError;
+      }
+    }
     const accessToken = newCheckoutAccessToken();
     const accessTokenHash = await hashCheckoutAccessToken(accessToken);
     const tokenExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
@@ -623,12 +671,7 @@ Deno.serve(async (req) => {
       customer_snapshot: customerType === "franchise"
         ? {
           ...input.customer,
-          name: franchiseFiscalProfile!.company_legal_name,
-          cpfCnpj: String(franchiseFiscalProfile!.cnpj || "").replace(/\D/g, ""),
-          legalName: franchiseFiscalProfile!.company_legal_name,
-          tradeName: franchiseFiscalProfile!.company_trade_name || "",
-          stateRegistration: franchiseFiscalProfile!.state_registration || "",
-          stateRegistrationIndicator: franchiseFiscalProfile!.state_registration_indicator,
+          ...fiscalIdentity!,
         }
         : input.customer,
       address_snapshot: input.delivery.address ?? {},
@@ -667,28 +710,23 @@ Deno.serve(async (req) => {
       : customerType === "subscriber"
       ? "Clube TudoPraPet"
       : "TudoPraPet";
-    const lineItems = buildDraftLineItems(
-      input.items,
-      finalPriceMap,
-      currentPriceMap,
-      discountTitle,
-    );
-    // Sem checagem de variante sem preço aqui, ao contrário de _shared/checkout.ts:
-    // input.items já foi reduzido a availableItems (linha 186), e todo item que
-    // sobrou tem detail -- logo, tem entrada em currentPriceMap. Quem não tinha
-    // saiu antes, como "Produto removido".
-    const adjustmentLine = buildPriceAdjustmentLine(input.items, finalPriceMap, currentPriceMap);
-    if (adjustmentLine) lineItems.push(adjustmentLine);
-    const serviceFeeLine = buildServiceFeeLine(serviceFee);
+    void discountTitle;
+    // Preço final (e a taxa da franquia, rateada) vai dentro de cada produto.
+    const priced = buildPricedDraftLineItems(input.items, finalPriceMap, serviceFee);
+    const lineItems = priced.lines;
+    const serviceFeeLine = buildServiceFeeLine(priced.residualFee);
     if (serviceFeeLine) lineItems.push(serviceFeeLine);
 
+    // Mesmo nome/documento do customer_snapshot em todos os destinos.
+    const draftCustomerName = fiscalIdentity ? fiscalIdentity.name : input.customer.name;
+    const draftCpfCnpj = fiscalIdentity ? fiscalIdentity.cpfCnpj : input.customer.cpfCnpj;
     const draft = await createFiscalDraftOrder({
       ...(openOrder ? { draftOrderId: openOrder.shopify_draft_order_id } : {}),
       lineItems,
       email: input.customer.email,
-      customerName: input.customer.name,
+      customerName: draftCustomerName,
       phone: input.customer.mobilePhone,
-      cpfCnpj: input.customer.cpfCnpj,
+      cpfCnpj: draftCpfCnpj,
       shippingLine: {
         ...buildShippingLine(shippingMethod, shippingAmount),
         shippingRateHandle,
@@ -699,23 +737,24 @@ Deno.serve(async (req) => {
       shippingAddress: (input.delivery.address || input.billingAddress)
         ? shopifyAddress(
           input.delivery.address || input.billingAddress!,
-          input.customer.name,
+          draftCustomerName,
           input.customer.mobilePhone,
-          input.customer.cpfCnpj,
+          draftCpfCnpj,
         )
         : undefined,
       billingAddress: (input.billingAddress || input.delivery.address)
         ? shopifyAddress(
           input.billingAddress || input.delivery.address!,
-          input.customer.name,
+          draftCustomerName,
           input.customer.mobilePhone,
-          input.customer.cpfCnpj,
+          draftCpfCnpj,
         )
         : undefined,
       tags: [
         "checkout-proprio",
         customerType === "franchise" ? "olist" : "asaas",
         customerType,
+        ...(customerType === "franchise" ? [] : externalPaymentTags(intendedMethod)),
         ...(customerType === "franchise" && input.invoicePurpose
           ? [`nfe-${input.invoicePurpose === "resale" ? "revenda" : "consumo-final"}`]
           : []),
@@ -725,6 +764,7 @@ Deno.serve(async (req) => {
       note: `Checkout TudoPraPet ${session.id}`,
       customAttributes: [
         { key: "checkout_session_id", value: session.id },
+        ...(customerType === "franchise" ? [] : externalPaymentAttributes(intendedMethod)),
         ...(customerType === "franchise" && input.invoicePurpose
           ? [
             { key: "finalidade_nfe", value: input.invoicePurpose },
@@ -768,13 +808,16 @@ Deno.serve(async (req) => {
           delivery: shippingCode,
           failurePoint: "draft_creation",
           itemCount: input.items.length,
-          hasPriceAdjustment: Boolean(adjustmentLine),
           // Campo exato recusado pela Shopify e quantas tentativas foram feitas.
           shopifyUserErrors: userErrors,
           rejectedFields: userErrors.map((error) => error.field).filter(Boolean),
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
+      if (dedupFingerprint) {
+        await admin.from("checkout_rate_limits").delete().eq("key_hash", dedupFingerprint);
+        dedupFingerprint = null;
+      }
       return errorResponse(customerFacingDraftError(userErrors, draft.error), 502);
     }
 
@@ -804,14 +847,18 @@ Deno.serve(async (req) => {
           delivery: shippingCode,
           failurePoint: "draft_validation",
           itemCount: input.items.length,
-          hasPriceAdjustment: Boolean(adjustmentLine),
           shopifyUserErrors: draft.userErrors ?? [],
           rejectedFields: (draft.userErrors ?? []).map((error) => error.field).filter(Boolean),
           shopifyAttempts: draft.attempts ?? 1,
         },
       });
+      if (dedupFingerprint) {
+        await admin.from("checkout_rate_limits").delete().eq("key_hash", dedupFingerprint);
+        dedupFingerprint = null;
+      }
       return errorResponse(customerFacingDraftError(draft.userErrors ?? [], draft.error), 502);
     }
+    keepDedupLock = Boolean(dedupFingerprint);
     if (!draft.taxCredentialStored) {
       console.warn(
         `Checkout ${session.id}: CPF/CNPJ salvo nos atributos; extensao fiscal nao persistiu.`,
@@ -870,6 +917,12 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
+    if (dedupAdmin && dedupFingerprint && !keepDedupLock) {
+      const { error: releaseError } = await dedupAdmin.from("checkout_rate_limits")
+        .delete()
+        .eq("key_hash", dedupFingerprint);
+      if (releaseError) console.error("Falha ao liberar trava de pedido duplicado:", releaseError);
+    }
     console.error("checkout-prepare:", error);
     return errorResponse("Não foi possível preparar o checkout", 500);
   }

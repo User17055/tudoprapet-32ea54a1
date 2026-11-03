@@ -16,6 +16,23 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    if (body.action === "update_payment_block") {
+      const userId = typeof body.userId === "string" ? body.userId : "";
+      if (!/^[0-9a-f-]{36}$/i.test(userId) || typeof body.skipPaymentBlock !== "boolean") {
+        return errorResponse("Dados inválidos", 400);
+      }
+      const { data: profile, error: profileError } = await admin.from("profiles")
+        .select("is_franchisee").eq("user_id", userId).maybeSingle();
+      if (profileError) throw profileError;
+      if (!profile?.is_franchisee) return errorResponse("O usuário não é franqueado", 409);
+      const { error } = await admin.from("franchise_credit_accounts").upsert({
+        user_id: userId,
+        skip_payment_block: body.skipPaymentBlock,
+      }, { onConflict: "user_id" });
+      if (error) throw error;
+      return jsonResponse({ ok: true, userId, skipPaymentBlock: body.skipPaymentBlock });
+    }
+
     if (body.action === "update_payment_term") {
       const userId = typeof body.userId === "string" ? body.userId : "";
       const paymentTermDays = Number(body.paymentTermDays);
@@ -51,7 +68,7 @@ Deno.serve(async (req) => {
     const { data, error } = await fetchAllRowsResult(
       admin,
       "franchise_credit_accounts",
-      "user_id,payment_term_days,payment_schedule_type,payment_due_day,payment_term_updated_at,payment_term_updated_by",
+      "user_id,payment_term_days,payment_schedule_type,payment_due_day,skip_payment_block,payment_term_updated_at,payment_term_updated_by",
       { orderBy: [{ column: "updated_at", ascending: false }, "user_id"] },
     );
     if (error) throw error;

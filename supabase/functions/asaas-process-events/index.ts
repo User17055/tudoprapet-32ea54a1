@@ -606,17 +606,31 @@ async function processEvent(admin: SupabaseClient, row: EventRow) {
   }
 }
 
+// O agendamento le a credencial de public.cron_worker_credentials (so service_role
+// acessa) e a envia em x-cron-worker-token. A funcao compara com o mesmo valor
+// lido do banco. Nunca grava em log nem devolve a credencial.
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token") });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeadersWith("x-payment-worker-token, x-cron-worker-token") });
   if (req.method !== "POST") return jsonResponse({ error: "Método não permitido" }, 405);
+
 
   const expected = Deno.env.get("PAYMENT_WORKER_TOKEN") || "";
   const received = req.headers.get("x-payment-worker-token") || "";
+  const cronReceived = req.headers.get("x-cron-worker-token") || "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const workerAuthorized = Boolean(expected && timingSafeEqual(expected, received));
+  let scheduleAuthorized = false;
+  if (cronReceived.length >= 32) {
+    const authClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole);
+    const { data: cred } = await authClient.from("cron_worker_credentials")
+      .select("token").eq("id", true).maybeSingle();
+    const cronExpected = String(cred?.token || "");
+    scheduleAuthorized = cronExpected.length >= 32 && timingSafeEqual(cronExpected, cronReceived);
+  }
   const cronAuthorized = Boolean(serviceRole && timingSafeEqual(serviceRole, bearer));
-  if (!workerAuthorized && !cronAuthorized) {
+  if (!workerAuthorized && !scheduleAuthorized && !cronAuthorized) {
     return jsonResponse({ error: "Não autorizado" }, 401);
   }
 
@@ -674,6 +688,7 @@ Deno.serve(async (req) => {
   let reconciliation = { checked: 0, paid: 0, pending: 0, failed: 0, budgetExhausted: false };
   let recovery = { checked: 0, recovered: 0, skipped: 0, failed: 0, budgetExhausted: false };
   let actions;
+  let olistReconciliationScheduled = false;
   try {
     if (runScheduled) {
       try {
@@ -696,6 +711,35 @@ Deno.serve(async (req) => {
       } catch (reconciliationError) {
         console.error("Falha na conciliação financeira:", reconciliationError);
         return jsonResponse({ error: "Falha na conciliação financeira" }, 500);
+      }
+
+      // O cron do banco nao deve guardar uma segunda copia da service role.
+      // O worker, que ja foi autenticado, encaminha a conciliacao Olist com a
+      // credencial atual do ambiente. Uma falha aqui nunca cancela o worker.
+      try {
+        const task = fetch(
+          `${Deno.env.get("SUPABASE_URL")!}/functions/v1/olist-reconcile-franchise`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${serviceRole}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ source: "asaas-process-events", requested_at: new Date().toISOString() }),
+          },
+        ).then(async (response) => {
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            console.error("Conciliação Olist recusada:", response.status, result);
+          }
+        }).catch((error) => console.error("Falha isolada na conciliação Olist:", error));
+        const runtime = (globalThis as unknown as {
+          EdgeRuntime?: { waitUntil(value: Promise<unknown>): void };
+        }).EdgeRuntime;
+        runtime?.waitUntil(task);
+        olistReconciliationScheduled = true;
+      } catch (olistError) {
+        console.error("Falha isolada na conciliação Olist:", olistError);
       }
     }
   } finally {
@@ -768,5 +812,6 @@ Deno.serve(async (req) => {
     expirations,
     reconciliation,
     recovery,
+    olistReconciliationScheduled,
   });
 });
