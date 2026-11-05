@@ -42,6 +42,8 @@ import {
 import {
   franchisePaymentDueDate,
   type FranchisePaymentScheduleType,
+  franchiseVariantsWithoutSnapshotCost,
+  resolveFranchiseOrderItems,
 } from "../_shared/franchise-payment.ts";
 import { resolveFranchiseFiscalIdentity, validateFiscalSnapshot } from "../_shared/franchise-fiscal.ts";
 
@@ -556,6 +558,26 @@ Deno.serve(async (req) => {
       if (!olistEcommerceName) {
         throw new Error("Nome da integração Shopify na Olist não configurado");
       }
+      // Concluir na Shopify não tem volta. Produto sem custo precisa recusar a
+      // compra antes disso, senão a venda fica criada com o checkout falhando.
+      olistStage = "items";
+      const items = (Array.isArray(session.items_snapshot) ? session.items_snapshot : []) as Array<
+        Record<string, unknown>
+      >;
+      const variantsWithoutSnapshotCost = franchiseVariantsWithoutSnapshotCost(items);
+      const currentCostMap = new Map<string, number>();
+      if (variantsWithoutSnapshotCost.length) {
+        // leitura-limitada: custos das variantes do carrinho desta sessao
+        const { data: costRows, error: costError } = await admin.from("product_costs")
+          .select("shopify_variant_id,cost")
+          .in("shopify_variant_id", variantsWithoutSnapshotCost);
+        if (costError) throw costError;
+        for (const row of costRows ?? []) {
+          const cost = Number(row.cost);
+          if (Number.isFinite(cost) && cost > 0) currentCostMap.set(row.shopify_variant_id, cost);
+        }
+      }
+      const olistItems = resolveFranchiseOrderItems(items, currentCostMap);
       // A Shopify também envia pedidos para a integração nativa da Olist.
       // Conclua primeiro para usar o mesmo número externo nas duas origens;
       // assim a Olist reconhece a venda em vez de criar outro pedido/nota.
@@ -591,40 +613,6 @@ Deno.serve(async (req) => {
         session.address_snapshot && Object.keys(session.address_snapshot).length
           ? olistCustomer(customer, session.address_snapshot as Record<string, string>)
           : undefined;
-      const items = (Array.isArray(session.items_snapshot) ? session.items_snapshot : []) as Array<
-        Record<string, unknown>
-      >;
-      const variantsWithoutSnapshotCost = items
-        .filter((item) => !Number.isFinite(Number(item.costUnitPrice)) || Number(item.costUnitPrice) <= 0)
-        .map((item) => String(item.variantId || ""))
-        .filter(Boolean);
-      const currentCostMap = new Map<string, number>();
-      if (variantsWithoutSnapshotCost.length) {
-        // leitura-limitada: custos das variantes do carrinho desta sessao
-        const { data: costRows, error: costError } = await admin.from("product_costs")
-          .select("shopify_variant_id,cost")
-          .in("shopify_variant_id", variantsWithoutSnapshotCost);
-        if (costError) throw costError;
-        for (const row of costRows ?? []) {
-          const cost = Number(row.cost);
-          if (Number.isFinite(cost) && cost > 0) currentCostMap.set(row.shopify_variant_id, cost);
-        }
-      }
-      const olistItems = items.map((item) => {
-        const snapshotCost = Number(item.costUnitPrice);
-        const unitCost = Number.isFinite(snapshotCost) && snapshotCost > 0
-          ? snapshotCost
-          : currentCostMap.get(String(item.variantId || ""));
-        if (unitCost === undefined) {
-          throw new Error(`Produto ${String(item.sku || item.productTitle || "sem SKU")} sem custo para a NF-e`);
-        }
-        return {
-          sku: String(item.sku || ""),
-          description: [item.productTitle, item.variantTitle].filter(Boolean).join(" - "),
-          quantity: Number(item.quantity),
-          unitPrice: unitCost,
-        };
-      });
       const olistOtherExpenses = olistOtherExpensesForTotal(
         olistItems,
         Number(session.shipping_amount),
@@ -1156,6 +1144,7 @@ Deno.serve(async (req) => {
       }
       const stageMessage: Record<string, string> = {
         configuration: "validar a configuração da Olist",
+        items: "conferir o custo dos produtos",
         order: "criar o pedido na Olist",
         receivable: "gerar a cobrança na Olist",
         invoice: "emitir a nota fiscal na Olist",

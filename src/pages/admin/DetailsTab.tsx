@@ -15,6 +15,7 @@ import { ProductPicker } from "@/components/admin/ProductPicker";
 import { fuzzySearch, normalizeText } from "@/lib/fuzzySearch";
 import { suggestProductDetails, type ProductDetailSuggestion } from "@/lib/productDetailSuggestions";
 import { fetchAllRows, fetchAllRowsResult } from "@/lib/fetchAllRows";
+import { useProductAttributeToggle } from "@/hooks/useProductAttributeToggle";
 
 interface Category {
   id: string;
@@ -575,7 +576,12 @@ function AssignPanel() {
   const [attrs, setAttrs] = useState<ProductAttribute[]>([]);
   const [contentRow, setContentRow] = useState<ProductContentRow | null>(null);
   const [attributeFilter, setAttributeFilter] = useState("");
-  const [updatingAttribute, setUpdatingAttribute] = useState<string | null>(null);
+  const { toggleAttribute, isAttributePending, hasPendingAttributeWrites } = useProductAttributeToggle({
+    productId,
+    attrs,
+    setAttrs,
+    setAllProductAttrs,
+  });
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("");
   const [registrationFilter, setRegistrationFilter] = useState<"all" | "registered" | "unregistered">("all");
@@ -727,6 +733,7 @@ function AssignPanel() {
       setContentRow(null);
       return;
     }
+    let stale = false;
     (async () => {
       const [pc, pa, content] = await Promise.all([
         // leitura-limitada: vinculos de UM produto
@@ -735,6 +742,8 @@ function AssignPanel() {
         supabase.from("product_attributes").select("*").eq("shopify_product_id", productId).order("sort_order"),
         supabase.from("product_content").select("id, shopify_product_id, brand_id").eq("shopify_product_id", productId).maybeSingle(),
       ]);
+      // Trocar de produto rapido nao pode deixar os atributos do anterior na tela do atual.
+      if (stale) return;
       const selectedCategoryIds = ((pc.data || []) as ProductCategoryLink[]).map((x) => x.category_id);
       setSelectedCats(new Set(selectedCategoryIds));
       const selectedRoots = new Set(
@@ -753,6 +762,9 @@ function AssignPanel() {
       setContentRow((content.data as ProductContentRow) || null);
       setBrandId((content.data as ProductContentRow | null)?.brand_id || "none");
     })();
+    return () => {
+      stale = true;
+    };
   }, [productId, categories, products]);
 
   const getParentIds = (id: string): string[] => {
@@ -836,35 +848,6 @@ function AssignPanel() {
       toast.error("Erro: " + (e instanceof Error ? e.message : "erro desconhecido"));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const toggleAttribute = async (key: string, value: string) => {
-    if (!productId || updatingAttribute) return;
-    const operationKey = `${key}:${value}`;
-    const existing = attrs.find((attribute) => attribute.attr_key === key && attribute.attr_value === value);
-    setUpdatingAttribute(operationKey);
-    try {
-      if (existing) {
-        const { error } = await supabase.from("product_attributes").delete().eq("id", existing.id);
-        if (error) throw error;
-        setAttrs((current) => current.filter((attribute) => attribute.id !== existing.id));
-      } else {
-        const { data, error } = await supabase.from("product_attributes").insert({
-          shopify_product_id: productId,
-          attr_key: key,
-          attr_value: value,
-          sort_order: attrs.length,
-        }).select().single();
-        if (error) throw error;
-        setAttrs((current) => [...current, data as ProductAttribute]);
-      }
-      await reloadAll();
-    } catch (error) {
-      toast.error("Não foi possível atualizar o atributo.");
-      console.error(error);
-    } finally {
-      setUpdatingAttribute(null);
     }
   };
 
@@ -1445,7 +1428,7 @@ function AssignPanel() {
                     type="button"
                     size="sm"
                     onClick={handleApplySuggestions}
-                    disabled={applyingSuggestions}
+                    disabled={applyingSuggestions || hasPendingAttributeWrites}
                   >
                     {applyingSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                     Preencher com IA
@@ -1589,24 +1572,23 @@ function AssignPanel() {
                                   const selected = attrs.some(
                                     (attribute) => attribute.attr_key === group.key && attribute.attr_value === value,
                                   );
-                                  const operationKey = `${group.key}:${value}`;
-                                  const updating = updatingAttribute === operationKey;
+                                  const pending = isAttributePending(group.key, value);
                                   return (
                                     <button
                                       key={value}
                                       type="button"
                                       aria-pressed={selected}
-                                      disabled={Boolean(updatingAttribute)}
+                                      aria-busy={pending}
                                       onClick={() => toggleAttribute(group.key, value)}
-                                      className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
+                                      className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                        pending ? "cursor-progress " : ""
+                                      }${
                                         selected
                                           ? "border-primary bg-primary text-primary-foreground"
                                           : "border-border bg-background text-foreground hover:border-primary hover:text-primary"
                                       }`}
                                     >
-                                      {updating ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      ) : selected ? (
+                                      {selected ? (
                                         <Check className="h-3.5 w-3.5" />
                                       ) : (
                                         <Plus className="h-3.5 w-3.5" />
@@ -1655,7 +1637,7 @@ function AssignPanel() {
                 O perfil guardará as categorias, os atributos e a marca opcional do produto aberto acima.
               </p>
             </div>
-            <Button onClick={handleCreateProfile} disabled={!productId || savingProfile}>
+            <Button onClick={handleCreateProfile} disabled={!productId || savingProfile || hasPendingAttributeWrites}>
               {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
               Salvar perfil
             </Button>
@@ -1789,7 +1771,7 @@ function AssignPanel() {
                 size="sm"
                 variant="outline"
                 onClick={() => handleApplyAllSuggestions(false)}
-                disabled={unregisteredProducts.length === 0 || applyingAllSuggestions}
+                disabled={unregisteredProducts.length === 0 || applyingAllSuggestions || hasPendingAttributeWrites}
               >
                 {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Preencher com IA ({unregisteredProducts.length})
@@ -1798,7 +1780,7 @@ function AssignPanel() {
                 type="button"
                 size="sm"
                 onClick={() => handleApplyAllSuggestions(true)}
-                disabled={products.length === 0 || applyingAllSuggestions}
+                disabled={products.length === 0 || applyingAllSuggestions || hasPendingAttributeWrites}
               >
                 {applyingAllSuggestions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Repreencher todos com IA
