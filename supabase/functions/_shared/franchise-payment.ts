@@ -14,6 +14,34 @@ function saoPauloParts(value: string | Date) {
 const isoDate = (year: number, month: number, day: number) =>
   `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
+export function franchiseVariantsWithoutSnapshotCost(items: Array<Record<string, unknown>>): string[] {
+  return items
+    .filter((item) => !Number.isFinite(Number(item.costUnitPrice)) || Number(item.costUnitPrice) <= 0)
+    .map((item) => String(item.variantId || ""))
+    .filter(Boolean);
+}
+
+export function resolveFranchiseOrderItems(
+  items: Array<Record<string, unknown>>,
+  currentCosts: Map<string, number>,
+) {
+  return items.map((item) => {
+    const snapshotCost = Number(item.costUnitPrice);
+    const unitCost = Number.isFinite(snapshotCost) && snapshotCost > 0
+      ? snapshotCost
+      : currentCosts.get(String(item.variantId || ""));
+    if (unitCost === undefined) {
+      throw new Error(`Produto ${String(item.sku || item.productTitle || "sem SKU")} sem custo para a NF-e`);
+    }
+    return {
+      sku: String(item.sku || ""),
+      description: [item.productTitle, item.variantTitle].filter(Boolean).join(" - "),
+      quantity: Number(item.quantity),
+      unitPrice: unitCost,
+    };
+  });
+}
+
 export function franchisePaymentDueDate(input: {
   createdAt: string | Date;
   scheduleType: FranchisePaymentScheduleType;
