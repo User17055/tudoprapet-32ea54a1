@@ -377,25 +377,37 @@ export type Database = {
       }
       club_members: {
         Row: {
+          cpf: string | null
           created_at: string
           email: string
           id: string
           is_active: boolean
           name: string | null
+          phone: string | null
+          source: string
+          updated_at: string
         }
         Insert: {
+          cpf?: string | null
           created_at?: string
           email: string
           id?: string
           is_active?: boolean
           name?: string | null
+          phone?: string | null
+          source?: string
+          updated_at?: string
         }
         Update: {
+          cpf?: string | null
           created_at?: string
           email?: string
           id?: string
           is_active?: boolean
           name?: string | null
+          phone?: string | null
+          source?: string
+          updated_at?: string
         }
         Relationships: []
       }
