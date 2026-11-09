@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
       if (!profile) {
         const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
           data: { name, cpf, person_type: "individual", acquisition_source: SOURCE },
-          redirectTo: "https://tudoprapet.com.br/reset-password",
+          redirectTo: "https://tudoprapet.com.br/redefinir-senha",
         });
         if (error) {
           console.error("invite failed", error.message);
