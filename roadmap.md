@@ -1,5 +1,10 @@
 # Roadmap — correção webhook retirada (03/09/2026)
 
+## Entrar com São Francisco (10/11/2026)
+- [x] Adicionar botão OIDC e retorno público com sessão validada, sem alterar preços; apresentação desktop/mobile e cancelamento conferidos
+- [ ] Ativar OIDC nas configurações de autenticação — depende do usuário salvar o novo segredo; consulta em 10/11 retornou provedor não encontrado
+- [ ] Testar consentimento e retorno com cliente São Francisco — depende da ativação e de sessão de cliente no provedor
+
 - [ ] 1. "Reenviar último" só aceita pedido comprovadamente de retirada (mesma regra do webhook)
 - [ ] 2. Não apagar webhooks antigos (manter até o fim)
 - [ ] 3. Criar 1 webhook manual de teste (orders/create) — usuário, no painel Shopify
