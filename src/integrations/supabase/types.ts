@@ -252,6 +252,7 @@ export type Database = {
           invoice_purpose: string | null
           items_snapshot: Json
           olist_invoice_checked_at: string | null
+          olist_invoice_error: string | null
           olist_invoice_id: string | null
           olist_invoice_number: string | null
           olist_invoice_status: string | null
@@ -299,6 +300,7 @@ export type Database = {
           invoice_purpose?: string | null
           items_snapshot?: Json
           olist_invoice_checked_at?: string | null
+          olist_invoice_error?: string | null
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
           olist_invoice_status?: string | null
@@ -346,6 +348,7 @@ export type Database = {
           invoice_purpose?: string | null
           items_snapshot?: Json
           olist_invoice_checked_at?: string | null
+          olist_invoice_error?: string | null
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
           olist_invoice_status?: string | null
@@ -1635,6 +1638,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_sales_fiscal_health: {
+        Args: { p_grace_minutes?: number; p_since?: string }
+        Returns: Json
+      }
       claim_olist_franchise_checkout: {
         Args: { p_session_id: string }
         Returns: boolean

@@ -71,6 +71,13 @@
       "when": 1794431992334,
       "tag": "0009_scope_public_prices_and_banners",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794433964147,
+      "tag": "0010_sales_fiscal_health",
+      "breakpoints": true
     }
   ]
 }
