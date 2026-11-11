@@ -64,6 +64,13 @@
       "when": 1794431910800,
       "tag": "0008_restrict_subscriber_category_margins_read",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794431992334,
+      "tag": "0009_scope_public_prices_and_banners",
+      "breakpoints": true
     }
   ]
 }
