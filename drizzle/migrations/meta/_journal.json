@@ -85,6 +85,13 @@
       "when": 1794434001087,
       "tag": "0011_olist_sales_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794434012791,
+      "tag": "0012_grant_sales_orders_tables",
+      "breakpoints": true
     }
   ]
 }
