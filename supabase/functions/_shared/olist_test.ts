@@ -1,6 +1,9 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  assertSingleOlistReceivable,
   buildOlistFranchiseOrder,
+  findOlistOrderByEcommerceNumber,
+  OlistDuplicateReceivableError,
   buildOlistReceivable,
   findExactOlistCost,
   ensureOlistOrderReceivable,
@@ -169,6 +172,110 @@ Deno.test("reaproveita conta a receber vinculada a nota fiscal do pedido", async
     assertEquals(calls.some((call) => call.url.includes("pedido.lancar.contas.php")), false);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+function stubOlist(responses: unknown[]) {
+  const calls: Array<{ url: string; body: URLSearchParams }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), body: new URLSearchParams(String(init?.body || "")) });
+    return Promise.resolve(new Response(JSON.stringify(responses.shift()), { status: 200 }));
+  }) as typeof fetch;
+  return { calls, restore: () => (globalThis.fetch = originalFetch) };
+}
+
+const noRecords = { retorno: { status: "Erro", codigo_erro: 20, erros: [{ erro: "sem registros" }] } };
+const accounts = (...items: Array<{ id: number; situacao: string }>) => ({
+  retorno: {
+    status: "OK",
+    contas: items.map((item) => ({ conta: { ...item, valor: "110.00", saldo: "110.00" } })),
+  },
+});
+
+Deno.test("venda paga com uma unica conta pode ser baixada", async () => {
+  const stub = stubOlist([
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 9001 } } },
+    accounts({ id: 77, situacao: "aberto" }),
+    noRecords,
+  ]);
+  try {
+    await assertSingleOlistReceivable("501", "77", "token-test");
+    assertEquals(stub.calls[1].body.get("id_origem"), "501");
+    assertEquals(stub.calls[2].body.get("id_origem"), "9001");
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("conta do pedido e conta da nota ativas bloqueiam a baixa", async () => {
+  const stub = stubOlist([
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 9001 } } },
+    accounts({ id: 77, situacao: "aberto" }),
+    accounts({ id: 78, situacao: "aberto" }),
+  ]);
+  try {
+    const error = await assertRejects(
+      () => assertSingleOlistReceivable("501", "77", "token-test"),
+      OlistDuplicateReceivableError,
+    );
+    assertEquals(error.message.includes("77, 78"), true);
+    assertEquals(stub.calls.some((call) => call.url.includes("conta.receber.baixar")), false);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("conta cancelada nao conta como duplicidade", async () => {
+  const stub = stubOlist([
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 0 } } },
+    accounts({ id: 77, situacao: "aberto" }, { id: 76, situacao: "cancelada" }),
+  ]);
+  try {
+    await assertSingleOlistReceivable("501", "77", "token-test");
+    // id_nota_fiscal "0" nao e nota: so a origem do pedido e consultada.
+    assertEquals(stub.calls.length, 2);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("conta salva diferente da unica conta ativa e duplicidade", async () => {
+  const stub = stubOlist([
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 0 } } },
+    accounts({ id: 80, situacao: "aberto" }),
+  ]);
+  try {
+    await assertRejects(
+      () => assertSingleOlistReceivable("501", "77", "token-test"),
+      OlistDuplicateReceivableError,
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("acha pedido antigo pelo numero do e-commerce sem janela de datas", async () => {
+  const stub = stubOlist([
+    noRecords,
+    {
+      retorno: {
+        status: "OK",
+        pedidos: [
+          { pedido: { id: 1, numero: 10, numero_ecommerce: "9999" } },
+          { pedido: { id: 501, numero: 321, numero_ecommerce: "#1235" } },
+        ],
+      },
+    },
+  ]);
+  try {
+    const order = await findOlistOrderByEcommerceNumber(["#1235", "1235"], "token-test");
+    assertEquals(order, { id: "501", number: "321", externalReference: "#1235" });
+    assertEquals(stub.calls[0].body.get("numeroEcommerce"), "#1235");
+    assertEquals(stub.calls[1].body.get("numeroEcommerce"), "1235");
+    assertEquals(stub.calls.some((call) => call.body.has("dataInicial")), false);
+  } finally {
+    stub.restore();
   }
 });
 

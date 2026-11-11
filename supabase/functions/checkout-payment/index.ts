@@ -754,6 +754,7 @@ Deno.serve(async (req) => {
         ...(ownsInvoiceProcessing
           ? {
             olist_invoice_status: invoiceOutcome.status,
+            olist_invoice_error: invoiceOutcome.error ? invoiceOutcome.error.slice(0, 2000) : null,
             olist_invoice_checked_at: new Date().toISOString(),
           }
           : {}),

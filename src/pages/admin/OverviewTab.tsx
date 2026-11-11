@@ -23,6 +23,7 @@ import type { PrintableOrder } from "@/lib/orderPrint";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fetchAllRowsResult } from "@/lib/fetchAllRows";
+import { SalesFiscalHealthCard, type SalesFiscalHealth } from "./SalesFiscalHealthCard";
 
 interface DashboardData {
   users: number;
@@ -76,10 +77,12 @@ export default function OverviewTab() {
   const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
+  const [fiscalHealth, setFiscalHealth] = useState<SalesFiscalHealth | null>(null);
+  const [fiscalError, setFiscalError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
-    const [profiles, members, administrators, maintenance, ordersResult] = await Promise.all([
+    const [profiles, members, administrators, maintenance, ordersResult, fiscalResult] = await Promise.all([
       fetchAllRowsResult<{ user_id: string; is_franchisee: boolean }>("profiles", "user_id,is_franchisee", {
         orderBy: "user_id",
       }),
@@ -87,7 +90,10 @@ export default function OverviewTab() {
       supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "admin"),
       supabase.from("site_maintenance").select("enabled").eq("id", true).maybeSingle(),
       supabase.functions.invoke("admin-orders", { body: { action: "list", limit: 8 } }),
+      supabase.rpc("admin_sales_fiscal_health"),
     ]);
+    setFiscalError(fiscalResult.error?.message || null);
+    setFiscalHealth(fiscalResult.error ? null : (fiscalResult.data as unknown as SalesFiscalHealth));
 
     const firstError = profiles.error || members.error || administrators.error || maintenance.error || ordersResult.error;
     if (firstError) {
@@ -122,7 +128,10 @@ export default function OverviewTab() {
   // "terça-feira, 29 de setembro" -> só a primeira letra maiúscula, como em português.
   const todayText = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const today = todayText.charAt(0).toUpperCase() + todayText.slice(1);
-  const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0);
+  const withoutInvoice = fiscalHealth?.without_invoice || 0;
+  const unsettledPaid = fiscalHealth?.unsettled_paid || 0;
+  const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0) +
+    Number(withoutInvoice > 0) + Number(unsettledPaid > 0);
 
   const cards = [
     { label: "Clientes", value: data.users, icon: Users, color: "bg-blue-50 text-blue-700", to: "/admin?tab=users" },
@@ -220,9 +229,15 @@ export default function OverviewTab() {
             {data.maintenance && <StatusLink to="/admin?tab=maintenance" icon={Wrench} text="A loja está em manutenção" />}
             {data.pendingSales > 0 && <StatusLink to="/admin?tab=orders" icon={Package} text={`${data.pendingSales} venda(s) aguardando sincronização`} />}
             {data.failedCheckouts > 0 && <StatusLink to="/admin?tab=orders" icon={AlertTriangle} text={`${data.failedCheckouts} falha(s) recente(s) no checkout`} />}
+            {withoutInvoice > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Receipt} text={`${withoutInvoice} venda(s) sem nota fiscal`} />}
+            {unsettledPaid > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={CircleDollarSign} text={`${unsettledPaid} venda(s) paga(s) com conta em aberto`} />}
           </CardContent>
         </Card>
       )}
+
+      <div id="nota-fiscal-e-baixa">
+        <SalesFiscalHealthCard health={fiscalHealth} loading={loading} error={fiscalError} />
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
@@ -331,6 +346,14 @@ function QuickLink({ to, icon: Icon, label }: { to: string; icon: typeof Package
 }
 
 function StatusLink({ to, icon: Icon, text }: { to: string; icon: typeof Package; text: string }) {
+  // Âncora da própria página: rola até o cartão sem trocar a aba do painel.
+  if (to.startsWith("#")) {
+    return (
+      <a href={to} className="flex items-center gap-2 rounded-lg bg-white/70 p-3 font-medium hover:bg-white">
+        <Icon className="h-4 w-4 shrink-0" /> <span>{text}</span>
+      </a>
+    );
+  }
   return (
     <Link to={to} className="flex items-center gap-2 rounded-lg bg-white/70 p-3 font-medium hover:bg-white">
       <Icon className="h-4 w-4 shrink-0" /> <span>{text}</span>
