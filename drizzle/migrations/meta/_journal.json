@@ -78,6 +78,13 @@
       "when": 1794433964147,
       "tag": "0010_sales_fiscal_health",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794434001087,
+      "tag": "0011_olist_sales_orders",
+      "breakpoints": true
     }
   ]
 }

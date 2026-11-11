@@ -847,6 +847,57 @@ export type Database = {
         }
         Relationships: []
       }
+      olist_sync_state: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: []
+      }
+      olist_webhook_events: {
+        Row: {
+          attempts: number
+          dedupe_key: string
+          event: string
+          id: number
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+          received_at: string
+        }
+        Insert: {
+          attempts?: number
+          dedupe_key: string
+          event: string
+          id?: never
+          last_error?: string | null
+          payload: Json
+          processed_at?: string | null
+          received_at?: string
+        }
+        Update: {
+          attempts?: number
+          dedupe_key?: string
+          event?: string
+          id?: never
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+        }
+        Relationships: []
+      }
       payment_actions: {
         Row: {
           action_type: string
@@ -1463,6 +1514,111 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_orders: {
+        Row: {
+          attempts: number
+          automation_eligible: boolean
+          boleto_url: string | null
+          created_at: string
+          customer_cpf_cnpj: string | null
+          customer_name: string | null
+          customer_type: string
+          id: string
+          invoice_checked_at: string | null
+          invoice_error: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          invoice_status: string | null
+          invoice_url: string | null
+          items: Json
+          needs_refresh: boolean
+          next_attempt_at: string | null
+          olist_order_id: string
+          olist_order_number: string | null
+          order_date: string | null
+          processing_until: string | null
+          receivable_amount: number | null
+          receivable_due_date: string | null
+          receivable_error: string | null
+          receivable_id: string | null
+          receivable_status: string | null
+          refreshed_at: string | null
+          situation: string | null
+          total: number | null
+          tracking_code: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          automation_eligible?: boolean
+          boleto_url?: string | null
+          created_at?: string
+          customer_cpf_cnpj?: string | null
+          customer_name?: string | null
+          customer_type?: string
+          id?: string
+          invoice_checked_at?: string | null
+          invoice_error?: string | null
+          invoice_id?: string | null
+          invoice_number?: string | null
+          invoice_status?: string | null
+          invoice_url?: string | null
+          items?: Json
+          needs_refresh?: boolean
+          next_attempt_at?: string | null
+          olist_order_id: string
+          olist_order_number?: string | null
+          order_date?: string | null
+          processing_until?: string | null
+          receivable_amount?: number | null
+          receivable_due_date?: string | null
+          receivable_error?: string | null
+          receivable_id?: string | null
+          receivable_status?: string | null
+          refreshed_at?: string | null
+          situation?: string | null
+          total?: number | null
+          tracking_code?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          automation_eligible?: boolean
+          boleto_url?: string | null
+          created_at?: string
+          customer_cpf_cnpj?: string | null
+          customer_name?: string | null
+          customer_type?: string
+          id?: string
+          invoice_checked_at?: string | null
+          invoice_error?: string | null
+          invoice_id?: string | null
+          invoice_number?: string | null
+          invoice_status?: string | null
+          invoice_url?: string | null
+          items?: Json
+          needs_refresh?: boolean
+          next_attempt_at?: string | null
+          olist_order_id?: string
+          olist_order_number?: string | null
+          order_date?: string | null
+          processing_until?: string | null
+          receivable_amount?: number | null
+          receivable_due_date?: string | null
+          receivable_error?: string | null
+          receivable_id?: string | null
+          receivable_status?: string | null
+          refreshed_at?: string | null
+          situation?: string | null
+          total?: number | null
+          tracking_code?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       site_maintenance: {
         Row: {
           enabled: boolean
@@ -1696,6 +1852,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      claim_sales_order: { Args: { p_id: string }; Returns: boolean }
       consume_checkout_rate_limit: {
         Args: {
           p_key_hash: string
