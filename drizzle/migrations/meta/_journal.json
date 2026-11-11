@@ -57,6 +57,13 @@
       "when": 1794263214047,
       "tag": "0007_club_members_partner_source",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794431910800,
+      "tag": "0008_restrict_subscriber_category_margins_read",
+      "breakpoints": true
     }
   ]
 }
