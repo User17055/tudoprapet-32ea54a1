@@ -71,6 +71,27 @@
       "when": 1794431992334,
       "tag": "0009_scope_public_prices_and_banners",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794433964147,
+      "tag": "0010_sales_fiscal_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794434001087,
+      "tag": "0011_olist_sales_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794434012791,
+      "tag": "0012_grant_sales_orders_tables",
+      "breakpoints": true
     }
   ]
 }
