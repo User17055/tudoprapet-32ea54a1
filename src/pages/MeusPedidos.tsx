@@ -5,10 +5,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Package, PiggyBank, ExternalLink, Crown, Wallet } from 'lucide-react';
+import { ArrowLeft, Package, PiggyBank, ExternalLink, Crown, Wallet, Store, ArrowRight } from 'lucide-react';
 import logo from '@/assets/tpp-logo.svg';
 import { useIsFranchisee } from '@/hooks/useIsFranchisee';
 import { FranchiseOpenOrderCard } from '@/components/FranchiseOpenOrderCard';
+import { SaleDocuments } from '@/components/SaleDocuments';
+import { formatDate, formatMoney, situationState, TONE_CLASSES, type SaleInvoice, type SaleOrder } from '@/lib/saleOrders';
 
 interface OrderLine {
   title: string;
@@ -33,6 +35,8 @@ interface Order {
   fulfillment_status: string | null;
   order_status_url: string;
   savings: number;
+  sale_order_number?: string | null;
+  invoice?: SaleInvoice | null;
   line_items: OrderLine[];
 }
 
@@ -77,6 +81,8 @@ const MeusPedidos = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isFranchisee } = useIsFranchisee();
+  // Compras lançadas pela equipe direto no pedido de venda (loja/presencial).
+  const [storeOrders, setStoreOrders] = useState<SaleOrder[]>([]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -86,6 +92,11 @@ const MeusPedidos = () => {
     }
 
     const load = async () => {
+      // Falha nas compras da loja não esconde os pedidos do site.
+      void supabase.functions.invoke('sales-orders').then(({ data: sales }) => {
+        const list = Array.isArray(sales?.orders) ? (sales.orders as SaleOrder[]) : [];
+        setStoreOrders(list.filter((order) => order.origin === 'olist'));
+      }).catch(() => setStoreOrders([]));
       try {
         const { data, error } = await supabase.functions.invoke('customer-orders');
         if (error) throw error;
@@ -119,6 +130,16 @@ const MeusPedidos = () => {
         </div>
 
         <FranchiseOpenOrderCard enabled={isFranchisee} />
+
+        {isFranchisee && (
+          <Link
+            to="/franquia/pedidos"
+            className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-semibold text-primary hover:bg-primary/10"
+          >
+            <span className="flex items-center gap-2"><Store className="h-4 w-4" /> Ver todos os pedidos da franquia, com nota fiscal e boleto</span>
+            <ArrowRight className="h-4 w-4 shrink-0" />
+          </Link>
+        )}
 
         {loading && (
           <div className="flex justify-center py-16">
@@ -222,6 +243,10 @@ const MeusPedidos = () => {
                         </div>
                       </div>
 
+                      {!order.cancelled_at && (order.sale_order_number || order.invoice) && (
+                        <SaleDocuments saleOrderNumber={order.sale_order_number ?? null} invoice={order.invoice ?? null} />
+                      )}
+
                       <div className="space-y-2">
                         {order.line_items.map((li, i) => (
                           <div key={i} className="flex items-center gap-3 text-sm">
@@ -264,6 +289,48 @@ const MeusPedidos = () => {
               </div>
             )}
           </>
+        )}
+
+        {!loading && storeOrders.length > 0 && (
+          <section className="space-y-4" aria-labelledby="compras-na-loja">
+            <div>
+              <h2 id="compras-na-loja" className="font-display font-bold text-xl text-foreground">Compras na loja</h2>
+              <p className="text-sm text-muted-foreground">Pedidos lançados pela nossa equipe no seu CPF ou CNPJ.</p>
+            </div>
+            {storeOrders.map((order) => {
+              const situation = situationState(order.situation);
+              return (
+                <Card key={order.id}>
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-display font-bold text-lg">
+                          {order.saleOrderNumber ? `Pedido ${order.saleOrderNumber}` : 'Pedido na loja'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className={TONE_CLASSES[situation.tone]}>{situation.label}</Badge>
+                        <p className="font-display font-bold text-lg">{formatMoney(order.total, order.currency)}</p>
+                      </div>
+                    </div>
+                    <SaleDocuments saleOrderNumber={order.saleOrderNumber} invoice={order.invoice} />
+                    {order.items.length > 0 && (
+                      <ul className="space-y-1 border-t border-border pt-3 text-sm">
+                        {order.items.map((item, index) => (
+                          <li key={index} className="flex items-center gap-3">
+                            <span className="flex-1 min-w-0 truncate">{item.title}</span>
+                            <span className="text-muted-foreground">x{item.quantity}</span>
+                            <span className="w-20 text-right font-semibold">{formatMoney(item.unitPrice * item.quantity, order.currency)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </section>
         )}
       </main>
     </div>

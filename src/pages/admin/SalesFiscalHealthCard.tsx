@@ -1,4 +1,4 @@
-import { CheckCircle2, FileWarning, Landmark } from "lucide-react";
+import { CheckCircle2, FileWarning, Landmark, Receipt } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,8 @@ export interface SalesFiscalIssue {
   currency: string | null;
   olist_order_number: string | null;
   customer_name: string;
-  issue: "invoice" | "settlement";
+  issue: "invoice" | "settlement" | "receivable";
+  origin?: "site" | "olist";
   invoice_status: string | null;
   reason: string;
 }
@@ -19,8 +20,15 @@ export interface SalesFiscalIssue {
 export interface SalesFiscalHealth {
   without_invoice: number;
   unsettled_paid: number;
+  without_receivable?: number;
   items: SalesFiscalIssue[];
 }
+
+const ISSUE_LABELS: Record<SalesFiscalIssue["issue"], string> = {
+  invoice: "Sem nota",
+  settlement: "Sem baixa",
+  receivable: "Sem boleto",
+};
 
 const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   common: "Cliente",
@@ -54,19 +62,20 @@ export function SalesFiscalHealthCard({
   const counters = [
     { label: "Vendas sem nota fiscal", value: health?.without_invoice ?? 0, icon: FileWarning },
     { label: "Pagas com conta em aberto", value: health?.unsettled_paid ?? 0, icon: Landmark },
+    { label: "Franquia sem boleto", value: health?.without_receivable ?? 0, icon: Receipt },
   ];
-  const allClear = !!health && health.without_invoice === 0 && health.unsettled_paid === 0;
+  const allClear = !!health && counters.every((counter) => counter.value === 0);
 
   return (
     <Card>
       <CardHeader className="pb-4">
         <CardTitle className="text-base">Nota fiscal e baixa</CardTitle>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Vendas concluídas há mais de 30 minutos. Os dois números precisam estar em zero.
+          Vendas do site e pedidos de venda da Olist há mais de 30 minutos. Todos os números precisam estar em zero.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {counters.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
@@ -109,10 +118,11 @@ export function SalesFiscalHealthCard({
               <li key={`${item.id}-${item.issue}`} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:gap-4">
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-foreground">
-                    {item.issue === "invoice" ? "Sem nota" : "Sem baixa"}
+                    {ISSUE_LABELS[item.issue] || item.issue}
                     <span className="font-normal text-muted-foreground">
                       {" · "}
-                      {CUSTOMER_TYPE_LABELS[item.customer_type] || item.customer_type}
+                      {item.origin === "olist" ? "Pedido de venda · " : ""}
+                      {CUSTOMER_TYPE_LABELS[item.customer_type] || "Cliente não identificado"}
                       {item.customer_name ? ` · ${item.customer_name}` : ""}
                       {item.olist_order_number ? ` · Pedido de venda ${item.olist_order_number}` : ""}
                     </span>

@@ -15,6 +15,14 @@ verify_jwt = false
 [functions.olist-reconcile-franchise]
 verify_jwt = false
 
+# Vendas lançadas direto na Olist; autentica pela service role (chamada pela conciliação).
+[functions.olist-sales-sync]
+verify_jwt = false
+
+# Webhooks da Olist: sem JWT, autentica pelo segredo da URL (OLIST_WEBHOOK_SECRET).
+[functions.olist-webhook]
+verify_jwt = false
+
 # Diagnóstico protegido por x-payment-worker-token.
 [functions.shopify-draft-diag]
 verify_jwt = false

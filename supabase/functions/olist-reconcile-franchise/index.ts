@@ -41,6 +41,29 @@ function reconciliationStart(): string {
     : configured.toISOString();
 }
 
+/**
+ * Vendas lançadas direto na Olist rodam em outra function, com orçamento de
+ * tempo próprio. Disparada daqui para não guardar outra cópia da service role
+ * no cron do banco (mesmo motivo do worker que chama esta conciliação).
+ */
+function scheduleSalesSync(serviceRole: string) {
+  try {
+    const task = fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/olist-sales-sync`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${serviceRole}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "olist-reconcile-franchise" }),
+    }).then(async (response) => {
+      if (!response.ok) console.error("Sincronização de vendas Olist recusada:", response.status);
+    }).catch((error) => console.error("Falha isolada na sincronização de vendas Olist:", error));
+    const runtime = (globalThis as unknown as {
+      EdgeRuntime?: { waitUntil(value: Promise<unknown>): void };
+    }).EdgeRuntime;
+    runtime?.waitUntil(task);
+  } catch (error) {
+    console.error("Falha isolada na sincronização de vendas Olist:", error);
+  }
+}
+
 class AwaitingOlistImportError extends Error {
   constructor() {
     super("Pedido pago ainda não foi importado da Shopify para a Olist");
@@ -477,6 +500,7 @@ Deno.serve(async (req) => {
 
     const asaasBridge = await reconcileAsaasPayments(admin, token);
     const customerInvoices = await issueCustomerInvoices(admin, token);
+    scheduleSalesSync(serviceRole);
     return jsonResponse({
       // Mantém o contrato anterior para quem já monitora a conciliação de
       // franquias; a ponte nova entra em um bloco adicional.

@@ -61,6 +61,7 @@ Deno.test("permite seguir com o pedido quando a emissao da nota foi aceita e seg
       number: "42",
       series: undefined,
       issued: false,
+      voided: false,
       accessKey: null,
       accessUrl: null,
     });

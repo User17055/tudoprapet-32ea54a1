@@ -130,8 +130,9 @@ export default function OverviewTab() {
   const today = todayText.charAt(0).toUpperCase() + todayText.slice(1);
   const withoutInvoice = fiscalHealth?.without_invoice || 0;
   const unsettledPaid = fiscalHealth?.unsettled_paid || 0;
+  const withoutReceivable = fiscalHealth?.without_receivable || 0;
   const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0) +
-    Number(withoutInvoice > 0) + Number(unsettledPaid > 0);
+    Number(withoutInvoice > 0) + Number(unsettledPaid > 0) + Number(withoutReceivable > 0);
 
   const cards = [
     { label: "Clientes", value: data.users, icon: Users, color: "bg-blue-50 text-blue-700", to: "/admin?tab=users" },
@@ -231,6 +232,7 @@ export default function OverviewTab() {
             {data.failedCheckouts > 0 && <StatusLink to="/admin?tab=orders" icon={AlertTriangle} text={`${data.failedCheckouts} falha(s) recente(s) no checkout`} />}
             {withoutInvoice > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Receipt} text={`${withoutInvoice} venda(s) sem nota fiscal`} />}
             {unsettledPaid > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={CircleDollarSign} text={`${unsettledPaid} venda(s) paga(s) com conta em aberto`} />}
+            {withoutReceivable > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Store} text={`${withoutReceivable} pedido(s) de franquia sem boleto`} />}
           </CardContent>
         </Card>
       )}

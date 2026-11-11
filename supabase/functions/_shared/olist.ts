@@ -110,6 +110,8 @@ export interface OlistInvoice {
   number: string;
   series?: string;
   issued: boolean;
+  /** Cancelada ou denegada: existe, mas não vale como nota da venda. */
+  voided?: boolean;
   accessKey?: string | null;
   accessUrl?: string | null;
 }
@@ -700,7 +702,12 @@ export async function getOlistInvoice(id: string, token: string): Promise<OlistI
   const invoice = payload?.retorno?.nota_fiscal;
   if (!invoice?.id) throw new Error(responseErrors(payload));
   const accessKey = invoice.chave_acesso ? String(invoice.chave_acesso) : null;
-  const issued = Boolean(accessKey) || /autorizad|emitid/i.test(String(invoice.situacao || ""));
+  // Nota cancelada/denegada continua com chave de acesso, mas não vale como
+  // nota da venda. A API v2 devolve a situação como código (3 = cancelada,
+  // 10 = denegada) ou texto, conforme o endpoint.
+  const situation = String(invoice.situacao ?? "").trim();
+  const voided = situation === "3" || situation === "10" || /cancel|denegad/i.test(situation);
+  const issued = !voided && (Boolean(accessKey) || /autorizad|emitid/i.test(situation));
   let accessUrl = invoice.link_acesso ? String(invoice.link_acesso) : null;
   if (!accessUrl && issued) {
     // nota.fiscal.obter nao traz o link; a API tem um endpoint proprio para ele.
@@ -717,8 +724,98 @@ export async function getOlistInvoice(id: string, token: string): Promise<OlistI
     number: String(invoice.numero ?? ""),
     series: invoice.serie !== undefined ? String(invoice.serie) : undefined,
     issued,
+    voided,
     accessKey,
     accessUrl,
+  };
+}
+
+export interface OlistOrderListEntry {
+  id: string;
+  number: string;
+  externalReference: string;
+  situation: string;
+  orderDate: string | null;
+  customerName: string;
+  total: number;
+}
+
+/**
+ * Uma página da pesquisa de pedidos (100 por página). `filters` aceita os
+ * parâmetros da API v2, ex.: `dataAtualizacao` ou `dataInicial`/`dataFinal`.
+ */
+export async function listOlistOrdersPage(
+  filters: Record<string, string>,
+  page: number,
+  token: string,
+): Promise<{ orders: OlistOrderListEntry[]; totalPages: number }> {
+  const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, {
+    ...filters,
+    pagina: String(page),
+  });
+  if (Number(payload?.retorno?.codigo_erro) === 20) return { orders: [], totalPages: 0 };
+  const orders = (payload?.retorno?.pedidos ?? [])
+    .map((entry: any) => entry?.pedido ?? entry)
+    .filter((order: any) => order?.id)
+    .map((order: any) => ({
+      id: String(order.id),
+      number: String(order.numero ?? order.id),
+      externalReference: String(order.numero_ecommerce || "").trim(),
+      situation: String(order.situacao || "").trim(),
+      orderDate: order.data_pedido ? String(order.data_pedido) : null,
+      customerName: String(order.nome || "").trim(),
+      total: Number(order.valor),
+    }));
+  const totalPages = Number(payload?.retorno?.numero_paginas || 1);
+  return { orders, totalPages: Number.isFinite(totalPages) ? totalPages : 1 };
+}
+
+export interface OlistOrderSnapshot {
+  id: string;
+  number: string;
+  externalReference: string;
+  situation: string;
+  orderDate: string | null;
+  total: number;
+  customer: { name: string; cpfCnpj: string; email: string };
+  items: Array<{ sku: string; description: string; quantity: number; unitPrice: number }>;
+  trackingCode: string | null;
+  invoiceId: string | null;
+}
+
+/** Pedido completo, usado para vendas lançadas direto na Olist. */
+export async function getOlistOrderSnapshot(
+  id: string,
+  token: string,
+): Promise<OlistOrderSnapshot> {
+  const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id });
+  const order = payload?.retorno?.pedido;
+  if (!order?.id) throw new Error(responseErrors(payload));
+  return {
+    id: String(order.id),
+    number: String(order.numero ?? order.id),
+    externalReference: String(
+      order.numero_ecommerce || order.ecommerce?.numeroPedidoEcommerce || "",
+    ).trim(),
+    situation: String(order.situacao || "").trim(),
+    orderDate: order.data_pedido ? String(order.data_pedido) : null,
+    total: Number(order.total_pedido),
+    customer: {
+      name: String(order.cliente?.nome || "").trim(),
+      cpfCnpj: String(order.cliente?.cpf_cnpj || "").replace(/\D/g, ""),
+      email: String(order.cliente?.email || "").trim().toLowerCase(),
+    },
+    items: (order.itens ?? []).map((entry: any) => {
+      const item = entry?.item ?? entry;
+      return {
+        sku: String(item?.codigo || "").trim(),
+        description: String(item?.descricao || "").trim(),
+        quantity: Number(item?.quantidade) || 0,
+        unitPrice: Number(item?.valor_unitario) || 0,
+      };
+    }),
+    trackingCode: order.codigo_rastreamento ? String(order.codigo_rastreamento) : null,
+    invoiceId: normalizeOlistId(order.id_nota_fiscal),
   };
 }
 
@@ -745,6 +842,13 @@ export async function issueOlistInvoice(
 ): Promise<OlistInvoice> {
   const current = await getOlistInvoice(invoice.id, token);
   if (current.issued) return current;
+  // Reemitir nota cancelada/denegada falha na Olist; a venda precisa de uma
+  // nota nova, decidida por uma pessoa (pode ser devolução ou cancelamento).
+  if (current.voided) {
+    throw new Error(
+      `A NF-e ${current.number || current.id} do pedido está cancelada ou denegada na Olist`,
+    );
+  }
   const payload = await olistPost(OLIST_INVOICE_ISSUE_URL, token, {
     id: invoice.id,
     enviarEmail: "S",
