@@ -849,10 +849,21 @@ export async function issueOlistInvoice(
       `A NF-e ${current.number || current.id} do pedido está cancelada ou denegada na Olist`,
     );
   }
-  const payload = await olistPost(OLIST_INVOICE_ISSUE_URL, token, {
-    id: invoice.id,
-    enviarEmail: "S",
-  });
+  let payload: any;
+  try {
+    payload = await olistPost(OLIST_INVOICE_ISSUE_URL, token, {
+      id: invoice.id,
+      enviarEmail: "S",
+    });
+  } catch (error) {
+    // Nota já enviada à SEFAZ (aguardando retorno) ou já autorizada: a Olist
+    // recusa um novo envio. Não é rejeição fiscal — relê e segue como está.
+    const message = error instanceof Error ? error.message : String(error);
+    if (/apenas notas pendentes ou rejeitadas/i.test(message)) {
+      return await getOlistInvoice(invoice.id, token);
+    }
+    throw error;
+  }
   const issued = payload?.retorno?.nota_fiscal;
   if (!issued && payload?.retorno?.status !== "OK") throw new Error(responseErrors(payload));
   const confirmed = await getOlistInvoice(String(issued?.id ?? invoice.id), token);
@@ -927,12 +938,17 @@ export async function issueFranchiseInvoiceSafely(
 ): Promise<FranchiseInvoiceOutcome> {
   let invoice = params.savedInvoice;
   try {
-    if (!invoice) {
-      invoice = await generateOlistInvoice(params.orderId, params.token);
-      if (params.onInvoiceGenerated) await params.onInvoiceGenerated(invoice);
+    try {
+      return await generateAndIssue(params, invoice, (generated) => (invoice = generated));
+    } catch (error) {
+      // A nota salva foi excluída na Olist: sem esta retentativa a venda ficaria
+      // para sempre "rejeitada". generateOlistInvoice reaproveita a nota atual
+      // do pedido, se houver, e só gera uma nova quando não existe nenhuma.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!params.savedInvoice || !/nota fiscal n[aã]o localizada/i.test(message)) throw error;
+      invoice = null;
+      return await generateAndIssue(params, null, (generated) => (invoice = generated));
     }
-    const issued = await issueOlistInvoice(invoice, params.token);
-    return { invoice: issued, status: issued.issued ? "issued" : "pending", error: null };
   } catch (error) {
     return {
       invoice,
@@ -940,4 +956,23 @@ export async function issueFranchiseInvoiceSafely(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function generateAndIssue(
+  params: {
+    orderId: string;
+    token: string;
+    onInvoiceGenerated?: (invoice: OlistInvoice) => Promise<void>;
+  },
+  saved: OlistInvoice | null,
+  remember: (invoice: OlistInvoice) => void,
+): Promise<FranchiseInvoiceOutcome> {
+  let invoice = saved;
+  if (!invoice) {
+    invoice = await generateOlistInvoice(params.orderId, params.token);
+    remember(invoice);
+    if (params.onInvoiceGenerated) await params.onInvoiceGenerated(invoice);
+  }
+  const issued = await issueOlistInvoice(invoice, params.token);
+  return { invoice: issued, status: issued.issued ? "issued" : "pending", error: null };
 }

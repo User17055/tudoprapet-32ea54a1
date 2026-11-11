@@ -9,7 +9,7 @@ import {
   retryDelayMinutes,
   toOlistDateTime,
 } from "./olist-sales.ts";
-import { getOlistInvoice, issueOlistInvoice } from "./olist.ts";
+import { getOlistInvoice, issueFranchiseInvoiceSafely, issueOlistInvoice } from "./olist.ts";
 
 Deno.test("situacao da listagem e do webhook viram o mesmo valor", () => {
   assertEquals(normalizeSituation("Preparando envio"), "preparando envio");
@@ -87,6 +87,61 @@ Deno.test("nota cancelada com chave de acesso nao conta como emitida", async () 
     const invoice = await getOlistInvoice("900", "token-test");
     assertEquals(invoice.issued, false);
     assertEquals(invoice.voided, true);
+  } finally {
+    stub.restore();
+  }
+});
+
+const notFound = {
+  retorno: { status: "Erro", codigo_erro: 32, erros: [{ erro: "Nota Fiscal não localizada" }] },
+};
+
+Deno.test("nota salva excluida na Olist: gera de novo em vez de ficar rejeitada", async () => {
+  const stub = stubOlist([
+    notFound, // nota.fiscal.obter da nota salva
+    { retorno: { status: "OK", pedido: { id: 501, id_nota_fiscal: 0 } } }, // pedido sem nota
+    { retorno: { status: "OK", registros: { registro: { idNotaFiscal: 950, numero: "77" } } } },
+    { retorno: { status: "OK", nota_fiscal: { id: 950, numero: "77", situacao: "Pendente" } } },
+    { retorno: { status: "OK", nota_fiscal: { id: 950 } } }, // emitir
+    { retorno: { status: "OK", nota_fiscal: { id: 950, numero: "77", chave_acesso: "1".repeat(44) } } },
+    { retorno: { status: "OK", link_nfe: "https://danfe.example/950" } },
+  ]);
+  const saved: string[] = [];
+  try {
+    const outcome = await issueFranchiseInvoiceSafely({
+      orderId: "501",
+      token: "token-test",
+      savedInvoice: { id: "900", number: "", issued: false },
+      onInvoiceGenerated: (invoice) => Promise.resolve(void saved.push(invoice.id)),
+    });
+    assertEquals(outcome.status, "issued");
+    assertEquals(outcome.invoice?.id, "950");
+    assertEquals(saved, ["950"]);
+    assertEquals(stub.calls.some((url) => url.includes("gerar.nota.fiscal.pedido")), true);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("nota ja enviada a SEFAZ fica pendente, nao rejeitada", async () => {
+  const stub = stubOlist([
+    { retorno: { status: "OK", nota_fiscal: { id: 900, numero: "12", situacao: "4" } } },
+    {
+      retorno: {
+        status: "Erro",
+        erros: [{ erro: "Nota Fiscal localizada, porém apenas notas pendentes ou rejeitadas podem ser enviadas" }],
+      },
+    },
+    { retorno: { status: "OK", nota_fiscal: { id: 900, numero: "12", situacao: "4" } } },
+  ]);
+  try {
+    const outcome = await issueFranchiseInvoiceSafely({
+      orderId: "501",
+      token: "token-test",
+      savedInvoice: { id: "900", number: "12", issued: false },
+    });
+    assertEquals(outcome.status, "pending");
+    assertEquals(outcome.error, null);
   } finally {
     stub.restore();
   }
