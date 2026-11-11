@@ -401,6 +401,35 @@ export async function findOlistOrderByExternalReference(
 }
 
 /**
+ * Busca o pedido pelo número do e-commerce, sem janela de datas. Cobre vendas
+ * antigas que a varredura recente (`findImportedOlistOrders`) já não alcança,
+ * para que nenhuma venda paga fique para sempre "aguardando importação".
+ */
+export async function findOlistOrderByEcommerceNumber(
+  references: unknown[],
+  token: string,
+): Promise<OlistImportedOrder | null> {
+  const candidates = [...new Set(references.flatMap(normalizedExternalOrderReferences))];
+  for (const candidate of candidates) {
+    const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, {
+      numeroEcommerce: candidate,
+    });
+    if (Number(payload?.retorno?.codigo_erro) === 20) continue;
+    for (const entry of payload?.retorno?.pedidos ?? []) {
+      const order = entry?.pedido ?? entry;
+      const externalReference = String(order?.numero_ecommerce || "").trim();
+      if (!order?.id || !olistExternalReferenceMatches(externalReference, references)) continue;
+      return {
+        id: String(order.id),
+        number: String(order.numero ?? order.id),
+        externalReference,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Localiza pedidos que a integração Shopify já importou no ERP. Uma única
  * varredura atende vários checkouts e evita uma chamada Olist por pedido.
  */
@@ -499,23 +528,67 @@ export async function createOlistReceivable(
   return { id: String(record.id), status: "aberto", documentNumber };
 }
 
+async function listOlistReceivablesByOrigin(
+  originId: string,
+  token: string,
+): Promise<OlistReceivable[]> {
+  const payload = await olistPost(OLIST_RECEIVABLE_SEARCH_URL, token, { id_origem: originId });
+  if (Number(payload?.retorno?.codigo_erro) === 20) return [];
+  return (payload?.retorno?.contas ?? [])
+    .map((entry: any) => entry?.conta ?? entry)
+    .filter((account: any) => account?.id)
+    .map((account: any) => ({
+      id: String(account.id),
+      status: String(account.situacao || "aberto").toLowerCase(),
+      documentNumber: account.numero_doc ? String(account.numero_doc) : undefined,
+      dueDate: account.data_vencimento ? String(account.data_vencimento) : undefined,
+      amount: Number(account.valor),
+      balance: Number(account.saldo),
+    }));
+}
+
 export async function findOlistReceivableByOrder(
   orderId: string,
   token: string,
 ): Promise<OlistReceivable | null> {
-  const payload = await olistPost(OLIST_RECEIVABLE_SEARCH_URL, token, { id_origem: orderId });
-  if (Number(payload?.retorno?.codigo_erro) === 20) return null;
-  const entry = payload?.retorno?.contas?.[0];
-  const account = entry?.conta ?? entry;
-  if (!account?.id) return null;
-  return {
-    id: String(account.id),
-    status: String(account.situacao || "aberto").toLowerCase(),
-    documentNumber: account.numero_doc ? String(account.numero_doc) : undefined,
-    dueDate: account.data_vencimento ? String(account.data_vencimento) : undefined,
-    amount: Number(account.valor),
-    balance: Number(account.saldo),
-  };
+  return (await listOlistReceivablesByOrigin(orderId, token))[0] ?? null;
+}
+
+const CANCELLED_RECEIVABLE_STATUSES = ["cancelado", "cancelada"];
+
+export class OlistDuplicateReceivableError extends Error {
+  constructor(orderId: string, receivableIds: string[]) {
+    super(
+      `Duplicidade: ${receivableIds.length} contas a receber ativas para o pedido Olist ${orderId} ` +
+        `(${receivableIds.join(", ")}). Nenhuma baixa foi feita; cancele a conta indevida na Olist.`,
+    );
+    this.name = "OlistDuplicateReceivableError";
+  }
+}
+
+/**
+ * Venda já paga não pode deixar outra conta viva na Olist. Antes da baixa,
+ * confere todas as contas ligadas ao pedido e à nota dele; havendo outra conta
+ * não cancelada, não baixa nada e deixa o financeiro decidir qual cancelar.
+ */
+export async function assertSingleOlistReceivable(
+  orderId: string,
+  receivableId: string,
+  token: string,
+): Promise<void> {
+  const invoiceId = await getOlistOrderInvoiceId(orderId, token);
+  const accounts = new Map<string, OlistReceivable>();
+  for (const origin of [orderId, ...(invoiceId ? [invoiceId] : [])]) {
+    for (const account of await listOlistReceivablesByOrigin(origin, token)) {
+      accounts.set(account.id, account);
+    }
+  }
+  const active = [...accounts.values()]
+    .filter((account) => !CANCELLED_RECEIVABLE_STATUSES.includes(account.status));
+  if (active.some((account) => account.id !== receivableId)) {
+    const ids = [...new Set([receivableId, ...active.map((account) => account.id)])];
+    throw new OlistDuplicateReceivableError(orderId, ids);
+  }
 }
 
 export async function ensureOlistOrderReceivable(

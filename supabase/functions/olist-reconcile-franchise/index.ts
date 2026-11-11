@@ -1,8 +1,10 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { errorResponse, jsonResponse } from "../_shared/cors.ts";
 import {
+  assertSingleOlistReceivable,
   ensureOlistOrderReceivable,
   findImportedOlistOrders,
+  findOlistOrderByEcommerceNumber,
   getOlistOrderReconciliationDetails,
   getOlistReceivable,
   issueFranchiseInvoiceSafely,
@@ -24,6 +26,21 @@ function retryAt(attempt: number): string {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+// Toda venda tem que ter nota e venda paga não pode ficar com conta em aberto:
+// não há janela móvel que abandone pendências. O piso só evita reprocessar
+// vendas anteriores à ponte Asaas -> Olist, que foram tratadas manualmente.
+// Manter igual ao padrão de public.admin_sales_fiscal_health.
+const DEFAULT_RECONCILIATION_START = "2026-10-07T00:00:00-03:00";
+// Mesma janela usada pela varredura de `findImportedOlistOrders`.
+const IMPORT_SCAN_DAYS = 14;
+
+function reconciliationStart(): string {
+  const configured = new Date(Deno.env.get("OLIST_RECONCILIATION_START") || "");
+  return Number.isNaN(configured.getTime())
+    ? new Date(DEFAULT_RECONCILIATION_START).toISOString()
+    : configured.toISOString();
+}
+
 class AwaitingOlistImportError extends Error {
   constructor() {
     super("Pedido pago ainda não foi importado da Shopify para a Olist");
@@ -34,8 +51,10 @@ class AwaitingOlistImportError extends Error {
 interface BridgeSession {
   id: string;
   customer_type: "common" | "subscriber";
+  created_at: string;
   shopify_order_id: string;
   olist_order_id: string | null;
+  olist_order_number: string | null;
   olist_receivable_id: string | null;
   olist_payment_sync_attempts: number;
   total: number;
@@ -55,16 +74,15 @@ interface BridgePayment {
 
 async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
   const now = new Date().toISOString();
-  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60_000).toISOString();
   const { data: sessions, error } = await admin.from("checkout_sessions")
     .select(
-      "id,customer_type,shopify_order_id,olist_order_id,olist_receivable_id,olist_payment_sync_attempts,total,customer_snapshot",
+      "id,created_at,customer_type,shopify_order_id,olist_order_id,olist_order_number,olist_receivable_id,olist_payment_sync_attempts,total,customer_snapshot",
     )
     .in("customer_type", ["common", "subscriber"])
     .eq("status", "shopify_created")
     .not("shopify_order_id", "is", null)
     .is("olist_payment_synced_at", null)
-    .gte("created_at", cutoff)
+    .gte("created_at", reconciliationStart())
     .or(`olist_payment_sync_next_attempt_at.is.null,olist_payment_sync_next_attempt_at.lte.${now}`)
     .order("created_at", { ascending: true })
     .limit(8);
@@ -123,15 +141,28 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
       if (shopify.financialStatus && shopify.financialStatus !== "paid") {
         throw new Error(`Shopify não confirma pedido como pago (${shopify.financialStatus})`);
       }
-      const imported = session.olist_order_id
-        ? importedOrders.find((order) => order.id === String(session.olist_order_id))
+      // Pedido já vinculado: usa o id salvo. A varredura recente não alcança
+      // vendas antigas, e o pedido completo é conferido logo abaixo.
+      let imported = session.olist_order_id
+        ? {
+          id: String(session.olist_order_id),
+          number: String(session.olist_order_number || session.olist_order_id),
+          externalReference: "",
+        }
         : importedOrders.find((order) =>
           olistExternalReferenceMatches(order.externalReference, [
             shopify.id,
             shopify.name,
             shopify.orderNumber,
           ])
+        ) ?? null;
+      const ageDays = (Date.now() - Date.parse(session.created_at)) / 86_400_000;
+      if (!imported && ageDays >= IMPORT_SCAN_DAYS - 1) {
+        imported = await findOlistOrderByEcommerceNumber(
+          [shopify.id, shopify.name, shopify.orderNumber],
+          token,
         );
+      }
       if (!imported) {
         awaitingImport++;
         const waiting = new AwaitingOlistImportError();
@@ -209,6 +240,8 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
           `Valor da conta Olist (${receivable.amount}) diverge do pedido (${orderAmount})`,
         );
       }
+      // Venda paga no site não pode deixar outra conta viva na Olist.
+      await assertSingleOlistReceivable(imported.id, receivable.id, token);
       const paidAtValue = String(payment.received_at || payment.confirmed_at || now);
       const paidAt = new Date(paidAtValue);
       if (Number.isNaN(paidAt.getTime())) throw new Error("Data do pagamento Asaas inválida");
@@ -258,7 +291,7 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
  */
 async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
   const summary = { checked: 0, issued: 0, pending: 0, rejected: 0 };
-  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60_000).toISOString();
+  const cutoff = reconciliationStart();
   const stale = new Date(Date.now() - 10 * 60_000).toISOString();
   const { data: rows, error } = await admin.from("checkout_sessions")
     .select("id,olist_order_id,olist_invoice_id,olist_invoice_number,olist_invoice_status")
@@ -270,7 +303,7 @@ async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
       `olist_invoice_status.is.null,olist_invoice_status.in.(pending,rejected),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${stale})`,
     )
     .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
-    .limit(6);
+    .limit(8);
   if (error) {
     console.error("Falha ao listar NF-e de clientes:", error);
     return summary;
@@ -303,6 +336,7 @@ async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
     if (outcome.error) console.warn(`NF-e do cliente ${row.id} pendente:`, outcome.error);
     await admin.from("checkout_sessions").update({
       olist_invoice_status: outcome.status,
+      olist_invoice_error: outcome.error ? outcome.error.slice(0, 2000) : null,
       olist_invoice_checked_at: new Date().toISOString(),
       ...(outcome.invoice?.id ? { olist_invoice_id: outcome.invoice.id } : {}),
       ...(outcome.invoice?.number ? { olist_invoice_number: outcome.invoice.number } : {}),
@@ -394,10 +428,13 @@ Deno.serve(async (req) => {
       .eq("customer_type", "franchise")
       .eq("status", "credit_approved")
       .not("olist_order_id", "is", null)
-      .in("olist_invoice_status", ["generating", "pending", "rejected"])
-      .or(`olist_invoice_status.in.(pending,rejected),olist_invoice_checked_at.lt.${staleInvoiceClaim}`)
+      // Status nulo = a emissão nem chegou a ser tentada (ex.: o checkout caiu
+      // depois de criar o pedido). Também entra na fila, a partir do piso.
+      .or(
+        `olist_invoice_status.in.(pending,rejected),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${staleInvoiceClaim}),and(olist_invoice_status.is.null,created_at.gte.${reconciliationStart()})`,
+      )
       .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
-      .limit(6);
+      .limit(8);
     if (invoiceRowsError) console.error("Falha ao listar NF-e pendentes:", invoiceRowsError);
     for (const row of invoiceRows || []) {
       invoiceSummary.checked++;
@@ -430,6 +467,7 @@ Deno.serve(async (req) => {
       if (outcome.error) console.warn(`NF-e da sessão ${row.id} segue pendente:`, outcome.error);
       await admin.from("checkout_sessions").update({
         olist_invoice_status: outcome.status,
+        olist_invoice_error: outcome.error ? outcome.error.slice(0, 2000) : null,
         olist_invoice_checked_at: new Date().toISOString(),
         ...(outcome.invoice?.id ? { olist_invoice_id: outcome.invoice.id } : {}),
         ...(outcome.invoice?.number ? { olist_invoice_number: outcome.invoice.number } : {}),
