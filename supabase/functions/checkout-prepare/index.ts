@@ -441,6 +441,16 @@ Deno.serve(async (req) => {
           specialPriceMap.set(row.shopify_variant_id, cost);
         }
       }
+      // Sem custo a NF-e não sai e o pedido trava depois. Recusa já aqui,
+      // antes de reservar estoque ou concluir qualquer coisa na Shopify.
+      const withoutCost = variantIds.filter((id) => !franchiseCostMap.has(id));
+      if (withoutCost.length) {
+        const names = withoutCost.map((id) => details.get(id)?.productTitle || "Produto").join(", ");
+        return errorResponse(
+          `Estes produtos estão temporariamente indisponíveis para franquia: ${names}. Remova-os do carrinho para continuar.`,
+          409,
+        );
+      }
     }
 
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
