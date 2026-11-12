@@ -5,7 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
-import { fetchOlistCostBySku, normalizeSku } from "../_shared/olist.ts";
+import { fetchOlistCostBySku, normalizeSku, OLIST_PRODUCTS_SEARCH_URL } from "../_shared/olist.ts";
 import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "../_shared/subscriber-category.ts";
 import { fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
 
@@ -38,6 +38,25 @@ Deno.serve(async (req) => {
     body = await req.json();
   } catch {
     return errorResponse("JSON invalido", 400);
+  }
+  // Busca por nome (só leitura) para achar o SKU de produto sem SKU na Shopify.
+  const searchName = String((body as Record<string, unknown>).searchName || "").trim();
+  if (searchName) {
+    if (searchName.length > 120) return errorResponse("Nome muito longo", 400);
+    const response = await fetch(OLIST_PRODUCTS_SEARCH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: new URLSearchParams({ token, pesquisa: searchName, formato: "JSON" }),
+    });
+    const payload = await response.json() as any;
+    const products = (payload?.retorno?.produtos ?? []).map((entry: any) => ({
+      id: String(entry?.produto?.id ?? ""),
+      sku: String(entry?.produto?.codigo ?? ""),
+      name: String(entry?.produto?.nome ?? ""),
+      cost: Number(entry?.produto?.preco_custo) || null,
+      status: String(entry?.produto?.situacao ?? ""),
+    }));
+    return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, products });
   }
   if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > MAX_ITEMS) {
     return errorResponse(`Envie de 1 a ${MAX_ITEMS} itens`, 400);
