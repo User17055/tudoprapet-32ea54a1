@@ -27,6 +27,7 @@ import {
 import { shopifyAddress } from "../_shared/shopify-address.ts";
 import { applyDeliveryPolicy } from "../_shared/shipping-policy.ts";
 import { writeCheckoutAttemptLog } from "../_shared/checkout-log.ts";
+import { ensureFranchiseCosts, FRANCHISE_PRICE_BLOCKED_MESSAGE } from "../_shared/franchise-pricing.ts";
 import { hasFieldError, type ShopifyUserError } from "../_shared/checkout-failure.ts";
 import { PICKUP_HOURS } from "../_shared/pickup.ts";
 import { hasSufficientFranchiseInventory, hasSufficientInventory } from "../_shared/inventory.ts";
@@ -383,6 +384,36 @@ Deno.serve(async (req) => {
     // que continuam visíveis para o perfil e possuem estoque suficiente.
     input.items = availableItems;
     const variantIds = availableItems.map((item) => item.variantId);
+
+    // Franquia paga custo: item sem custo tem o custo buscado na Olist agora;
+    // se não houver como, o checkout para aqui (antes de pedido, nota e boleto)
+    // em vez de cobrar o preço cheio.
+    if (customerType === "franchise") {
+      const { blocked } = await ensureFranchiseCosts(
+        admin,
+        availableItems.map((item) => {
+          const detail = details.get(item.variantId)!;
+          return {
+            variantId: item.variantId,
+            productId: detail.productId,
+            sku: detail.sku || "",
+            title: detail.productTitle,
+            catalogPrice: detail.price,
+          };
+        }),
+        {
+          token: Deno.env.get("OLIST_API_TOKEN") || Deno.env.get("TINY_API_TOKEN") || "",
+          userId: auth.user?.id,
+        },
+      );
+      if (blocked.length) {
+        return jsonResponse({
+          error: FRANCHISE_PRICE_BLOCKED_MESSAGE,
+          code: "franchise_price_blocked",
+          franchisePriceBlocked: blocked,
+        });
+      }
+    }
 
     // O valor regular definido no sistema tem prioridade sobre a Shopify para
     // todos os perfis. Na ausência dele, o preço atual da Shopify é o fallback.

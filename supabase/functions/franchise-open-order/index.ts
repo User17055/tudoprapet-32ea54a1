@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireUser } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { hasSufficientFranchiseInventory } from "../_shared/inventory.ts";
+import { ensureFranchiseCosts, FRANCHISE_PRICE_BLOCKED_MESSAGE } from "../_shared/franchise-pricing.ts";
 import {
   deleteDraftOrder,
   fetchVariantCheckoutDetails,
@@ -112,6 +113,33 @@ Deno.serve(async (req) => {
     const audience = new Map((audienceRows || []).map((row) => [row.shopify_product_id, row.audience]));
     if ([...details.values()].some((detail) => !["franquia", "ambos"].includes(audience.get(detail.productId) || ""))) {
       return errorResponse("Um produto não está disponível para franquia", 409);
+    }
+
+    // Franquia paga custo: item sem custo e sem como buscá-lo não entra no
+    // pedido em aberto (seria reservado pelo preço cheio).
+    const { blocked } = await ensureFranchiseCosts(
+      admin,
+      combined.map((item) => {
+        const detail = details.get(item.variantId)!;
+        return {
+          variantId: item.variantId,
+          productId: detail.productId,
+          sku: detail.sku || "",
+          title: detail.productTitle,
+          catalogPrice: detail.price,
+        };
+      }),
+      {
+        token: Deno.env.get("OLIST_API_TOKEN") || Deno.env.get("TINY_API_TOKEN") || "",
+        userId,
+      },
+    );
+    if (blocked.length) {
+      return jsonResponse({
+        error: FRANCHISE_PRICE_BLOCKED_MESSAGE,
+        code: "franchise_price_blocked",
+        franchisePriceBlocked: blocked,
+      });
     }
 
     const variantIds = combined.map((item) => item.variantId);

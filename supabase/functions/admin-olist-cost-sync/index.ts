@@ -6,8 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import { fetchOlistCostBySku, normalizeSku, OLIST_PRODUCTS_SEARCH_URL } from "../_shared/olist.ts";
-import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "../_shared/subscriber-category.ts";
-import { fetchAllRowsResult } from "../_shared/fetch-all-rows.ts";
+import { applyProductCost, loadSubscriberMarginRules } from "../_shared/olist-cost-apply.ts";
 
 type SyncItem = {
   productId?: string;
@@ -79,22 +78,11 @@ Deno.serve(async (req) => {
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const results: Array<Record<string, unknown>> = [];
   const productIds = [...new Set(items.map((item) => item.productId))];
-  const [categoryResult, linkResult, ruleResult] = await Promise.all([
-    fetchAllRowsResult<{ id: string; name: string; parent_id: string | null }>(admin, "categories", "id,name,parent_id", {
-      orderBy: "id",
-    }),
-    fetchAllRowsResult<{ shopify_product_id: string; category_id: string }>(
-      admin,
-      "product_categories",
-      "id,shopify_product_id,category_id",
-      { orderBy: "id", filter: (query) => query.in("shopify_product_id", productIds) },
-    ),
-    fetchAllRowsResult<{ category_id: string; percent: number }>(admin, "subscriber_category_margins", "category_id,percent", {
-      orderBy: "category_id",
-    }),
-  ]);
-  if (categoryResult.error || linkResult.error || ruleResult.error) {
-    console.error("[admin-olist-cost-sync] categorias:", categoryResult.error || linkResult.error || ruleResult.error);
+  let rules;
+  try {
+    rules = await loadSubscriberMarginRules(admin, productIds);
+  } catch (rulesError) {
+    console.error("[admin-olist-cost-sync] categorias:", rulesError);
     return errorResponse("Nao foi possivel carregar as regras de preco por categoria", 500);
   }
 
@@ -111,85 +99,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const { data: existingCost, error: existingCostError } = await admin
-        .from("product_costs")
-        .select("cost,previous_cost,cost_changed_at,package_weight_kg")
-        .eq("shopify_variant_id", item.variantId)
-        .maybeSingle();
-      if (existingCostError) throw existingCostError;
-
-      const oldCost = existingCost ? Number(existingCost.cost) : null;
-      const packageWeightKg = item.weightKg ?? (existingCost?.package_weight_kg === null || existingCost?.package_weight_kg === undefined
-        ? null
-        : Number(existingCost.package_weight_kg));
-      const costChanged = oldCost === null || oldCost !== product.cost;
-      const changedAt = new Date().toISOString();
-      const { error: costError } = await admin.from("product_costs").upsert({
-        shopify_product_id: item.productId,
-        shopify_variant_id: item.variantId,
-        sku: item.sku,
-        cost: product.cost,
-        previous_cost: costChanged && oldCost !== null ? oldCost : existingCost?.previous_cost ?? null,
-        cost_changed_at: costChanged && oldCost !== null ? changedAt : existingCost?.cost_changed_at ?? null,
-        source: "olist",
-        synced_at: changedAt,
-        package_weight_kg: packageWeightKg,
-      }, { onConflict: "shopify_variant_id" });
-      if (costError) throw costError;
-
-      if (costChanged) {
-        const { error: historyError } = await admin.from("product_cost_history").insert({
-          shopify_variant_id: item.variantId,
-          old_cost: oldCost,
-          new_cost: product.cost,
-          source: "olist",
-          changed_at: changedAt,
-        });
-        if (historyError) throw historyError;
-      }
-
-      const { data: existingFranchise, error: existingFranchiseError } = await admin
-        .from("franchise_prices")
-        .select("price")
-        .eq("shopify_variant_id", item.variantId)
-        .maybeSingle();
-      if (existingFranchiseError) throw existingFranchiseError;
-
-      // Preserva uma margem de franquia ja cadastrada. Se nao houver valor ou
-      // se ele tiver ficado abaixo do novo custo, sobe somente ate o custo.
-      const currentFranchisePrice = existingFranchise ? Number(existingFranchise.price) : null;
-      const franchisePrice = currentFranchisePrice !== null && currentFranchisePrice >= product.cost
-        ? currentFranchisePrice
-        : product.cost;
-      const subscriberMarginPercent = subscriberMarginWithFeedRule(
-        item.productId,
-        packageWeightKg,
-        categoryResult.data || [],
-        linkResult.data || [],
-        ruleResult.data || [],
-      );
-      const subscriberPrice = priceFromCostAndMargin(product.cost, subscriberMarginPercent);
-      const { error: franchiseError } = await admin.from("franchise_prices").upsert({
-        shopify_product_id: item.productId,
-        shopify_variant_id: item.variantId,
-        price: franchisePrice,
-      }, { onConflict: "shopify_variant_id" });
-      if (franchiseError) throw franchiseError;
-
-      const { error: subscriberError } = await admin.from("subscriber_prices").upsert({
-        shopify_product_id: item.productId,
-        shopify_variant_id: item.variantId,
-        subscriber_price: subscriberPrice,
-      }, { onConflict: "shopify_variant_id" });
-      if (subscriberError) throw subscriberError;
-
-      // Versoes anteriores da integracao gravavam o preco calculado como preco
-      // regular. Remover esse override devolve a venda normal para a Shopify.
-      const { error: legacyCustomerPriceError } = await admin
-        .from("customer_prices")
-        .delete()
-        .eq("shopify_variant_id", item.variantId);
-      if (legacyCustomerPriceError) throw legacyCustomerPriceError;
+      const applied = await applyProductCost(admin, item, product.cost, rules);
 
       results.push({
         sku: item.sku,
@@ -198,13 +108,13 @@ Deno.serve(async (req) => {
         olistProductId: product.id,
         olistName: product.name,
         cost: product.cost,
-        previousCost: oldCost,
-        costChanged,
-        costIncreased: oldCost !== null && product.cost > oldCost,
-        franchisePrice,
-        subscriberPrice,
-        subscriberMarginPercent,
-        packageWeightKg,
+        previousCost: applied.oldCost,
+        costChanged: applied.costChanged,
+        costIncreased: applied.oldCost !== null && product.cost > applied.oldCost,
+        franchisePrice: applied.franchisePrice,
+        subscriberPrice: applied.subscriberPrice,
+        subscriberMarginPercent: applied.subscriberMarginPercent,
+        packageWeightKg: applied.packageWeightKg,
       });
     } catch (error) {
       console.error("[admin-olist-cost-sync]", item.sku, error);

@@ -59,6 +59,7 @@ import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { supabase } from "@/integrations/supabase/client";
+import { handleFranchisePriceBlocked } from "@/lib/franchisePriceBlocked";
 import {
   customCheckoutEnabled,
   readCheckoutLaunch,
@@ -1201,6 +1202,9 @@ export default function Checkout() {
             headers: sessionClaimHeaders(Boolean(user)),
           });
         if (prepareError || prepared?.error) {
+          // Produto sem preço de franquia: avisa e deixa a franquia remover
+          // ou pedir revisão, sem cobrar o preço cheio.
+          if (handleFranchisePriceBlocked(prepared)) return;
           if (prepared?.profileRequired) {
             toast.error(prepared.error || "Complete os dados fiscais da franquia.");
             navigate("/perfil?retorno=checkout");

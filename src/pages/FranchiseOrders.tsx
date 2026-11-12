@@ -37,11 +37,16 @@ export default function FranchiseOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<OriginFilter>("all");
+  const [reviews, setReviews] = useState<PriceReview[]>([]);
 
   const load = useCallback(async () => {
     if (!user || !isFranchisee) return;
     setLoading(true);
     setError("");
+    // Revisões de preço são um extra: falha aqui não esconde os pedidos.
+    void supabase.functions.invoke("franchise-price-review", { body: { action: "mine" } })
+      .then(({ data }) => setReviews(Array.isArray(data?.reviews) ? data.reviews : []))
+      .catch(() => setReviews([]));
     const { data, error: requestError } = await supabase.functions.invoke("sales-orders");
     if (requestError || data?.error) {
       setError(data?.error || "Não foi possível carregar seus pedidos.");
@@ -88,6 +93,8 @@ export default function FranchiseOrders() {
             </Button>
           </div>
 
+          {reviews.length > 0 && <PriceReviewList reviews={reviews} />}
+
           <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="Origem do pedido">
             {FILTERS.map(({ value, label }) => (
               <Button
@@ -133,6 +140,62 @@ export default function FranchiseOrders() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+interface PriceReview {
+  id: string;
+  variantId: string;
+  title: string | null;
+  status: "blocked" | "requested" | "approved" | "changed" | "rejected";
+  price: number | null;
+  note: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+
+const REVIEW_STATES: Record<PriceReview["status"], { label: string; tone: keyof typeof TONE_CLASSES }> = {
+  blocked: { label: "Em revisão", tone: "info" },
+  requested: { label: "Em revisão", tone: "info" },
+  approved: { label: "Liberado", tone: "success" },
+  changed: { label: "Liberado", tone: "success" },
+  rejected: { label: "Indisponível", tone: "muted" },
+};
+
+/** Produtos que a franquia pediu para revisar e o resultado de cada um. */
+function PriceReviewList({ reviews }: { reviews: PriceReview[] }) {
+  return (
+    <Card className="mt-6">
+      <CardContent className="space-y-3 p-5">
+        <div>
+          <h2 className="font-display text-lg font-bold">Produtos em revisão de preço</h2>
+          <p className="text-sm text-muted-foreground">
+            Produtos que estavam sem preço de franquia e que você pediu para a nossa equipe revisar.
+          </p>
+        </div>
+        <ul className="divide-y divide-border/70">
+          {reviews.map((review) => {
+            const state = REVIEW_STATES[review.status] ?? REVIEW_STATES.requested;
+            const released = review.status === "approved" || review.status === "changed";
+            return (
+              <li key={review.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{review.title || "Produto"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {released
+                      ? `Liberado${review.price !== null ? ` por ${formatMoney(review.price)}` : ""}. Já pode adicionar ao carrinho.`
+                      : review.status === "rejected"
+                      ? `Não disponível para franquia${review.note ? `: ${review.note}` : "."}`
+                      : `Pedido em ${formatDate(review.requestedAt)}. Avisaremos aqui quando for decidido.`}
+                  </p>
+                </div>
+                <Badge variant="outline" className={cn("w-fit", TONE_CLASSES[state.tone])}>{state.label}</Badge>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 

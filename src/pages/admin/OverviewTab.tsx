@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 import { SalesFiscalHealthCard, type SalesFiscalHealth } from "./SalesFiscalHealthCard";
+import { FranchisePriceReviewsCard } from "./FranchisePriceReviewsCard";
 
 interface DashboardData {
   users: number;
@@ -79,6 +80,7 @@ export default function OverviewTab() {
   const [loading, setLoading] = useState(true);
   const [fiscalHealth, setFiscalHealth] = useState<SalesFiscalHealth | null>(null);
   const [fiscalError, setFiscalError] = useState<string | null>(null);
+  const [priceReviews, setPriceReviews] = useState(0);
 
   const load = async () => {
     setLoading(true);
@@ -132,7 +134,8 @@ export default function OverviewTab() {
   const unsettledPaid = fiscalHealth?.unsettled_paid || 0;
   const withoutReceivable = fiscalHealth?.without_receivable || 0;
   const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0) +
-    Number(withoutInvoice > 0) + Number(unsettledPaid > 0) + Number(withoutReceivable > 0);
+    Number(withoutInvoice > 0) + Number(unsettledPaid > 0) + Number(withoutReceivable > 0) +
+    Number(priceReviews > 0);
 
   const cards = [
     { label: "Clientes", value: data.users, icon: Users, color: "bg-blue-50 text-blue-700", to: "/admin?tab=users" },
@@ -233,12 +236,17 @@ export default function OverviewTab() {
             {withoutInvoice > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Receipt} text={`${withoutInvoice} venda(s) sem nota fiscal`} />}
             {unsettledPaid > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={CircleDollarSign} text={`${unsettledPaid} venda(s) paga(s) com conta em aberto`} />}
             {withoutReceivable > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Store} text={`${withoutReceivable} pedido(s) de franquia sem boleto`} />}
+            {priceReviews > 0 && <StatusLink to="#revisao-preco-franquia" icon={CircleDollarSign} text={`${priceReviews} produto(s) sem preço de franquia`} />}
           </CardContent>
         </Card>
       )}
 
       <div id="nota-fiscal-e-baixa">
         <SalesFiscalHealthCard health={fiscalHealth} loading={loading} error={fiscalError} />
+      </div>
+
+      <div id="revisao-preco-franquia">
+        <FranchisePriceReviewsCard onCountChange={setPriceReviews} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">

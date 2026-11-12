@@ -32,6 +32,16 @@ export interface SpecialPriceCheckoutConfig {
   buildNote(user: CheckoutUser): string;
   /** Env vars do token Admin, na ordem de preferência. */
   shopifyTokenEnvKeys: string[];
+  /**
+   * Conferência antes de precificar (franquia: custo de cada item). Uma
+   * resposta aqui encerra o checkout sem criar o rascunho na Shopify.
+   */
+  guardItems?(
+    adminClient: SupabaseClient,
+    user: CheckoutUser,
+    items: Array<{ variantId: string; quantity: number }>,
+    tokens: { storefront: string; admin: string },
+  ): Promise<Response | null>;
 }
 
 function readFirstEnv(keys: string[]): string {
@@ -79,6 +89,14 @@ export async function handleSpecialPriceCheckout(
     const parsed = parseCheckoutItems(body?.items);
     if (!parsed.ok) return errorResponse(parsed.message, 400);
     const items = parsed.value;
+
+    if (config.guardItems) {
+      const stop = await config.guardItems(adminClient, checkoutUser, items, {
+        storefront: storefrontToken,
+        admin: shopifyToken,
+      });
+      if (stop) return stop;
+    }
 
     const variantIds = items.map((i) => i.variantId);
     const { data: specialRows } = await adminClient

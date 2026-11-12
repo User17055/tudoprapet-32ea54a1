@@ -13,6 +13,7 @@ import logo from "@/assets/tpp-logo.svg";
 
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { FranchisePriceBlockedDialog } from "@/components/FranchisePriceBlockedDialog";
 
 const ProductDetail = lazy(() => import("./pages/ProductDetail.tsx"));
 const Login = lazy(() => import("./pages/Login.tsx"));
@@ -85,6 +86,7 @@ const App = () => (
       {/* Só o Sonner. O Toaster do shadcn estava montado mas seu useToast não
           era chamado em lugar nenhum — renderizava sempre vazio. */}
       <Sonner />
+      <FranchisePriceBlockedDialog />
       <AppErrorBoundary>
         <AuthProvider>
           <SubscriptionProvider>
