@@ -92,6 +92,13 @@
       "when": 1794434012791,
       "tag": "0012_grant_sales_orders_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794521097001,
+      "tag": "0013_franchise_price_reviews",
+      "breakpoints": true
     }
   ]
 }
