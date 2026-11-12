@@ -429,10 +429,12 @@ export default function ValuesTab() {
       } else {
         const price = parsePrice(raw);
         if (!Number.isFinite(price) || price <= 0) return toast.error("Informe um Valor da Franquia válido.");
+        // Franquia paga custo, sem margem: com custo cadastrado, o valor é o custo.
+        // (O checkout de franquia também realinha o preço ao custo.)
         const cost = costMap.get(row.variant.id)?.cost;
-        if (cost !== undefined && price < cost) {
-          return toast.error("O valor da franquia não pode ficar abaixo do custo.", {
-            description: `Custo atual: ${money(cost)}. Informe ${money(cost)} ou mais.`,
+        if (cost !== undefined && Math.abs(price - cost) >= 0.005) {
+          return toast.error("O valor da franquia é o custo do produto.", {
+            description: `Custo atual: ${money(cost)}. Para mudar, atualize o custo (sincronizando com a Olist).`,
           });
         }
         operations.push(supabase.from("franchise_prices").upsert({

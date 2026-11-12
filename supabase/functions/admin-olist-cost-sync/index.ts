@@ -1,6 +1,6 @@
 // Importa o custo do ERP Olist pelo SKU e atualiza as tabelas de precos locais.
 // Regra comercial: Shopify e a venda normal; assinante paga custo + percentual
-// da categoria mais especifica; franquia nunca paga abaixo do custo.
+// da categoria mais especifica; franquia paga o custo (preco de franquia = custo).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { requireAdmin } from "../_shared/auth.ts";

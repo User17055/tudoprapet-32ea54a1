@@ -7,7 +7,7 @@ import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "./subscrib
  * regra do botão "sincronizar custos" do admin, usada também pelo checkout de
  * franquia (custo buscado na hora) e pela revisão de preço:
  *  - product_costs + histórico quando o custo muda;
- *  - franquia: preserva preço de franquia >= custo; senão sobe até o custo;
+ *  - franquia: preço de franquia = custo (sobe e desce junto com ele);
  *  - assinante: custo + margem da categoria mais específica;
  *  - remove o override legado em customer_prices.
  */
@@ -108,19 +108,10 @@ export async function applyProductCost(
     if (historyError) throw historyError;
   }
 
-  const { data: existingFranchise, error: existingFranchiseError } = await admin
-    .from("franchise_prices")
-    .select("price")
-    .eq("shopify_variant_id", item.variantId)
-    .maybeSingle();
-  if (existingFranchiseError) throw existingFranchiseError;
-
-  // Preserva uma margem de franquia já cadastrada. Se não houver valor ou se
-  // ele tiver ficado abaixo do novo custo, sobe somente até o custo.
-  const currentFranchisePrice = existingFranchise ? Number(existingFranchise.price) : null;
-  const franchisePrice = currentFranchisePrice !== null && currentFranchisePrice >= cost
-    ? currentFranchisePrice
-    : cost;
+  // Franquia paga custo, sem margem: o preço de franquia acompanha o custo
+  // para cima e para baixo (decisão de 12/11/2026 — nenhum produto é vendido
+  // às franquias acima do custo).
+  const franchisePrice = cost;
   const subscriberMarginPercent = subscriberMarginWithFeedRule(
     item.productId,
     packageWeightKg,

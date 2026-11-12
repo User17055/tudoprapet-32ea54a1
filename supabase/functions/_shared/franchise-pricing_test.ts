@@ -144,3 +144,81 @@ Deno.test("quem já pediu revisão não vê o botão de novo; recusado mostra o 
   assertEquals(rejected.canRequestReview, false);
   assertEquals(rejected.message, "Produto indisponível para franquia: fora de linha");
 });
+
+const NOW = Date.parse("2026-11-12T12:00:00Z");
+const daysAgo = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
+
+Deno.test("custo com mais de 7 dias é reconsultado e o preço de franquia acompanha", async () => {
+  const fake = fakeAdmin({
+    product_costs: [{ shopify_variant_id: item("11").variantId, cost: 20, synced_at: daysAgo(10) }],
+    franchise_prices: [{ shopify_variant_id: item("11").variantId, price: 20 }],
+  });
+  const applied: number[] = [];
+  const result = await ensureFranchiseCosts(fake.admin, [item("11")], {
+    token: "t",
+    now: NOW,
+    lookup: () => Promise.resolve({ id: "1", sku: "SKU11", name: "x", cost: 17 }),
+    applyCost: (_entry, cost) => Promise.resolve(void applied.push(cost)),
+  });
+  assertEquals(result.refreshed, [item("11").variantId]);
+  assertEquals(applied, [17]);
+  assertEquals(result.blocked, []);
+});
+
+Deno.test("custo recente não consulta a Olist", async () => {
+  const fake = fakeAdmin({
+    product_costs: [{ shopify_variant_id: item("12").variantId, cost: 20, synced_at: daysAgo(2) }],
+    franchise_prices: [{ shopify_variant_id: item("12").variantId, price: 20 }],
+  });
+  const result = await ensureFranchiseCosts(fake.admin, [item("12")], {
+    token: "t",
+    now: NOW,
+    lookup: () => Promise.reject(new Error("não deveria consultar a Olist")),
+  });
+  assertEquals(result.refreshed, []);
+  assertEquals(fake.upserts.length, 0);
+});
+
+Deno.test("falha ao atualizar custo antigo não bloqueia: segue com o custo cadastrado", async () => {
+  const fake = fakeAdmin({
+    product_costs: [{ shopify_variant_id: item("13").variantId, cost: 20, synced_at: daysAgo(30) }],
+    franchise_prices: [{ shopify_variant_id: item("13").variantId, price: 20 }],
+  });
+  const result = await ensureFranchiseCosts(fake.admin, [item("13")], {
+    token: "t",
+    now: NOW,
+    lookup: () => Promise.reject(new Error("API Bloqueada")),
+  });
+  assertEquals(result.blocked, []);
+  assertEquals(result.refreshed, []);
+});
+
+Deno.test("item sem custo tem prioridade no limite de consultas sobre custo antigo", async () => {
+  const fake = fakeAdmin({
+    product_costs: [{ shopify_variant_id: item("14").variantId, cost: 20, synced_at: daysAgo(30) }],
+    franchise_prices: [{ shopify_variant_id: item("14").variantId, price: 20 }],
+  });
+  const consulted: string[] = [];
+  await ensureFranchiseCosts(fake.admin, [item("14"), item("15")], {
+    token: "t",
+    now: NOW,
+    maxLookups: 1,
+    lookup: (sku) => {
+      consulted.push(sku);
+      return Promise.resolve({ id: "1", sku, name: "x", cost: 9 });
+    },
+    applyCost: () => Promise.resolve(),
+  });
+  assertEquals(consulted, ["SKU15"]);
+});
+
+Deno.test("preço de franquia acima do custo volta para o custo (sem margem)", async () => {
+  const fake = fakeAdmin({
+    product_costs: [{ shopify_variant_id: item("16").variantId, cost: 17, synced_at: daysAgo(1) }],
+    franchise_prices: [{ shopify_variant_id: item("16").variantId, price: 20 }],
+  });
+  const result = await ensureFranchiseCosts(fake.admin, [item("16")], { token: "t", now: NOW });
+  assertEquals(result.blocked, []);
+  assertEquals(fake.upserts.length, 1);
+  assertEquals((fake.upserts[0].payload as Array<{ price: number }>)[0].price, 17);
+});
