@@ -796,6 +796,101 @@ export type Database = {
           },
         ]
       }
+      franchise_price_review_requests: {
+        Row: {
+          id: string
+          requested_at: string
+          review_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          requested_at?: string
+          review_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          requested_at?: string
+          review_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "franchise_price_review_requests_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "franchise_price_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      franchise_price_reviews: {
+        Row: {
+          block_count: number
+          catalog_price: number | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decided_by_email: string | null
+          decision_cost: number | null
+          decision_note: string | null
+          first_blocked_at: string
+          id: string
+          last_blocked_at: string
+          product_title: string | null
+          reason: string
+          requested_at: string | null
+          shopify_product_id: string | null
+          shopify_variant_id: string
+          sku: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          block_count?: number
+          catalog_price?: number | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decided_by_email?: string | null
+          decision_cost?: number | null
+          decision_note?: string | null
+          first_blocked_at?: string
+          id?: string
+          last_blocked_at?: string
+          product_title?: string | null
+          reason: string
+          requested_at?: string | null
+          shopify_product_id?: string | null
+          shopify_variant_id: string
+          sku?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          block_count?: number
+          catalog_price?: number | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decided_by_email?: string | null
+          decision_cost?: number | null
+          decision_note?: string | null
+          first_blocked_at?: string
+          id?: string
+          last_blocked_at?: string
+          product_title?: string | null
+          reason?: string
+          requested_at?: string | null
+          shopify_product_id?: string | null
+          shopify_variant_id?: string
+          sku?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       franchise_prices: {
         Row: {
           created_at: string
@@ -1912,6 +2007,17 @@ export type Database = {
       is_tax_id_available: { Args: { _tax_id: string }; Returns: boolean }
       is_valid_cnpj: { Args: { value: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
+      record_franchise_price_block: {
+        Args: {
+          p_catalog_price: number
+          p_product_id: string
+          p_reason: string
+          p_sku: string
+          p_title: string
+          p_variant_id: string
+        }
+        Returns: string
+      }
       save_customer_address: {
         Args: {
           p_address: Json
