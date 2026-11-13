@@ -1929,6 +1929,10 @@ export type Database = {
     }
     Functions: {
       admin_automation_status: { Args: never; Returns: Json }
+      admin_retry_olist_issue: {
+        Args: { p_id: string; p_issue: string; p_origin?: string }
+        Returns: undefined
+      }
       admin_sales_fiscal_health: {
         Args: { p_grace_minutes?: number; p_since?: string }
         Returns: Json
@@ -2048,6 +2052,10 @@ export type Database = {
       is_tax_id_available: { Args: { _tax_id: string }; Returns: boolean }
       is_valid_cnpj: { Args: { value: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
+      olist_issue_needs_action: {
+        Args: { p_message: string }
+        Returns: boolean
+      }
       record_franchise_price_block: {
         Args: {
           p_catalog_price: number

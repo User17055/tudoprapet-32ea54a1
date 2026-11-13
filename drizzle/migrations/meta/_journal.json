@@ -113,6 +113,13 @@
       "when": 1794570734894,
       "tag": "0015_olist_rate_limit_and_automation_status",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794590515590,
+      "tag": "0016_olist_issue_needs_action",
+      "breakpoints": true
     }
   ]
 }
