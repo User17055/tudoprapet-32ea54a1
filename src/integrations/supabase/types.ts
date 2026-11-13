@@ -1929,10 +1929,6 @@ export type Database = {
     }
     Functions: {
       admin_automation_status: { Args: never; Returns: Json }
-      admin_retry_olist_issue: {
-        Args: { p_id: string; p_issue: string; p_origin?: string }
-        Returns: undefined
-      }
       admin_sales_fiscal_health: {
         Args: { p_grace_minutes?: number; p_since?: string }
         Returns: Json
