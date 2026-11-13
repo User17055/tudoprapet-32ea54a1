@@ -106,6 +106,13 @@
       "when": 1794521115057,
       "tag": "0014_grant_franchise_price_reviews_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794570734894,
+      "tag": "0015_olist_rate_limit_and_automation_status",
+      "breakpoints": true
     }
   ]
 }
