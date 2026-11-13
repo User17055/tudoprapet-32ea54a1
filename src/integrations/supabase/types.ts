@@ -1889,7 +1889,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      admin_automation_status: { Args: never; Returns: Json }
       admin_sales_fiscal_health: {
         Args: { p_grace_minutes?: number; p_since?: string }
         Returns: Json
