@@ -14,6 +14,7 @@ import {
   settleOlistReceivable,
 } from "../_shared/olist.ts";
 import { getShopifyOrderReference, shopifyAdminToken } from "../_shared/shopify.ts";
+import { needsAction, NEEDS_ACTION_RETRY_HOURS, nextDailyRetry } from "../_shared/olist-issues.ts";
 
 function dateFromOlist(value?: string): Date | null {
   const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -72,6 +73,8 @@ function scheduleSalesSync(serviceRole: string) {
 const RUN_BUDGET_MS = 110_000;
 let runDeadline = Number.POSITIVE_INFINITY;
 const outOfTime = () => Date.now() > runDeadline;
+
+const dayAgo = () => new Date(Date.now() - NEEDS_ACTION_RETRY_HOURS * 60 * 60_000).toISOString();
 
 class AwaitingOlistImportError extends Error {
   constructor() {
@@ -305,7 +308,9 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
       const message = entryError instanceof Error ? entryError.message : String(entryError);
       const { error: updateError } = await admin.from("checkout_sessions").update({
         olist_payment_sync_attempts: attempt,
-        olist_payment_sync_next_attempt_at: retryAt(attempt),
+        // Precisa de ação (total diferente, nota sem conta...): só uma vez por
+        // dia, até alguém corrigir na Olist ou pedir "tentar agora" no painel.
+        olist_payment_sync_next_attempt_at: needsAction(message) ? nextDailyRetry() : retryAt(attempt),
         olist_payment_sync_error: message.slice(0, 2000),
       }).eq("id", session.id).is("olist_payment_synced_at", null);
       if (updateError) {
@@ -333,7 +338,8 @@ async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
     .not("olist_order_id", "is", null)
     .gte("created_at", cutoff)
     .or(
-      `olist_invoice_status.is.null,olist_invoice_status.in.(pending,rejected),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${stale})`,
+      // Recusada pela SEFAZ/Olist só volta uma vez por dia (precisa de correção).
+      `olist_invoice_status.is.null,olist_invoice_status.eq.pending,and(olist_invoice_status.eq.rejected,olist_invoice_checked_at.lt.${dayAgo()}),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${stale})`,
     )
     .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
     .limit(8);
@@ -469,7 +475,7 @@ Deno.serve(async (req) => {
       // Status nulo = a emissão nem chegou a ser tentada (ex.: o checkout caiu
       // depois de criar o pedido). Também entra na fila, a partir do piso.
       .or(
-        `olist_invoice_status.in.(pending,rejected),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${staleInvoiceClaim}),and(olist_invoice_status.is.null,created_at.gte.${reconciliationStart()})`,
+        `olist_invoice_status.eq.pending,and(olist_invoice_status.eq.rejected,olist_invoice_checked_at.lt.${dayAgo()}),and(olist_invoice_status.eq.generating,olist_invoice_checked_at.lt.${staleInvoiceClaim}),and(olist_invoice_status.is.null,created_at.gte.${reconciliationStart()})`,
       )
       .order("olist_invoice_checked_at", { ascending: true, nullsFirst: true })
       .limit(8);

@@ -12,8 +12,11 @@ import {
   RefreshCw,
   Search,
   Store,
+  Hourglass,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +26,7 @@ import {
   CUSTOMER_TYPE_LABELS,
   formatAge,
   formatMoney,
+  formatNextRetry,
   ISSUE_LABELS,
   type SalesFiscalHealth,
   type SalesFiscalIssue,
@@ -34,6 +38,7 @@ import { FranchisePriceReviewsCard } from "./FranchisePriceReviewsCard";
 type Section = "pending" | "prices" | "automations";
 type IssueFilter = "all" | SalesFiscalIssue["issue"];
 type OriginFilter = "all" | "site" | "olist";
+type StateFilter = "all" | "action" | "waiting";
 
 const ISSUE_STYLES: Record<SalesFiscalIssue["issue"], { bar: string; chip: string; icon: LucideIcon }> = {
   invoice: { bar: "bg-rose-500", chip: "bg-rose-50 text-rose-700 ring-rose-600/20", icon: FileWarning },
@@ -55,6 +60,7 @@ export default function OlistReviewTab() {
   const [section, setSection] = useState<Section>("pending");
   const [issueFilter, setIssueFilter] = useState<IssueFilter>("all");
   const [originFilter, setOriginFilter] = useState<OriginFilter>("all");
+  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [query, setQuery] = useState("");
   const [openReviews, setOpenReviews] = useState<number | null>(null);
 
@@ -86,12 +92,31 @@ export default function OlistReviewTab() {
     const needle = query.trim().toLowerCase();
     return (health?.items ?? []).filter((item) =>
       (issueFilter === "all" || item.issue === issueFilter) &&
+      (stateFilter === "all" || (stateFilter === "action") === Boolean(item.needs_action)) &&
       (originFilter === "all" || (item.origin ?? "site") === originFilter) &&
       (!needle ||
         item.customer_name.toLowerCase().includes(needle) ||
         String(item.olist_order_number || "").includes(needle))
     );
-  }, [health, issueFilter, originFilter, query]);
+  }, [health, issueFilter, originFilter, stateFilter, query]);
+
+  const needsActionCount = health?.needs_action ?? 0;
+  const waitingCount = health?.waiting ?? 0;
+
+  // "Já corrigi, tentar agora": antecipa a próxima tentativa do sistema.
+  const retryNow = async (item: SalesFiscalIssue) => {
+    const { error } = await supabase.rpc("admin_retry_olist_issue", {
+      p_id: item.id,
+      p_issue: item.issue,
+      p_origin: item.origin ?? "site",
+    });
+    if (error) {
+      toast.error("Não foi possível agendar a nova tentativa", { description: error.message });
+      return;
+    }
+    toast.success("Nova tentativa na próxima rodada (até 10 minutos).");
+    await load();
+  };
 
   const openPending = (filter: IssueFilter) => {
     setSection("pending");
@@ -185,6 +210,11 @@ export default function OlistReviewTab() {
                 <>
                   <AlertTriangle className="h-4 w-4 text-[hsl(var(--admin-gold))]" />
                   {totalPending === 1 ? "1 pendência precisa de atenção." : `${totalPending} pendências precisam de atenção.`}
+                  {health && (
+                    <span className="text-white/60">
+                      {needsActionCount} precisam de ação · {waitingCount} aguardando o sistema
+                    </span>
+                  )}
                 </>
               ) : (
                 <><CheckCircle2 className="h-4 w-4 text-emerald-400" /> Tudo em dia: toda venda com nota, baixa e boleto.</>
@@ -278,6 +308,20 @@ export default function OlistReviewTab() {
           <CardContent className="space-y-4 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-1.5">
+                {(["all", "action", "waiting"] as const).map((value) => (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant={stateFilter === value ? "secondary" : "ghost"}
+                    className="h-8 gap-1 rounded-full"
+                    onClick={() => setStateFilter(value)}
+                  >
+                    {value === "action" && <Wrench className="h-3.5 w-3.5" />}
+                    {value === "waiting" && <Hourglass className="h-3.5 w-3.5" />}
+                    {value === "all" ? "Todas as situações" : value === "action" ? `Precisa de ação (${needsActionCount})` : `Aguardando (${waitingCount})`}
+                  </Button>
+                ))}
+                <span className="mx-1 hidden w-px bg-border sm:block" aria-hidden="true" />
                 {(["all", "invoice", "settlement", "receivable"] as const).map((value) => (
                   <Button
                     key={value}
@@ -332,7 +376,9 @@ export default function OlistReviewTab() {
               </div>
             ) : (
               <ul className="space-y-2">
-                {items.map((item) => <IssueRow key={`${item.id}-${item.issue}`} item={item} />)}
+                {items.map((item) => (
+                  <IssueRow key={`${item.id}-${item.issue}`} item={item} onRetry={() => retryNow(item)} />
+                ))}
               </ul>
             )}
 
@@ -340,8 +386,10 @@ export default function OlistReviewTab() {
               <p className="text-xs text-muted-foreground">Mostrando as 100 pendências mais antigas.</p>
             )}
             <p className="text-xs text-muted-foreground">
-              O sistema tenta resolver cada pendência sozinho a cada 10 minutos. O motivo mostra o que impede:
-              rejeição fiscal e divergência de valor precisam de ajuste na Olist.
+              <strong>Aguardando:</strong> o sistema resolve sozinho, tentando a cada 10 minutos.
+              {" "}<strong>Precisa de ação:</strong> só se resolve com ajuste na Olist (rejeição fiscal, total
+              diferente, nota sem conta); o sistema tenta uma vez por dia. Depois de corrigir, use
+              {" "}"Já corrigi, tentar agora".
             </p>
           </CardContent>
         </Card>
@@ -356,9 +404,11 @@ export default function OlistReviewTab() {
   );
 }
 
-function IssueRow({ item }: { item: SalesFiscalIssue }) {
+function IssueRow({ item, onRetry }: { item: SalesFiscalIssue; onRetry: () => Promise<void> }) {
   const style = ISSUE_STYLES[item.issue];
   const Icon = style.icon;
+  const [retrying, setRetrying] = useState(false);
+  const nextRetry = formatNextRetry(item.next_retry_at);
   return (
     <li className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-border/80 bg-card p-4 pl-5 sm:flex-row sm:items-start">
       <span className={cn("absolute inset-y-0 left-0 w-1", style.bar)} aria-hidden="true" />
@@ -367,6 +417,15 @@ function IssueRow({ item }: { item: SalesFiscalIssue }) {
           <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ring-1 ring-inset", style.chip)}>
             <Icon className="h-3 w-3" /> {ISSUE_LABELS[item.issue]}
           </span>
+          {item.needs_action ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-800 ring-1 ring-inset ring-orange-600/20">
+              <Wrench className="h-3 w-3" /> Precisa de ação
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700 ring-1 ring-inset ring-sky-600/20">
+              <Hourglass className="h-3 w-3" /> Aguardando
+            </span>
+          )}
           <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
             {item.origin === "olist" ? <Store className="h-3 w-3" /> : null}
             {item.origin === "olist" ? "Pedido de venda" : "Site"}
@@ -382,6 +441,28 @@ function IssueRow({ item }: { item: SalesFiscalIssue }) {
           )}
         </p>
         <p className="mt-0.5 break-words text-xs text-muted-foreground">{item.reason}</p>
+        {nextRetry && (
+          <p className="mt-0.5 text-xs text-muted-foreground/80">Próxima tentativa automática {nextRetry}</p>
+        )}
+        {item.needs_action && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 h-7 gap-1 px-2.5 text-xs"
+            disabled={retrying}
+            onClick={async () => {
+              setRetrying(true);
+              try {
+                await onRetry();
+              } finally {
+                setRetrying(false);
+              }
+            }}
+          >
+            {retrying ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            Já corrigi, tentar agora
+          </Button>
+        )}
       </div>
       <div className="flex shrink-0 items-baseline gap-3 sm:flex-col sm:items-end sm:gap-0.5">
         <span className="text-sm font-bold tabular-nums text-foreground">{formatMoney(item.total, item.currency)}</span>

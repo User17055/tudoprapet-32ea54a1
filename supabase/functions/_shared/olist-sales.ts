@@ -9,6 +9,7 @@ import {
   type OlistInvoice,
   type OlistOrderListEntry,
 } from "./olist.ts";
+import { needsAction, nextDailyRetry } from "./olist-issues.ts";
 
 /**
  * Vendas lançadas direto na Olist (pedido de venda interno/presencial).
@@ -316,7 +317,13 @@ export async function refreshSalesOrder(
   }
 
   const attempts = hadError ? row.attempts + 1 : 0;
-  const next = hadError
+  // Rejeição fiscal ou conta duplicada só se resolve com correção na Olist:
+  // nova tentativa uma vez por dia (ou na hora, pelo painel).
+  const blockingError = patch.invoice_status === "rejected" || needsAction(patch.receivable_error) ||
+    needsAction(patch.invoice_error);
+  const next = hadError && blockingError
+    ? new Date(nextDailyRetry(now.getTime()))
+    : hadError
     ? new Date(now.getTime() + retryDelayMinutes(attempts) * 60_000)
     : waiting
     ? new Date(now.getTime() + 60 * 60_000)

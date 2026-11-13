@@ -1,3 +1,5 @@
+import { isTransientOlistError } from "./olist-issues.ts";
+
 export const OLIST_PRODUCTS_SEARCH_URL = "https://api.tiny.com.br/api2/produtos.pesquisa.php";
 export const OLIST_ORDER_CREATE_URL = "https://api.tiny.com.br/api2/pedido.incluir.php";
 export const OLIST_ORDER_SEARCH_URL = "https://api.tiny.com.br/api2/pedidos.pesquisa.php";
@@ -1031,7 +1033,9 @@ export async function issueFranchiseInvoiceSafely(
   } catch (error) {
     // Limite de chamadas não é rejeição fiscal: fica pendente e a próxima
     // rodada tenta de novo, sem aparecer como nota recusada.
-    if (isOlistRateLimitError(error)) {
+    // O mesmo vale para falha passageira (rede, 5xx, bloqueio): rejeição é
+    // só o que a Olist/SEFAZ recusou de fato.
+    if (isOlistRateLimitError(error) || isTransientOlistError((error as Error)?.message)) {
       return { invoice, status: "pending", error: (error as Error).message };
     }
     return {

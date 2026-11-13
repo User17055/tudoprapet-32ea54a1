@@ -13,12 +13,17 @@ export interface SalesFiscalIssue {
   origin?: "site" | "olist";
   invoice_status: string | null;
   reason: string;
+  /** Só se resolve com correção na Olist (tentado uma vez por dia). */
+  needs_action?: boolean;
+  next_retry_at?: string | null;
 }
 
 export interface SalesFiscalHealth {
   without_invoice: number;
   unsettled_paid: number;
   without_receivable?: number;
+  needs_action?: number;
+  waiting?: number;
   items: SalesFiscalIssue[];
 }
 
@@ -37,6 +42,15 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
 
 export const formatMoney = (value: number | null | undefined, currency?: string | null) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: currency || "BRL" }).format(Number(value) || 0);
+
+/** "em 3 h", "em 20 min" — quando o sistema tenta de novo. */
+export function formatNextRetry(iso: string | null | undefined, now = Date.now()): string | null {
+  if (!iso) return null;
+  const minutes = Math.round((Date.parse(iso) - now) / 60_000);
+  if (minutes <= 10) return "na próxima rodada (até 10 min)";
+  if (minutes < 60) return `em ${minutes} min`;
+  return `em ${Math.round(minutes / 60)} h`;
+}
 
 export function formatAge(iso: string, now = Date.now()): string {
   const hours = Math.floor((now - Date.parse(iso)) / 3_600_000);
