@@ -292,7 +292,11 @@ export async function refreshSalesOrder(
       });
       Object.assign(patch, invoicePatch(outcome.invoice, outcome.status, outcome.error));
       if (outcome.status === "rejected") hadError = true;
-      if (outcome.status === "pending") waiting = true;
+      // Pendente com erro = limite de chamadas da Olist: tenta de novo em 10 min.
+      if (outcome.status === "pending") {
+        if (outcome.error) hadError = true;
+        else waiting = true;
+      }
     } else if (!eligible && snapshot.invoiceId && row.invoice_status !== "issued") {
       // Fora da automação, só mostra a nota que já existe na Olist.
       const invoice = await getOlistInvoice(snapshot.invoiceId, token);

@@ -1,6 +1,11 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { listOlistOrdersPage, toOlistDate } from "../_shared/olist.ts";
+import {
+  listOlistOrdersPage,
+  olistCallsPerMinute,
+  setOlistCallPriority,
+  toOlistDate,
+} from "../_shared/olist.ts";
 import {
   loadSalesOrderQueue,
   processOlistWebhookEvent,
@@ -126,7 +131,9 @@ Deno.serve(async (req) => {
   if (!token) return errorResponse("OLIST_API_TOKEN não configurado", 503);
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole);
-  const deadline = Date.now() + BUDGET_MS;
+  setOlistCallPriority("background");
+  const startedAt = Date.now();
+  const deadline = startedAt + BUDGET_MS;
   const result: Record<string, unknown> = {};
   // Cada etapa falha sozinha: um erro na varredura não impede a fila.
   for (
@@ -143,5 +150,13 @@ Deno.serve(async (req) => {
       result[name] = { error: error instanceof Error ? error.message : String(error) };
     }
   }
+  // Última execução, para o painel de automações do admin.
+  const { error: stateError } = await admin.from("olist_sync_state").upsert({
+    key: "sales_sync_run",
+    value: new Date().toISOString(),
+    details: { ...result, durationMs: Date.now() - startedAt, callsPerMinute: olistCallsPerMinute() },
+    updated_at: new Date().toISOString(),
+  });
+  if (stateError) console.error("olist-sales-sync estado:", stateError);
   return jsonResponse(result);
 });

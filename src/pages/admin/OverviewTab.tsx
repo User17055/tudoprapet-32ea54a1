@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { fetchAllRowsResult } from "@/lib/fetchAllRows";
 import { SalesFiscalHealthCard, type SalesFiscalHealth } from "./SalesFiscalHealthCard";
 import { FranchisePriceReviewsCard } from "./FranchisePriceReviewsCard";
+import { AutomationStatusCard } from "./AutomationStatusCard";
 
 interface DashboardData {
   users: number;
@@ -244,6 +245,8 @@ export default function OverviewTab() {
       <div id="nota-fiscal-e-baixa">
         <SalesFiscalHealthCard health={fiscalHealth} loading={loading} error={fiscalError} />
       </div>
+
+      <AutomationStatusCard />
 
       <div id="revisao-preco-franquia">
         <FranchisePriceReviewsCard onCountChange={setPriceReviews} />

@@ -323,7 +323,79 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Limite compartilhado entre TODAS as functions (tabela olist_api_rate). O
+// intervalo local acima vale só dentro de uma function; várias rodando juntas
+// passavam do limite do plano. As automações usam no máximo 70% do limite por
+// minuto; o restante fica para o checkout (pedido, boleto, custo de franquia).
+export type OlistCallPriority = "interactive" | "background";
+let olistPriority: OlistCallPriority = "interactive";
+let olistRateLimitedUntil = 0;
+const BACKGROUND_SHARE = 0.7;
+
+/** Automações (conciliação, sincronização, webhook) chamam no início. */
+export function setOlistCallPriority(priority: OlistCallPriority) {
+  olistPriority = priority;
+}
+
+export function olistCallsPerMinute(): number {
+  const configured = Number(Deno.env.get("OLIST_API_CALLS_PER_MINUTE"));
+  return Number.isFinite(configured) && configured >= 1 ? Math.floor(configured) : 30;
+}
+
+/** O limite de chamadas está cheio: a automação para e retoma na próxima rodada. */
+export class OlistRateLimitError extends Error {
+  constructor(waitMs: number) {
+    super(`Limite de chamadas à API da Olist atingido; nova tentativa em ${Math.ceil(waitMs / 1000)} s`);
+    this.name = "OlistRateLimitError";
+  }
+}
+
+export function isOlistRateLimitError(error: unknown): boolean {
+  return error instanceof OlistRateLimitError;
+}
+
+async function sharedLimiterRpc(name: string, body: Record<string, unknown>): Promise<unknown> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  // Sem banco (testes) ou limitador indisponível: segue só com o intervalo local.
+  if (!url || !key) return null;
+  try {
+    const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function claimOlistCall(): Promise<void> {
+  // Sem banco (testes, execução local): não há limite compartilhado.
+  if (!Deno.env.get("SUPABASE_URL") || !Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return;
+  if (olistRateLimitedUntil > Date.now()) {
+    throw new OlistRateLimitError(olistRateLimitedUntil - Date.now());
+  }
+  const limit = olistCallsPerMinute();
+  const background = olistPriority === "background";
+  const effective = background ? Math.max(1, Math.floor(limit * BACKGROUND_SHARE)) : limit;
+  // Automação espera pouco (a fila continua na próxima rodada); checkout
+  // espera mais antes de desistir.
+  const giveUpAt = Date.now() + (background ? 20_000 : 15_000);
+  for (;;) {
+    const wait = Number(await sharedLimiterRpc("claim_olist_api_call", { p_limit: effective }));
+    if (!Number.isFinite(wait) || wait <= 0) return;
+    if (Date.now() + wait > giveUpAt) {
+      olistRateLimitedUntil = Date.now() + wait;
+      throw new OlistRateLimitError(wait);
+    }
+    await sleep(Math.min(wait, 5_000) + Math.floor(Math.random() * 250));
+  }
+}
+
 async function olistThrottle(): Promise<void> {
+  await claimOlistCall();
   const now = Date.now();
   const waitFor = Math.max(
     olistBlockedUntil - now,
@@ -331,6 +403,13 @@ async function olistThrottle(): Promise<void> {
   );
   if (waitFor > 0) await sleep(waitFor);
   olistLastCallAt = Date.now();
+}
+
+function noteOlistBlock() {
+  olistBlockedUntil = Date.now() + OLIST_BLOCK_BACKOFF_MS;
+  void sharedLimiterRpc("report_olist_api_block", {
+    p_seconds: Math.round(OLIST_BLOCK_BACKOFF_MS / 1000),
+  });
 }
 
 async function olistPost(url: string, token: string, fields: Record<string, string>): Promise<any> {
@@ -344,9 +423,7 @@ async function olistPost(url: string, token: string, fields: Record<string, stri
   const payload = await response.json();
   if (payload?.retorno?.status === "Erro" && Number(payload?.retorno?.codigo_erro) !== 20) {
     const message = responseErrors(payload);
-    if (message.includes("API Bloqueada")) {
-      olistBlockedUntil = Date.now() + OLIST_BLOCK_BACKOFF_MS;
-    }
+    if (message.includes("API Bloqueada")) noteOlistBlock();
     throw new Error(message);
   }
   return payload;
@@ -897,6 +974,7 @@ export function findExactOlistCost(
 
 export async function fetchOlistCostBySku(sku: string, token: string): Promise<OlistCost | null> {
   const body = new URLSearchParams({ token, pesquisa: sku.trim(), formato: "JSON" });
+  await olistThrottle();
   const response = await fetch(OLIST_PRODUCTS_SEARCH_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
@@ -909,6 +987,7 @@ export async function fetchOlistCostBySku(sku: string, token: string): Promise<O
     // A API usa o erro 20 tambem quando a pesquisa simplesmente nao encontra o SKU.
     if (payload.retorno.codigo_erro === 20) return null;
     const detail = payload.retorno.erros?.map((entry) => entry.erro).filter(Boolean).join("; ");
+    if (detail?.includes("API Bloqueada")) noteOlistBlock();
     throw new Error(detail || "A Olist recusou a consulta");
   }
   return findExactOlistCost(payload, sku);
@@ -950,6 +1029,11 @@ export async function issueFranchiseInvoiceSafely(
       return await generateAndIssue(params, null, (generated) => (invoice = generated));
     }
   } catch (error) {
+    // Limite de chamadas não é rejeição fiscal: fica pendente e a próxima
+    // rodada tenta de novo, sem aparecer como nota recusada.
+    if (isOlistRateLimitError(error)) {
+      return { invoice, status: "pending", error: (error as Error).message };
+    }
     return {
       invoice,
       status: "rejected",

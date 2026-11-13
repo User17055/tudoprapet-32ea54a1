@@ -8,7 +8,9 @@ import {
   getOlistOrderReconciliationDetails,
   getOlistReceivable,
   issueFranchiseInvoiceSafely,
+  olistCallsPerMinute,
   olistExternalReferenceMatches,
+  setOlistCallPriority,
   settleOlistReceivable,
 } from "../_shared/olist.ts";
 import { getShopifyOrderReference, shopifyAdminToken } from "../_shared/shopify.ts";
@@ -63,6 +65,13 @@ function scheduleSalesSync(serviceRole: string) {
     console.error("Falha isolada na sincronização de vendas Olist:", error);
   }
 }
+
+// Cada rodada tem orçamento de tempo: o que não couber fica para a próxima
+// (a conciliação roda a cada 10 min). Evita a function morrer no meio de um
+// item quando a Olist está lenta ou o limite de chamadas está cheio.
+const RUN_BUDGET_MS = 110_000;
+let runDeadline = Number.POSITIVE_INFINITY;
+const outOfTime = () => Date.now() > runDeadline;
 
 class AwaitingOlistImportError extends Error {
   constructor() {
@@ -156,6 +165,7 @@ async function reconcileAsaasPayments(admin: SupabaseClient, token: string) {
   let awaitingImport = 0;
   let failed = 0;
   for (const session of pendingSessions) {
+    if (outOfTime()) break;
     const payment = paymentBySession.get(session.id);
     const shopify = references.get(session.id);
     if (!payment || !shopify) continue;
@@ -332,6 +342,7 @@ async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
     return summary;
   }
   for (const row of rows || []) {
+    if (outOfTime()) break;
     summary.checked++;
     const { data: claimed, error: claimError } = await admin.rpc(
       "claim_olist_invoice_processing",
@@ -379,6 +390,9 @@ Deno.serve(async (req) => {
 
   try {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceRole);
+    setOlistCallPriority("background");
+    runDeadline = Date.now() + RUN_BUDGET_MS;
+    const startedAt = new Date();
     const { data: rows, error } = await admin.from("payments")
       .select("id,provider_payment_id,status,due_date")
       .eq("provider", "olist")
@@ -393,6 +407,7 @@ Deno.serve(async (req) => {
     let pending = 0;
     let failed = 0;
     for (const row of rows || []) {
+      if (outOfTime()) break;
       try {
         const account = await getOlistReceivable(String(row.provider_payment_id), token);
         const status = account.status.toLowerCase();
@@ -460,6 +475,7 @@ Deno.serve(async (req) => {
       .limit(8);
     if (invoiceRowsError) console.error("Falha ao listar NF-e pendentes:", invoiceRowsError);
     for (const row of invoiceRows || []) {
+      if (outOfTime()) break;
       invoiceSummary.checked++;
       const { data: claimed, error: claimError } = await admin.rpc(
         "claim_olist_invoice_processing",
@@ -501,7 +517,7 @@ Deno.serve(async (req) => {
     const asaasBridge = await reconcileAsaasPayments(admin, token);
     const customerInvoices = await issueCustomerInvoices(admin, token);
     scheduleSalesSync(serviceRole);
-    return jsonResponse({
+    const result = {
       // Mantém o contrato anterior para quem já monitora a conciliação de
       // franquias; a ponte nova entra em um bloco adicional.
       checked: rows?.length || 0,
@@ -512,7 +528,22 @@ Deno.serve(async (req) => {
       invoices: invoiceSummary,
       asaasBridge,
       customerInvoices,
+    };
+    // Última execução, para o painel de automações do admin.
+    const { error: stateError } = await admin.from("olist_sync_state").upsert({
+      key: "reconcile_run",
+      value: new Date().toISOString(),
+      details: {
+        ...result,
+        startedAt: startedAt.toISOString(),
+        durationMs: Date.now() - startedAt.getTime(),
+        outOfTime: outOfTime(),
+        callsPerMinute: olistCallsPerMinute(),
+      },
+      updated_at: new Date().toISOString(),
     });
+    if (stateError) console.error("olist-reconcile-franchise estado:", stateError);
+    return jsonResponse(result);
   } catch (error) {
     console.error("olist-reconcile-franchise:", error);
     return errorResponse("Falha ao conciliar contas da Olist", 500);

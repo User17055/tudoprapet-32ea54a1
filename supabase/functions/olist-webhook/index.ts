@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { errorResponse, jsonResponse } from "../_shared/cors.ts";
 import { parseWebhookBody, processOlistWebhookEvent } from "../_shared/olist-sales.ts";
+import { setOlistCallPriority } from "../_shared/olist.ts";
+
+// Aviso é processado em segundo plano: usa a cota das automações.
+setOlistCallPriority("background");
 
 /**
  * Recebe os webhooks da Olist (situação de pedido e NF-e autorizada).
