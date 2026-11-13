@@ -11,6 +11,7 @@ import {
   Package,
   Receipt,
   ShieldCheck,
+  ClipboardCheck,
   Store,
   Users,
   Wrench,
@@ -23,9 +24,7 @@ import type { PrintableOrder } from "@/lib/orderPrint";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fetchAllRowsResult } from "@/lib/fetchAllRows";
-import { SalesFiscalHealthCard, type SalesFiscalHealth } from "./SalesFiscalHealthCard";
-import { FranchisePriceReviewsCard } from "./FranchisePriceReviewsCard";
-import { AutomationStatusCard } from "./AutomationStatusCard";
+import type { SalesFiscalHealth } from "@/lib/olistReview";
 
 interface DashboardData {
   users: number;
@@ -79,13 +78,13 @@ export default function OverviewTab() {
   const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
+  // Só os totais: o detalhe fica na aba "Revisão Olist".
   const [fiscalHealth, setFiscalHealth] = useState<SalesFiscalHealth | null>(null);
-  const [fiscalError, setFiscalError] = useState<string | null>(null);
   const [priceReviews, setPriceReviews] = useState(0);
 
   const load = async () => {
     setLoading(true);
-    const [profiles, members, administrators, maintenance, ordersResult, fiscalResult] = await Promise.all([
+    const [profiles, members, administrators, maintenance, ordersResult, fiscalResult, automationResult] = await Promise.all([
       fetchAllRowsResult<{ user_id: string; is_franchisee: boolean }>("profiles", "user_id,is_franchisee", {
         orderBy: "user_id",
       }),
@@ -94,9 +93,11 @@ export default function OverviewTab() {
       supabase.from("site_maintenance").select("enabled").eq("id", true).maybeSingle(),
       supabase.functions.invoke("admin-orders", { body: { action: "list", limit: 8 } }),
       supabase.rpc("admin_sales_fiscal_health"),
+      supabase.rpc("admin_automation_status"),
     ]);
-    setFiscalError(fiscalResult.error?.message || null);
     setFiscalHealth(fiscalResult.error ? null : (fiscalResult.data as unknown as SalesFiscalHealth));
+    const automation = automationResult.data as unknown as { price_reviews?: { open?: number } } | null;
+    setPriceReviews(Number(automation?.price_reviews?.open || 0));
 
     const firstError = profiles.error || members.error || administrators.error || maintenance.error || ordersResult.error;
     if (firstError) {
@@ -134,9 +135,9 @@ export default function OverviewTab() {
   const withoutInvoice = fiscalHealth?.without_invoice || 0;
   const unsettledPaid = fiscalHealth?.unsettled_paid || 0;
   const withoutReceivable = fiscalHealth?.without_receivable || 0;
+  const olistPending = withoutInvoice + unsettledPaid + withoutReceivable + priceReviews;
   const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0) +
-    Number(withoutInvoice > 0) + Number(unsettledPaid > 0) + Number(withoutReceivable > 0) +
-    Number(priceReviews > 0);
+    Number(olistPending > 0);
 
   const cards = [
     { label: "Clientes", value: data.users, icon: Users, color: "bg-blue-50 text-blue-700", to: "/admin?tab=users" },
@@ -234,23 +235,10 @@ export default function OverviewTab() {
             {data.maintenance && <StatusLink to="/admin?tab=maintenance" icon={Wrench} text="A loja está em manutenção" />}
             {data.pendingSales > 0 && <StatusLink to="/admin?tab=orders" icon={Package} text={`${data.pendingSales} venda(s) aguardando sincronização`} />}
             {data.failedCheckouts > 0 && <StatusLink to="/admin?tab=orders" icon={AlertTriangle} text={`${data.failedCheckouts} falha(s) recente(s) no checkout`} />}
-            {withoutInvoice > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Receipt} text={`${withoutInvoice} venda(s) sem nota fiscal`} />}
-            {unsettledPaid > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={CircleDollarSign} text={`${unsettledPaid} venda(s) paga(s) com conta em aberto`} />}
-            {withoutReceivable > 0 && <StatusLink to="#nota-fiscal-e-baixa" icon={Store} text={`${withoutReceivable} pedido(s) de franquia sem boleto`} />}
-            {priceReviews > 0 && <StatusLink to="#revisao-preco-franquia" icon={CircleDollarSign} text={`${priceReviews} produto(s) sem preço de franquia`} />}
+            {olistPending > 0 && <StatusLink to="/admin?tab=olist" icon={ClipboardCheck} text={`${olistPending} pendência(s) na Revisão Olist`} />}
           </CardContent>
         </Card>
       )}
-
-      <div id="nota-fiscal-e-baixa">
-        <SalesFiscalHealthCard health={fiscalHealth} loading={loading} error={fiscalError} />
-      </div>
-
-      <AutomationStatusCard />
-
-      <div id="revisao-preco-franquia">
-        <FranchisePriceReviewsCard onCountChange={setPriceReviews} />
-      </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
@@ -337,6 +325,7 @@ export default function OverviewTab() {
             <QuickLink to="/admin?tab=administrators" icon={ShieldCheck} label="Administradores" />
             <QuickLink to="/admin?tab=retirada" icon={Package} label="Retirada" />
             <QuickLink to="/admin?tab=maintenance" icon={Wrench} label="Manutenção" />
+            <QuickLink to="/admin?tab=olist" icon={ClipboardCheck} label="Revisão Olist" />
           </CardContent>
         </Card>
       </div>
@@ -359,14 +348,6 @@ function QuickLink({ to, icon: Icon, label }: { to: string; icon: typeof Package
 }
 
 function StatusLink({ to, icon: Icon, text }: { to: string; icon: typeof Package; text: string }) {
-  // Âncora da própria página: rola até o cartão sem trocar a aba do painel.
-  if (to.startsWith("#")) {
-    return (
-      <a href={to} className="flex items-center gap-2 rounded-lg bg-white/70 p-3 font-medium hover:bg-white">
-        <Icon className="h-4 w-4 shrink-0" /> <span>{text}</span>
-      </a>
-    );
-  }
   return (
     <Link to={to} className="flex items-center gap-2 rounded-lg bg-white/70 p-3 font-medium hover:bg-white">
       <Icon className="h-4 w-4 shrink-0" /> <span>{text}</span>

@@ -1,9 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { Activity, Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 type Level = "ok" | "warn" | "error" | "idle";
@@ -95,25 +92,15 @@ function Row({ level, title, status, children }: { level: Level; title: string; 
  * Situação das automações da Olist: conciliação (notas e baixas), vendas
  * lançadas na Olist, webhooks, limite da API e revisões de preço de franquia.
  */
-export function AutomationStatusCard() {
-  const [status, setStatus] = useState<AutomationStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data, error: rpcError } = await supabase.rpc("admin_automation_status");
-    setLoading(false);
-    if (rpcError) {
-      setError(rpcError.message);
-      return;
-    }
-    setError(null);
-    setStatus(data as unknown as AutomationStatus);
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
+export function AutomationStatusCard({
+  status,
+  loading,
+  error,
+}: {
+  status: AutomationStatus | null;
+  loading: boolean;
+  error: string | null;
+}) {
   const now = status ? Date.parse(status.now) : Date.now();
   const reconcileAgo = minutesSince(status?.reconcile?.last_run, now);
   const salesAgo = minutesSince(status?.sales_sync.last_run, now);
@@ -126,18 +113,13 @@ export function AutomationStatusCard() {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between space-y-0 pb-4">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Activity className="h-4 w-4 text-primary" /> Automações da Olist
-          </CardTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Rodam sozinhas a cada 10 minutos. Verde: em dia; amarelo: atenção; vermelho: parada.
-          </p>
-        </div>
-        <Button size="sm" variant="ghost" onClick={() => void load()} disabled={loading} aria-label="Atualizar automações">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-        </Button>
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Activity className="h-4 w-4 text-primary" /> Automações da Olist
+        </CardTitle>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Rodam sozinhas a cada 10 minutos. Verde: em dia; amarelo: atenção; vermelho: parada; cinza: não configurado.
+        </p>
       </CardHeader>
       <CardContent>
         {error ? (

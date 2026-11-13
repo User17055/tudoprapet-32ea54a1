@@ -42,6 +42,7 @@ import {
   Wrench,
   LayoutDashboard,
   ShieldCheck,
+  ClipboardCheck,
   CircleDollarSign,
   BadgePercent,
   ChevronRight,
@@ -77,6 +78,7 @@ import MaintenanceTab from "./admin/MaintenanceTab";
 import ConferenceTab from "./admin/ConferenceTab";
 import OverviewTab from "./admin/OverviewTab";
 import AdministratorsTab from "./admin/AdministratorsTab";
+import OlistReviewTab from "./admin/OlistReviewTab";
 import ValuesTab from "./admin/ValuesTab";
 import CommissionsTab from "./admin/CommissionsTab";
 import DuplicatesTab from "./admin/DuplicatesTab";
@@ -106,6 +108,7 @@ type SubscriberPriceFilter = "all" | "registered" | "unregistered";
 type SectionId =
   | "overview"
   | "administrators"
+  | "olist"
   | "users"
   | "members"
   | "prices"
@@ -140,6 +143,7 @@ const NAV_GROUPS: { label: string; items: SectionDef[] }[] = [
     items: [
       { id: "overview", label: "Visão geral", description: "Indicadores e atalhos da operação", icon: LayoutDashboard, component: OverviewTab },
       { id: "administrators", label: "Administradores", description: "Cadastre e gerencie os acessos ao painel", icon: ShieldCheck, component: AdministratorsTab },
+      { id: "olist", label: "Revisão Olist", description: "Notas, baixas, boletos, preço de franquia e automações", icon: ClipboardCheck, component: OlistReviewTab },
     ],
   },
   {
