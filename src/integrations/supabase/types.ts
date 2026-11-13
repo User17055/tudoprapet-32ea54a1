@@ -942,18 +942,57 @@ export type Database = {
         }
         Relationships: []
       }
+      olist_api_rate: {
+        Row: {
+          blocked_until: string | null
+          blocks_today: number
+          calls: number
+          calls_today: number
+          id: boolean
+          last_blocked_at: string | null
+          stats_day: string
+          throttled_today: number
+          window_start: string
+        }
+        Insert: {
+          blocked_until?: string | null
+          blocks_today?: number
+          calls?: number
+          calls_today?: number
+          id?: boolean
+          last_blocked_at?: string | null
+          stats_day?: string
+          throttled_today?: number
+          window_start?: string
+        }
+        Update: {
+          blocked_until?: string | null
+          blocks_today?: number
+          calls?: number
+          calls_today?: number
+          id?: boolean
+          last_blocked_at?: string | null
+          stats_day?: string
+          throttled_today?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       olist_sync_state: {
         Row: {
+          details: Json | null
           key: string
           updated_at: string
           value: string | null
         }
         Insert: {
+          details?: Json | null
           key: string
           updated_at?: string
           value?: string | null
         }
         Update: {
+          details?: Json | null
           key?: string
           updated_at?: string
           value?: string | null
@@ -1889,10 +1928,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_automation_status: { Args: never; Returns: Json }
       admin_sales_fiscal_health: {
         Args: { p_grace_minutes?: number; p_since?: string }
         Returns: Json
       }
+      claim_olist_api_call: { Args: { p_limit: number }; Returns: number }
       claim_olist_franchise_checkout: {
         Args: { p_session_id: string }
         Returns: boolean
@@ -2017,6 +2058,10 @@ export type Database = {
           p_variant_id: string
         }
         Returns: string
+      }
+      report_olist_api_block: {
+        Args: { p_seconds: number }
+        Returns: undefined
       }
       save_customer_address: {
         Args: {
