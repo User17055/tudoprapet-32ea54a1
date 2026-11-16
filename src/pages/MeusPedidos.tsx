@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Package, PiggyBank, ExternalLink, Crown, Wallet, Store, ArrowRight } from 'lucide-react';
-import logo from '@/assets/tpp-logo.svg';
+import logo from '@/assets/tpp-logo-natal.webp';
 import { useIsFranchisee } from '@/hooks/useIsFranchisee';
 import { FranchiseOpenOrderCard } from '@/components/FranchiseOpenOrderCard';
 import { SaleDocuments } from '@/components/SaleDocuments';

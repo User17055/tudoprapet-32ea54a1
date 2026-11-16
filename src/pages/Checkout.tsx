@@ -28,7 +28,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { gsap } from "gsap";
-import logo from "@/assets/tpp-logo.svg";
+import logo from "@/assets/tpp-logo-natal.webp";
 import bravectoImage from "@/assets/bravecto.jpg";
 import defenzaImage from "@/assets/defenza.jpg";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

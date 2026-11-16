@@ -9,11 +9,12 @@ import { useAccountCartSync } from "@/hooks/useAccountCartSync";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import Index from "./pages/Index.tsx";
-import logo from "@/assets/tpp-logo.svg";
+import logo from "@/assets/tpp-logo-natal.webp";
 
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
 import { FranchisePriceBlockedDialog } from "@/components/FranchisePriceBlockedDialog";
+import { ChristmasDecor } from "@/components/ChristmasTheme";
 
 const ProductDetail = lazy(() => import("./pages/ProductDetail.tsx"));
 const Login = lazy(() => import("./pages/Login.tsx"));
@@ -54,6 +55,7 @@ const AppContent = () => {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <ChristmasDecor />
       <MaintenanceGate>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
