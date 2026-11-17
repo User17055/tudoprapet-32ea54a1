@@ -380,7 +380,7 @@ export const Header = () => {
         </div>
 
         <Link to="/catalogo" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - catálogo">
-          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:-my-1.5 md:w-56" />
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[140px] max-w-none sm:w-40 md:-my-1.5 md:w-56" />
         </Link>
 
         <form
