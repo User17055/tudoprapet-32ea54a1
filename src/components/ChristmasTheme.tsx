@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
 
-// Tema de Natal: para remover, apague este arquivo, o bloco "Natal" do index.css e o uso de <ChristmasDecor />, e <ChristmasFooterDecor /> do Footer; e volte os imports de tpp-logo-natal.webp para tpp-logo.svg.
+// Tema de Natal: para remover, apague este arquivo, o bloco "Natal" do index.css e o uso de <ChristmasDecor />, e <ChristmasFooterDecor /> do Footer; em ProductGrid, tire <ChristmasHolly /> e volte o text-[#D62839] do "Selecionados pra voce" para text-secondary; em ProductCard, volte a etiqueta de % OFF para bg-[#ffe9ad] text-[#111827]; e volte os imports de tpp-logo-natal.webp para tpp-logo.svg.
 
 // [lado, distância da borda (px), duração (s), atraso (s), tamanho (px)]
 const FLAKES: Array<["left" | "right", number, number, number, number]> = [
@@ -45,6 +45,19 @@ export const ChristmasDecor = () => {
     </div>
   );
 };
+
+// Raminho de azevinho para títulos; tamanho em em para acompanhar a fonte do texto ao lado.
+export const ChristmasHolly = () => (
+  <svg viewBox="0 0 40 24" aria-hidden="true" className="ml-1.5 inline-block h-[0.85em] w-auto align-[-0.05em]">
+    <path d="M20 15 C14 7 6 5 1 8 C4 9 4 12 2 14 C5 14 6 17 5 19 C10 18 15 18 20 15 Z" fill="#1f7f4f" />
+    <path d="M20 15 C26 7 34 5 39 8 C36 9 36 12 38 14 C35 14 34 17 35 19 C30 18 25 18 20 15 Z" fill="#24905a" />
+    <path d="M19 14.5 C14 10 8 9 3.5 10.5 M21 14.5 C26 10 32 9 36.5 10.5" stroke="#3aa76d" strokeWidth=".8" fill="none" />
+    <circle cx="16.8" cy="15" r="3.3" fill="#D62839" />
+    <circle cx="23.2" cy="15" r="3.3" fill="#D62839" />
+    <circle cx="20" cy="11" r="3.3" fill="#e23a4b" />
+    <circle cx="19" cy="10" r=".9" fill="#fff" opacity=".7" />
+  </svg>
+);
 
 const SNOW_EDGE = "M0 11 Q40 11 65 13 Q90 15 115 11 Q140 7 170 10.5 Q200 14 225 11.5 Q250 9 285 10 Q320 11 360 11";
 const SNOW_CREST = "#d5e1f1";

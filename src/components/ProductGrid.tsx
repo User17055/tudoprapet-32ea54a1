@@ -11,6 +11,7 @@ import { isProductAvailable } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
 import { fetchAllRowsResult } from "@/lib/fetchAllRows";
+import { ChristmasHolly } from "@/components/ChristmasTheme";
 
 interface FeaturedProduct {
   shopify_product_id: string;
@@ -83,11 +84,12 @@ export const ProductGrid = () => {
     <section className="bg-white py-10 md:py-14">
       <div className="container mx-auto">
         <div className="mb-4">
-          <span className="text-xs font-bold uppercase tracking-wider text-secondary">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#D62839]">
             Selecionados pra voce
           </span>
           <h2 className="font-display text-2xl font-900 md:text-3xl">
             Destaques da semana
+            <ChristmasHolly />
           </h2>
           <p className="text-sm text-muted-foreground">
             Os mais vendidos com os melhores precos
