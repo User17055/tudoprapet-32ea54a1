@@ -263,7 +263,13 @@ export type Database = {
           olist_payment_sync_error: string | null
           olist_payment_sync_next_attempt_at: string | null
           olist_payment_synced_at: string | null
+          olist_receivable_checked_at: string | null
+          olist_receivable_error: string | null
           olist_receivable_id: string | null
+          olist_twin_checked_at: string | null
+          olist_twin_checks: number
+          olist_twin_order_numbers: string | null
+          olist_twin_status: string | null
           pricing_snapshot: Json
           referral_code: string | null
           referral_employee_name: string | null
@@ -311,7 +317,13 @@ export type Database = {
           olist_payment_sync_error?: string | null
           olist_payment_sync_next_attempt_at?: string | null
           olist_payment_synced_at?: string | null
+          olist_receivable_checked_at?: string | null
+          olist_receivable_error?: string | null
           olist_receivable_id?: string | null
+          olist_twin_checked_at?: string | null
+          olist_twin_checks?: number
+          olist_twin_order_numbers?: string | null
+          olist_twin_status?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
           referral_employee_name?: string | null
@@ -359,7 +371,13 @@ export type Database = {
           olist_payment_sync_error?: string | null
           olist_payment_sync_next_attempt_at?: string | null
           olist_payment_synced_at?: string | null
+          olist_receivable_checked_at?: string | null
+          olist_receivable_error?: string | null
           olist_receivable_id?: string | null
+          olist_twin_checked_at?: string | null
+          olist_twin_checks?: number
+          olist_twin_order_numbers?: string | null
+          olist_twin_status?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
           referral_employee_name?: string | null

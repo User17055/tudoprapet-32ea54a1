@@ -120,6 +120,13 @@
       "when": 1794590515590,
       "tag": "0016_olist_issue_needs_action",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795108831537,
+      "tag": "0017_franchise_receivable_retry",
+      "breakpoints": true
     }
   ]
 }
