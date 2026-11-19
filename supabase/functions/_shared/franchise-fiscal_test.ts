@@ -16,7 +16,7 @@ const complete = {
   cnpj: CNPJ,
   company_legal_name: "Tudo Pra Pet LTDA",
   company_trade_name: "TudoPraPet",
-  state_registration: "123456789",
+  state_registration: "123456789012",
   state_registration_indicator: "contributor",
 };
 
@@ -37,7 +37,7 @@ Deno.test("1. revenda envia CNPJ, razão social, contribuinte e IE", () => {
     name: "Tudo Pra Pet LTDA",
     legalName: "Tudo Pra Pet LTDA",
     tradeName: "TudoPraPet",
-    stateRegistration: "123456789",
+    stateRegistration: "123456789012",
     stateRegistrationIndicator: "contributor",
   });
 });
@@ -129,7 +129,7 @@ for (const purpose of ["resale", "final_consumption"] as const) {
     const receivable = buildOlistReceivable(olistInput, "1") as { conta: { cliente: Record<string, string> } };
     assertEquals(order.pedido.cliente.cpf_cnpj, snapshot.cpfCnpj);
     assertEquals(receivable.conta.cliente.cpf_cnpj, snapshot.cpfCnpj);
-    assertEquals(order.pedido.cliente.ie, purpose === "resale" ? "123456789" : undefined);
+    assertEquals(order.pedido.cliente.ie, purpose === "resale" ? "123456789012" : undefined);
 
     const shopify = await captureShopifyBodies(snapshot.cpfCnpj, snapshot.name);
     assertEquals(shopify.includes(`"key":"CPF/CNPJ","value":"${snapshot.cpfCnpj}"`), true);

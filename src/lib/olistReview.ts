@@ -9,7 +9,7 @@ export interface SalesFiscalIssue {
   currency: string | null;
   olist_order_number: string | null;
   customer_name: string;
-  issue: "invoice" | "settlement" | "receivable";
+  issue: "invoice" | "settlement" | "receivable" | "duplicate";
   origin?: "site" | "olist";
   invoice_status: string | null;
   reason: string;
@@ -22,6 +22,7 @@ export interface SalesFiscalHealth {
   without_invoice: number;
   unsettled_paid: number;
   without_receivable?: number;
+  duplicates?: number;
   needs_action?: number;
   waiting?: number;
   items: SalesFiscalIssue[];
@@ -31,6 +32,7 @@ export const ISSUE_LABELS: Record<SalesFiscalIssue["issue"], string> = {
   invoice: "Sem nota fiscal",
   settlement: "Paga sem baixa",
   receivable: "Franquia sem boleto",
+  duplicate: "Pedido duplicado",
 };
 
 export const CUSTOMER_TYPE_LABELS: Record<string, string> = {

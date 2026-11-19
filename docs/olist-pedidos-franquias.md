@@ -2,19 +2,32 @@
 
 O checkout de franquia usa a Olist como origem financeira. Depois da confirmação final do franqueado, o sistema:
 
-1. cria o pedido de venda na Olist;
-2. registra em `outras_despesas` a taxa operacional e a diferença entre custo e preço comercial;
-3. lança a conta a receber com vencimento em 7 ou 30 dias, conforme o cadastro do franqueado;
-4. gera e emite a NF-e imediatamente;
-5. conclui o rascunho do pedido na Shopify como pagamento pendente;
-6. consulta a Olist a cada 10 minutos e dá baixa local quando a conta estiver paga.
+1. conclui o rascunho do pedido na Shopify como pagamento pendente;
+2. cria o pedido de venda na Olist **em aberto**, com `outras_despesas` para a taxa operacional e a diferença entre custo e preço comercial;
+3. lança a conta a receber com o vencimento do cadastro do franqueado;
+4. aprova o pedido, o que dispara a automação da Olist "Emitir NFe ao aprovar o pedido", e emite a NF-e (reaproveita a nota da automação);
+5. consulta a Olist a cada 10 minutos e dá baixa local quando a conta estiver paga.
 
 O boleto usa a mesma conta a receber e pode oferecer Pix por QR Code ou copia e cola. Não devem ser criadas duas cobranças separadas.
 
+**Por que o pedido nasce em aberto:** com a automação "Emitir NFe ao aprovar o
+pedido" ligada, um pedido criado já aprovado ganha a nota cerca de 1 s depois,
+sem contas. Com nota gerada, a Olist recusa lançar as contas pelo pedido ("Não é
+possível lançar contas pois existe nota fiscal gerada para o pedido"); foi o que
+derrubou o checkout em 18/11/2026. Se a nota já existir, as contas são lançadas
+pela nota (`nota.fiscal.lancar.contas`).
+
 O pedido é concluído primeiro na Shopify para obter seu número definitivo. A
 inclusão pela API usa esse mesmo número e o mesmo nome da integração Shopify na
-Olist, impedindo que a recepção automática do e-commerce crie outra venda e
-outra NF-e para a mesma compra.
+Olist; com isso a recepção automática do e-commerce normalmente reconhece a
+venda e não cria outra. **Não é garantido:** a integração importa pedidos
+Shopify "pendentes" como "Em aberto" e, em 18/11/2026, criou cópias (pedidos
+728 e 730). A API não aceita vincular o pedido à integração (`id_ecommerce` da
+integração devolve o erro 31). Por isso a conciliação procura a cópia (mesmo
+número, em aberto, sem nota, sem conta e sem a marca "Pedido de franquia
+TudoPraPet" em `obs`) e a aponta na Revisão Olist; com
+`OLIST_CANCEL_IMPORTED_TWINS=true` ela cancela a cópia. A busca do pedido do
+site nunca reaproveita a cópia importada.
 
 Os itens do pedido e da NF-e usam o custo salvo em `product_costs`, capturado no
 snapshot do checkout. Quando o preço cobrado da franquia for maior que o custo,
@@ -41,6 +54,10 @@ npx supabase secrets set OLIST_SHOPIFY_ECOMMERCE_NAME="nome-exato-da-integracao-
 npx supabase secrets set OLIST_RESALE_NATURE_OPERATION_ID="id-revenda-na-olist"
 npx supabase secrets set OLIST_FINAL_CONSUMPTION_NATURE_OPERATION_ID="id-consumo-final-na-olist"
 ```
+
+Opcional: `OLIST_CANCEL_IMPORTED_TWINS="true"` faz a conciliação cancelar a
+cópia que a integração Shopify importar de um pedido de franquia. Desligado, a
+cópia só aparece na Revisão Olist para cancelamento manual.
 
 `OLIST_FRANCHISE_PAYMENT_METHOD` usa `boleto` por padrão. O valor é normalizado para minúsculas antes de ser enviado à Olist.
 
@@ -112,7 +129,12 @@ minutos, passa a encaminhar a conciliação com a credencial vigente da função
 
 Os IDs do pedido, da conta e da nota são salvos separadamente. Se a Olist ou a
 Shopify falhar no meio do processo, uma nova tentativa retoma os registros
-existentes em vez de gerar uma duplicidade. Falhas de geração, emissão ou
+existentes em vez de gerar uma duplicidade. Depois que a Shopify foi concluída
+e o pedido existe na Olist, uma falha na cobrança não devolve a sessão para
+"aguardando pagamento": a franqueada é avisada de que o pedido foi registrado,
+a página Pagamentos mostra "Boleto em geração" e a conciliação lança a conta,
+grava o boleto e segue para a NF-e (a Revisão Olist mostra "Franquia sem
+boleto" enquanto isso não acontece). Falhas de geração, emissão ou
 autorização da NF-e ficam registradas em `checkout_sessions.olist_invoice_status`
 e são retomadas pela conciliação, sem bloquear a conclusão da venda.
 Antes de criar pedido, cobrança, gerar ou emitir nota, o checkout obtém uma

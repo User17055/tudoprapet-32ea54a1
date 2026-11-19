@@ -44,6 +44,7 @@ const ISSUE_STYLES: Record<SalesFiscalIssue["issue"], { bar: string; chip: strin
   invoice: { bar: "bg-rose-500", chip: "bg-rose-50 text-rose-700 ring-rose-600/20", icon: FileWarning },
   settlement: { bar: "bg-amber-500", chip: "bg-amber-50 text-amber-800 ring-amber-600/20", icon: Landmark },
   receivable: { bar: "bg-violet-500", chip: "bg-violet-50 text-violet-700 ring-violet-600/20", icon: Receipt },
+  duplicate: { bar: "bg-orange-500", chip: "bg-orange-50 text-orange-800 ring-orange-600/20", icon: AlertTriangle },
 };
 
 /**
@@ -322,7 +323,7 @@ export default function OlistReviewTab() {
                   </Button>
                 ))}
                 <span className="mx-1 hidden w-px bg-border sm:block" aria-hidden="true" />
-                {(["all", "invoice", "settlement", "receivable"] as const).map((value) => (
+                {(["all", "invoice", "settlement", "receivable", "duplicate"] as const).map((value) => (
                   <Button
                     key={value}
                     size="sm"
