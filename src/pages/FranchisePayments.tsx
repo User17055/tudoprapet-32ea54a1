@@ -9,6 +9,7 @@ import { Header } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsFranchisee } from "@/hooks/useIsFranchisee";
 import { supabase } from "@/integrations/supabase/client";
+import { pendingPaymentLabel } from "@/lib/franchisePayments";
 
 interface FranchisePayment {
   id: string;
@@ -26,6 +27,7 @@ interface FranchisePayment {
   dueDate: string | null;
   paymentUrl: string | null;
   providerPaymentId: string | null;
+  receivablePending?: boolean;
   createdAt: string;
 }
 
@@ -152,7 +154,7 @@ export default function FranchisePayments() {
                               <a href={payment.paymentUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ver cobrança</a>
                             </Button>
                           ) : (
-                            <Button variant="outline" className="w-full" disabled>Link sendo gerado</Button>
+                            <Button variant="outline" className="w-full" disabled>{pendingPaymentLabel(payment)}</Button>
                           )}
                         </div>
                       </div>

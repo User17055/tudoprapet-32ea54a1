@@ -4,6 +4,7 @@ import {
   assertSingleOlistReceivable,
   ensureOlistOrderReceivable,
   findImportedOlistOrders,
+  findImportedTwinOrders,
   findOlistOrderByEcommerceNumber,
   getOlistOrderReconciliationDetails,
   getOlistReceivable,
@@ -386,6 +387,172 @@ async function issueCustomerInvoices(admin: SupabaseClient, token: string) {
   return summary;
 }
 
+/**
+ * Franquia com pedido na Olist e sem conta a receber: o checkout caiu depois
+ * de concluir a Shopify e criar o pedido (ex.: a automação gerou a nota antes
+ * do "lançar contas"). Lança a cobrança, grava o boleto e libera a NF-e.
+ * Usa a mesma trava do checkout, então nunca roda junto com uma nova tentativa
+ * da franqueada.
+ */
+async function retryFranchiseReceivables(admin: SupabaseClient, token: string) {
+  const summary = { checked: 0, created: 0, failed: 0 };
+  const recent = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: rows, error } = await admin.from("checkout_sessions")
+    .select("id,olist_order_id,olist_receivable_error,olist_receivable_checked_at")
+    .eq("customer_type", "franchise")
+    .in("status", ["awaiting_payment", "payment_processing"])
+    .not("olist_order_id", "is", null)
+    .is("olist_receivable_id", null)
+    .gte("created_at", reconciliationStart())
+    .or(`olist_receivable_checked_at.is.null,olist_receivable_checked_at.lt.${recent}`)
+    .order("olist_receivable_checked_at", { ascending: true, nullsFirst: true })
+    .limit(6);
+  if (error) {
+    console.error("Falha ao listar franquias sem cobrança:", error);
+    return summary;
+  }
+  for (const row of rows || []) {
+    if (outOfTime()) break;
+    // Erro que só se resolve com correção na Olist: uma tentativa por dia.
+    if (
+      needsAction(row.olist_receivable_error) && row.olist_receivable_checked_at &&
+      row.olist_receivable_checked_at > dayAgo()
+    ) continue;
+    const { data: claimed, error: claimError } = await admin.rpc(
+      "claim_olist_franchise_checkout",
+      { p_session_id: row.id },
+    );
+    if (claimError || !claimed) continue;
+    summary.checked++;
+    const orderId = String(row.olist_order_id);
+    try {
+      const reference = await ensureOlistOrderReceivable(orderId, token);
+      const receivable = await getOlistReceivable(reference.id, token);
+      const { data: payment, error: paymentLookupError } = await admin.from("payments")
+        .select("id")
+        .eq("checkout_session_id", row.id)
+        .eq("provider", "olist")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (paymentLookupError) throw paymentLookupError;
+      if (payment?.id) {
+        const { error: paymentError } = await admin.from("payments").update({
+          provider_customer_id: orderId,
+          provider_payment_id: receivable.id,
+          ...(receivable.boletoUrl ? { provider_payment_url: receivable.boletoUrl } : {}),
+          raw_status: receivable.status,
+          status: receivable.status === "pago" ? "received" : "pending",
+          ...(receivable.status === "pago"
+            ? { received_at: new Date().toISOString(), is_active: false }
+            : {}),
+        }).eq("id", payment.id);
+        if (paymentError) throw paymentError;
+      }
+      // credit_approved: a fila de NF-e logo abaixo aprova o pedido e emite a nota.
+      const { error: sessionError } = await admin.from("checkout_sessions").update({
+        status: "credit_approved",
+        olist_receivable_id: receivable.id,
+        olist_receivable_error: null,
+        olist_receivable_checked_at: new Date().toISOString(),
+      }).eq("id", row.id);
+      if (sessionError) throw sessionError;
+      summary.created++;
+    } catch (rowError) {
+      summary.failed++;
+      const message = rowError instanceof Error ? rowError.message : String(rowError);
+      console.error(`Cobrança da franquia ${row.id} segue pendente:`, message);
+      // Continua em processamento: a trava expira em 10 min e a próxima rodada tenta de novo.
+      await admin.from("checkout_sessions").update({
+        olist_receivable_error: message.slice(0, 2000),
+        olist_receivable_checked_at: new Date().toISOString(),
+      }).eq("id", row.id);
+    }
+  }
+  return summary;
+}
+
+// Intervalo entre as conferências de cópia importada: a importação da Shopify
+// pode chegar minutos ou horas depois do pedido do site.
+const TWIN_CHECK_SPACING_MS = [15 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
+
+/**
+ * Pedido de franquia duplicado pela importação da Shopify (mesmo número,
+ * em aberto, sem nota e sem conta). Só cancela com OLIST_CANCEL_IMPORTED_TWINS
+ * = "true"; sem isso, aponta na Revisão Olist para cancelar à mão.
+ */
+async function checkFranchiseImportedTwins(admin: SupabaseClient, token: string) {
+  const summary = { checked: 0, found: 0, cancelled: 0, failed: 0 };
+  const cancel = Deno.env.get("OLIST_CANCEL_IMPORTED_TWINS") === "true";
+  const now = Date.now();
+  const { data: rows, error } = await admin.from("checkout_sessions")
+    .select("id,created_at,olist_order_id,olist_twin_checks,olist_twin_checked_at,olist_twin_status")
+    .eq("customer_type", "franchise")
+    .not("olist_order_id", "is", null)
+    .gte("created_at", new Date(now - 14 * 24 * 60 * 60_000).toISOString())
+    .lt("created_at", new Date(now - TWIN_CHECK_SPACING_MS[0]).toISOString())
+    .or(`olist_twin_checks.lt.${TWIN_CHECK_SPACING_MS.length},olist_twin_status.eq.found`)
+    .order("olist_twin_checked_at", { ascending: true, nullsFirst: true })
+    .limit(10);
+  if (error) {
+    console.error("Falha ao listar franquias para conferir duplicidade:", error);
+    return summary;
+  }
+  for (const row of rows || []) {
+    if (outOfTime() || summary.checked >= 3) break;
+    const checks = Number(row.olist_twin_checks) || 0;
+    const spacing = TWIN_CHECK_SPACING_MS[Math.min(checks, TWIN_CHECK_SPACING_MS.length - 1)];
+    const last = row.olist_twin_checked_at ? Date.parse(row.olist_twin_checked_at) : 0;
+    if (checks > 0 && now - last < spacing) continue;
+    // Fora das conferências normais, só a cópia apontada e não cancelada volta.
+    if (checks >= TWIN_CHECK_SPACING_MS.length && row.olist_twin_status !== "found") continue;
+    summary.checked++;
+    try {
+      const details = await getOlistOrderReconciliationDetails(String(row.olist_order_id), token);
+      if (!details.externalReference) throw new Error("Pedido da Olist sem número de e-commerce");
+      const result = await findImportedTwinOrders(
+        details.externalReference,
+        String(row.olist_order_id),
+        token,
+        cancel,
+      );
+      summary.found += result.twins.length;
+      summary.cancelled += result.cancelled.length;
+      const pending = result.twins.filter((twin) => !result.cancelled.includes(twin.id));
+      const status = pending.length
+        ? "found"
+        : result.cancelled.length
+        ? "cancelled"
+        : row.olist_twin_status === "found"
+        ? "resolved"
+        : row.olist_twin_status;
+      if (result.twins.length) {
+        console.warn(
+          `Pedido ${details.number} da franquia duplicado pela importação Shopify:`,
+          result.twins.map((twin) => twin.number).join(", "),
+          cancel ? "(cancelado)" : "(apontado; cancelamento automático desligado)",
+        );
+      }
+      await admin.from("checkout_sessions").update({
+        olist_twin_checks: checks + 1,
+        olist_twin_checked_at: new Date().toISOString(),
+        olist_twin_status: status ?? null,
+        ...(result.twins.length
+          ? { olist_twin_order_numbers: result.twins.map((twin) => twin.number).join(", ") }
+          : {}),
+      }).eq("id", row.id);
+    } catch (rowError) {
+      summary.failed++;
+      console.error(`Falha ao conferir duplicidade da sessão ${row.id}:`, rowError);
+      await admin.from("checkout_sessions").update({
+        olist_twin_checks: checks + 1,
+        olist_twin_checked_at: new Date().toISOString(),
+      }).eq("id", row.id);
+    }
+  }
+  return summary;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Método não permitido", 405);
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -463,6 +630,8 @@ Deno.serve(async (req) => {
         console.error(`Falha ao conciliar conta Olist ${row.provider_payment_id}:`, entryError);
       }
     }
+    // Antes da fila de NF-e: a franquia que ganhar a cobrança aqui já entra nela.
+    const franchiseReceivables = await retryFranchiseReceivables(admin, token);
     // Reprocessa NF-e pendentes/rejeitadas de pedidos já concluídos na Shopify.
     // Reaproveita a nota salva; só gera nota quando o pedido ainda não tem uma.
     const invoiceSummary = { checked: 0, issued: 0, pending: 0, rejected: 0 };
@@ -497,6 +666,8 @@ Deno.serve(async (req) => {
       const outcome = await issueFranchiseInvoiceSafely({
         orderId: String(row.olist_order_id),
         token,
+        // Pedido de franquia nasce em aberto e só é aprovado depois da cobrança.
+        approveOrder: true,
         savedInvoice: row.olist_invoice_id
           ? { id: String(row.olist_invoice_id), number: String(row.olist_invoice_number || ""), issued: false }
           : null,
@@ -522,6 +693,7 @@ Deno.serve(async (req) => {
 
     const asaasBridge = await reconcileAsaasPayments(admin, token);
     const customerInvoices = await issueCustomerInvoices(admin, token);
+    const franchiseTwins = await checkFranchiseImportedTwins(admin, token);
     scheduleSalesSync(serviceRole);
     const result = {
       // Mantém o contrato anterior para quem já monitora a conciliação de
@@ -534,6 +706,8 @@ Deno.serve(async (req) => {
       invoices: invoiceSummary,
       asaasBridge,
       customerInvoices,
+      franchiseReceivables,
+      franchiseTwins,
     };
     // Última execução, para o painel de automações do admin.
     const { error: stateError } = await admin.from("olist_sync_state").upsert({

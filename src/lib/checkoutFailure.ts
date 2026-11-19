@@ -4,8 +4,11 @@
 const PATTERNS: Array<[RegExp, string]> = [
   [/OLIST_API_TOKEN|Olist n[aã]o configurada/i, "Integração da Olist sem token configurado no Supabase"],
   [/schema cache|olist_(order|receivable|invoice)|provider_payment_url/i, "Migration da integração Olist ainda não aplicada"],
-  [/nota fiscal|SEFAZ|certificado/i, "A Olist não conseguiu autorizar a nota fiscal"],
-  [/conta a receber|cobrança/i, "A Olist não conseguiu gerar a conta a receber"],
+  // Antes da regra de nota: "não é possível lançar contas pois existe nota
+  // fiscal gerada" é falha da cobrança, não da nota.
+  [/limite de chamadas|api bloqueada/i, "A Olist estava ocupada (limite de chamadas da API) — vale tentar de novo em 1 minuto"],
+  [/lan[cç]ar contas|conta a receber|cobran[cç]a/i, "A Olist não conseguiu gerar a conta a receber (boleto)"],
+  [/nota fiscal|NF-e|CFOP|SEFAZ|certificado/i, "A Olist não conseguiu autorizar a nota fiscal"],
   [/Olist/i, "A Olist recusou ou não concluiu a operação"],
   // Casos específicos primeiro: eles ficariam escondidos atrás de "cliente".
   [

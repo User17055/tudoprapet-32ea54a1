@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
 
     const { data: sessions, error: sessionsError } = await admin.from("checkout_sessions")
       .select(
-        "id,created_at,status,currency,total,invoice_purpose,franchise_payment_term_days,franchise_payment_schedule_type,franchise_payment_due_day,olist_order_id,olist_order_number,olist_invoice_id,olist_invoice_number,olist_invoice_url",
+        "id,created_at,status,currency,total,invoice_purpose,franchise_payment_term_days,franchise_payment_schedule_type,franchise_payment_due_day,olist_order_id,olist_order_number,olist_receivable_id,olist_invoice_id,olist_invoice_number,olist_invoice_url",
       )
       .eq("user_id", auth.user.id)
       .eq("customer_type", "franchise")
@@ -100,6 +100,9 @@ Deno.serve(async (req) => {
         dueDate: payment?.due_date || null,
         paymentUrl: payment?.provider_payment_url || null,
         providerPaymentId: payment?.provider_payment_id || null,
+        // Pedido na Olist sem conta a receber: a conciliação ainda vai lançar o boleto.
+        receivablePending: Boolean(session.olist_order_id && !session.olist_receivable_id) &&
+          !["cancelled", "expired", "failed"].includes(String(session.status)),
         createdAt: String(payment?.created_at || session.created_at),
       }];
     });

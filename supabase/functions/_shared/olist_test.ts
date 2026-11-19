@@ -317,7 +317,7 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
     customer: {
       name: "Franquia Teste",
       tradeName: "Franquia Teste Centro",
-      stateRegistration: "123456789",
+      stateRegistration: "123456789012",
       cpfCnpj: "12345678000199",
       email: "franquia@teste.com",
       phone: "18999999999",
@@ -340,9 +340,9 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   const order = buildOlistFranchiseOrder(input) as any;
   assertEquals(order.pedido.outras_despesas, 2);
   assertEquals(order.pedido.cliente.nome_fantasia, "Franquia Teste Centro");
-  assertEquals(order.pedido.cliente.ie, "123456789");
+  assertEquals(order.pedido.cliente.ie, "123456789012");
   assertEquals(order.pedido.itens[0].item.codigo, "RACAO-1");
-  assertEquals(order.pedido.situacao, "aprovado");
+  assertEquals(order.pedido.situacao, "aberto");
   assertEquals(order.pedido.id_natureza_operacao, "12345");
   assertEquals(order.pedido.ecommerce, "Shopify TudoPraPet");
   assertEquals(order.pedido.obs.includes("revenda"), true);
@@ -350,7 +350,7 @@ Deno.test("pedido de franquia leva taxa e conta com vencimento integral", () => 
   assertEquals(order.pedido.parcelas[0].parcela.valor, 62);
   const receivable = buildOlistReceivable(input, "ABC123456") as any;
   assertEquals(receivable.conta.valor, 62);
-  assertEquals(receivable.conta.cliente.ie, "123456789");
+  assertEquals(receivable.conta.cliente.ie, "123456789012");
   assertEquals(receivable.conta.vencimento, "02/10/2026");
 });
 
