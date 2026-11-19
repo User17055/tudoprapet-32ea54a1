@@ -5,6 +5,13 @@ import { requireUser } from "../_shared/auth.ts";
 
 const PRICE_ID = "price_1TKM1SRPcks7vOIJJByCtDwR";
 
+const ALLOWED_ORIGINS = ["https://tudoprapet.com.br", "https://www.tudoprapet.com.br", "https://tudoprapet.lovable.app", "https://id-preview--ead90f96-0fcc-495e-b899-82169728ce1f.lovable.app"];
+function safeOrigin(req: Request): string {
+  const o = req.headers.get("origin") || "";
+  if (ALLOWED_ORIGINS.includes(o)) return o;
+  return "https://tudoprapet.com.br";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -46,7 +53,7 @@ serve(async (req) => {
       }
     }
 
-    const origin = req.headers.get("origin") || "https://tudoprapet.lovable.app";
+    const origin = safeOrigin(req);
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

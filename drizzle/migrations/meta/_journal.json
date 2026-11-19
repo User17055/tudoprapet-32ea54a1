@@ -127,6 +127,13 @@
       "when": 1795108831537,
       "tag": "0017_franchise_receivable_retry",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795111161514,
+      "tag": "0018_admin_grant_requires_confirmed_email",
+      "breakpoints": true
     }
   ]
 }

@@ -76,6 +76,7 @@ export async function handleSpecialPriceCheckout(
     });
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user?.email) return errorResponse("Não autorizado", 401);
+    if (!user.email_confirmed_at) return errorResponse("Confirme seu e-mail para continuar", 403);
 
     const checkoutUser: CheckoutUser = { id: user.id, email: user.email };
     const normalizedEmail = user.email.toLowerCase();
