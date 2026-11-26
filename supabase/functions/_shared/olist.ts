@@ -1128,6 +1128,131 @@ export async function fetchOlistCostBySku(sku: string, token: string): Promise<O
   return findExactOlistCost(payload, sku);
 }
 
+/** Produto do catálogo da Olist, como vem em `produtos.pesquisa` (só leitura). */
+export interface OlistCatalogProduct {
+  id: string;
+  sku: string;
+  name: string;
+  price: number | null;
+  promoPrice: number | null;
+  cost: number | null;
+  status: string | null;
+  variationType: string | null;
+}
+
+export interface OlistCatalogPage {
+  page: number;
+  totalPages: number;
+  products: OlistCatalogProduct[];
+}
+
+function olistMoney(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? roundMoney(number) : null;
+}
+
+export function parseOlistCatalogProduct(raw: any): OlistCatalogProduct | null {
+  const id = normalizeOlistId(raw?.id);
+  if (!id) return null;
+  return {
+    id,
+    sku: String(raw?.codigo ?? "").trim(),
+    name: String(raw?.nome ?? "").trim(),
+    price: olistMoney(raw?.preco),
+    promoPrice: olistMoney(raw?.preco_promocional),
+    cost: olistMoney(raw?.preco_custo),
+    status: raw?.situacao ? String(raw.situacao) : null,
+    variationType: raw?.tipoVariacao ? String(raw.tipoVariacao) : null,
+  };
+}
+
+/**
+ * Uma página do catálogo inteiro (pesquisa sem termo: ativos e inativos, 100
+ * por página). Só leitura: o site nunca grava na Olist.
+ */
+export async function fetchOlistCatalogPage(token: string, page: number): Promise<OlistCatalogPage> {
+  const payload = await olistPost(OLIST_PRODUCTS_SEARCH_URL, token, {
+    pesquisa: "",
+    pagina: String(page),
+  });
+  if (payload?.retorno?.status !== "OK") return { page, totalPages: page - 1, products: [] };
+  const products = (payload.retorno.produtos ?? [])
+    .map((entry: any) => parseOlistCatalogProduct(entry?.produto ?? entry))
+    .filter((product: OlistCatalogProduct | null): product is OlistCatalogProduct => product !== null);
+  return { page, totalPages: Math.max(page, Number(payload.retorno.numero_paginas) || page), products };
+}
+
+export interface OlistPriceList {
+  id: string;
+  name: string;
+  adjustmentPercent: number;
+}
+
+export interface OlistPriceListException {
+  productId: string;
+  price: number | null;
+  promoPrice: number | null;
+}
+
+function olistRecords(payload: any): any[] {
+  const raw = payload?.retorno?.registros;
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return list.map((entry: any) => entry?.registro ?? entry);
+}
+
+/** Listas de preço da Olist (ex.: Franqueados). Só leitura. */
+export async function fetchOlistPriceLists(token: string): Promise<OlistPriceList[]> {
+  const lists: OlistPriceList[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const payload = await olistPost(
+      "https://api.tiny.com.br/api2/listas.precos.pesquisa.php",
+      token,
+      { pesquisa: "", pagina: String(page) },
+    );
+    if (payload?.retorno?.status !== "OK") break;
+    for (const record of olistRecords(payload)) {
+      const id = normalizeOlistId(record?.id);
+      if (!id) continue;
+      const percent = Number(String(record?.acrescimo_desconto ?? "0").replace(",", "."));
+      lists.push({
+        id,
+        name: String(record?.descricao ?? "").trim(),
+        adjustmentPercent: Number.isFinite(percent) ? percent : 0,
+      });
+    }
+    if (page >= (Number(payload.retorno.numero_paginas) || 1)) break;
+  }
+  return lists;
+}
+
+/** Exceções (preço próprio por produto) de uma lista de preço. Só leitura. */
+export async function fetchOlistPriceListExceptions(
+  token: string,
+  listId: string,
+): Promise<OlistPriceListException[]> {
+  const exceptions: OlistPriceListException[] = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const payload = await olistPost(
+      "https://api.tiny.com.br/api2/listas.precos.excecoes.php",
+      token,
+      { idListaPreco: listId, pagina: String(page) },
+    );
+    if (payload?.retorno?.status !== "OK") break;
+    for (const record of olistRecords(payload)) {
+      const productId = normalizeOlistId(record?.id_produto);
+      if (!productId) continue;
+      exceptions.push({
+        productId,
+        price: olistMoney(record?.preco),
+        promoPrice: olistMoney(record?.preco_promocional),
+      });
+    }
+    if (page >= (Number(payload.retorno.numero_paginas) || 1)) break;
+  }
+  return exceptions;
+}
+
 export type FranchiseInvoiceStatus = "issued" | "pending" | "rejected";
 
 export interface FranchiseInvoiceOutcome {

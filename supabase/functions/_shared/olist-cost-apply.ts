@@ -8,8 +8,9 @@ import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "./subscrib
  * franquia (custo buscado na hora) e pela revisão de preço:
  *  - product_costs + histórico quando o custo muda;
  *  - franquia: preço de franquia = custo (sobe e desce junto com ele);
- *  - assinante: custo + margem da categoria mais específica;
- *  - remove o override legado em customer_prices.
+ *  - assinante: custo + margem da categoria mais específica.
+ * Não mexe em customer_prices ("Valor do Cliente"): é preço definido à mão no
+ * admin, e a sincronização apagava sem avisar (decisão de 26/11/2026).
  */
 
 export interface SubscriberMarginRules {
@@ -61,6 +62,32 @@ export interface AppliedCost {
   packageWeightKg: number | null;
 }
 
+/**
+ * Preços que dependem do custo, sem gravar nada (usado também na simulação):
+ *  - franquia paga custo, sem margem: acompanha o custo para cima e para baixo
+ *    (decisão de 12/11/2026 — nenhum produto é vendido às franquias acima do custo);
+ *  - assinante: custo + margem da categoria (ração considera o peso do pacote).
+ */
+export function derivedPricesFromCost(
+  productId: string,
+  cost: number,
+  packageWeightKg: number | null,
+  rules: SubscriberMarginRules,
+): { franchisePrice: number; subscriberPrice: number; subscriberMarginPercent: number } {
+  const subscriberMarginPercent = subscriberMarginWithFeedRule(
+    productId,
+    packageWeightKg,
+    rules.categories,
+    rules.links,
+    rules.rules,
+  );
+  return {
+    franchisePrice: cost,
+    subscriberPrice: priceFromCostAndMargin(cost, subscriberMarginPercent),
+    subscriberMarginPercent,
+  };
+}
+
 export async function applyProductCost(
   admin: SupabaseClient,
   item: { productId: string; variantId: string; sku: string; weightKg?: number | null },
@@ -108,18 +135,12 @@ export async function applyProductCost(
     if (historyError) throw historyError;
   }
 
-  // Franquia paga custo, sem margem: o preço de franquia acompanha o custo
-  // para cima e para baixo (decisão de 12/11/2026 — nenhum produto é vendido
-  // às franquias acima do custo).
-  const franchisePrice = cost;
-  const subscriberMarginPercent = subscriberMarginWithFeedRule(
+  const { franchisePrice, subscriberPrice, subscriberMarginPercent } = derivedPricesFromCost(
     item.productId,
+    cost,
     packageWeightKg,
-    rules.categories,
-    rules.links,
-    rules.rules,
+    rules,
   );
-  const subscriberPrice = priceFromCostAndMargin(cost, subscriberMarginPercent);
   const { error: franchiseError } = await admin.from("franchise_prices").upsert({
     shopify_product_id: item.productId,
     shopify_variant_id: item.variantId,
@@ -133,14 +154,6 @@ export async function applyProductCost(
     subscriber_price: subscriberPrice,
   }, { onConflict: "shopify_variant_id" });
   if (subscriberError) throw subscriberError;
-
-  // Versões anteriores da integração gravavam o preço calculado como preço
-  // regular. Remover esse override devolve a venda normal para a Shopify.
-  const { error: legacyCustomerPriceError } = await admin
-    .from("customer_prices")
-    .delete()
-    .eq("shopify_variant_id", item.variantId);
-  if (legacyCustomerPriceError) throw legacyCustomerPriceError;
 
   return {
     cost,

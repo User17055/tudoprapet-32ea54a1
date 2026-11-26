@@ -16,6 +16,41 @@ import { formatPercentage, percentageOverCost, priceRisk } from "@/lib/pricePerc
 import { fetchAllShopifyProducts, type ShopifyProduct } from "@/lib/shopify";
 import { isMissingValue, isSaleAtOrBelowCost, isSubscriberPriceNotVisible, matchesMissingValueFilter, type MissingValueFilter } from "@/lib/valueCompleteness";
 import { parsePackageWeightKg } from "@/lib/packageWeight";
+import { Checkbox } from "@/components/ui/checkbox";
+import { OlistCatalogPanel } from "@/components/admin/values/OlistCatalogPanel";
+import { OlistApplyDialog, type ApplyTarget } from "@/components/admin/values/OlistApplyDialog";
+import {
+  fetchOlistCatalogData,
+  fetchPriceDates,
+  fetchPriceValueHistory,
+  type OlistCatalogData,
+  type PriceDates,
+  type PriceValueHistoryRow,
+} from "@/lib/olistCatalogData";
+import {
+  categoryWithDescendants,
+  changedSince,
+  differentPrice,
+  isStale,
+  listRole,
+  matchesOlistFilter,
+  olistListPrice,
+  olistSalePrice,
+  olistSkuKey,
+  shortDate,
+  shortDateTime,
+  type OlistFilter,
+  type OlistListException,
+  type OlistProduct,
+  type RowComparison,
+} from "@/lib/olistComparison";
+import {
+  fetchProductBrandRows,
+  fetchProductCategoryRows,
+  fetchStoreBrands,
+  fetchStoreCategories,
+  type StoreCategory,
+} from "@/lib/catalogData";
 
 type SubscriberPrice = {
   shopify_variant_id: string;
@@ -38,6 +73,7 @@ type ProductCost = {
   previous_cost: number | null;
   cost_changed_at: string | null;
   synced_at: string;
+  created_at?: string | null;
 };
 
 type ProductCostRow = Omit<ProductCost, "cost" | "previous_cost"> & {
@@ -126,6 +162,35 @@ function PriceMetrics({
   );
 }
 
+/** "alterado" = o valor mudou de verdade; "conferido" = última leitura na Olist. */
+function ValueDates({ changedAt, checkedAt }: { changedAt: string | null; checkedAt?: string | null }) {
+  if (!changedAt && !checkedAt) return null;
+  return (
+    <p className="mt-0.5 text-[11px] text-muted-foreground">
+      {changedAt ? `alterado em ${shortDate(changedAt)}` : "sem data de alteração"}
+      {checkedAt ? ` · conferido ${shortDateTime(checkedAt)}` : ""}
+    </p>
+  );
+}
+
+/** Valor da Olist ao lado do valor do site; destaca quando são diferentes. */
+function OlistReference({ label, value, site, missing = null }: {
+  label: string;
+  value: number | null;
+  site: number | null;
+  missing?: string | null;
+}) {
+  if (value === null) {
+    return missing ? <p className="mt-0.5 text-[11px] text-amber-700">{missing}</p> : null;
+  }
+  const different = differentPrice(site, value) || site === null;
+  return (
+    <p className={`mt-0.5 text-[11px] ${different ? "font-medium text-amber-700" : "text-muted-foreground"}`}>
+      {label}: {money(value)}{different ? " · diferente" : ""}
+    </p>
+  );
+}
+
 const normalizedText = (value: string) => value
   .normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "")
@@ -162,8 +227,68 @@ export default function ValuesTab() {
   const [details, setDetails] = useState<PriceDetails | null>(null);
   const [costHistory, setCostHistory] = useState<CostHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [olistData, setOlistData] = useState<OlistCatalogData | null>(null);
+  const [olistUnavailable, setOlistUnavailable] = useState(false);
+  const [priceDates, setPriceDates] = useState<{ franchise: Map<string, PriceDates>; subscriber: Map<string, PriceDates> }>(
+    () => ({ franchise: new Map(), subscriber: new Map() }),
+  );
+  const [categories, setCategories] = useState<StoreCategory[]>([]);
+  const [categoryLinks, setCategoryLinks] = useState<Map<string, string[]>>(() => new Map());
+  const [brandByProduct, setBrandByProduct] = useState<Map<string, string>>(() => new Map());
+  const [olistFilter, setOlistFilter] = useState<OlistFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [brandFilter, setBrandFilter] = useState("all");
+  const [staleDays, setStaleDays] = useState("");
+  const [changedFrom, setChangedFrom] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [applyTargets, setApplyTargets] = useState<ApplyTarget[] | null>(null);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [valueHistory, setValueHistory] = useState<PriceValueHistoryRow[]>([]);
   const bulkSyncingRef = useRef(false);
   const reloadTimerRef = useRef<number | null>(null);
+
+  // Retrato da Olist e datas novas: falha aqui (ex.: antes da publicação da
+  // migration de 26/11/2026) não derruba a tela, só esconde o que é novo.
+  const loadOlist = async () => {
+    try {
+      setOlistData(await fetchOlistCatalogData());
+      setOlistUnavailable(false);
+    } catch (error) {
+      console.error("[Valores] retrato da Olist:", error);
+      setOlistUnavailable(true);
+    }
+    try {
+      setPriceDates(await fetchPriceDates());
+    } catch (error) {
+      console.error("[Valores] datas de mudança:", error);
+    }
+  };
+
+  const loadTaxonomy = async () => {
+    try {
+      const [storeCategories, links, brands, brandLinks] = await Promise.all([
+        fetchStoreCategories(),
+        fetchProductCategoryRows(),
+        fetchStoreBrands(),
+        fetchProductBrandRows(),
+      ]);
+      setCategories(storeCategories);
+      const byProduct = new Map<string, string[]>();
+      for (const link of links) byProduct.set(link.shopify_product_id, [...(byProduct.get(link.shopify_product_id) ?? []), link.category_id]);
+      setCategoryLinks(byProduct);
+      const brandName = new Map(brands.map((brand) => [brand.id, brand.name]));
+      setBrandByProduct(new Map(brandLinks
+        .filter((link) => link.brand_id && brandName.has(link.brand_id))
+        .map((link) => [link.shopify_product_id, brandName.get(link.brand_id!)!])));
+    } catch (error) {
+      console.error("[Valores] categorias e marcas:", error);
+    }
+  };
+
+  const setCatalogBusyState = (busy: boolean) => {
+    bulkSyncingRef.current = busy;
+    setCatalogBusy(busy);
+  };
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -186,7 +311,7 @@ export default function ValuesTab() {
         ),
         fetchAllRows<ProductCostRow>(
           "product_costs",
-          "shopify_variant_id,cost,previous_cost,cost_changed_at,synced_at",
+          "shopify_variant_id,cost,previous_cost,cost_changed_at,synced_at,created_at",
           { orderBy: "shopify_variant_id" },
         ),
         fetchAllCustomerPrices(),
@@ -210,10 +335,12 @@ export default function ValuesTab() {
 
   useEffect(() => {
     load();
+    void loadOlist();
+    void loadTaxonomy();
     const scheduleReload = () => {
       if (bulkSyncingRef.current) return;
       if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current);
-      reloadTimerRef.current = window.setTimeout(() => { void load(true); }, 500);
+      reloadTimerRef.current = window.setTimeout(() => { void load(true); void loadOlist(); }, 500);
     };
     const channel = supabase
       .channel("admin-values")
@@ -237,7 +364,11 @@ export default function ValuesTab() {
     const { variantId, ...dialogDetails } = value;
     setDetails(dialogDetails);
     setCostHistory([]);
+    setValueHistory([]);
     setHistoryLoading(true);
+    fetchPriceValueHistory(variantId)
+      .then(setValueHistory)
+      .catch((error) => console.error("[Valores] histórico de franquia/assinante:", error));
     const { data, error } = await supabase
       .from("product_cost_history")
       .select("id,old_cost,new_cost,changed_at,source")
@@ -273,6 +404,93 @@ export default function ValuesTab() {
   const rowsWithSku = useMemo(
     () => rows.filter((row) => row.variant.sku?.trim()),
     [rows],
+  );
+
+  // ---- Comparação com o retrato da Olist (só leitura) ----
+  const olistBySku = useMemo(() => {
+    const map = new Map<string, OlistProduct>();
+    for (const product of olistData?.products ?? []) {
+      if (product.skuKey && !map.has(product.skuKey)) map.set(product.skuKey, product);
+    }
+    return map;
+  }, [olistData]);
+
+  const olistLists = useMemo(() => {
+    const lists = olistData?.lists ?? [];
+    const exceptions = new Map<string, OlistListException>();
+    for (const entry of olistData?.exceptions ?? []) exceptions.set(`${entry.listId}|${entry.productId}`, entry);
+    return {
+      franchise: lists.find((list) => listRole(list) === "franchise") ?? null,
+      subscriber: lists.find((list) => listRole(list) === "subscriber") ?? null,
+      exceptions,
+    };
+  }, [olistData]);
+
+  const comparisons = useMemo(() => {
+    const map = new Map<string, RowComparison>();
+    for (const row of rows) {
+      const sku = row.variant.sku?.trim() ?? "";
+      const olist = sku && olistData ? olistBySku.get(olistSkuKey(sku)) ?? null : null;
+      const listPrice = (list: typeof olistLists.franchise) =>
+        list && olist ? olistListPrice(list, olist, olistLists.exceptions.get(`${list.id}|${olist.id}`)) : null;
+      const shopify = Number(row.variant.price.amount);
+      map.set(row.variant.id, {
+        hasSku: Boolean(sku),
+        olist,
+        siteCost: costMap.get(row.variant.id)?.cost ?? null,
+        siteSale: customerMap.get(row.variant.id) ?? (isMissingValue(shopify) ? null : shopify),
+        siteFranchise: franchiseMap.get(row.variant.id)?.price ?? null,
+        siteSubscriber: subscriberMap.get(row.variant.id) ?? null,
+        franchiseList: listPrice(olistLists.franchise),
+        subscriberList: listPrice(olistLists.subscriber),
+      });
+    }
+    return map;
+  }, [rows, olistData, olistBySku, olistLists, costMap, customerMap, franchiseMap, subscriberMap]);
+
+  const olistCounts = useMemo(() => {
+    const filters: OlistFilter[] = ["cost_diff", "sale_diff", "franchise_list_diff", "subscriber_list_diff", "not_in_olist", "olist_no_cost", "no_sku"];
+    const counts = Object.fromEntries(filters.map((filter) => [filter, 0])) as Record<OlistFilter, number>;
+    for (const comparison of comparisons.values()) {
+      for (const filter of filters) if (matchesOlistFilter(comparison, filter)) counts[filter] += 1;
+    }
+    return counts;
+  }, [comparisons]);
+
+  const selectedCategoryIds = useMemo(
+    () => (categoryFilter === "all" ? null : categoryWithDescendants(categoryFilter, categories)),
+    [categoryFilter, categories],
+  );
+
+  const categoryOptions = useMemo(() => {
+    const byId = new Map(categories.map((category) => [category.id, category]));
+    const path = (category: StoreCategory) => {
+      const names = [category.name];
+      let parent = category.parent_id ? byId.get(category.parent_id) : undefined;
+      const seen = new Set<string>([category.id]);
+      while (parent && !seen.has(parent.id)) {
+        seen.add(parent.id);
+        names.unshift(parent.name);
+        parent = parent.parent_id ? byId.get(parent.parent_id) : undefined;
+      }
+      return names.join(" › ");
+    };
+    return categories.map((category) => ({ id: category.id, label: path(category) }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [categories]);
+
+  const brandOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const product of products) {
+      const brand = brandByProduct.get(product.node.id) || product.node.vendor?.trim();
+      if (brand) names.add(brand);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [products, brandByProduct]);
+
+  const vendorByProduct = useMemo(
+    () => new Map(products.map((product) => [product.node.id, product.node.vendor?.trim() ?? ""])),
+    [products],
   );
 
   const syncFromOlist = async (items: OlistSyncItem[], bulk = false) => {
@@ -392,6 +610,22 @@ export default function ValuesTab() {
         franchise: franchiseMap.get(row.variant.id)?.price,
       };
       if (!matchesMissingValueFilter(values, valueFilter)) return false;
+      const comparison = comparisons.get(row.variant.id);
+      if (olistFilter !== "all" && (!comparison || !matchesOlistFilter(comparison, olistFilter))) return false;
+      if (selectedCategoryIds && !(categoryLinks.get(row.productId) ?? []).some((id) => selectedCategoryIds.has(id))) return false;
+      if (brandFilter !== "all" && (brandByProduct.get(row.productId) || vendorByProduct.get(row.productId)) !== brandFilter) return false;
+      const days = Number(staleDays.replace(",", "."));
+      if (staleDays.trim() && Number.isFinite(days) && days >= 0 && !isStale(costMap.get(row.variant.id)?.synced_at, days)) return false;
+      if (changedFrom) {
+        const cost = costMap.get(row.variant.id);
+        const franchiseDates = priceDates.franchise.get(row.variant.id);
+        const subscriberDates = priceDates.subscriber.get(row.variant.id);
+        if (!changedSince([
+          cost?.cost_changed_at ?? cost?.created_at,
+          franchiseDates?.changedAt ?? franchiseDates?.createdAt,
+          subscriberDates?.changedAt ?? subscriberDates?.createdAt,
+        ], changedFrom)) return false;
+      }
       if (marginSource === "all") return true;
       const margin = percentageOverCost(values[marginSource], values.cost);
       if (margin === null) return false;
@@ -400,7 +634,9 @@ export default function ValuesTab() {
       return (minimum === null || !Number.isFinite(minimum) || margin >= minimum)
         && (maximum === null || !Number.isFinite(maximum) || margin <= maximum);
     });
-  }, [query, rows, valueFilter, marginSource, minMargin, maxMargin, costMap, franchiseMap, subscriberMap]);
+  }, [query, rows, valueFilter, marginSource, minMargin, maxMargin, costMap, franchiseMap, subscriberMap,
+    comparisons, olistFilter, selectedCategoryIds, categoryLinks, brandFilter, brandByProduct, vendorByProduct,
+    staleDays, changedFrom, priceDates]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / VALUES_PER_PAGE));
   const paginatedRows = useMemo(
@@ -408,7 +644,47 @@ export default function ValuesTab() {
     [currentPage, filteredRows],
   );
 
-  useEffect(() => { setCurrentPage(1); }, [query, valueFilter, marginSource, minMargin, maxMargin]);
+  useEffect(() => { setCurrentPage(1); }, [query, valueFilter, marginSource, minMargin, maxMargin,
+    olistFilter, categoryFilter, brandFilter, staleDays, changedFrom]);
+
+  // ---- Seleção livre (sobrevive à troca de página e de filtro) ----
+  const toggleSelected = (variantIds: string[], checked: boolean) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const id of variantIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+  const pageIds = paginatedRows.map((row) => row.variant.id);
+  const pageSelectedCount = pageIds.filter((id) => selected.has(id)).length;
+  const pageCheckState: boolean | "indeterminate" =
+    pageIds.length > 0 && pageSelectedCount === pageIds.length ? true : pageSelectedCount > 0 ? "indeterminate" : false;
+  const selectedRows = rows.filter((row) => selected.has(row.variant.id));
+  const selectedWithoutSku = selectedRows.filter((row) => !row.variant.sku?.trim()).length;
+
+  const toApplyTarget = (row: (typeof rows)[number]): ApplyTarget => {
+    const shopify = Number(row.variant.price.amount);
+    return {
+      productId: row.productId,
+      variantId: row.variant.id,
+      sku: row.variant.sku!.trim(),
+      weightKg: row.weightKg,
+      title: `${row.productTitle}${row.variant.title && row.variant.title !== "Default Title" ? ` · ${row.variant.title}` : ""}`,
+      salePrice: customerMap.get(row.variant.id) ?? (isMissingValue(shopify) ? null : shopify),
+    };
+  };
+
+  const openApply = () => {
+    const targets = selectedRows.filter((row) => row.variant.sku?.trim()).map(toApplyTarget);
+    if (!targets.length) {
+      toast.error("Selecione produtos com SKU.");
+      return;
+    }
+    setApplyTargets(targets);
+  };
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
@@ -510,6 +786,14 @@ export default function ValuesTab() {
 
       <SubscriberCategoryMarginsCard onPricesChanged={() => void load(true)} />
 
+      <OlistCatalogPanel
+        data={olistData}
+        unavailable={olistUnavailable}
+        busy={catalogBusy || bulkSyncingOlist}
+        onBusyChange={setCatalogBusyState}
+        onReloaded={loadOlist}
+      />
+
       {olistProgress && (
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-2 flex items-center justify-between gap-3 text-sm">
@@ -548,10 +832,13 @@ export default function ValuesTab() {
             </CardDescription>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:w-auto 2xl:flex-nowrap">
-            <Button variant="outline" onClick={syncAllCosts} disabled={bulkSyncingOlist || loading}>
-              {bulkSyncingOlist ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-              Atualizar todos pela Olist ({rowsWithSku.length})
-            </Button>
+            {/* Caminho antigo (1 consulta por SKU, ~27 min) só enquanto o retrato não existe. */}
+            {olistUnavailable && (
+              <Button variant="outline" onClick={syncAllCosts} disabled={bulkSyncingOlist || loading}>
+                {bulkSyncingOlist ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Atualizar todos pela Olist ({rowsWithSku.length})
+              </Button>
+            )}
             <Select value={valueFilter} onValueChange={(value) => setValueFilter(value as MissingValueFilter)}>
               <SelectTrigger className="w-full sm:w-56" aria-label="Filtrar pendências de valores">
                 <SelectValue />
@@ -586,6 +873,70 @@ export default function ValuesTab() {
             </div>
           </div>
         </CardHeader>
+        <div className="flex flex-col gap-2 border-t px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Select value={olistFilter} onValueChange={(value) => setOlistFilter(value as OlistFilter)}>
+            <SelectTrigger className="w-full sm:w-64" aria-label="Comparar com a Olist"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Comparação com a Olist: todos</SelectItem>
+              <SelectItem value="cost_diff" disabled={!olistData}>Custo diferente da Olist ({olistCounts.cost_diff})</SelectItem>
+              <SelectItem value="sale_diff" disabled={!olistData}>Venda normal ≠ Olist ({olistCounts.sale_diff})</SelectItem>
+              <SelectItem value="franchise_list_diff" disabled={!olistLists.franchise}>
+                Franquia ≠ lista {olistLists.franchise?.name ?? "da Olist"} ({olistCounts.franchise_list_diff})
+              </SelectItem>
+              <SelectItem value="subscriber_list_diff" disabled={!olistLists.subscriber}>
+                Assinante ≠ lista {olistLists.subscriber?.name ?? "da Olist"} ({olistCounts.subscriber_list_diff})
+              </SelectItem>
+              <SelectItem value="not_in_olist" disabled={!olistData}>SKU fora do catálogo da Olist ({olistCounts.not_in_olist})</SelectItem>
+              <SelectItem value="olist_no_cost" disabled={!olistData}>Olist sem preço de custo ({olistCounts.olist_no_cost})</SelectItem>
+              <SelectItem value="no_sku">Sem SKU ({olistCounts.no_sku})</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-full sm:w-56" aria-label="Filtrar por categoria"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {categoryOptions.map((option) => <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar por marca"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as marcas</SelectItem>
+              {brandOptions.map((brand) => <SelectItem key={brand} value={brand}>{brand}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Input
+            value={staleDays}
+            onChange={(event) => setStaleDays(event.target.value)}
+            type="number"
+            min="0"
+            placeholder="Não conferido há + dias"
+            aria-label="Não conferido com a Olist há mais de tantos dias"
+            className="w-full sm:w-48"
+          />
+          <div className="flex items-center gap-2">
+            <span className="whitespace-nowrap text-xs text-muted-foreground">Alterado desde</span>
+            <Input value={changedFrom} onChange={(event) => setChangedFrom(event.target.value)} type="date" aria-label="Valor alterado desde" className="w-40" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t bg-muted/30 px-4 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center">
+          <span className="font-medium">{selected.size} selecionado{selected.size === 1 ? "" : "s"}</span>
+          {selectedWithoutSku > 0 && <span className="text-xs text-amber-700">({selectedWithoutSku} sem SKU, ficam de fora)</span>}
+          <Button size="sm" variant="outline" onClick={() => toggleSelected(filteredRows.map((row) => row.variant.id), true)} disabled={filteredRows.length === 0}>
+            Selecionar os {filteredRows.length} filtrados
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>Limpar seleção</Button>
+          <Button
+            size="sm"
+            className="sm:ml-auto"
+            onClick={openApply}
+            disabled={selected.size === 0 || !olistData?.lastCatalogRun || catalogBusy || bulkSyncingOlist}
+            title={!olistData?.lastCatalogRun ? "Leia o catálogo da Olist primeiro" : undefined}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Simular e atualizar pela Olist ({selected.size - selectedWithoutSku})
+          </Button>
+        </div>
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
@@ -596,6 +947,13 @@ export default function ValuesTab() {
               <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={pageCheckState}
+                      onCheckedChange={(checked) => toggleSelected(pageIds, checked === true)}
+                      aria-label="Selecionar os produtos desta página"
+                    />
+                  </TableHead>
                   <TableHead className="min-w-[260px]">Produto</TableHead>
                   <TableHead className="min-w-[190px]">Custo Olist</TableHead>
                   <TableHead className="min-w-[190px]">Venda normal (Shopify)</TableHead>
@@ -616,8 +974,20 @@ export default function ValuesTab() {
                   const franchiseValue = effectivePrice(draft?.franchise, franchise?.price);
                   const customerSaved = customerMap.get(row.variant.id);
                   const customerValue = effectivePrice(draft?.customer, customerSaved);
+                  const comparison = comparisons.get(row.variant.id);
+                  const olistProduct = comparison?.olist ?? null;
+                  const olistSale = olistSalePrice(olistProduct);
+                  const franchiseDates = priceDates.franchise.get(row.variant.id);
+                  const subscriberDates = priceDates.subscriber.get(row.variant.id);
                   return (
-                    <TableRow key={row.variant.id}>
+                    <TableRow key={row.variant.id} data-state={selected.has(row.variant.id) ? "selected" : undefined}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(row.variant.id)}
+                          onCheckedChange={(checked) => toggleSelected([row.variant.id], checked === true)}
+                          aria-label={`Selecionar ${row.productTitle}`}
+                        />
+                      </TableCell>
                       <TableCell><div className="flex items-center gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                           {row.image ? <img src={row.image.url} alt="" className="h-full w-full object-cover" /> : <Package className="h-5 w-5 text-muted-foreground" />}
@@ -637,14 +1007,22 @@ export default function ValuesTab() {
                             {productCost.cost > productCost.previous_cost ? "Subiu" : "Baixou"} {formatPercentage(Math.abs((productCost.cost / productCost.previous_cost - 1) * 100))}
                           </p>
                         ) : <p className="mt-1 text-[11px] text-muted-foreground">Sem alteração registrada</p>}
+                        <ValueDates
+                          changedAt={productCost?.cost_changed_at ?? productCost?.created_at ?? null}
+                          checkedAt={productCost?.synced_at ?? null}
+                        />
+                        <OlistReference label="Olist" value={olistProduct?.cost ?? null} site={displayedCost} missing={olistData && row.variant.sku?.trim() ? (olistProduct ? "Olist sem custo" : "Fora do catálogo da Olist") : null} />
                       </TableCell>
                       <TableCell>
                         <Input readOnly value={displayedShopifyPrice === null ? "Não cadastrado" : money(displayedShopifyPrice)} className="h-10 bg-muted/50 tabular-nums" />
                         <PriceMetrics value={displayedShopifyPrice} cost={displayedCost} normalSale />
+                        <OlistReference label={olistProduct?.promoPrice ? "Olist (promoção)" : "Olist"} value={olistSale} site={customerSaved ?? displayedShopifyPrice} />
                       </TableCell>
                       <TableCell>
                         {subscriber === undefined ? <span className="inline-flex h-10 items-center text-sm text-muted-foreground">Não cadastrado</span> : <Input readOnly value={money(subscriber)} className="h-10 bg-muted/50 font-medium tabular-nums" />}
                         <PriceMetrics value={subscriber ?? null} cost={displayedCost} />
+                        <ValueDates changedAt={subscriberDates?.changedAt ?? subscriberDates?.createdAt ?? null} />
+                        {olistLists.subscriber && <OlistReference label={`Lista ${olistLists.subscriber.name}`} value={comparison?.subscriberList ?? null} site={subscriber ?? null} />}
                       </TableCell>
                       <TableCell>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Usa o preço da Shopify" value={draft?.customer ?? (customerSaved !== undefined ? decimal(customerSaved) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "customer", event.target.value)} aria-label={`Valor do Cliente de ${row.productTitle}`} /></div>
@@ -654,6 +1032,8 @@ export default function ValuesTab() {
                       <TableCell>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span><Input type="text" inputMode="decimal" className="h-10 pl-10 pr-9 font-medium tabular-nums" placeholder="Digite o valor" value={draft?.franchise ?? (franchise ? decimal(franchise.price) : "")} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(row.variant.id, "franchise", event.target.value)} aria-label={`Valor da Franquia de ${row.productTitle}`} /></div>
                         <PriceMetrics value={franchiseValue} cost={displayedCost} />
+                        <ValueDates changedAt={franchiseDates?.changedAt ?? franchiseDates?.createdAt ?? null} />
+                        {olistLists.franchise && <OlistReference label={`Lista ${olistLists.franchise.name}`} value={comparison?.franchiseList ?? null} site={franchise?.price ?? null} />}
                       </TableCell>
                       <TableCell><div className="flex gap-2">
                         <Button
@@ -794,10 +1174,44 @@ export default function ValuesTab() {
                   </div>
                 )}
               </div>
+
+              <div>
+                <h3 className="text-sm font-semibold">Histórico de franquia, assinante e Valor do Cliente</h3>
+                {valueHistory.length === 0 ? (
+                  <p className="mt-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nenhuma mudança registrada. O registro começa com a publicação de 26/11/2026.</p>
+                ) : (
+                  <div className="mt-2 overflow-hidden rounded-lg border">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Valor</TableHead><TableHead>Anterior</TableHead><TableHead>Novo</TableHead></TableRow></TableHeader>
+                      <TableBody>{valueHistory.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="whitespace-nowrap text-xs">{new Date(entry.changed_at).toLocaleString("pt-BR")}</TableCell>
+                          <TableCell className="text-xs">{entry.kind === "franchise" ? "Franquia" : entry.kind === "subscriber" ? "Assinante" : "Valor do Cliente"}</TableCell>
+                          <TableCell>{entry.old_value === null ? "—" : money(entry.old_value)}</TableCell>
+                          <TableCell className="font-medium">{entry.new_value === null ? "Removido" : money(entry.new_value)}</TableCell>
+                        </TableRow>
+                      ))}</TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {applyTargets && (
+        <OlistApplyDialog
+          open
+          targets={applyTargets}
+          onClose={() => setApplyTargets(null)}
+          onBusyChange={setCatalogBusyState}
+          onApplied={async () => { await load(true); await loadOlist(); }}
+          onFallback={(targets) => {
+            void syncFromOlist(targets.map(({ productId, variantId, sku, weightKg }) => ({ productId, variantId, sku, weightKg })), true);
+          }}
+        />
+      )}
     </div>
   );
 }
