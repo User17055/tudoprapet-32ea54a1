@@ -18,8 +18,11 @@ Custo vazio ou zero na Olist não é gravado.
 ## Tela Admin > Valores
 
 1. **Ler catálogo da Olist**: baixa o catálogo inteiro (`produtos.pesquisa`, 100
-   por página, ~8 chamadas) e as listas de preço com as exceções para tabelas de
-   retrato só de admin. Não altera nada no site nem na Olist.
+   por página, ~8 chamadas) e as listas de preço com as exceções (~15 chamadas)
+   para tabelas de retrato só de admin. Não altera nada no site nem na Olist.
+   Cada pedido à função faz uma chamada só; como a leitura inteira passa do
+   limite por minuto das automações, a tela espera o tempo devolvido e continua
+   sozinha (1 a 2 minutos no total).
 2. Filtrar e selecionar (caixinha por linha, a página ou todos os filtrados): por
    categoria, marca, diferença com a Olist, sem SKU, não conferido há N dias,
    alterado desde uma data.

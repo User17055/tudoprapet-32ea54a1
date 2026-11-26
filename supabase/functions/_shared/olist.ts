@@ -370,9 +370,11 @@ export function olistCallsPerMinute(): number {
 
 /** O limite de chamadas está cheio: a automação para e retoma na próxima rodada. */
 export class OlistRateLimitError extends Error {
+  readonly waitMs: number;
   constructor(waitMs: number) {
     super(`Limite de chamadas à API da Olist atingido; nova tentativa em ${Math.ceil(waitMs / 1000)} s`);
     this.name = "OlistRateLimitError";
+    this.waitMs = Math.max(0, Math.ceil(waitMs));
   }
 }
 
@@ -1226,31 +1228,35 @@ export async function fetchOlistPriceLists(token: string): Promise<OlistPriceLis
   return lists;
 }
 
-/** Exceções (preço próprio por produto) de uma lista de preço. Só leitura. */
-export async function fetchOlistPriceListExceptions(
+export interface OlistPriceListExceptionPage {
+  page: number;
+  totalPages: number;
+  exceptions: OlistPriceListException[];
+}
+
+/** Uma página (100) das exceções (preço próprio por produto) de uma lista. Só leitura. */
+export async function fetchOlistPriceListExceptionsPage(
   token: string,
   listId: string,
-): Promise<OlistPriceListException[]> {
+  page: number,
+): Promise<OlistPriceListExceptionPage> {
+  const payload = await olistPost(
+    "https://api.tiny.com.br/api2/listas.precos.excecoes.php",
+    token,
+    { idListaPreco: listId, pagina: String(page) },
+  );
+  if (payload?.retorno?.status !== "OK") return { page, totalPages: page - 1, exceptions: [] };
   const exceptions: OlistPriceListException[] = [];
-  for (let page = 1; page <= 100; page += 1) {
-    const payload = await olistPost(
-      "https://api.tiny.com.br/api2/listas.precos.excecoes.php",
-      token,
-      { idListaPreco: listId, pagina: String(page) },
-    );
-    if (payload?.retorno?.status !== "OK") break;
-    for (const record of olistRecords(payload)) {
-      const productId = normalizeOlistId(record?.id_produto);
-      if (!productId) continue;
-      exceptions.push({
-        productId,
-        price: olistMoney(record?.preco),
-        promoPrice: olistMoney(record?.preco_promocional),
-      });
-    }
-    if (page >= (Number(payload.retorno.numero_paginas) || 1)) break;
+  for (const record of olistRecords(payload)) {
+    const productId = normalizeOlistId(record?.id_produto);
+    if (!productId) continue;
+    exceptions.push({
+      productId,
+      price: olistMoney(record?.preco),
+      promoPrice: olistMoney(record?.preco_promocional),
+    });
   }
-  return exceptions;
+  return { page, totalPages: Math.max(page, Number(payload.retorno.numero_paginas) || page), exceptions };
 }
 
 export type FranchiseInvoiceStatus = "issued" | "pending" | "rejected";

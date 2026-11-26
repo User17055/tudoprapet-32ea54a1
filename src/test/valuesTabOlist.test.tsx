@@ -66,6 +66,13 @@ vi.mock("@/integrations/supabase/client", () => {
       functions: {
         invoke: (name: string, { body }: { body: Record<string, unknown> }) => {
           state.invokes.push({ name, body });
+          const reading: Record<string, unknown> = {
+            catalog_page: { ok: true, runId: "run-2", totalPages: 2, products: 1 },
+            price_lists: { ok: true, runId: "run-2", lists: 1, priceLists: [{ id: "1872", name: "Franqueados" }] },
+            price_list_page: { ok: true, runId: "run-2", totalPages: 2, exceptions: 1 },
+            finish: { ok: true, runId: body.runId, failed: false },
+          };
+          if (reading[String(body.action)]) return Promise.resolve({ data: reading[String(body.action)], error: null });
           const items = (body.items as Array<{ variantId: string; sku: string }>) ?? [];
           return Promise.resolve({
             data: {
@@ -152,6 +159,22 @@ describe("tela Valores com o catálogo da Olist", () => {
     expect(screen.getByText(/conferido 25\/11/)).toBeInTheDocument();
     // Produto sem SKU não é acusado como "fora do catálogo".
     expect(screen.queryByText(/Fora do catálogo da Olist/)).not.toBeInTheDocument();
+  });
+
+  it("lê o catálogo e as listas uma página por pedido", async () => {
+    render(<ValuesTab />);
+    await screen.findByText(/Lido em/);
+    fireEvent.click(screen.getByRole("button", { name: /Ler catálogo da Olist/ }));
+    await waitFor(() => expect(state.invokes.some((call) => call.body.action === "finish")).toBe(true));
+    expect(state.invokes.map((call) => [call.body.action, call.body.page ?? null, call.body.listId ?? null])).toEqual([
+      ["catalog_page", 1, null],
+      ["catalog_page", 2, null],
+      ["price_lists", null, null],
+      ["price_list_page", 1, "1872"],
+      ["price_list_page", 2, "1872"],
+      ["finish", null, null],
+    ]);
+    expect(state.invokes.every((call) => call.body.action === "catalog_page" && call.body.page === 1 || call.body.runId === "run-2")).toBe(true);
   });
 
   it("seleciona, simula sem gravar e só grava ao confirmar", async () => {

@@ -25,21 +25,42 @@ export function OlistCatalogPanel({ data, unavailable, onReloaded, busy, onBusyC
   const readCatalog = async () => {
     onBusyChange(true);
     let runId: string | undefined;
+    // Cada pedido faz uma chamada à Olist; quando o limite por minuto enche,
+    // a tela avisa e continua sozinha depois da espera.
+    let current = { page: 1, total: 1, step: "" };
+    const show = (next: typeof current) => {
+      current = next;
+      setProgress(next);
+    };
+    const onWait = (seconds: number) =>
+      setProgress({
+        ...current,
+        step: `${current.step} · limite de chamadas da Olist por minuto (o checkout tem prioridade): continua sozinho em ${seconds} s`,
+      });
     try {
       let total = 1;
       for (let page = 1; page <= total; page += 1) {
-        setProgress({ page, total, step: `Lendo produtos da Olist (página ${page} de ${total})` });
-        const response = await invokeOlistCatalog({ action: "catalog_page", page, runId });
+        show({ page, total, step: `Lendo produtos da Olist (página ${page} de ${total})` });
+        const response = await invokeOlistCatalog({ action: "catalog_page", page, runId }, onWait);
         runId = response.runId;
         total = Math.max(page, response.totalPages ?? page);
-        setProgress({ page, total, step: `Lendo produtos da Olist (página ${page} de ${total})` });
       }
-      setProgress({ page: total, total, step: "Lendo listas de preço da Olist" });
-      const lists = await invokeOlistCatalog({ action: "price_lists", runId });
+      show({ page: 0, total: 1, step: "Lendo listas de preço da Olist" });
+      const lists = await invokeOlistCatalog({ action: "price_lists", runId }, onWait);
+      for (const list of lists.priceLists ?? []) {
+        let listTotal = 1;
+        for (let page = 1; page <= listTotal; page += 1) {
+          show({ page, total: listTotal, step: `Lendo a lista "${list.name}" (página ${page} de ${listTotal})` });
+          const response = await invokeOlistCatalog({ action: "price_list_page", runId, listId: list.id, page }, onWait);
+          listTotal = Math.max(page, response.totalPages ?? page);
+        }
+      }
+      show({ page: 1, total: 1, step: "Conferindo a leitura" });
       const finished = await invokeOlistCatalog({ action: "finish", runId });
       if (finished.failed) throw new Error(finished.error || "Leitura incompleta");
+      const listCount = lists.priceLists?.length ?? lists.lists ?? 0;
       toast.success("Catálogo da Olist lido.", {
-        description: `${total} página${total === 1 ? "" : "s"} de produtos e ${lists.lists ?? 0} lista${lists.lists === 1 ? "" : "s"} de preço. Nada foi alterado no site nem na Olist.`,
+        description: `${total} página${total === 1 ? "" : "s"} de produtos e ${listCount} lista${listCount === 1 ? "" : "s"} de preço. Nada foi alterado no site nem na Olist.`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro inesperado";
@@ -82,7 +103,8 @@ export function OlistCatalogPanel({ data, unavailable, onReloaded, busy, onBusyC
             </p>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Mão única: a Olist alimenta o site. Ler e aplicar nunca alteram nada na Olist.
+            Mão única: a Olist alimenta o site. Ler e aplicar nunca alteram nada na Olist. A leitura leva 1 a 2
+            minutos (cerca de 23 chamadas, dentro do limite por minuto da Olist).
           </p>
         </div>
         <Button variant="outline" onClick={readCatalog} disabled={busy || unavailable} className="shrink-0">

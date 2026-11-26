@@ -1,6 +1,8 @@
 // Valores pela Olist em duas etapas (26/11/2026):
 //  1. Ler: baixa o catálogo inteiro da Olist (~8 chamadas de 100 produtos) e as
-//     listas de preço para um retrato no banco;
+//     listas de preço (~15 chamadas) para um retrato no banco. Cada pedido faz
+//     UMA chamada à Olist: a leitura inteira (~23) passa do limite por minuto
+//     das automações, então a tela espera o tempo devolvido e continua;
 //  2. Aplicar: grava custo, franquia e assinante a partir do retrato para os
 //     itens escolhidos, sem chamar a Olist (mesma regra de applyProductCost).
 // Mão única: nada aqui grava na Olist. Antes eram ~765 chamadas e ~27 minutos.
@@ -10,10 +12,11 @@ import { requireAdmin } from "../_shared/auth.ts";
 import { corsHeaders, errorResponse, FUNCTIONS_VERSION, jsonResponse } from "../_shared/cors.ts";
 import {
   fetchOlistCatalogPage,
-  fetchOlistPriceListExceptions,
+  fetchOlistPriceListExceptionsPage,
   fetchOlistPriceLists,
-  isOlistRateLimitError,
+  normalizeOlistId,
   normalizeSku,
+  OlistRateLimitError,
   setOlistCallPriority,
 } from "../_shared/olist.ts";
 import {
@@ -26,6 +29,9 @@ import { planCatalogApply, type CatalogApplyItem, type SnapshotRow } from "../_s
 const MAX_APPLY_ITEMS = 100;
 const APPLY_CONCURRENCY = 4;
 const MAX_CATALOG_PAGES = 100;
+const MAX_EXCEPTION_PAGES = 100;
+// "API Bloqueada" da própria Olist: o limitador compartilhado para por 90 s.
+const OLIST_BLOCK_WAIT_MS = 90_000;
 
 type Body = Record<string, unknown>;
 
@@ -101,34 +107,15 @@ async function priceLists(admin: SupabaseClient, token: string, body: Body) {
   if (!runId) return errorResponse("Execução inválida", 400);
   const lists = await fetchOlistPriceLists(token);
   const fetchedAt = new Date().toISOString();
-  let exceptionCount = 0;
   for (const list of lists) {
-    const exceptions = await fetchOlistPriceListExceptions(token, list.id);
-    const { error: listError } = await admin.from("olist_price_lists").upsert({
+    const { error } = await admin.from("olist_price_lists").upsert({
       olist_price_list_id: list.id,
       name: list.name,
       adjustment_percent: list.adjustmentPercent,
       run_id: runId,
       fetched_at: fetchedAt,
     }, { onConflict: "olist_price_list_id" });
-    if (listError) throw listError;
-    const { error: clearError } = await admin.from("olist_price_list_exceptions")
-      .delete()
-      .eq("olist_price_list_id", list.id);
-    if (clearError) throw clearError;
-    const rows = [...new Map(exceptions.map((entry) => [entry.productId, entry])).values()].map((entry) => ({
-      olist_price_list_id: list.id,
-      olist_product_id: entry.productId,
-      price: entry.price,
-      promo_price: entry.promoPrice,
-      run_id: runId,
-      fetched_at: fetchedAt,
-    }));
-    for (const part of chunks(rows, 500)) {
-      const { error } = await admin.from("olist_price_list_exceptions").insert(part);
-      if (error) throw error;
-    }
-    exceptionCount += rows.length;
+    if (error) throw error;
   }
   // Lista apagada na Olist sai do retrato (as exceções vão junto, em cascata).
   if (lists.length) {
@@ -137,8 +124,63 @@ async function priceLists(admin: SupabaseClient, token: string, body: Body) {
       .not("olist_price_list_id", "in", `(${lists.map((list) => `"${list.id}"`).join(",")})`);
     if (error) throw error;
   }
-  await bumpRun(admin, runId, { price_lists: lists.length, exceptions: exceptionCount });
-  return jsonResponse({ ok: true, version: FUNCTIONS_VERSION, runId, lists: lists.length, exceptions: exceptionCount });
+  const { error: runError } = await admin.from("olist_catalog_runs").update({ price_lists: lists.length }).eq("id", runId);
+  if (runError) throw runError;
+  return jsonResponse({
+    ok: true,
+    version: FUNCTIONS_VERSION,
+    runId,
+    lists: lists.length,
+    priceLists: lists.map((list) => ({ id: list.id, name: list.name })),
+  });
+}
+
+/** Uma página das exceções de uma lista; as que sumiram saem no finish. */
+async function priceListPage(admin: SupabaseClient, token: string, body: Body) {
+  const runId = validRunId(body.runId);
+  if (!runId) return errorResponse("Execução inválida", 400);
+  const listId = normalizeOlistId(body.listId);
+  if (!listId) return errorResponse("Lista inválida", 400);
+  const page = Number(body.page);
+  if (!Number.isInteger(page) || page < 1 || page > MAX_EXCEPTION_PAGES) return errorResponse("Página inválida", 400);
+  const { data: list, error: listError } = await admin.from("olist_price_lists")
+    .select("olist_price_list_id")
+    .eq("olist_price_list_id", listId)
+    .eq("run_id", runId)
+    .maybeSingle();
+  if (listError) throw listError;
+  if (!list) return errorResponse("Lista não lida nesta execução", 400);
+
+  const result = await fetchOlistPriceListExceptionsPage(token, listId, page);
+  const fetchedAt = new Date().toISOString();
+  const rows = [...new Map(result.exceptions.map((entry) => [entry.productId, entry])).values()].map((entry) => ({
+    olist_price_list_id: listId,
+    olist_product_id: entry.productId,
+    price: entry.price,
+    promo_price: entry.promoPrice,
+    run_id: runId,
+    fetched_at: fetchedAt,
+  }));
+  for (const part of chunks(rows, 500)) {
+    const { error } = await admin.from("olist_price_list_exceptions")
+      .upsert(part, { onConflict: "olist_price_list_id,olist_product_id" });
+    if (error) throw error;
+  }
+  return jsonResponse({
+    ok: true,
+    version: FUNCTIONS_VERSION,
+    runId,
+    listId,
+    page,
+    totalPages: result.totalPages,
+    exceptions: rows.length,
+  });
+}
+
+async function countRows(admin: SupabaseClient, table: string, runId: string): Promise<number> {
+  const { count, error } = await admin.from(table).select("run_id", { count: "exact", head: true }).eq("run_id", runId);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 async function finishRun(admin: SupabaseClient, body: Body) {
@@ -149,6 +191,15 @@ async function finishRun(admin: SupabaseClient, body: Body) {
   const { data: run, error } = await admin.from("olist_catalog_runs").select("kind,status,products").eq("id", runId).maybeSingle();
   if (error) throw error;
   if (!run) return errorResponse("Execução não encontrada", 404);
+  if (run.kind === "catalog") {
+    // Conta o que de fato entrou: uma página repetida depois de uma falha de
+    // rede não pode contar em dobro.
+    const products = await countRows(admin, "olist_product_snapshot", runId);
+    const exceptions = await countRows(admin, "olist_price_list_exceptions", runId);
+    const { error: countError } = await admin.from("olist_catalog_runs").update({ products, exceptions }).eq("id", runId);
+    if (countError) throw countError;
+    run.products = products;
+  }
   if (run.kind === "catalog" && !failed) {
     // Leitura que veio bem menor que a anterior (página vazia, Olist instável)
     // não apaga o retrato: os produtos "sumidos" virariam "fora do catálogo".
@@ -173,6 +224,11 @@ async function finishRun(admin: SupabaseClient, body: Body) {
     if (staleError) throw staleError;
     const { error: nullError } = await admin.from("olist_product_snapshot").delete().is("run_id", null);
     if (nullError) throw nullError;
+    // Exceção que não veio nesta leitura foi tirada da lista na Olist.
+    const { error: exceptionError } = await admin.from("olist_price_list_exceptions").delete().neq("run_id", runId);
+    if (exceptionError) throw exceptionError;
+    const { error: exceptionNullError } = await admin.from("olist_price_list_exceptions").delete().is("run_id", null);
+    if (exceptionNullError) throw exceptionNullError;
   }
   const counts: Record<string, number> = {};
   if (run.kind === "apply") {
@@ -299,21 +355,26 @@ Deno.serve(async (req) => {
   setOlistCallPriority("background");
 
   try {
-    if (action === "catalog_page" || action === "price_lists") {
+    if (action === "catalog_page" || action === "price_lists" || action === "price_list_page") {
       if (!token) return jsonResponse({ ok: false, version: FUNCTIONS_VERSION, error: "Secret OLIST_API_TOKEN não configurado" });
-      return action === "catalog_page"
-        ? await catalogPage(admin, token, body, auth.auth.userId)
-        : await priceLists(admin, token, body);
+      if (action === "catalog_page") return await catalogPage(admin, token, body, auth.auth.userId);
+      if (action === "price_lists") return await priceLists(admin, token, body);
+      return await priceListPage(admin, token, body);
     }
     if (action === "finish") return await finishRun(admin, body);
     if (action === "apply") return await apply(admin, body, auth.auth.userId);
     return errorResponse("Ação inválida", 400);
   } catch (error) {
     console.error("[admin-olist-catalog]", action, error);
-    if (isOlistRateLimitError(error)) {
-      return jsonResponse({ ok: false, version: FUNCTIONS_VERSION, retryable: true, error: error instanceof Error ? error.message : "Limite da Olist" });
-    }
     const message = error instanceof Error ? error.message : "Erro inesperado";
+    // Limite por minuto cheio (o checkout tem prioridade) ou Olist bloqueada:
+    // a tela espera o tempo devolvido e repete só este pedido.
+    const retryAfterMs = error instanceof OlistRateLimitError
+      ? error.waitMs
+      : message.includes("API Bloqueada") ? OLIST_BLOCK_WAIT_MS : null;
+    if (retryAfterMs !== null) {
+      return jsonResponse({ ok: false, version: FUNCTIONS_VERSION, retryable: true, retryAfterMs, error: message });
+    }
     return jsonResponse({ ok: false, version: FUNCTIONS_VERSION, error: message });
   }
 });
