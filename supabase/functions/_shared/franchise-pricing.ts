@@ -50,7 +50,7 @@ export const STALE_COST_DAYS = 7;
 type CostLookup = (sku: string, token: string) => Promise<OlistCost | null>;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: number | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
