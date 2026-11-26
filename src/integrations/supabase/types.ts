@@ -912,21 +912,27 @@ export type Database = {
       franchise_prices: {
         Row: {
           created_at: string
+          previous_price: number | null
           price: number
+          price_changed_at: string | null
           shopify_product_id: string
           shopify_variant_id: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          previous_price?: number | null
           price: number
+          price_changed_at?: string | null
           shopify_product_id: string
           shopify_variant_id: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          previous_price?: number | null
           price?: number
+          price_changed_at?: string | null
           shopify_product_id?: string
           shopify_variant_id?: string
           updated_at?: string
@@ -993,6 +999,161 @@ export type Database = {
           stats_day?: string
           throttled_today?: number
           window_start?: string
+        }
+        Relationships: []
+      }
+      olist_catalog_runs: {
+        Row: {
+          applied: number
+          changed: number
+          created_by: string | null
+          error: string | null
+          exceptions: number
+          failed: number
+          finished_at: string | null
+          id: string
+          kind: string
+          not_found: number
+          pages: number
+          price_lists: number
+          products: number
+          started_at: string
+          status: string
+        }
+        Insert: {
+          applied?: number
+          changed?: number
+          created_by?: string | null
+          error?: string | null
+          exceptions?: number
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          kind: string
+          not_found?: number
+          pages?: number
+          price_lists?: number
+          products?: number
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          applied?: number
+          changed?: number
+          created_by?: string | null
+          error?: string | null
+          exceptions?: number
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          not_found?: number
+          pages?: number
+          price_lists?: number
+          products?: number
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      olist_price_list_exceptions: {
+        Row: {
+          fetched_at: string
+          olist_price_list_id: string
+          olist_product_id: string
+          price: number | null
+          promo_price: number | null
+          run_id: string | null
+        }
+        Insert: {
+          fetched_at?: string
+          olist_price_list_id: string
+          olist_product_id: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+        }
+        Update: {
+          fetched_at?: string
+          olist_price_list_id?: string
+          olist_product_id?: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "olist_price_list_exceptions_olist_price_list_id_fkey"
+            columns: ["olist_price_list_id"]
+            isOneToOne: false
+            referencedRelation: "olist_price_lists"
+            referencedColumns: ["olist_price_list_id"]
+          },
+        ]
+      }
+      olist_price_lists: {
+        Row: {
+          adjustment_percent: number
+          fetched_at: string
+          name: string
+          olist_price_list_id: string
+          run_id: string | null
+        }
+        Insert: {
+          adjustment_percent?: number
+          fetched_at?: string
+          name?: string
+          olist_price_list_id: string
+          run_id?: string | null
+        }
+        Update: {
+          adjustment_percent?: number
+          fetched_at?: string
+          name?: string
+          olist_price_list_id?: string
+          run_id?: string | null
+        }
+        Relationships: []
+      }
+      olist_product_snapshot: {
+        Row: {
+          cost: number | null
+          fetched_at: string
+          name: string
+          olist_product_id: string
+          price: number | null
+          promo_price: number | null
+          run_id: string | null
+          sku: string
+          sku_key: string
+          status: string | null
+          variation_type: string | null
+        }
+        Insert: {
+          cost?: number | null
+          fetched_at?: string
+          name?: string
+          olist_product_id: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+          sku?: string
+          sku_key?: string
+          status?: string | null
+          variation_type?: string | null
+        }
+        Update: {
+          cost?: number | null
+          fetched_at?: string
+          name?: string
+          olist_product_id?: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+          sku?: string
+          sku_key?: string
+          status?: string | null
+          variation_type?: string | null
         }
         Relationships: []
       }
@@ -1227,6 +1388,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      price_value_history: {
+        Row: {
+          changed_at: string
+          id: string
+          kind: string
+          new_value: number | null
+          old_value: number | null
+          shopify_variant_id: string
+        }
+        Insert: {
+          changed_at?: string
+          id?: string
+          kind: string
+          new_value?: number | null
+          old_value?: number | null
+          shopify_variant_id: string
+        }
+        Update: {
+          changed_at?: string
+          id?: string
+          kind?: string
+          new_value?: number | null
+          old_value?: number | null
+          shopify_variant_id?: string
+        }
+        Relationships: []
       }
       print_jobs: {
         Row: {
@@ -1828,6 +2016,8 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          previous_price: number | null
+          price_changed_at: string | null
           shopify_product_id: string
           shopify_variant_id: string
           subscriber_price: number
@@ -1836,6 +2026,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          previous_price?: number | null
+          price_changed_at?: string | null
           shopify_product_id: string
           shopify_variant_id: string
           subscriber_price: number
@@ -1844,6 +2036,8 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          previous_price?: number | null
+          price_changed_at?: string | null
           shopify_product_id?: string
           shopify_variant_id?: string
           subscriber_price?: number

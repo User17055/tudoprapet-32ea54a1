@@ -134,6 +134,13 @@
       "when": 1795111161514,
       "tag": "0018_admin_grant_requires_confirmed_email",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795714696086,
+      "tag": "0019_olist_catalog_snapshot",
+      "breakpoints": true
     }
   ]
 }
