@@ -4,6 +4,7 @@ import {
   productSearchFields,
   relevantTerms,
   searchProducts,
+  searchProductsDetailed,
   searchTokens,
   suggestSearchCorrection,
 } from "@/lib/productSearch";
@@ -123,5 +124,97 @@ describe("voce quis dizer", () => {
 
   it("nao sugere quando todos os termos existem ou sao sinonimos", () => {
     expect(suggestSearchCorrection("racao cachorro", vocabulary)).toBeNull();
+  });
+});
+
+// Casos medidos no catalogo real em 11/2026 (573 produtos a venda).
+const store = [
+  { title: "Fator Cólica Glóbulos 26 g", vendor: "Homeopet", categories: ["Homeopáticos e Florais"] },
+  { title: "Snack Dental Cães Adultos 90 g", vendor: "Keldog", categories: ["Cachorro", "Petiscos"] },
+  { title: "Ração Golden Mega Cães Adultos 15 kg", vendor: "Golden", categories: ["Cachorro", "Ração"] },
+  { title: "Suplemento Ômega 3 Cães Gatos Franpet Ômega 1000 30 Cápsulas", vendor: "Franpet", categories: ["Suplementos e Vitaminas"] },
+  { title: "Antiparasitário Ourofino WellPet para Cães de 2 a 4,5 kg 45 mg", vendor: "Ourofino", categories: ["Cachorro", "Farmácia"] },
+  { title: "Whiskas Sachê Gato Castrado Carne 85 g", vendor: "Whiskas", categories: ["Gato", "Saches"] },
+  { title: "Whiskas Lata Atum 290 g", vendor: "Whiskas", categories: ["Gato"] },
+  { title: "Kit Cata Caca com Refil", vendor: "Chalesco", categories: ["Higiene"] },
+  { title: "Capa Pet para Banco", vendor: "Chalesco", categories: [] },
+  { title: "Mordedor Gelado Laranja", vendor: "Chalesco", categories: ["Cachorro"] },
+  { title: "Brinquedo Ratinho com 2 un", vendor: "Chalesco", categories: ["Gato"] },
+  { title: "Areia Sílica Fina GreatPets 1,6 kg", vendor: "GreatPets", categories: ["Gato", "Areias e Banheiros"] },
+  { title: "Ração Premier Cães Adultos 1 kg", vendor: "Premier", categories: ["Cachorro", "Ração"], description: "Não substitui o remédio indicado pelo veterinário." },
+  { title: "Acepran Gotas 10 ml", vendor: "Vetnil", categories: ["Demais Medicamentos", "Farmácia"] },
+];
+type StoreItem = (typeof store)[number] & { description?: string };
+const storeFields = (product: StoreItem) => productSearchFields({
+  title: product.title, vendor: product.vendor, categoryNames: product.categories, description: product.description,
+});
+const find = (query: string) => searchProducts(query, store as StoreItem[], storeFields).map((product) => product.title);
+
+describe("sem resultado parecido por engano", () => {
+  it("o que a loja nao vende nao vira outro produto", () => {
+    expect(find("coleira")).toEqual([]);
+    expect(find("drontal")).toEqual([]);
+    expect(find("cama")).toEqual([]);
+  });
+
+  it("resultado exato esconde o aproximado", () => {
+    expect(find("omega")).toEqual(["Suplemento Ômega 3 Cães Gatos Franpet Ômega 1000 30 Cápsulas"]);
+  });
+
+  it("palavra so na descricao nao vence a categoria", () => {
+    expect(find("remedio")).toContain("Acepran Gotas 10 ml");
+    expect(find("remedio")).not.toContain("Ração Premier Cães Adultos 1 kg");
+  });
+
+  it("erro de digitacao ainda acha quando nao ha nada exato", () => {
+    const result = searchProductsDetailed("whiskaz", store as StoreItem[], storeFields);
+    expect(result.items).toHaveLength(2);
+    expect(result.approximate).toBe(true);
+  });
+});
+
+describe("palavras do cliente", () => {
+  it("vermifugo acha antiparasitario", () => {
+    expect(find("vermifugo")).toEqual(["Antiparasitário Ourofino WellPet para Cães de 2 a 4,5 kg 45 mg"]);
+  });
+
+  it("racao umida e pate acham sache e lata", () => {
+    expect(find("racao umida gato")).toEqual(expect.arrayContaining(["Whiskas Sachê Gato Castrado Carne 85 g", "Whiskas Lata Atum 290 g"]));
+    expect(find("pate gato")).toHaveLength(2);
+    expect(find("sache")).toEqual(["Whiskas Sachê Gato Castrado Carne 85 g"]);
+  });
+
+  it("brinquedo acha mordedor e areia sanitaria acha areia", () => {
+    expect(find("brinquedo")).toEqual(expect.arrayContaining(["Mordedor Gelado Laranja", "Brinquedo Ratinho com 2 un"]));
+    expect(find("areia sanitaria")).toEqual(["Areia Sílica Fina GreatPets 1,6 kg"]);
+  });
+});
+
+describe("palavra que nao existe na loja", () => {
+  it("busca sem ela e avisa", () => {
+    const result = searchProductsDetailed("whiskas xyzabc", store as StoreItem[], storeFields);
+    expect(result.items).toHaveLength(2);
+    expect(result.ignoredTerms).toEqual(["xyzabc"]);
+  });
+
+  it("nao ignora palavra que existe so porque a combinacao nao existe", () => {
+    const result = searchProductsDetailed("whiskas mordedor", store as StoreItem[], storeFields);
+    expect(result.items).toEqual([]);
+    expect(result.ignoredTerms).toEqual([]);
+  });
+});
+
+describe("voce quis dizer sem bobagem", () => {
+  const vocabulary = buildSearchVocabulary((store as StoreItem[]).map(storeFields));
+
+  it("nao sugere palavra de outra letra ou distante demais", () => {
+    expect(suggestSearchCorrection("coleira", vocabulary)).toBeNull();
+    expect(suggestSearchCorrection("drontal", vocabulary)).toBeNull();
+    expect(suggestSearchCorrection("pate gato", vocabulary)).toBeNull();
+  });
+
+  it("ainda corrige erro pequeno", () => {
+    expect(suggestSearchCorrection("whiskaz", vocabulary)).toBe("whiskas");
+    expect(suggestSearchCorrection("mordedr", vocabulary)).toBe("mordedor");
   });
 });

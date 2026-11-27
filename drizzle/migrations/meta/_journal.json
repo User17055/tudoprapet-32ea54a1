@@ -50,6 +50,97 @@
       "when": 1792161020076,
       "tag": "0006_payment_attempt_respect_skip_block",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794263214047,
+      "tag": "0007_club_members_partner_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794431910800,
+      "tag": "0008_restrict_subscriber_category_margins_read",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794431992334,
+      "tag": "0009_scope_public_prices_and_banners",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794433964147,
+      "tag": "0010_sales_fiscal_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794434001087,
+      "tag": "0011_olist_sales_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794434012791,
+      "tag": "0012_grant_sales_orders_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794521097001,
+      "tag": "0013_franchise_price_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794521115057,
+      "tag": "0014_grant_franchise_price_reviews_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794570734894,
+      "tag": "0015_olist_rate_limit_and_automation_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794590515590,
+      "tag": "0016_olist_issue_needs_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795108831537,
+      "tag": "0017_franchise_receivable_retry",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795111161514,
+      "tag": "0018_admin_grant_requires_confirmed_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795714696086,
+      "tag": "0019_olist_catalog_snapshot",
+      "breakpoints": true
     }
   ]
 }

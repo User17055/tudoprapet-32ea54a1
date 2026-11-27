@@ -9,10 +9,12 @@ import { useAccountCartSync } from "@/hooks/useAccountCartSync";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import Index from "./pages/Index.tsx";
-import logo from "@/assets/tpp-logo.svg";
+import logo from "@/assets/tpp-logo-natal.webp";
 
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { FranchisePriceBlockedDialog } from "@/components/FranchisePriceBlockedDialog";
+import { ChristmasDecor } from "@/components/ChristmasTheme";
 
 const ProductDetail = lazy(() => import("./pages/ProductDetail.tsx"));
 const Login = lazy(() => import("./pages/Login.tsx"));
@@ -27,6 +29,7 @@ const Checkout = lazy(() => import("./pages/Checkout.tsx"));
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const MeusPedidos = lazy(() => import("./pages/MeusPedidos.tsx"));
 const FranchisePayments = lazy(() => import("./pages/FranchisePayments.tsx"));
+const FranchiseOrders = lazy(() => import("./pages/FranchiseOrders.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const OAuthConsent = lazy(() => import("./pages/OAuthConsent.tsx"));
 
@@ -52,6 +55,7 @@ const AppContent = () => {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <ChristmasDecor />
       <MaintenanceGate>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
@@ -68,6 +72,7 @@ const AppContent = () => {
             <Route path="/admin" element={<Admin />} />
             <Route path="/meus-pedidos" element={<MeusPedidos />} />
             <Route path="/pagamentos-franquia" element={<FranchisePayments />} />
+            <Route path="/franquia/pedidos" element={<FranchiseOrders />} />
             <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -83,6 +88,7 @@ const App = () => (
       {/* Só o Sonner. O Toaster do shadcn estava montado mas seu useToast não
           era chamado em lugar nenhum — renderizava sempre vazio. */}
       <Sonner />
+      <FranchisePriceBlockedDialog />
       <AppErrorBoundary>
         <AuthProvider>
           <SubscriptionProvider>

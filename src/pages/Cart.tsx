@@ -21,6 +21,7 @@ import { useSubscriberPrices } from "@/hooks/useSubscriberPrices";
 import { useFranchisePrices } from "@/hooks/useFranchisePrices";
 import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { supabase } from "@/integrations/supabase/client";
+import { handleFranchisePriceBlocked } from "@/lib/franchisePriceBlocked";
 import { getDisplayOptions } from "@/lib/shopify";
 import { goToCheckout } from "@/lib/checkout";
 import { useCartStore } from "@/stores/cartStore";
@@ -151,15 +152,19 @@ const Cart = () => {
             { body: { items: lineItems } },
           );
           if (error) throw error;
+          if (handleFranchisePriceBlocked(data)) return;
           if (data?.checkoutUrl) {
             clearCart();
             goToCheckout(data.checkoutUrl);
             return;
           }
+          throw new Error(data?.error || "Checkout de franquia sem link");
         } catch (err) {
+          // Franquia nunca segue pelo checkout normal: pagaria o preço cheio.
           console.error("Franchise checkout failed:", err);
-          toast.error("Erro ao aplicar preço de franquia. Usando checkout normal.");
+          toast.error("Não foi possível aplicar o preço de franquia. Tente novamente em instantes.");
         }
+        return;
       } else if (customerIsSubscribed) {
         try {
           const lineItems = availableItems.map((item) => ({

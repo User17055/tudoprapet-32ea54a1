@@ -26,7 +26,7 @@ import { useProductVariations } from "@/hooks/useProductVariations";
 import {
   buildSearchVocabulary,
   productSearchFields,
-  searchProducts,
+  searchProductsDetailed,
   suggestSearchCorrection,
   type SearchField,
 } from "@/lib/productSearch";
@@ -269,16 +269,28 @@ const Catalog = () => {
 
   // Toda palavra digitada precisa casar; define o universo sobre o qual os filtros contam.
   // Na relevancia, o que esta em estoque vem antes do esgotado, mantendo a ordem da busca.
-  const searchedProducts = useMemo(() => {
-    if (!hasSearch) return discoverableProducts;
-    const ranked = searchProducts(filters.search, discoverableProducts, (p) => searchFieldsById.get(p.node.id) || []);
-    return [...ranked.filter(isProductAvailable), ...ranked.filter((p) => !isProductAvailable(p))];
+  const searchResult = useMemo(() => {
+    if (!hasSearch) return null;
+    return searchProductsDetailed(filters.search, discoverableProducts, (p) => searchFieldsById.get(p.node.id) || []);
   }, [discoverableProducts, hasSearch, filters.search, searchFieldsById]);
 
+  const searchedProducts = useMemo(() => {
+    if (!searchResult) return discoverableProducts;
+    const ranked = searchResult.items;
+    return [...ranked.filter(isProductAvailable), ...ranked.filter((p) => !isProductAvailable(p))];
+  }, [discoverableProducts, searchResult]);
+
+  // Palavras que nao existem na loja e ficaram de fora ("caixa de transporte" -> "caixa").
+  const ignoredSearchTerms = searchResult?.ignoredTerms ?? [];
+
+  // "Voce quis dizer" so aparece quando a correcao acha produto com todas as palavras.
   const searchSuggestion = useMemo(() => {
-    if (!hasSearch || searchedProducts.length > 0) return null;
-    return suggestSearchCorrection(filters.search, buildSearchVocabulary(searchFieldsById.values()));
-  }, [hasSearch, searchedProducts.length, filters.search, searchFieldsById]);
+    if (!searchResult || (searchResult.items.length > 0 && searchResult.ignoredTerms.length === 0)) return null;
+    const suggestion = suggestSearchCorrection(filters.search, buildSearchVocabulary(searchFieldsById.values()));
+    if (!suggestion) return null;
+    const check = searchProductsDetailed(suggestion, discoverableProducts, (p) => searchFieldsById.get(p.node.id) || []);
+    return check.items.length > 0 && check.ignoredTerms.length === 0 ? suggestion : null;
+  }, [searchResult, filters.search, searchFieldsById, discoverableProducts]);
 
   const facetProducts = useMemo<FacetProduct[]>(() => {
     const catsByProduct = new Map<string, Set<string>>();
@@ -900,6 +912,25 @@ const Catalog = () => {
                   </p>
                 )}
               </div>
+
+              {!catalogLoading && ignoredSearchTerms.length > 0 && filteredProducts.length > 0 && (
+                <p className="-mt-3 mb-6 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground" role="status">
+                  Não encontramos produtos com {ignoredSearchTerms.map((term) => `"${term}"`).join(", ")}. Mostrando resultados sem {ignoredSearchTerms.length === 1 ? "essa palavra" : "essas palavras"}.
+                  {searchSuggestion && (
+                    <>
+                      {" "}Você quis dizer{" "}
+                      <button
+                        type="button"
+                        className="font-semibold text-primary hover:underline"
+                        onClick={() => updateFilters((draft) => { draft.search = searchSuggestion; }, { replace: false })}
+                      >
+                        {searchSuggestion}
+                      </button>
+                      ?
+                    </>
+                  )}
+                </p>
+              )}
 
               {catalogLoading ? (
                 <div

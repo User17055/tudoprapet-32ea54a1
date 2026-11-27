@@ -349,7 +349,7 @@ export async function savePickupCodeOnOrder(opts: {
       console.error(`Failed to save pickup code on order: ${upd.status} ${await upd.text()}`);
       return false;
     }
-    console.log(`Pickup code ${pickupCode} saved on order ${numericOrderId}`);
+    console.log(`Pickup code saved on order ${numericOrderId}`);
     return true;
   } catch (e) {
     console.error("Failed to save pickup code:", e);

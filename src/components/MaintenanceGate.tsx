@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
-import logo from "@/assets/tpp-logo.svg";
+import logo from "@/assets/tpp-logo-natal.webp";
 
 function MaintenanceCountdown({ endsAt }: { endsAt: string | null }) {
   const [now, setNow] = useState(Date.now());

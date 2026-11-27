@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import logo from "@/assets/tpp-logo.svg";
+import logoNatal from "@/assets/tpp-logo-natal.webp";
 
 interface AuthLayoutProps {
   /** Para onde o botão de voltar leva. */
@@ -52,7 +53,7 @@ export const AuthLayout = ({
           </Link>
 
           <Link to="/" className="flex items-center" aria-label="TudoPraPet — início">
-            <img src={logo} alt="TudoPraPet" className="h-auto w-32 sm:w-40" />
+            <img src={logoNatal} alt="TudoPraPet" className="h-auto w-32 sm:w-40" />
           </Link>
         </div>
       </header>

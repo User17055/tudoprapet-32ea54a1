@@ -1,3 +1,5 @@
+import { isTransientOlistError } from "./olist-issues.ts";
+
 export const OLIST_PRODUCTS_SEARCH_URL = "https://api.tiny.com.br/api2/produtos.pesquisa.php";
 export const OLIST_ORDER_CREATE_URL = "https://api.tiny.com.br/api2/pedido.incluir.php";
 export const OLIST_ORDER_SEARCH_URL = "https://api.tiny.com.br/api2/pedidos.pesquisa.php";
@@ -14,6 +16,12 @@ export const OLIST_INVOICE_ISSUE_URL = "https://api.tiny.com.br/api2/nota.fiscal
 export const OLIST_ORDER_LAUNCH_RECEIVABLES_URL =
   "https://api.tiny.com.br/api2/pedido.lancar.contas.php";
 export const OLIST_RECEIVABLE_SETTLE_URL = "https://api.tiny.com.br/api2/conta.receber.baixar.php";
+export const OLIST_ORDER_STATUS_URL = "https://api.tiny.com.br/api2/pedido.alterar.situacao.php";
+export const OLIST_INVOICE_LAUNCH_RECEIVABLES_URL =
+  "https://api.tiny.com.br/api2/nota.fiscal.lancar.contas.php";
+
+/** Marca gravada em `obs` de todo pedido de franquia criado pelo site. */
+export const FRANCHISE_ORDER_MARKER = "Pedido de franquia TudoPraPet";
 
 export interface OlistCost {
   id: string;
@@ -110,6 +118,8 @@ export interface OlistInvoice {
   number: string;
   series?: string;
   issued: boolean;
+  /** Cancelada ou denegada: existe, mas não vale como nota da venda. */
+  voided?: boolean;
   accessKey?: string | null;
   accessUrl?: string | null;
 }
@@ -179,15 +189,31 @@ export function toOlistDate(value: string | Date): string {
   }).format(date);
 }
 
+// IE com tamanho errado (ex.: SP com 11 dígitos) vai para a NF-e e, com
+// `atualizar_cliente`, sobrescreve o cadastro certo do cliente na Olist. Fora
+// do tamanho válido o campo não é enviado e a Olist mantém o que já tem.
+const STATE_REGISTRATION_DIGITS: Record<string, number> = { SP: 12 };
+
+export function validOlistStateRegistration(value: unknown, state: unknown): string | null {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  const expected = STATE_REGISTRATION_DIGITS[String(state ?? "").trim().toUpperCase()];
+  if (expected ? digits.length !== expected : digits.length < 8 || digits.length > 14) return null;
+  return digits;
+}
+
+function olistStateRegistration(customer: OlistFranchiseCustomer): Record<string, string> {
+  const ie = validOlistStateRegistration(customer.stateRegistration, customer.state);
+  return ie ? { ie } : {};
+}
+
 function olistCustomer(customer: OlistFranchiseCustomer): Record<string, unknown> {
   return {
     nome: truncate(customer.name, 50),
     ...(customer.tradeName ? { nome_fantasia: truncate(customer.tradeName, 50) } : {}),
     tipo_pessoa: customer.cpfCnpj.replace(/\D/g, "").length === 14 ? "J" : "F",
     cpf_cnpj: customer.cpfCnpj.replace(/\D/g, ""),
-    ...(customer.stateRegistration
-      ? { ie: customer.stateRegistration.replace(/\D/g, "").slice(0, 14) }
-      : {}),
+    ...olistStateRegistration(customer),
     endereco: truncate(customer.address, 50),
     numero: truncate(customer.number, 10),
     complemento: truncate(customer.complement, 50),
@@ -205,9 +231,7 @@ function olistDeliveryAddress(customer: OlistFranchiseCustomer): Record<string, 
   return {
     tipo_pessoa: customer.cpfCnpj.replace(/\D/g, "").length === 14 ? "J" : "F",
     cpf_cnpj: customer.cpfCnpj.replace(/\D/g, ""),
-    ...(customer.stateRegistration
-      ? { ie: customer.stateRegistration.replace(/\D/g, "").slice(0, 14) }
-      : {}),
+    ...olistStateRegistration(customer),
     endereco: truncate(customer.address, 50),
     numero: truncate(customer.number, 10),
     complemento: truncate(customer.complement, 50),
@@ -255,11 +279,15 @@ export function buildOlistFranchiseOrder(input: OlistFranchiseOrderInput): Recor
           ...(input.paymentMethod ? { forma_pagamento: truncate(input.paymentMethod, 30) } : {}),
         },
       }],
-      situacao: "aprovado",
+      // Nasce em aberto: a automação da Olist "Emitir NFe ao aprovar o pedido"
+      // gera a nota sem lançar contas, e com nota gerada a Olist recusa lançar
+      // as contas pelo pedido. O site lança as contas e só depois aprova
+      // (`ensureOlistOrderApproved`).
+      situacao: "aberto",
       numero_pedido_ecommerce: truncate(input.externalReference, 50),
       ecommerce: truncate(input.ecommerceName || "TudoPraPet", 50),
       obs: truncate(
-        `Pedido de franquia TudoPraPet ${input.externalReference} - NF-e: ${
+        `${FRANCHISE_ORDER_MARKER} ${input.externalReference} - NF-e: ${
           input.invoicePurpose === "final_consumption" ? "consumo final" : "revenda"
         }`,
         100,
@@ -321,7 +349,81 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Limite compartilhado entre TODAS as functions (tabela olist_api_rate). O
+// intervalo local acima vale só dentro de uma function; várias rodando juntas
+// passavam do limite do plano. As automações usam no máximo 70% do limite por
+// minuto; o restante fica para o checkout (pedido, boleto, custo de franquia).
+export type OlistCallPriority = "interactive" | "background";
+let olistPriority: OlistCallPriority = "interactive";
+let olistRateLimitedUntil = 0;
+const BACKGROUND_SHARE = 0.7;
+
+/** Automações (conciliação, sincronização, webhook) chamam no início. */
+export function setOlistCallPriority(priority: OlistCallPriority) {
+  olistPriority = priority;
+}
+
+export function olistCallsPerMinute(): number {
+  const configured = Number(Deno.env.get("OLIST_API_CALLS_PER_MINUTE"));
+  return Number.isFinite(configured) && configured >= 1 ? Math.floor(configured) : 30;
+}
+
+/** O limite de chamadas está cheio: a automação para e retoma na próxima rodada. */
+export class OlistRateLimitError extends Error {
+  readonly waitMs: number;
+  constructor(waitMs: number) {
+    super(`Limite de chamadas à API da Olist atingido; nova tentativa em ${Math.ceil(waitMs / 1000)} s`);
+    this.name = "OlistRateLimitError";
+    this.waitMs = Math.max(0, Math.ceil(waitMs));
+  }
+}
+
+export function isOlistRateLimitError(error: unknown): boolean {
+  return error instanceof OlistRateLimitError;
+}
+
+async function sharedLimiterRpc(name: string, body: Record<string, unknown>): Promise<unknown> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  // Sem banco (testes) ou limitador indisponível: segue só com o intervalo local.
+  if (!url || !key) return null;
+  try {
+    const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function claimOlistCall(): Promise<void> {
+  // Sem banco (testes, execução local): não há limite compartilhado.
+  if (!Deno.env.get("SUPABASE_URL") || !Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return;
+  if (olistRateLimitedUntil > Date.now()) {
+    throw new OlistRateLimitError(olistRateLimitedUntil - Date.now());
+  }
+  const limit = olistCallsPerMinute();
+  const background = olistPriority === "background";
+  const effective = background ? Math.max(1, Math.floor(limit * BACKGROUND_SHARE)) : limit;
+  // Automação espera pouco (a fila continua na próxima rodada); checkout
+  // espera mais antes de desistir.
+  const giveUpAt = Date.now() + (background ? 20_000 : 15_000);
+  for (;;) {
+    const wait = Number(await sharedLimiterRpc("claim_olist_api_call", { p_limit: effective }));
+    if (!Number.isFinite(wait) || wait <= 0) return;
+    if (Date.now() + wait > giveUpAt) {
+      olistRateLimitedUntil = Date.now() + wait;
+      throw new OlistRateLimitError(wait);
+    }
+    await sleep(Math.min(wait, 5_000) + Math.floor(Math.random() * 250));
+  }
+}
+
 async function olistThrottle(): Promise<void> {
+  await claimOlistCall();
   const now = Date.now();
   const waitFor = Math.max(
     olistBlockedUntil - now,
@@ -329,6 +431,13 @@ async function olistThrottle(): Promise<void> {
   );
   if (waitFor > 0) await sleep(waitFor);
   olistLastCallAt = Date.now();
+}
+
+function noteOlistBlock() {
+  olistBlockedUntil = Date.now() + OLIST_BLOCK_BACKOFF_MS;
+  void sharedLimiterRpc("report_olist_api_block", {
+    p_seconds: Math.round(OLIST_BLOCK_BACKOFF_MS / 1000),
+  });
 }
 
 async function olistPost(url: string, token: string, fields: Record<string, string>): Promise<any> {
@@ -342,9 +451,7 @@ async function olistPost(url: string, token: string, fields: Record<string, stri
   const payload = await response.json();
   if (payload?.retorno?.status === "Erro" && Number(payload?.retorno?.codigo_erro) !== 20) {
     const message = responseErrors(payload);
-    if (message.includes("API Bloqueada")) {
-      olistBlockedUntil = Date.now() + OLIST_BLOCK_BACKOFF_MS;
-    }
+    if (message.includes("API Bloqueada")) noteOlistBlock();
     throw new Error(message);
   }
   return payload;
@@ -377,25 +484,136 @@ export async function createOlistFranchiseOrder(
   return { id: String(record.id), number: String(record.numero ?? record.id) };
 }
 
+/**
+ * Todos os pedidos da Olist com este número de e-commerce (o do site e,
+ * quando a importação da Shopify duplica, a cópia importada).
+ */
+export async function listOlistOrdersByEcommerceNumber(
+  externalReference: string,
+  token: string,
+): Promise<OlistCreatedOrder[]> {
+  const found = new Map<string, OlistCreatedOrder>();
+  for (const candidate of normalizedExternalOrderReferences(externalReference)) {
+    const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, { numeroEcommerce: candidate });
+    if (Number(payload?.retorno?.codigo_erro) === 20) continue;
+    for (const entry of payload?.retorno?.pedidos ?? []) {
+      const order = entry?.pedido ?? entry;
+      // Aceita "#1235" e "1235": a importação Shopify pode gravar com cerquilha.
+      if (!order?.id || !olistExternalReferenceMatches(order?.numero_ecommerce, [externalReference])) {
+        continue;
+      }
+      found.set(String(order.id), { id: String(order.id), number: String(order.numero ?? order.id) });
+    }
+  }
+  return [...found.values()];
+}
+
+export interface OlistOrderOrigin {
+  /** Criado pelo checkout de franquia do site (marca em `obs`). */
+  createdBySite: boolean;
+  situation: string;
+  invoiceId: string | null;
+}
+
+export async function getOlistOrderOrigin(id: string, token: string): Promise<OlistOrderOrigin> {
+  const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id });
+  const order = payload?.retorno?.pedido;
+  if (!order?.id) throw new Error(responseErrors(payload));
+  return {
+    createdBySite: String(order.obs || "").includes(FRANCHISE_ORDER_MARKER),
+    situation: String(order.situacao || "").trim(),
+    invoiceId: normalizeOlistId(order.id_nota_fiscal),
+  };
+}
+
+/**
+ * Pedido de franquia que o site já criou para este número. Ignora a cópia
+ * que a importação da Shopify cria: ela não tem a natureza, o vencimento nem
+ * as parcelas do checkout, e lançar contas nela cobraria errado.
+ */
 export async function findOlistOrderByExternalReference(
   externalReference: string,
   token: string,
 ): Promise<OlistCreatedOrder | null> {
-  const todayDate = new Date();
-  const yesterdayDate = new Date(todayDate);
-  yesterdayDate.setDate(todayDate.getDate() - 1);
-  const today = toOlistDate(todayDate);
-  const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, {
-    dataInicial: toOlistDate(yesterdayDate),
-    dataFinal: today,
-  });
-  if (Number(payload?.retorno?.codigo_erro) === 20) return null;
-  for (const entry of payload?.retorno?.pedidos ?? []) {
-    const order = entry?.pedido ?? entry;
-    // Aceita "#1235" e "1235": a importação Shopify pode gravar com cerquilha.
-    if (!olistExternalReferenceMatches(order?.numero_ecommerce, [externalReference])) continue;
-    if (!order?.id) continue;
-    return { id: String(order.id), number: String(order.numero ?? order.id) };
+  for (const order of await listOlistOrdersByEcommerceNumber(externalReference, token)) {
+    if ((await getOlistOrderOrigin(order.id, token)).createdBySite) return order;
+  }
+  return null;
+}
+
+function isOpenOlistSituation(situation: string): boolean {
+  return /^(em )?aberto$/i.test(situation.trim());
+}
+
+/**
+ * Aprova o pedido de franquia depois que as contas foram lançadas. A aprovação
+ * dispara a automação da Olist que gera a NF-e. Pedido já aprovado (ou além)
+ * fica como está. Devolve true quando aprovou agora.
+ */
+export async function ensureOlistOrderApproved(orderId: string, token: string): Promise<boolean> {
+  const origin = await getOlistOrderOrigin(orderId, token);
+  if (!isOpenOlistSituation(origin.situation)) return false;
+  await olistPost(OLIST_ORDER_STATUS_URL, token, { id: orderId, situacao: "aprovado" });
+  return true;
+}
+
+export interface ImportedTwinCheck {
+  /** Cópias importadas encontradas (sem nota, sem conta, em aberto). */
+  twins: OlistCreatedOrder[];
+  cancelled: string[];
+}
+
+/**
+ * A integração Shopify da Olist às vezes importa de novo um pedido que o site
+ * já criou. A cópia fica "em aberto", sem nota e sem conta. Só cancela quando
+ * `cancel` é true (OLIST_CANCEL_IMPORTED_TWINS); senão apenas aponta.
+ */
+export async function findImportedTwinOrders(
+  externalReference: string,
+  siteOrderId: string,
+  token: string,
+  cancel: boolean,
+): Promise<ImportedTwinCheck> {
+  const result: ImportedTwinCheck = { twins: [], cancelled: [] };
+  for (const order of await listOlistOrdersByEcommerceNumber(externalReference, token)) {
+    if (order.id === siteOrderId) continue;
+    const origin = await getOlistOrderOrigin(order.id, token);
+    if (origin.createdBySite || origin.invoiceId || !isOpenOlistSituation(origin.situation)) continue;
+    if ((await listOlistReceivablesByOrigin(order.id, token)).length) continue;
+    result.twins.push(order);
+    if (cancel) {
+      await olistPost(OLIST_ORDER_STATUS_URL, token, { id: order.id, situacao: "cancelado" });
+      result.cancelled.push(order.id);
+    }
+  }
+  return result;
+}
+
+/**
+ * Busca o pedido pelo número do e-commerce, sem janela de datas. Cobre vendas
+ * antigas que a varredura recente (`findImportedOlistOrders`) já não alcança,
+ * para que nenhuma venda paga fique para sempre "aguardando importação".
+ */
+export async function findOlistOrderByEcommerceNumber(
+  references: unknown[],
+  token: string,
+): Promise<OlistImportedOrder | null> {
+  const candidates = [...new Set(references.flatMap(normalizedExternalOrderReferences))];
+  for (const candidate of candidates) {
+    const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, {
+      numeroEcommerce: candidate,
+    });
+    if (Number(payload?.retorno?.codigo_erro) === 20) continue;
+    for (const entry of payload?.retorno?.pedidos ?? []) {
+      const order = entry?.pedido ?? entry;
+      const externalReference = String(order?.numero_ecommerce || "").trim();
+      if (!order?.id || !olistExternalReferenceMatches(externalReference, references)) continue;
+      return {
+        id: String(order.id),
+        number: String(order.numero ?? order.id),
+        externalReference,
+      };
+    }
   }
   return null;
 }
@@ -499,23 +717,67 @@ export async function createOlistReceivable(
   return { id: String(record.id), status: "aberto", documentNumber };
 }
 
+async function listOlistReceivablesByOrigin(
+  originId: string,
+  token: string,
+): Promise<OlistReceivable[]> {
+  const payload = await olistPost(OLIST_RECEIVABLE_SEARCH_URL, token, { id_origem: originId });
+  if (Number(payload?.retorno?.codigo_erro) === 20) return [];
+  return (payload?.retorno?.contas ?? [])
+    .map((entry: any) => entry?.conta ?? entry)
+    .filter((account: any) => account?.id)
+    .map((account: any) => ({
+      id: String(account.id),
+      status: String(account.situacao || "aberto").toLowerCase(),
+      documentNumber: account.numero_doc ? String(account.numero_doc) : undefined,
+      dueDate: account.data_vencimento ? String(account.data_vencimento) : undefined,
+      amount: Number(account.valor),
+      balance: Number(account.saldo),
+    }));
+}
+
 export async function findOlistReceivableByOrder(
   orderId: string,
   token: string,
 ): Promise<OlistReceivable | null> {
-  const payload = await olistPost(OLIST_RECEIVABLE_SEARCH_URL, token, { id_origem: orderId });
-  if (Number(payload?.retorno?.codigo_erro) === 20) return null;
-  const entry = payload?.retorno?.contas?.[0];
-  const account = entry?.conta ?? entry;
-  if (!account?.id) return null;
-  return {
-    id: String(account.id),
-    status: String(account.situacao || "aberto").toLowerCase(),
-    documentNumber: account.numero_doc ? String(account.numero_doc) : undefined,
-    dueDate: account.data_vencimento ? String(account.data_vencimento) : undefined,
-    amount: Number(account.valor),
-    balance: Number(account.saldo),
-  };
+  return (await listOlistReceivablesByOrigin(orderId, token))[0] ?? null;
+}
+
+const CANCELLED_RECEIVABLE_STATUSES = ["cancelado", "cancelada"];
+
+export class OlistDuplicateReceivableError extends Error {
+  constructor(orderId: string, receivableIds: string[]) {
+    super(
+      `Duplicidade: ${receivableIds.length} contas a receber ativas para o pedido Olist ${orderId} ` +
+        `(${receivableIds.join(", ")}). Nenhuma baixa foi feita; cancele a conta indevida na Olist.`,
+    );
+    this.name = "OlistDuplicateReceivableError";
+  }
+}
+
+/**
+ * Venda já paga não pode deixar outra conta viva na Olist. Antes da baixa,
+ * confere todas as contas ligadas ao pedido e à nota dele; havendo outra conta
+ * não cancelada, não baixa nada e deixa o financeiro decidir qual cancelar.
+ */
+export async function assertSingleOlistReceivable(
+  orderId: string,
+  receivableId: string,
+  token: string,
+): Promise<void> {
+  const invoiceId = await getOlistOrderInvoiceId(orderId, token);
+  const accounts = new Map<string, OlistReceivable>();
+  for (const origin of [orderId, ...(invoiceId ? [invoiceId] : [])]) {
+    for (const account of await listOlistReceivablesByOrigin(origin, token)) {
+      accounts.set(account.id, account);
+    }
+  }
+  const active = [...accounts.values()]
+    .filter((account) => !CANCELLED_RECEIVABLE_STATUSES.includes(account.status));
+  if (active.some((account) => account.id !== receivableId)) {
+    const ids = [...new Set([receivableId, ...active.map((account) => account.id)])];
+    throw new OlistDuplicateReceivableError(orderId, ids);
+  }
 }
 
 export async function ensureOlistOrderReceivable(
@@ -533,6 +795,9 @@ export async function ensureOlistOrderReceivable(
   if (invoiceId) {
     const invoiceReceivable = await findOlistReceivableByOrder(invoiceId, token);
     if (invoiceReceivable) return invoiceReceivable;
+    // Nota gerada sem contas (automação "Emitir NFe ao aprovar"): pelo pedido
+    // a Olist recusa ("existe nota fiscal gerada"); pela nota, aceita.
+    return await launchOlistReceivablesFromInvoice(orderId, invoiceId, token);
   }
 
   try {
@@ -544,6 +809,10 @@ export async function ensureOlistOrderReceivable(
     if (invoiceId) {
       const invoiceReceivable = await findOlistReceivableByOrder(invoiceId, token);
       if (invoiceReceivable) return invoiceReceivable;
+      const message = error instanceof Error ? error.message : String(error);
+      if (/existe nota fiscal gerada/i.test(message)) {
+        return await launchOlistReceivablesFromInvoice(orderId, invoiceId, token);
+      }
     }
     throw error;
   }
@@ -551,6 +820,26 @@ export async function ensureOlistOrderReceivable(
   const created = await findOlistReceivableByOrder(orderId, token) ||
     (invoiceId ? await findOlistReceivableByOrder(invoiceId, token) : null);
   if (!created) throw new Error("A Olist não devolveu a conta a receber do pedido");
+  return created;
+}
+
+async function launchOlistReceivablesFromInvoice(
+  orderId: string,
+  invoiceId: string,
+  token: string,
+): Promise<OlistReceivable> {
+  try {
+    await olistPost(OLIST_INVOICE_LAUNCH_RECEIVABLES_URL, token, { id: invoiceId });
+  } catch (error) {
+    // Outra execução pode ter lançado entre a consulta e esta chamada.
+    const recovered = await findOlistReceivableByOrder(invoiceId, token) ||
+      await findOlistReceivableByOrder(orderId, token);
+    if (recovered) return recovered;
+    throw error;
+  }
+  const created = await findOlistReceivableByOrder(invoiceId, token) ||
+    await findOlistReceivableByOrder(orderId, token);
+  if (!created) throw new Error("A Olist não devolveu a conta a receber da nota do pedido");
   return created;
 }
 
@@ -627,7 +916,12 @@ export async function getOlistInvoice(id: string, token: string): Promise<OlistI
   const invoice = payload?.retorno?.nota_fiscal;
   if (!invoice?.id) throw new Error(responseErrors(payload));
   const accessKey = invoice.chave_acesso ? String(invoice.chave_acesso) : null;
-  const issued = Boolean(accessKey) || /autorizad|emitid/i.test(String(invoice.situacao || ""));
+  // Nota cancelada/denegada continua com chave de acesso, mas não vale como
+  // nota da venda. A API v2 devolve a situação como código (3 = cancelada,
+  // 10 = denegada) ou texto, conforme o endpoint.
+  const situation = String(invoice.situacao ?? "").trim();
+  const voided = situation === "3" || situation === "10" || /cancel|denegad/i.test(situation);
+  const issued = !voided && (Boolean(accessKey) || /autorizad|emitid/i.test(situation));
   let accessUrl = invoice.link_acesso ? String(invoice.link_acesso) : null;
   if (!accessUrl && issued) {
     // nota.fiscal.obter nao traz o link; a API tem um endpoint proprio para ele.
@@ -644,8 +938,98 @@ export async function getOlistInvoice(id: string, token: string): Promise<OlistI
     number: String(invoice.numero ?? ""),
     series: invoice.serie !== undefined ? String(invoice.serie) : undefined,
     issued,
+    voided,
     accessKey,
     accessUrl,
+  };
+}
+
+export interface OlistOrderListEntry {
+  id: string;
+  number: string;
+  externalReference: string;
+  situation: string;
+  orderDate: string | null;
+  customerName: string;
+  total: number;
+}
+
+/**
+ * Uma página da pesquisa de pedidos (100 por página). `filters` aceita os
+ * parâmetros da API v2, ex.: `dataAtualizacao` ou `dataInicial`/`dataFinal`.
+ */
+export async function listOlistOrdersPage(
+  filters: Record<string, string>,
+  page: number,
+  token: string,
+): Promise<{ orders: OlistOrderListEntry[]; totalPages: number }> {
+  const payload = await olistPost(OLIST_ORDER_SEARCH_URL, token, {
+    ...filters,
+    pagina: String(page),
+  });
+  if (Number(payload?.retorno?.codigo_erro) === 20) return { orders: [], totalPages: 0 };
+  const orders = (payload?.retorno?.pedidos ?? [])
+    .map((entry: any) => entry?.pedido ?? entry)
+    .filter((order: any) => order?.id)
+    .map((order: any) => ({
+      id: String(order.id),
+      number: String(order.numero ?? order.id),
+      externalReference: String(order.numero_ecommerce || "").trim(),
+      situation: String(order.situacao || "").trim(),
+      orderDate: order.data_pedido ? String(order.data_pedido) : null,
+      customerName: String(order.nome || "").trim(),
+      total: Number(order.valor),
+    }));
+  const totalPages = Number(payload?.retorno?.numero_paginas || 1);
+  return { orders, totalPages: Number.isFinite(totalPages) ? totalPages : 1 };
+}
+
+export interface OlistOrderSnapshot {
+  id: string;
+  number: string;
+  externalReference: string;
+  situation: string;
+  orderDate: string | null;
+  total: number;
+  customer: { name: string; cpfCnpj: string; email: string };
+  items: Array<{ sku: string; description: string; quantity: number; unitPrice: number }>;
+  trackingCode: string | null;
+  invoiceId: string | null;
+}
+
+/** Pedido completo, usado para vendas lançadas direto na Olist. */
+export async function getOlistOrderSnapshot(
+  id: string,
+  token: string,
+): Promise<OlistOrderSnapshot> {
+  const payload = await olistPost(OLIST_ORDER_GET_URL, token, { id });
+  const order = payload?.retorno?.pedido;
+  if (!order?.id) throw new Error(responseErrors(payload));
+  return {
+    id: String(order.id),
+    number: String(order.numero ?? order.id),
+    externalReference: String(
+      order.numero_ecommerce || order.ecommerce?.numeroPedidoEcommerce || "",
+    ).trim(),
+    situation: String(order.situacao || "").trim(),
+    orderDate: order.data_pedido ? String(order.data_pedido) : null,
+    total: Number(order.total_pedido),
+    customer: {
+      name: String(order.cliente?.nome || "").trim(),
+      cpfCnpj: String(order.cliente?.cpf_cnpj || "").replace(/\D/g, ""),
+      email: String(order.cliente?.email || "").trim().toLowerCase(),
+    },
+    items: (order.itens ?? []).map((entry: any) => {
+      const item = entry?.item ?? entry;
+      return {
+        sku: String(item?.codigo || "").trim(),
+        description: String(item?.descricao || "").trim(),
+        quantity: Number(item?.quantidade) || 0,
+        unitPrice: Number(item?.valor_unitario) || 0,
+      };
+    }),
+    trackingCode: order.codigo_rastreamento ? String(order.codigo_rastreamento) : null,
+    invoiceId: normalizeOlistId(order.id_nota_fiscal),
   };
 }
 
@@ -672,10 +1056,28 @@ export async function issueOlistInvoice(
 ): Promise<OlistInvoice> {
   const current = await getOlistInvoice(invoice.id, token);
   if (current.issued) return current;
-  const payload = await olistPost(OLIST_INVOICE_ISSUE_URL, token, {
-    id: invoice.id,
-    enviarEmail: "S",
-  });
+  // Reemitir nota cancelada/denegada falha na Olist; a venda precisa de uma
+  // nota nova, decidida por uma pessoa (pode ser devolução ou cancelamento).
+  if (current.voided) {
+    throw new Error(
+      `A NF-e ${current.number || current.id} do pedido está cancelada ou denegada na Olist`,
+    );
+  }
+  let payload: any;
+  try {
+    payload = await olistPost(OLIST_INVOICE_ISSUE_URL, token, {
+      id: invoice.id,
+      enviarEmail: "S",
+    });
+  } catch (error) {
+    // Nota já enviada à SEFAZ (aguardando retorno) ou já autorizada: a Olist
+    // recusa um novo envio. Não é rejeição fiscal — relê e segue como está.
+    const message = error instanceof Error ? error.message : String(error);
+    if (/apenas notas pendentes ou rejeitadas/i.test(message)) {
+      return await getOlistInvoice(invoice.id, token);
+    }
+    throw error;
+  }
   const issued = payload?.retorno?.nota_fiscal;
   if (!issued && payload?.retorno?.status !== "OK") throw new Error(responseErrors(payload));
   const confirmed = await getOlistInvoice(String(issued?.id ?? invoice.id), token);
@@ -709,6 +1111,7 @@ export function findExactOlistCost(
 
 export async function fetchOlistCostBySku(sku: string, token: string): Promise<OlistCost | null> {
   const body = new URLSearchParams({ token, pesquisa: sku.trim(), formato: "JSON" });
+  await olistThrottle();
   const response = await fetch(OLIST_PRODUCTS_SEARCH_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
@@ -721,9 +1124,139 @@ export async function fetchOlistCostBySku(sku: string, token: string): Promise<O
     // A API usa o erro 20 tambem quando a pesquisa simplesmente nao encontra o SKU.
     if (payload.retorno.codigo_erro === 20) return null;
     const detail = payload.retorno.erros?.map((entry) => entry.erro).filter(Boolean).join("; ");
+    if (detail?.includes("API Bloqueada")) noteOlistBlock();
     throw new Error(detail || "A Olist recusou a consulta");
   }
   return findExactOlistCost(payload, sku);
+}
+
+/** Produto do catálogo da Olist, como vem em `produtos.pesquisa` (só leitura). */
+export interface OlistCatalogProduct {
+  id: string;
+  sku: string;
+  name: string;
+  price: number | null;
+  promoPrice: number | null;
+  cost: number | null;
+  status: string | null;
+  variationType: string | null;
+}
+
+export interface OlistCatalogPage {
+  page: number;
+  totalPages: number;
+  products: OlistCatalogProduct[];
+}
+
+function olistMoney(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? roundMoney(number) : null;
+}
+
+export function parseOlistCatalogProduct(raw: any): OlistCatalogProduct | null {
+  const id = normalizeOlistId(raw?.id);
+  if (!id) return null;
+  return {
+    id,
+    sku: String(raw?.codigo ?? "").trim(),
+    name: String(raw?.nome ?? "").trim(),
+    price: olistMoney(raw?.preco),
+    promoPrice: olistMoney(raw?.preco_promocional),
+    cost: olistMoney(raw?.preco_custo),
+    status: raw?.situacao ? String(raw.situacao) : null,
+    variationType: raw?.tipoVariacao ? String(raw.tipoVariacao) : null,
+  };
+}
+
+/**
+ * Uma página do catálogo inteiro (pesquisa sem termo: ativos e inativos, 100
+ * por página). Só leitura: o site nunca grava na Olist.
+ */
+export async function fetchOlistCatalogPage(token: string, page: number): Promise<OlistCatalogPage> {
+  const payload = await olistPost(OLIST_PRODUCTS_SEARCH_URL, token, {
+    pesquisa: "",
+    pagina: String(page),
+  });
+  if (payload?.retorno?.status !== "OK") return { page, totalPages: page - 1, products: [] };
+  const products = (payload.retorno.produtos ?? [])
+    .map((entry: any) => parseOlistCatalogProduct(entry?.produto ?? entry))
+    .filter((product: OlistCatalogProduct | null): product is OlistCatalogProduct => product !== null);
+  return { page, totalPages: Math.max(page, Number(payload.retorno.numero_paginas) || page), products };
+}
+
+export interface OlistPriceList {
+  id: string;
+  name: string;
+  adjustmentPercent: number;
+}
+
+export interface OlistPriceListException {
+  productId: string;
+  price: number | null;
+  promoPrice: number | null;
+}
+
+function olistRecords(payload: any): any[] {
+  const raw = payload?.retorno?.registros;
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return list.map((entry: any) => entry?.registro ?? entry);
+}
+
+/** Listas de preço da Olist (ex.: Franqueados). Só leitura. */
+export async function fetchOlistPriceLists(token: string): Promise<OlistPriceList[]> {
+  const lists: OlistPriceList[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const payload = await olistPost(
+      "https://api.tiny.com.br/api2/listas.precos.pesquisa.php",
+      token,
+      { pesquisa: "", pagina: String(page) },
+    );
+    if (payload?.retorno?.status !== "OK") break;
+    for (const record of olistRecords(payload)) {
+      const id = normalizeOlistId(record?.id);
+      if (!id) continue;
+      const percent = Number(String(record?.acrescimo_desconto ?? "0").replace(",", "."));
+      lists.push({
+        id,
+        name: String(record?.descricao ?? "").trim(),
+        adjustmentPercent: Number.isFinite(percent) ? percent : 0,
+      });
+    }
+    if (page >= (Number(payload.retorno.numero_paginas) || 1)) break;
+  }
+  return lists;
+}
+
+export interface OlistPriceListExceptionPage {
+  page: number;
+  totalPages: number;
+  exceptions: OlistPriceListException[];
+}
+
+/** Uma página (100) das exceções (preço próprio por produto) de uma lista. Só leitura. */
+export async function fetchOlistPriceListExceptionsPage(
+  token: string,
+  listId: string,
+  page: number,
+): Promise<OlistPriceListExceptionPage> {
+  const payload = await olistPost(
+    "https://api.tiny.com.br/api2/listas.precos.excecoes.php",
+    token,
+    { idListaPreco: listId, pagina: String(page) },
+  );
+  if (payload?.retorno?.status !== "OK") return { page, totalPages: page - 1, exceptions: [] };
+  const exceptions: OlistPriceListException[] = [];
+  for (const record of olistRecords(payload)) {
+    const productId = normalizeOlistId(record?.id_produto);
+    if (!productId) continue;
+    exceptions.push({
+      productId,
+      price: olistMoney(record?.preco),
+      promoPrice: olistMoney(record?.preco_promocional),
+    });
+  }
+  return { page, totalPages: Math.max(page, Number(payload.retorno.numero_paginas) || page), exceptions };
 }
 
 export type FranchiseInvoiceStatus = "issued" | "pending" | "rejected";
@@ -746,21 +1279,68 @@ export async function issueFranchiseInvoiceSafely(
     savedInvoice: OlistInvoice | null;
     token: string;
     onInvoiceGenerated?: (invoice: OlistInvoice) => Promise<void>;
+    /**
+     * Pedido de franquia nasce em aberto: aprova antes de gerar a nota. Só
+     * para pedidos criados pelo checkout de franquia, nunca para importados.
+     */
+    approveOrder?: boolean;
+    /** Espera a automação da Olist gerar a nota depois de aprovar (padrão 5 s). */
+    automationWaitMs?: number;
   },
 ): Promise<FranchiseInvoiceOutcome> {
   let invoice = params.savedInvoice;
   try {
-    if (!invoice) {
-      invoice = await generateOlistInvoice(params.orderId, params.token);
-      if (params.onInvoiceGenerated) await params.onInvoiceGenerated(invoice);
+    try {
+      return await generateAndIssue(params, invoice, (generated) => (invoice = generated));
+    } catch (error) {
+      // A nota salva foi excluída na Olist: sem esta retentativa a venda ficaria
+      // para sempre "rejeitada". generateOlistInvoice reaproveita a nota atual
+      // do pedido, se houver, e só gera uma nova quando não existe nenhuma.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!params.savedInvoice || !/nota fiscal n[aã]o localizada/i.test(message)) throw error;
+      invoice = null;
+      return await generateAndIssue(params, null, (generated) => (invoice = generated));
     }
-    const issued = await issueOlistInvoice(invoice, params.token);
-    return { invoice: issued, status: issued.issued ? "issued" : "pending", error: null };
   } catch (error) {
+    // Limite de chamadas não é rejeição fiscal: fica pendente e a próxima
+    // rodada tenta de novo, sem aparecer como nota recusada.
+    // O mesmo vale para falha passageira (rede, 5xx, bloqueio): rejeição é
+    // só o que a Olist/SEFAZ recusou de fato.
+    if (isOlistRateLimitError(error) || isTransientOlistError((error as Error)?.message)) {
+      return { invoice, status: "pending", error: (error as Error).message };
+    }
     return {
       invoice,
       status: "rejected",
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+async function generateAndIssue(
+  params: {
+    orderId: string;
+    token: string;
+    onInvoiceGenerated?: (invoice: OlistInvoice) => Promise<void>;
+    approveOrder?: boolean;
+    automationWaitMs?: number;
+  },
+  saved: OlistInvoice | null,
+  remember: (invoice: OlistInvoice) => void,
+): Promise<FranchiseInvoiceOutcome> {
+  let invoice = saved;
+  if (!invoice) {
+    // Aprovar dispara a automação "Emitir NFe ao aprovar o pedido". Espera um
+    // pouco para reaproveitar a nota dela (generateOlistInvoice confere a nota
+    // do pedido antes de gerar) em vez de gerar uma segunda.
+    if (params.approveOrder && await ensureOlistOrderApproved(params.orderId, params.token)) {
+      const wait = params.automationWaitMs ?? 5_000;
+      if (wait > 0) await sleep(wait);
+    }
+    invoice = await generateOlistInvoice(params.orderId, params.token);
+    remember(invoice);
+    if (params.onInvoiceGenerated) await params.onInvoiceGenerated(invoice);
+  }
+  const issued = await issueOlistInvoice(invoice, params.token);
+  return { invoice: issued, status: issued.issued ? "issued" : "pending", error: null };
 }

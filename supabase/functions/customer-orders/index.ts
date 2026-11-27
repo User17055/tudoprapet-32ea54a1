@@ -46,7 +46,9 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: linkedSessions, error: linkedError } = await admin
       .from("checkout_sessions")
-      .select("shopify_order_id, customer_type, status")
+      .select(
+        "shopify_order_id, customer_type, status, olist_order_number, olist_invoice_number, olist_invoice_url, olist_invoice_status",
+      )
       .eq("user_id", user.id)
       .not("shopify_order_id", "is", null)
       .order("created_at", { ascending: false })
@@ -144,6 +146,18 @@ Deno.serve(async (req) => {
       const extraOrderDiscount = Math.max(0, orderDiscounts - lineDiscountsSum);
       savings += extraOrderDiscount;
 
+      // Toda venda mostra o pedido de venda e a NF-e da Olist, quando o
+      // pedido nasceu no checkout próprio (vínculo pela sessão).
+      const linked = linkedSessionsByOrderId.get(String(o.id));
+      const saleOrderNumber = linked?.olist_order_number || null;
+      const invoice = linked
+        ? {
+          status: linked.olist_invoice_status || null,
+          number: linked.olist_invoice_number || null,
+          url: linked.olist_invoice_url || null,
+        }
+        : null;
+
       const fs = (o.financial_status || "").toLowerCase();
       const cancelled = !!o.cancelled_at;
       const refunded = fs === "refunded";
@@ -167,6 +181,8 @@ Deno.serve(async (req) => {
         savings: Number(savings.toFixed(2)),
         effective_spent: effectiveSpent,
         effective_savings: effectiveSavings,
+        sale_order_number: saleOrderNumber,
+        invoice,
         line_items: lineItems,
       };
     });

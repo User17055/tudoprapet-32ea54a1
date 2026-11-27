@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { handleFranchisePriceBlocked } from "@/lib/franchisePriceBlocked";
 
 export interface FranchiseOpenOrderItem {
   variantId: string;
@@ -27,6 +28,8 @@ export function useFranchiseOpenOrder(enabled = true) {
 
   const invoke = useCallback(async (body: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke("franchise-open-order", { body });
+    // Produto sem preço de franquia: o aviso explica e oferece remover/revisar.
+    if (handleFranchisePriceBlocked(data)) throw new Error(data.error);
     if (error || data?.error) throw new Error(data?.error || error?.message || "Não foi possível atualizar o pedido");
     return data as { order: FranchiseOpenOrder | null };
   }, []);

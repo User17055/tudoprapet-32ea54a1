@@ -13,6 +13,7 @@ import {
   ShoppingBag,
   Trash2,
   WalletCards,
+  Store,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -360,6 +361,7 @@ const Profile = () => {
         <div className="container mx-auto py-5 sm:py-8">
           <nav className="mb-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Atalhos da conta">
             <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/meus-pedidos"><Package className="mr-1.5 h-4 w-4" />Meus pedidos</Link></Button>
+            {isFranchisee && <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/franquia/pedidos"><Store className="mr-1.5 h-4 w-4" />Pedidos da franquia</Link></Button>}
             {isFranchisee && <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/pagamentos-franquia"><WalletCards className="mr-1.5 h-4 w-4" />Pagamentos</Link></Button>}
             <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/carrinho"><ShoppingBag className="mr-1.5 h-4 w-4" />Carrinho</Link></Button>
             <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full"><Link to="/catalogo">Comprar novamente</Link></Button>

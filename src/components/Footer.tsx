@@ -1,5 +1,6 @@
 import { Instagram, Mail, MessageCircle } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ChristmasFooterDecor } from "@/components/ChristmasTheme";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
 const INSTAGRAM_URL = "https://www.instagram.com/tudoprapet_/";
@@ -89,8 +90,9 @@ const FooterLink = ({ link }: { link: { label: string; to?: string; href?: strin
 
 export const Footer = () => {
   return (
-    <footer className="hidden border-t border-[#eeeeee] bg-white text-[#252a32] md:block">
-      <div className="container mx-auto py-10">
+    <footer className="bg-white text-[#252a32] md:border-t md:border-[#eeeeee]">
+      {/* no celular só aparece o desenho de Natal (ChristmasFooterDecor); os links continuam só no desktop */}
+      <div className="container mx-auto hidden pb-2 pt-10 md:block">
         <div className="grid grid-cols-6 gap-10">
           {footerColumns.map((column) => (
             <div key={column.title}>
@@ -123,6 +125,7 @@ export const Footer = () => {
           </div>
         </div>
       </div>
+      <ChristmasFooterDecor />
     </footer>
   );
 };

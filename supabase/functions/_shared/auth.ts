@@ -15,6 +15,8 @@ export interface AuthContext {
   supabase: SupabaseClient;
   userId: string;
   email: string | null;
+  /** E-mail confirmado pelo provedor de login. */
+  emailVerified: boolean;
 }
 
 export type AuthResult =
@@ -39,7 +41,7 @@ export async function requireUser(req: Request): Promise<AuthResult> {
     return { ok: false, response: errorResponse("Não autorizado", 401) };
   }
 
-  return { ok: true, auth: { supabase, userId: user.id, email: user.email ?? null } };
+  return { ok: true, auth: { supabase, userId: user.id, email: user.email ?? null, emailVerified: !!user.email_confirmed_at } };
 }
 
 /** Exige usuário autenticado E com papel de admin. */

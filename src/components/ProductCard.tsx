@@ -173,7 +173,7 @@ export const ProductCard = ({
     >
       <div className="relative aspect-square overflow-hidden rounded-lg border border-[#e5e7eb] bg-white">
         {badgePercent > 0 && (
-          <span className="absolute left-0 top-7 z-[2] inline-flex h-9 min-w-[78px] items-center justify-center rounded-r-sm bg-[#ffe9ad] px-3 text-[14px] font-bold leading-none text-[#111827]">
+          <span className="absolute left-0 top-7 z-[2] inline-flex h-9 min-w-[78px] items-center justify-center rounded-r-sm bg-[#D62839] px-3 text-[14px] font-bold leading-none text-white">
             {badgePercent}% OFF
           </span>
         )}

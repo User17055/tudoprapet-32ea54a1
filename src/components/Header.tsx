@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader2, Menu, MessageCircle, Package, Search, User, WalletCards, X } from "lucide-react";
+import { Loader2, Menu, MessageCircle, Package, Search, Store, User, WalletCards, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CartDrawer } from "@/components/CartDrawer";
 import { MegaMenu, type MegaMenuItem } from "@/components/MegaMenu";
@@ -21,7 +21,7 @@ import { useCustomerPrices } from "@/hooks/useCustomerPrices";
 import { isProductAvailable } from "@/lib/productAvailability";
 import { useClientSaleVisibility } from "@/hooks/useClientSaleVisibility";
 import { isClientProductVisible } from "@/lib/clientSaleVisibility";
-import logo from "@/assets/tpp-logo.svg";
+import logo from "@/assets/tpp-logo-natal.webp";
 
 const WHATSAPP_URL = "https://wa.me/5518996642021";
 const formatPrice = (amount: string) =>
@@ -328,6 +328,16 @@ export const Header = () => {
       </Link>
       {isFranchisee && (
         <Link
+          to="/franquia/pedidos"
+          onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-2 py-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
+        >
+          <Store className="h-4 w-4" />
+          Pedidos da franquia
+        </Link>
+      )}
+      {isFranchisee && (
+        <Link
           to="/pagamentos-franquia"
           onClick={() => setMobileOpen(false)}
           className="flex items-center gap-2 py-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
@@ -370,7 +380,7 @@ export const Header = () => {
         </div>
 
         <Link to="/catalogo" className="relative z-20 flex translate-y-1 shrink-0 items-center justify-self-center" aria-label="TudoPraPet - catálogo">
-          <img src={logo} alt="TudoPraPet" className="h-auto w-[118px] sm:w-40 md:h-10 md:w-auto" />
+          <img src={logo} alt="TudoPraPet" className="h-auto w-[140px] max-w-none sm:w-40 md:-my-1.5 md:w-56" />
         </Link>
 
         <form

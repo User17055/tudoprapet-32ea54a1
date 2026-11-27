@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { handleFranchisePriceBlocked } from "@/lib/franchisePriceBlocked";
 import { goToCheckout } from "@/lib/checkout";
 import { ProductImage } from "@/components/ProductImage";
 import { customCheckoutEnabled, startCustomCheckout } from "@/lib/customCheckout";
@@ -369,15 +370,23 @@ const ProductDetail = () => {
           body: { items: [{ variantId: variant.id, quantity }] },
         });
         if (error) throw error;
+        if (handleFranchisePriceBlocked(data)) {
+          setBuyingNow(false);
+          return;
+        }
         if (data?.checkoutUrl) {
           goToCheckout(data.checkoutUrl);
           setBuyingNow(false);
           return;
         }
+        throw new Error(data?.error || "Checkout de franquia sem link");
       } catch (err) {
+        // Franquia nunca segue pelo checkout normal: pagaria o preço cheio.
         console.error("Franchise checkout failed:", err);
-        toast.error("Erro ao aplicar preço de franquia.");
+        toast.error("Não foi possível aplicar o preço de franquia. Tente novamente em instantes.");
       }
+      setBuyingNow(false);
+      return;
     } else if (isSubscribed) {
       try {
         const { data, error } = await supabase.functions.invoke("subscriber-checkout", {

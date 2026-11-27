@@ -1,22 +1,78 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Loader2, Lock, Mail } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthField } from "@/components/auth/AuthField";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oidcLoading, setOidcLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   // Fluxos externos (consentimento OAuth do MCP) precisam voltar para a URL de origem.
   const rawNext = params.get("next") ?? "";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
+
+  useEffect(() => {
+    if (params.get("provider") !== "sao-francisco") return;
+    let active = true;
+    let checking = false;
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (params.has("error") || hash.has("error")) {
+      toast.error("Não foi possível entrar com São Francisco. Tente novamente.");
+      window.history.replaceState(null, "", "/login");
+      return;
+    }
+    setOidcLoading(true);
+    const confirmUser = async () => {
+      if (checking || !active) return;
+      checking = true;
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (active && !error && data.user) navigate(next || "/perfil", { replace: true });
+      } finally {
+        checking = false;
+      }
+    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) window.setTimeout(() => { void confirmUser(); }, 0);
+    });
+    void confirmUser();
+    const timeout = window.setTimeout(() => {
+      if (!active) return;
+      setOidcLoading(false);
+      toast.error("Não foi possível confirmar sua entrada. Tente novamente.");
+    }, 15000);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+      window.clearTimeout(timeout);
+    };
+  }, [params, next, navigate]);
+
+  const handleSaoFrancisco = async () => {
+    setOidcLoading(true);
+    try {
+      const callback = new URL("/login", window.location.origin);
+      callback.searchParams.set("provider", "sao-francisco");
+      if (next) callback.searchParams.set("next", next);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "custom:app-oidc",
+        options: { redirectTo: callback.toString(), scopes: "openid email profile phone" },
+      });
+      if (error) throw error;
+    } catch {
+      setOidcLoading(false);
+      toast.error("Não foi possível entrar com São Francisco. Tente novamente.");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +150,7 @@ const Login = () => {
 
         <Button
           type="submit"
-          disabled={loading}
+          disabled={loading || oidcLoading}
           className="btn-bounce h-12 w-full rounded-xl font-display text-base font-bold"
         >
           {loading ? (
@@ -105,6 +161,16 @@ const Login = () => {
               <ArrowRight className="ml-2 h-4 w-4" />
             </>
           )}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void handleSaoFrancisco()}
+          disabled={loading || oidcLoading}
+          className="h-12 w-full rounded-xl font-bold"
+        >
+          {oidcLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" /> : <ShieldCheck className="mr-2 h-5 w-5" aria-hidden="true" />}
+          Entrar com São Francisco
         </Button>
       </form>
     </AuthLayout>

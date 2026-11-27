@@ -11,6 +11,7 @@ import {
   Package,
   Receipt,
   ShieldCheck,
+  ClipboardCheck,
   Store,
   Users,
   Wrench,
@@ -23,6 +24,7 @@ import type { PrintableOrder } from "@/lib/orderPrint";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fetchAllRowsResult } from "@/lib/fetchAllRows";
+import type { SalesFiscalHealth } from "@/lib/olistReview";
 
 interface DashboardData {
   users: number;
@@ -76,10 +78,13 @@ export default function OverviewTab() {
   const { user } = useAuth();
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
+  // Só os totais: o detalhe fica na aba "Revisão Olist".
+  const [fiscalHealth, setFiscalHealth] = useState<SalesFiscalHealth | null>(null);
+  const [priceReviews, setPriceReviews] = useState(0);
 
   const load = async () => {
     setLoading(true);
-    const [profiles, members, administrators, maintenance, ordersResult] = await Promise.all([
+    const [profiles, members, administrators, maintenance, ordersResult, fiscalResult, automationResult] = await Promise.all([
       fetchAllRowsResult<{ user_id: string; is_franchisee: boolean }>("profiles", "user_id,is_franchisee", {
         orderBy: "user_id",
       }),
@@ -87,7 +92,12 @@ export default function OverviewTab() {
       supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "admin"),
       supabase.from("site_maintenance").select("enabled").eq("id", true).maybeSingle(),
       supabase.functions.invoke("admin-orders", { body: { action: "list", limit: 8 } }),
+      supabase.rpc("admin_sales_fiscal_health"),
+      supabase.rpc("admin_automation_status"),
     ]);
+    setFiscalHealth(fiscalResult.error ? null : (fiscalResult.data as unknown as SalesFiscalHealth));
+    const automation = automationResult.data as unknown as { price_reviews?: { open?: number } } | null;
+    setPriceReviews(Number(automation?.price_reviews?.open || 0));
 
     const firstError = profiles.error || members.error || administrators.error || maintenance.error || ordersResult.error;
     if (firstError) {
@@ -122,7 +132,12 @@ export default function OverviewTab() {
   // "terça-feira, 29 de setembro" -> só a primeira letra maiúscula, como em português.
   const todayText = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const today = todayText.charAt(0).toUpperCase() + todayText.slice(1);
-  const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0);
+  const withoutInvoice = fiscalHealth?.without_invoice || 0;
+  const unsettledPaid = fiscalHealth?.unsettled_paid || 0;
+  const withoutReceivable = fiscalHealth?.without_receivable || 0;
+  const olistPending = withoutInvoice + unsettledPaid + withoutReceivable + priceReviews;
+  const alertCount = Number(data.maintenance) + Number(data.pendingSales > 0) + Number(data.failedCheckouts > 0) +
+    Number(olistPending > 0);
 
   const cards = [
     { label: "Clientes", value: data.users, icon: Users, color: "bg-blue-50 text-blue-700", to: "/admin?tab=users" },
@@ -220,6 +235,7 @@ export default function OverviewTab() {
             {data.maintenance && <StatusLink to="/admin?tab=maintenance" icon={Wrench} text="A loja está em manutenção" />}
             {data.pendingSales > 0 && <StatusLink to="/admin?tab=orders" icon={Package} text={`${data.pendingSales} venda(s) aguardando sincronização`} />}
             {data.failedCheckouts > 0 && <StatusLink to="/admin?tab=orders" icon={AlertTriangle} text={`${data.failedCheckouts} falha(s) recente(s) no checkout`} />}
+            {olistPending > 0 && <StatusLink to="/admin?tab=olist" icon={ClipboardCheck} text={`${olistPending} pendência(s) na Revisão Olist`} />}
           </CardContent>
         </Card>
       )}
@@ -309,6 +325,7 @@ export default function OverviewTab() {
             <QuickLink to="/admin?tab=administrators" icon={ShieldCheck} label="Administradores" />
             <QuickLink to="/admin?tab=retirada" icon={Package} label="Retirada" />
             <QuickLink to="/admin?tab=maintenance" icon={Wrench} label="Manutenção" />
+            <QuickLink to="/admin?tab=olist" icon={ClipboardCheck} label="Revisão Olist" />
           </CardContent>
         </Card>
       </div>

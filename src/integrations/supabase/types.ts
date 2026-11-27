@@ -252,6 +252,7 @@ export type Database = {
           invoice_purpose: string | null
           items_snapshot: Json
           olist_invoice_checked_at: string | null
+          olist_invoice_error: string | null
           olist_invoice_id: string | null
           olist_invoice_number: string | null
           olist_invoice_status: string | null
@@ -262,7 +263,13 @@ export type Database = {
           olist_payment_sync_error: string | null
           olist_payment_sync_next_attempt_at: string | null
           olist_payment_synced_at: string | null
+          olist_receivable_checked_at: string | null
+          olist_receivable_error: string | null
           olist_receivable_id: string | null
+          olist_twin_checked_at: string | null
+          olist_twin_checks: number
+          olist_twin_order_numbers: string | null
+          olist_twin_status: string | null
           pricing_snapshot: Json
           referral_code: string | null
           referral_employee_name: string | null
@@ -299,6 +306,7 @@ export type Database = {
           invoice_purpose?: string | null
           items_snapshot?: Json
           olist_invoice_checked_at?: string | null
+          olist_invoice_error?: string | null
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
           olist_invoice_status?: string | null
@@ -309,7 +317,13 @@ export type Database = {
           olist_payment_sync_error?: string | null
           olist_payment_sync_next_attempt_at?: string | null
           olist_payment_synced_at?: string | null
+          olist_receivable_checked_at?: string | null
+          olist_receivable_error?: string | null
           olist_receivable_id?: string | null
+          olist_twin_checked_at?: string | null
+          olist_twin_checks?: number
+          olist_twin_order_numbers?: string | null
+          olist_twin_status?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
           referral_employee_name?: string | null
@@ -346,6 +360,7 @@ export type Database = {
           invoice_purpose?: string | null
           items_snapshot?: Json
           olist_invoice_checked_at?: string | null
+          olist_invoice_error?: string | null
           olist_invoice_id?: string | null
           olist_invoice_number?: string | null
           olist_invoice_status?: string | null
@@ -356,7 +371,13 @@ export type Database = {
           olist_payment_sync_error?: string | null
           olist_payment_sync_next_attempt_at?: string | null
           olist_payment_synced_at?: string | null
+          olist_receivable_checked_at?: string | null
+          olist_receivable_error?: string | null
           olist_receivable_id?: string | null
+          olist_twin_checked_at?: string | null
+          olist_twin_checks?: number
+          olist_twin_order_numbers?: string | null
+          olist_twin_status?: string | null
           pricing_snapshot?: Json
           referral_code?: string | null
           referral_employee_name?: string | null
@@ -377,25 +398,37 @@ export type Database = {
       }
       club_members: {
         Row: {
+          cpf: string | null
           created_at: string
           email: string
           id: string
           is_active: boolean
           name: string | null
+          phone: string | null
+          source: string
+          updated_at: string
         }
         Insert: {
+          cpf?: string | null
           created_at?: string
           email: string
           id?: string
           is_active?: boolean
           name?: string | null
+          phone?: string | null
+          source?: string
+          updated_at?: string
         }
         Update: {
+          cpf?: string | null
           created_at?: string
           email?: string
           id?: string
           is_active?: boolean
           name?: string | null
+          phone?: string | null
+          source?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -781,24 +814,125 @@ export type Database = {
           },
         ]
       }
+      franchise_price_review_requests: {
+        Row: {
+          id: string
+          requested_at: string
+          review_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          requested_at?: string
+          review_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          requested_at?: string
+          review_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "franchise_price_review_requests_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "franchise_price_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      franchise_price_reviews: {
+        Row: {
+          block_count: number
+          catalog_price: number | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decided_by_email: string | null
+          decision_cost: number | null
+          decision_note: string | null
+          first_blocked_at: string
+          id: string
+          last_blocked_at: string
+          product_title: string | null
+          reason: string
+          requested_at: string | null
+          shopify_product_id: string | null
+          shopify_variant_id: string
+          sku: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          block_count?: number
+          catalog_price?: number | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decided_by_email?: string | null
+          decision_cost?: number | null
+          decision_note?: string | null
+          first_blocked_at?: string
+          id?: string
+          last_blocked_at?: string
+          product_title?: string | null
+          reason: string
+          requested_at?: string | null
+          shopify_product_id?: string | null
+          shopify_variant_id: string
+          sku?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          block_count?: number
+          catalog_price?: number | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decided_by_email?: string | null
+          decision_cost?: number | null
+          decision_note?: string | null
+          first_blocked_at?: string
+          id?: string
+          last_blocked_at?: string
+          product_title?: string | null
+          reason?: string
+          requested_at?: string | null
+          shopify_product_id?: string | null
+          shopify_variant_id?: string
+          sku?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       franchise_prices: {
         Row: {
           created_at: string
+          previous_price: number | null
           price: number
+          price_changed_at: string | null
           shopify_product_id: string
           shopify_variant_id: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          previous_price?: number | null
           price: number
+          price_changed_at?: string | null
           shopify_product_id: string
           shopify_variant_id: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          previous_price?: number | null
           price?: number
+          price_changed_at?: string | null
           shopify_product_id?: string
           shopify_variant_id?: string
           updated_at?: string
@@ -829,6 +963,251 @@ export type Database = {
           image_path?: string
           link_url?: string | null
           sort_order?: number
+        }
+        Relationships: []
+      }
+      olist_api_rate: {
+        Row: {
+          blocked_until: string | null
+          blocks_today: number
+          calls: number
+          calls_today: number
+          id: boolean
+          last_blocked_at: string | null
+          stats_day: string
+          throttled_today: number
+          window_start: string
+        }
+        Insert: {
+          blocked_until?: string | null
+          blocks_today?: number
+          calls?: number
+          calls_today?: number
+          id?: boolean
+          last_blocked_at?: string | null
+          stats_day?: string
+          throttled_today?: number
+          window_start?: string
+        }
+        Update: {
+          blocked_until?: string | null
+          blocks_today?: number
+          calls?: number
+          calls_today?: number
+          id?: boolean
+          last_blocked_at?: string | null
+          stats_day?: string
+          throttled_today?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
+      olist_catalog_runs: {
+        Row: {
+          applied: number
+          changed: number
+          created_by: string | null
+          error: string | null
+          exceptions: number
+          failed: number
+          finished_at: string | null
+          id: string
+          kind: string
+          not_found: number
+          pages: number
+          price_lists: number
+          products: number
+          started_at: string
+          status: string
+        }
+        Insert: {
+          applied?: number
+          changed?: number
+          created_by?: string | null
+          error?: string | null
+          exceptions?: number
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          kind: string
+          not_found?: number
+          pages?: number
+          price_lists?: number
+          products?: number
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          applied?: number
+          changed?: number
+          created_by?: string | null
+          error?: string | null
+          exceptions?: number
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          not_found?: number
+          pages?: number
+          price_lists?: number
+          products?: number
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      olist_price_list_exceptions: {
+        Row: {
+          fetched_at: string
+          olist_price_list_id: string
+          olist_product_id: string
+          price: number | null
+          promo_price: number | null
+          run_id: string | null
+        }
+        Insert: {
+          fetched_at?: string
+          olist_price_list_id: string
+          olist_product_id: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+        }
+        Update: {
+          fetched_at?: string
+          olist_price_list_id?: string
+          olist_product_id?: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "olist_price_list_exceptions_olist_price_list_id_fkey"
+            columns: ["olist_price_list_id"]
+            isOneToOne: false
+            referencedRelation: "olist_price_lists"
+            referencedColumns: ["olist_price_list_id"]
+          },
+        ]
+      }
+      olist_price_lists: {
+        Row: {
+          adjustment_percent: number
+          fetched_at: string
+          name: string
+          olist_price_list_id: string
+          run_id: string | null
+        }
+        Insert: {
+          adjustment_percent?: number
+          fetched_at?: string
+          name?: string
+          olist_price_list_id: string
+          run_id?: string | null
+        }
+        Update: {
+          adjustment_percent?: number
+          fetched_at?: string
+          name?: string
+          olist_price_list_id?: string
+          run_id?: string | null
+        }
+        Relationships: []
+      }
+      olist_product_snapshot: {
+        Row: {
+          cost: number | null
+          fetched_at: string
+          name: string
+          olist_product_id: string
+          price: number | null
+          promo_price: number | null
+          run_id: string | null
+          sku: string
+          sku_key: string
+          status: string | null
+          variation_type: string | null
+        }
+        Insert: {
+          cost?: number | null
+          fetched_at?: string
+          name?: string
+          olist_product_id: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+          sku?: string
+          sku_key?: string
+          status?: string | null
+          variation_type?: string | null
+        }
+        Update: {
+          cost?: number | null
+          fetched_at?: string
+          name?: string
+          olist_product_id?: string
+          price?: number | null
+          promo_price?: number | null
+          run_id?: string | null
+          sku?: string
+          sku_key?: string
+          status?: string | null
+          variation_type?: string | null
+        }
+        Relationships: []
+      }
+      olist_sync_state: {
+        Row: {
+          details: Json | null
+          key: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          details?: Json | null
+          key: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          details?: Json | null
+          key?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: []
+      }
+      olist_webhook_events: {
+        Row: {
+          attempts: number
+          dedupe_key: string
+          event: string
+          id: number
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+          received_at: string
+        }
+        Insert: {
+          attempts?: number
+          dedupe_key: string
+          event: string
+          id?: never
+          last_error?: string | null
+          payload: Json
+          processed_at?: string | null
+          received_at?: string
+        }
+        Update: {
+          attempts?: number
+          dedupe_key?: string
+          event?: string
+          id?: never
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
         }
         Relationships: []
       }
@@ -1009,6 +1388,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      price_value_history: {
+        Row: {
+          changed_at: string
+          id: string
+          kind: string
+          new_value: number | null
+          old_value: number | null
+          shopify_variant_id: string
+        }
+        Insert: {
+          changed_at?: string
+          id?: string
+          kind: string
+          new_value?: number | null
+          old_value?: number | null
+          shopify_variant_id: string
+        }
+        Update: {
+          changed_at?: string
+          id?: string
+          kind?: string
+          new_value?: number | null
+          old_value?: number | null
+          shopify_variant_id?: string
+        }
+        Relationships: []
       }
       print_jobs: {
         Row: {
@@ -1448,6 +1854,111 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_orders: {
+        Row: {
+          attempts: number
+          automation_eligible: boolean
+          boleto_url: string | null
+          created_at: string
+          customer_cpf_cnpj: string | null
+          customer_name: string | null
+          customer_type: string
+          id: string
+          invoice_checked_at: string | null
+          invoice_error: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          invoice_status: string | null
+          invoice_url: string | null
+          items: Json
+          needs_refresh: boolean
+          next_attempt_at: string | null
+          olist_order_id: string
+          olist_order_number: string | null
+          order_date: string | null
+          processing_until: string | null
+          receivable_amount: number | null
+          receivable_due_date: string | null
+          receivable_error: string | null
+          receivable_id: string | null
+          receivable_status: string | null
+          refreshed_at: string | null
+          situation: string | null
+          total: number | null
+          tracking_code: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          automation_eligible?: boolean
+          boleto_url?: string | null
+          created_at?: string
+          customer_cpf_cnpj?: string | null
+          customer_name?: string | null
+          customer_type?: string
+          id?: string
+          invoice_checked_at?: string | null
+          invoice_error?: string | null
+          invoice_id?: string | null
+          invoice_number?: string | null
+          invoice_status?: string | null
+          invoice_url?: string | null
+          items?: Json
+          needs_refresh?: boolean
+          next_attempt_at?: string | null
+          olist_order_id: string
+          olist_order_number?: string | null
+          order_date?: string | null
+          processing_until?: string | null
+          receivable_amount?: number | null
+          receivable_due_date?: string | null
+          receivable_error?: string | null
+          receivable_id?: string | null
+          receivable_status?: string | null
+          refreshed_at?: string | null
+          situation?: string | null
+          total?: number | null
+          tracking_code?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          automation_eligible?: boolean
+          boleto_url?: string | null
+          created_at?: string
+          customer_cpf_cnpj?: string | null
+          customer_name?: string | null
+          customer_type?: string
+          id?: string
+          invoice_checked_at?: string | null
+          invoice_error?: string | null
+          invoice_id?: string | null
+          invoice_number?: string | null
+          invoice_status?: string | null
+          invoice_url?: string | null
+          items?: Json
+          needs_refresh?: boolean
+          next_attempt_at?: string | null
+          olist_order_id?: string
+          olist_order_number?: string | null
+          order_date?: string | null
+          processing_until?: string | null
+          receivable_amount?: number | null
+          receivable_due_date?: string | null
+          receivable_error?: string | null
+          receivable_id?: string | null
+          receivable_status?: string | null
+          refreshed_at?: string | null
+          situation?: string | null
+          total?: number | null
+          tracking_code?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       site_maintenance: {
         Row: {
           enabled: boolean
@@ -1505,6 +2016,8 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          previous_price: number | null
+          price_changed_at: string | null
           shopify_product_id: string
           shopify_variant_id: string
           subscriber_price: number
@@ -1513,6 +2026,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          previous_price?: number | null
+          price_changed_at?: string | null
           shopify_product_id: string
           shopify_variant_id: string
           subscriber_price: number
@@ -1521,6 +2036,8 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          previous_price?: number | null
+          price_changed_at?: string | null
           shopify_product_id?: string
           shopify_variant_id?: string
           subscriber_price?: number
@@ -1623,6 +2140,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_automation_status: { Args: never; Returns: Json }
+      admin_retry_olist_issue: {
+        Args: { p_id: string; p_issue: string; p_origin?: string }
+        Returns: undefined
+      }
+      admin_sales_fiscal_health: {
+        Args: { p_grace_minutes?: number; p_since?: string }
+        Returns: Json
+      }
+      claim_olist_api_call: { Args: { p_limit: number }; Returns: number }
       claim_olist_franchise_checkout: {
         Args: { p_session_id: string }
         Returns: boolean
@@ -1677,6 +2204,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      claim_sales_order: { Args: { p_id: string }; Returns: boolean }
       consume_checkout_rate_limit: {
         Args: {
           p_key_hash: string
@@ -1736,6 +2264,25 @@ export type Database = {
       is_tax_id_available: { Args: { _tax_id: string }; Returns: boolean }
       is_valid_cnpj: { Args: { value: string }; Returns: boolean }
       is_valid_cpf: { Args: { value: string }; Returns: boolean }
+      olist_issue_needs_action: {
+        Args: { p_message: string }
+        Returns: boolean
+      }
+      record_franchise_price_block: {
+        Args: {
+          p_catalog_price: number
+          p_product_id: string
+          p_reason: string
+          p_sku: string
+          p_title: string
+          p_variant_id: string
+        }
+        Returns: string
+      }
+      report_olist_api_block: {
+        Args: { p_seconds: number }
+        Returns: undefined
+      }
       save_customer_address: {
         Args: {
           p_address: Json

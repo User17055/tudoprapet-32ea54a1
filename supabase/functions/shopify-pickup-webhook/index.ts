@@ -347,7 +347,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`WhatsApp dispatched for order ${orderNumber}: ${respText}`);
+    console.log(`WhatsApp dispatched for order ${orderNumber}`);
 
     // Grava o código no pedido para o e-mail nativo da Shopify renderizar via
     // {{ attributes["Codigo de retirada"] }}.

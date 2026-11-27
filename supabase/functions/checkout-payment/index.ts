@@ -35,6 +35,7 @@ import {
   createOlistFranchiseOrder,
   ensureOlistOrderReceivable,
   getOlistReceivable,
+  isOlistRateLimitError,
   issueFranchiseInvoiceSafely,
   olistOtherExpensesForTotal,
   type OlistFranchiseOrderInput,
@@ -170,6 +171,10 @@ Deno.serve(async (req) => {
   let requestedAction = "";
   let olistStage = "";
   let ownsFranchiseProcessing = false;
+  // Pedido de franquia já criado na Olist (com a Shopify já concluída): a
+  // partir daqui a venda existe e uma falha não pode devolver a sessão para
+  // "aguardando pagamento" nem dizer que nada aconteceu.
+  let franchiseOlistOrderId: string | null = null;
   let logAdmin: any = null;
   let logContext: {
     sessionId?: string;
@@ -654,6 +659,7 @@ Deno.serve(async (req) => {
         }).eq("id", sessionId);
         if (orderSaveError) throw orderSaveError;
       }
+      franchiseOlistOrderId = order.id;
 
       olistStage = "receivable";
       const receivableReference = session.olist_receivable_id
@@ -661,7 +667,11 @@ Deno.serve(async (req) => {
         : await ensureOlistOrderReceivable(order.id, olistToken);
       const receivable = await getOlistReceivable(receivableReference.id, olistToken);
       const { error: receivableSaveError } = await admin.from("checkout_sessions")
-        .update({ olist_receivable_id: receivable.id }).eq("id", sessionId);
+        .update({
+          olist_receivable_id: receivable.id,
+          olist_receivable_error: null,
+          olist_receivable_checked_at: new Date().toISOString(),
+        }).eq("id", sessionId);
       if (receivableSaveError) throw receivableSaveError;
       const { error: paymentSaveError } = await admin.from("payments").update({
         provider: "olist",
@@ -695,6 +705,8 @@ Deno.serve(async (req) => {
         ? await issueFranchiseInvoiceSafely({
           orderId: order.id,
           token: olistToken,
+          // O pedido nasce em aberto; aprovar dispara a NF-e da automação.
+          approveOrder: true,
           savedInvoice: session.olist_invoice_id
             ? {
               id: String(session.olist_invoice_id),
@@ -742,6 +754,7 @@ Deno.serve(async (req) => {
         ...(ownsInvoiceProcessing
           ? {
             olist_invoice_status: invoiceOutcome.status,
+            olist_invoice_error: invoiceOutcome.error ? invoiceOutcome.error.slice(0, 2000) : null,
             olist_invoice_checked_at: new Date().toISOString(),
           }
           : {}),
@@ -1122,6 +1135,21 @@ Deno.serve(async (req) => {
         502,
       );
     }
+    if (logContext.method === "terms" && franchiseOlistOrderId && logAdmin && logContext.sessionId) {
+      // A venda já existe (Shopify concluída e pedido na Olist): não volta para
+      // "aguardando pagamento". A sessão segue em processamento e a conciliação
+      // (olist-reconcile-franchise) lança a cobrança e grava o boleto.
+      const { error: pendingError } = await logAdmin.from("checkout_sessions").update({
+        olist_receivable_error: (message || "Falha desconhecida ao gerar a cobrança").slice(0, 2000),
+        olist_receivable_checked_at: new Date().toISOString(),
+      }).eq("id", logContext.sessionId);
+      if (pendingError) console.error("Falha ao registrar cobrança pendente:", pendingError);
+      return errorResponse(
+        "Seu pedido foi registrado, mas a Olist ainda não gerou o boleto. Ele será gerado " +
+          "automaticamente e aparecerá em Pagamentos em alguns minutos. Não é preciso refazer a compra.",
+        502,
+      );
+    }
     if (logContext.method === "terms") {
       if (ownsFranchiseProcessing && logAdmin && logContext.sessionId) {
         const { error: releaseError } = await logAdmin.from("checkout_sessions")
@@ -1139,6 +1167,12 @@ Deno.serve(async (req) => {
       if (/olist_(order|receivable|invoice)|schema cache|column .* does not exist/i.test(message)) {
         return errorResponse(
           "A atualização do banco da Olist ainda não foi aplicada. Publique as migrations e tente novamente.",
+          503,
+        );
+      }
+      if (isOlistRateLimitError(error)) {
+        return errorResponse(
+          "A Olist está ocupada no momento. Aguarde 1 minuto e confirme o pedido de novo.",
           503,
         );
       }
