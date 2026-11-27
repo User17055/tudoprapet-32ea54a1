@@ -1,3 +1,4 @@
+import { effectiveListPrice, priceListIds } from "../../supabase/functions/_shared/olist-list-values";
 // Comparação do site com o retrato da Olist (tela Valores). Só leitura: as
 // diferenças aparecem para o admin decidir; nada aqui grava na Olist.
 
@@ -60,22 +61,16 @@ export function olistListPrice(
   product: OlistProduct | null | undefined,
   exception: OlistListException | null | undefined,
 ): number | null {
-  if (exception) return exception.promoPrice ?? exception.price;
-  if (!product) return null;
-  const sale = olistSalePrice(product);
-  if (sale === null) return null;
-  return Math.round(sale * (1 + list.adjustmentPercent / 100) * 100) / 100;
+  return effectiveListPrice(olistSalePrice(product), list.adjustmentPercent, exception ?? undefined);
 }
 
 export type ListRole = "franchise" | "subscriber";
 
-const normalized = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("pt-BR");
 
 /** Qual lista da Olist corresponde a qual preço do site (pelo nome). */
 export function listRole(list: OlistPriceList): ListRole | null {
-  const name = normalized(list.name);
-  if (/franq/.test(name)) return "franchise";
-  if (/plano|clube|assinante/.test(name)) return "subscriber";
+  if (list.id === priceListIds.franchise) return "franchise";
+  if (list.id === priceListIds.subscriber) return "subscriber";
   return null;
 }
 
@@ -91,12 +86,14 @@ export type OlistFilter =
   | "sale_diff"
   | "franchise_list_diff"
   | "subscriber_list_diff"
+  | "duplicate_sku"
   | "not_in_olist"
   | "olist_no_cost"
   | "no_sku";
 
 export interface RowComparison {
   hasSku: boolean;
+  ambiguous?: boolean;
   olist: OlistProduct | null;
   siteCost: number | null;
   siteSale: number | null;
@@ -112,18 +109,20 @@ export function matchesOlistFilter(row: RowComparison, filter: OlistFilter): boo
       return true;
     case "no_sku":
       return !row.hasSku;
+    case "duplicate_sku":
+      return row.ambiguous === true;
     case "not_in_olist":
-      return row.hasSku && row.olist === null;
+      return row.hasSku && !row.ambiguous && row.olist === null;
     case "olist_no_cost":
       return row.olist !== null && row.olist.cost === null;
     case "cost_diff":
       return row.olist?.cost != null && (row.siteCost === null || differentPrice(row.siteCost, row.olist.cost));
     case "sale_diff":
-      return differentPrice(row.siteSale, olistSalePrice(row.olist));
+      return olistSalePrice(row.olist) != null && (row.siteSale === null || differentPrice(row.siteSale, olistSalePrice(row.olist)));
     case "franchise_list_diff":
-      return differentPrice(row.siteFranchise, row.franchiseList);
+      return row.franchiseList != null && (row.siteFranchise === null || differentPrice(row.siteFranchise, row.franchiseList));
     case "subscriber_list_diff":
-      return differentPrice(row.siteSubscriber, row.subscriberList);
+      return row.subscriberList != null && (row.siteSubscriber === null || differentPrice(row.siteSubscriber, row.subscriberList));
   }
 }
 

@@ -57,7 +57,7 @@ describe("preço das listas da Olist (formato conferido em 26/11/2026)", () => {
     expect(olistListPrice(planoSF, null, null)).toBeNull();
   });
 
-  it("reconhece qual lista é a da franquia e qual é a do Clube pelo nome", () => {
+  it("reconhece qual lista é a da franquia e qual é a do Clube pelo ID da Olist", () => {
     expect(listRole(franqueados)).toBe("franchise");
     expect(listRole(planoSF)).toBe("subscriber");
     expect(listRole({ id: "9", name: "Atacado", adjustmentPercent: 0 })).toBeNull();

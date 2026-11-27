@@ -316,7 +316,7 @@ const ProductDetail = () => {
   const franchisePrice = variant ? getFranchisePrice(variant.id) : null;
   const hasSubscriberDiscount =
     !isFranchisee && subscriberPrice !== null && subscriberPrice < price;
-  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null && franchisePrice < price;
+  const hasFranchiseDiscount = isFranchisee && franchisePrice !== null;
   const installment = (price / 2).toFixed(2).replace(".", ",");
 
   

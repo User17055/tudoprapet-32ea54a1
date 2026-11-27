@@ -425,7 +425,7 @@ export default function Checkout() {
       : isSubscribed
         ? cardSubscriberPrice(item.variantId)
         : null;
-    if (special === null || !Number.isFinite(special) || special <= 0 || special >= catalogPrice) return acc;
+    if (special === null || !Number.isFinite(special) || special <= 0 || (!pricingIsFranchisee && special >= catalogPrice)) return acc;
     return acc + (catalogPrice - special) * item.quantity;
   }, 0);
   const cardBaseTotal = Math.max(
@@ -3287,7 +3287,7 @@ function CheckoutBag({
         : null;
     const effective = summary
       ? item.unitPrice
-      : special !== null && Number.isFinite(special) && special > 0 && special < catalog
+      : special !== null && Number.isFinite(special) && special > 0 && (isFranchisee || special < catalog)
         ? special
         : item.unitPrice;
     return { catalog, effective, hasDiscount: effective < catalog };
@@ -3553,7 +3553,11 @@ function SummaryTotals({
   const { getFranchisePrice, isFranchisee } = useFranchisePrices();
   const { getCustomerPrice } = useCustomerPrices();
   const cartSubtotal = cartItems.reduce(
-    (total, item) => total + (getCustomerPrice(item.variantId) ?? Number(item.price.amount)) * item.quantity,
+    (total, item) => {
+      const regular = getCustomerPrice(item.variantId) ?? Number(item.price.amount);
+      const franchise = isFranchisee ? getFranchisePrice(item.variantId) : null;
+      return total + Math.max(regular, franchise ?? regular) * item.quantity;
+    },
     0,
   );
   // Antes da sessão de checkout existir, o desconto só aparece para o perfil

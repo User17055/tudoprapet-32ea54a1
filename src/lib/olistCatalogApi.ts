@@ -46,6 +46,7 @@ export async function invokeOlistCatalog(
       lastError = error instanceof Error ? error.message : lastError;
       transportFailed = true;
     }
+    if (transportFailed && body.action === "apply" && body.dryRun !== true) throw new Error(lastError);
     if (!transportFailed && !response?.retryable) throw new Error(lastError);
 
     const retryAfterMs = Number(response?.retryAfterMs);

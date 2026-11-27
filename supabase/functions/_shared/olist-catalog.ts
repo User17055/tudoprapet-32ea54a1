@@ -1,3 +1,4 @@
+import { selectCatalogProduct } from "./olist-list-values.ts";
 import { normalizeSku, roundMoney } from "./olist.ts";
 
 /**
@@ -10,6 +11,7 @@ export interface CatalogApplyItem {
   productId: string;
   variantId: string;
   sku: string;
+  shopifyPrice?: number | null;
   weightKg: number | null;
 }
 
@@ -19,6 +21,11 @@ export interface SnapshotRow {
   sku_key: string;
   name: string;
   cost: number | string | null;
+  franchiseList?: number | null;
+  subscriberList?: number | null;
+  sale?: number | null;
+  run_id?: string;
+  fetched_at?: string;
   status: string | null;
 }
 
@@ -39,6 +46,12 @@ export interface ApplyPlan {
   cost: BeforeAfter;
   franchise: BeforeAfter;
   subscriber: BeforeAfter;
+  sale: BeforeAfter;
+  customerBefore: number | null;
+  franchiseOrigin: string;
+  subscriberOrigin: string;
+  catalogId?: string;
+  fetchedAt?: string;
   subscriberMarginPercent: number | null;
   changed: boolean;
   error?: string;
@@ -48,6 +61,7 @@ export interface CurrentValues {
   costs: Map<string, { cost: number; packageWeightKg: number | null }>;
   franchise: Map<string, number>;
   subscriber: Map<string, number>;
+  customers?: Map<string, number>;
 }
 
 type Derive = (
@@ -65,17 +79,11 @@ const differs = (a: number | null, b: number | null) =>
   a === null || b === null ? a !== b : Math.abs(a - b) >= 0.005;
 
 /**
- * Escolhe o produto da Olist de um SKU. SKU repetido: vale o único ativo; se
- * não houver um só ativo, só aceita quando todos têm o mesmo custo.
+ * Escolhe o produto da Olist de um SKU. SKU repetido: vale o único ativo; sem um único ativo, as listas podem divergir mesmo com custos idênticos.
  */
 export function pickSnapshotProduct(rows: SnapshotRow[]): SnapshotRow | "duplicate" | null {
   if (rows.length === 0) return null;
-  if (rows.length === 1) return rows[0];
-  const active = rows.filter((row) => row.status === "A");
-  if (active.length === 1) return active[0];
-  const candidates = active.length > 1 ? active : rows;
-  const costs = new Set(candidates.map((row) => positive(row.cost)));
-  return costs.size === 1 ? candidates[0] : "duplicate";
+  return selectCatalogProduct(rows) ?? "duplicate";
 }
 
 export function planCatalogApply(
@@ -109,6 +117,9 @@ export function planCatalogApply(
       franchise: { before: before.franchise, after: null },
       subscriber: { before: before.subscriber, after: null },
       subscriberMarginPercent: null,
+      sale: { before: current.customers?.get(item.variantId) ?? positive(item.shopifyPrice), after: null },
+      customerBefore: current.customers?.get(item.variantId) ?? null,
+      subscriberOrigin: "rule", franchiseOrigin: "rule",
       changed: false,
     };
 
@@ -122,14 +133,14 @@ export function planCatalogApply(
       olistStatus: picked.status,
     };
     const cost = positive(picked.cost);
-    if (cost === null) return { ...withProduct, status: "no_cost" };
+    if (cost === null && !picked.sale && !picked.franchiseList && !picked.subscriberList) return { ...withProduct, status: "no_cost" };
 
     const weightKg = item.weightKg ?? existing?.packageWeightKg ?? null;
-    const derived = derive(item.productId, cost, weightKg);
+    const derived = cost === null ? null : derive(item.productId, cost, weightKg);
     const after = {
       cost,
-      franchise: roundMoney(derived.franchisePrice),
-      subscriber: roundMoney(derived.subscriberPrice),
+      franchise: picked.franchiseList ?? derived?.franchisePrice ?? null,
+      subscriber: picked.subscriberList ?? derived?.subscriberPrice ?? null,
     };
     return {
       ...withProduct,
@@ -137,9 +148,15 @@ export function planCatalogApply(
       cost: { before: before.cost, after: after.cost },
       franchise: { before: before.franchise, after: after.franchise },
       subscriber: { before: before.subscriber, after: after.subscriber },
-      subscriberMarginPercent: derived.subscriberMarginPercent,
-      changed: differs(before.cost, after.cost) || differs(before.franchise, after.franchise) ||
-        differs(before.subscriber, after.subscriber),
+      subscriberMarginPercent: derived?.subscriberMarginPercent ?? null,
+      catalogId: picked.run_id, fetchedAt: picked.fetched_at,
+      franchiseOrigin: picked.franchiseList != null ? "olist" : "rule",
+      subscriberOrigin: picked.subscriberList != null ? "olist" : "rule",
+      sale: { before: base.sale.before, after: picked.sale ?? null },
+      changed: (after.cost !== null && differs(before.cost, after.cost)) ||
+        (after.franchise !== null && differs(before.franchise, after.franchise)) ||
+        (after.subscriber !== null && differs(before.subscriber, after.subscriber)) ||
+        (picked.sale != null && differs(base.sale.before, picked.sale)),
     };
   });
 }

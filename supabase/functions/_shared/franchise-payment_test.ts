@@ -52,3 +52,9 @@ Deno.test("dia 31 e ajustado ao ultimo dia de mes curto", () => {
   }), "2027-02-28");
 });
 
+
+Deno.test("pedido Olist usa o preço de franquia confirmado mesmo com custo diferente", () => {
+  const items = [{ variantId: "1", sku: "381161", quantity: 2, franchiseUnitPrice: 34.17, costUnitPrice: 31.98 }];
+  assertEquals(franchiseVariantsWithoutSnapshotCost(items), []);
+  assertEquals(resolveFranchiseOrderItems(items, new Map())[0].unitPrice, 34.17);
+});

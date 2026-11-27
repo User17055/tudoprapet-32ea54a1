@@ -84,7 +84,9 @@ vi.mock("@/integrations/supabase/client", () => {
                 status: "ok",
                 olistName: "Ração Premier 7,5 kg",
                 cost: { before: 41.35, after: 172.28 },
-                franchise: { before: 41.35, after: 172.28 },
+                sale: { before: 241.20, after: 241.20 },
+                franchiseOrigin: "olist", subscriberOrigin: "rule",
+                franchise: { before: 41.35, after: 120 },
                 subscriber: { before: 43.42, after: 180.89 },
                 changed: true,
               })),
@@ -156,7 +158,7 @@ describe("tela Valores com o catálogo da Olist", () => {
     expect(screen.queryByRole("button", { name: /Atualizar todos pela Olist/ })).not.toBeInTheDocument();
     expect(await screen.findByText(/Olist: R\$\s?172,28 · diferente/)).toBeInTheDocument();
     expect(screen.getByText(/Lista Franqueados: R\$\s?120,00 · diferente/)).toBeInTheDocument();
-    expect(screen.getByText(/conferido 25\/11/)).toBeInTheDocument();
+    expect(screen.getByText(/atualizado 25\/11/)).toBeInTheDocument();
     // Produto sem SKU não é acusado como "fora do catálogo".
     expect(screen.queryByText(/Fora do catálogo da Olist/)).not.toBeInTheDocument();
   });
@@ -177,6 +179,15 @@ describe("tela Valores com o catálogo da Olist", () => {
     expect(state.invokes.every((call) => call.body.action === "catalog_page" && call.body.page === 1 || call.body.runId === "run-2")).toBe(true);
   });
 
+  it("salva a edição manual da franquia sem simular a Olist", async () => {
+    render(<ValuesTab />);
+    const field = await screen.findByRole("textbox", { name: /Valor da Franquia de Ração Premier/ });
+    fireEvent.change(field, { target: { value: "34,17" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar valores" }));
+    await waitFor(() => expect(state.invokes.map(call => call.body.action)).toEqual(["manual"]));
+    expect(state.invokes[0].body.values).toEqual({ franchise: 34.17 });
+  });
+
   it("seleciona, simula sem gravar e só grava ao confirmar", async () => {
     render(<ValuesTab />);
     await screen.findByText(/Lido em/);
@@ -191,6 +202,6 @@ describe("tela Valores com o catálogo da Olist", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /Aplicar no site \(1\)/ }));
     await waitFor(() => expect(state.invokes.some((call) => call.body.action === "finish")).toBe(true));
     const write = state.invokes.find((call) => call.body.action === "apply" && call.body.dryRun !== true);
-    expect(write?.body.items).toEqual([{ productId: "gid://shopify/Product/1", variantId: V1, sku: "75831", weightKg: 7.5 }]);
+    expect(write?.body.items).toEqual([{ productId: "gid://shopify/Product/1", variantId: V1, sku: "75831", weightKg: 7.5, shopifyPrice: 241.20 }]);
   });
 });

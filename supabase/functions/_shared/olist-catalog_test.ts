@@ -102,7 +102,7 @@ Deno.test("SKU repetido na Olist: vale o único ativo; custos diferentes sem ati
   assertEquals(pickSnapshotProduct([]), null);
   const ativo = row({ olist_product_id: "2", status: "A", cost: 10 });
   assertEquals(pickSnapshotProduct([row({ status: "I", cost: 9 }), ativo]), ativo);
-  assertEquals(pickSnapshotProduct([row({ cost: 10 }), row({ olist_product_id: "2", cost: 10 })])?.valueOf(), row({ cost: 10 }));
+  assertEquals(pickSnapshotProduct([row({ cost: 10 }), row({ olist_product_id: "2", cost: 10 })]), "duplicate");
   assertEquals(pickSnapshotProduct([row({ cost: 10 }), row({ olist_product_id: "2", cost: 12 })]), "duplicate");
   const [plan] = planCatalogApply([item("75831")], [row({ cost: 10 }), row({ olist_product_id: "2", cost: 12 })], empty(), derive);
   assertEquals(plan.status, "duplicate_sku");
@@ -140,4 +140,21 @@ Deno.test("applyProductCost não apaga mais o Valor do Cliente (customer_prices)
     "upsert franchise_prices",
     "upsert subscriber_prices",
   ]);
+});
+
+Deno.test("SKU 381161 aplica preços da Olist mesmo quando o custo já confere", () => {
+  const target = { ...item("381161"), shopifyPrice: 54.70 };
+  const current = empty();
+  current.costs.set(target.variantId, { cost: 31.98, packageWeightKg: 1 });
+  current.franchise.set(target.variantId, 31.98);
+  current.subscriber.set(target.variantId, 33.58);
+  const snapshot = row({ sku_key: "381161", cost: 31.98, franchiseList: 34.17, subscriberList: 32.19, sale: 51.17 });
+  const [plan] = planCatalogApply([target], [snapshot], current, derive);
+  assertEquals(plan.changed, true);
+  assertEquals(plan.franchise, { before: 31.98, after: 34.17 });
+  assertEquals(plan.sale, { before: 54.70, after: 51.17 });
+  assertEquals(plan.subscriber, { before: 33.58, after: 32.19 });
+  current.franchise.set(target.variantId, 34.17);
+  current.subscriber.set(target.variantId, 32.19);
+  assertEquals(planCatalogApply([target], [snapshot], { ...current, customers: new Map([[target.variantId,51.17]]) }, derive)[0].changed, false);
 });

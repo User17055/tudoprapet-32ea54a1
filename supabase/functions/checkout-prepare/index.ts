@@ -8,7 +8,6 @@ import {
 } from "../_shared/checkout-access.ts";
 import { parseCheckoutPrepareInput, shippingLabel } from "../_shared/checkout-input.ts";
 import {
-  applyCostFloor,
   belowMinimumChargeMessage,
   buildServiceFeeLine,
   buildPricedDraftLineItems,
@@ -429,7 +428,6 @@ Deno.serve(async (req) => {
     // Este mapa é enviado à Shopify como desconto sobre o preço nativo. Começa
     // com o valor do cliente e recebe o preço de perfil somente quando menor.
     const specialPriceMap = new Map(customerPriceMap);
-    const franchiseCostMap = new Map<string, number>();
     if (customerType === "subscriber") {
       // leitura-limitada: variantes do carrinho
       const { data } = await admin.from("subscriber_prices")
@@ -444,44 +442,14 @@ Deno.serve(async (req) => {
       }
     } else if (customerType === "franchise") {
       // leitura-limitada: variantes do carrinho
-      const { data } = await admin.from("franchise_prices")
+      const { data, error } = await admin.from("franchise_prices")
         .select("shopify_variant_id,price").in("shopify_variant_id", variantIds);
+      if (error) throw error;
+      specialPriceMap.clear();
       for (const row of data ?? []) {
-        const price = Number(row.price);
-        const base = customerPriceMap.get(row.shopify_variant_id) ??
-          details.get(row.shopify_variant_id)?.price;
-        if (Number.isFinite(price) && price > 0 && (base === undefined || price < base)) {
-          specialPriceMap.set(row.shopify_variant_id, price);
-        }
+        if (Number(row.price) > 0) specialPriceMap.set(row.shopify_variant_id, Number(row.price));
       }
-
-      // O preco de franquia pode ser igual ou superior ao custo, nunca inferior.
-      // Esta barreira fica no servidor para proteger inclusive carrinhos antigos
-      // e valores gravados antes da validacao existir no administrativo.
-      // leitura-limitada: variantes do carrinho
-      const { data: costRows } = await admin.from("product_costs")
-        .select("shopify_variant_id,cost").in("shopify_variant_id", variantIds);
-      for (const row of costRows ?? []) {
-        const cost = Number(row.cost);
-        if (!Number.isFinite(cost) || cost <= 0) continue;
-        franchiseCostMap.set(row.shopify_variant_id, cost);
-        const current = specialPriceMap.get(row.shopify_variant_id) ??
-          customerPriceMap.get(row.shopify_variant_id) ??
-          details.get(row.shopify_variant_id)?.price;
-        if (current === undefined || current < cost) {
-          specialPriceMap.set(row.shopify_variant_id, cost);
-        }
-      }
-      // Sem custo a NF-e não sai e o pedido trava depois. Recusa já aqui,
-      // antes de reservar estoque ou concluir qualquer coisa na Shopify.
-      const withoutCost = variantIds.filter((id) => !franchiseCostMap.has(id));
-      if (withoutCost.length) {
-        const names = withoutCost.map((id) => details.get(id)?.productTitle || "Produto").join(", ");
-        return errorResponse(
-          `Estes produtos estão temporariamente indisponíveis para franquia: ${names}. Remova-os do carrinho para continuar.`,
-          409,
-        );
-      }
+      if (variantIds.some(id => !specialPriceMap.has(id))) return errorResponse("Produto sem preço de franquia. Revise o carrinho.", 409);
     }
 
     const currentPriceMap = new Map(Array.from(details).map(([id, detail]) => [id, detail.price]));
@@ -552,10 +520,7 @@ Deno.serve(async (req) => {
       const detail = details.get(item.variantId)!;
       const catalogPrice = customerPriceMap.get(item.variantId) ?? detail.price;
       const resolvedPrice = resolveUnitPrice(catalogPrice, specialPriceMap.get(item.variantId))!;
-      const costFloor = customerType === "franchise"
-        ? franchiseCostMap.get(item.variantId)
-        : undefined;
-      const unitPrice = applyCostFloor(resolvedPrice, costFloor)!;
+      const unitPrice = customerType === "franchise" ? specialPriceMap.get(item.variantId)! : resolvedPrice;
       finalPriceMap.set(item.variantId, unitPrice);
       // O piso de custo da franquia pode deixar o valor final acima do preço do
       // catálogo. Nesse caso a referência do subtotal é o próprio valor final:
@@ -583,8 +548,8 @@ Deno.serve(async (req) => {
         quantity: item.quantity,
         catalogUnitPrice: money(catalogPrice),
         unitPrice: money(unitPrice),
-        ...(customerType === "franchise" && costFloor !== undefined
-          ? { costUnitPrice: money(costFloor) }
+        ...(customerType === "franchise"
+          ? { franchiseUnitPrice: money(unitPrice) }
           : {}),
         lineTotal,
         ...(appliedRule

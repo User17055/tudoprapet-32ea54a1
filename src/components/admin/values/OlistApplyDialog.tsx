@@ -14,6 +14,7 @@ export interface ApplyTarget {
   weightKg: number | null;
   title: string;
   /** Venda normal efetiva (Valor do Cliente ou Shopify), para saber o que fica bloqueado. */
+  shopifyPrice: number | null;
   salePrice: number | null;
 }
 
@@ -26,6 +27,9 @@ type Plan = {
   cost: BeforeAfter;
   franchise: BeforeAfter;
   subscriber: BeforeAfter;
+  sale: BeforeAfter;
+  franchiseOrigin: string;
+  subscriberOrigin: string;
   changed: boolean;
   error?: string;
 };
@@ -50,6 +54,8 @@ function Change({ value }: { value: BeforeAfter }) {
 }
 
 interface Props {
+  catalogId?: string;
+  catalogDate: string | null;
   targets: ApplyTarget[];
   open: boolean;
   onClose: () => void;
@@ -59,7 +65,7 @@ interface Props {
   onBusyChange: (busy: boolean) => void;
 }
 
-export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback, onBusyChange }: Props) {
+export function OlistApplyDialog({ targets, catalogDate, catalogId, open, onClose, onApplied, onFallback, onBusyChange }: Props) {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null);
   const [applied, setApplied] = useState(false);
@@ -76,8 +82,8 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
         for (let index = 0; index < targets.length; index += SIMULATE_CHUNK) {
           if (cancelled) return;
           setProgress({ done: index, total: targets.length, label: "Simulando" });
-          const chunk = targets.slice(index, index + SIMULATE_CHUNK).map(({ productId, variantId, sku, weightKg }) => ({ productId, variantId, sku, weightKg }));
-          const response = await invokeOlistCatalog({ action: "apply", dryRun: true, items: chunk }) as { results?: Plan[] };
+          const chunk = targets.slice(index, index + SIMULATE_CHUNK).map(({ productId, variantId, sku, weightKg, shopifyPrice }) => ({ productId, variantId, sku, weightKg, shopifyPrice }));
+          const response = await invokeOlistCatalog({ action: "apply", catalogId, dryRun: true, items: chunk }) as { results?: Plan[] };
           all.push(...(response.results ?? []));
         }
         if (!cancelled) setPlans(all);
@@ -101,14 +107,15 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
   const summary = useMemo(() => {
     const list = plans ?? [];
     const ok = list.filter((plan) => plan.status === "ok");
-    const changes = (key: "cost" | "franchise" | "subscriber") => ok.filter((plan) => {
+    const changes = (key: "sale" | "cost" | "franchise" | "subscriber") => ok.filter((plan) => {
       const value = plan[key];
-      return value.after !== null && (value.before === null || Math.abs(value.before - value.after) >= 0.005);
+      return value && value.after !== null && (value.before === null || Math.abs(value.before - value.after) >= 0.005);
     }).length;
     const sale = (plan: Plan) => byVariant.get(plan.variantId)?.salePrice ?? null;
     return {
       ok: ok.length,
       changed: ok.filter((plan) => plan.changed).length,
+      sale: changes("sale"),
       cost: changes("cost"),
       franchise: changes("franchise"),
       subscriber: changes("subscriber"),
@@ -116,8 +123,8 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
       noCost: list.filter((plan) => plan.status === "no_cost"),
       duplicate: list.filter((plan) => plan.status === "duplicate_sku"),
       errors: list.filter((plan) => plan.status === "error"),
-      newlyBlocked: ok.filter((plan) => !blocked(sale(plan), plan.cost.before) && blocked(sale(plan), plan.cost.after)),
-      unblocked: ok.filter((plan) => blocked(sale(plan), plan.cost.before) && !blocked(sale(plan), plan.cost.after)),
+      newlyBlocked: ok.filter((plan) => !blocked(sale(plan), plan.cost.before) && blocked(plan.sale?.after ?? sale(plan), plan.cost.after ?? plan.cost.before)),
+      unblocked: ok.filter((plan) => blocked(sale(plan), plan.cost.before) && !blocked(plan.sale?.after ?? sale(plan), plan.cost.after ?? plan.cost.before)),
     };
   }, [plans, byVariant]);
 
@@ -128,20 +135,22 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
     onBusyChange(true);
     let runId: string | undefined;
     const results: Plan[] = [];
+    const fingerprints = new Map(plans.map(plan => [plan.variantId, JSON.stringify(plan)]));
     try {
       for (let index = 0; index < items.length; index += APPLY_CHUNK) {
         setProgress({ done: index, total: items.length, label: "Aplicando no site" });
-        const chunk = items.slice(index, index + APPLY_CHUNK).map(({ productId, variantId, sku, weightKg }) => ({ productId, variantId, sku, weightKg }));
-        const response = await invokeOlistCatalog({ action: "apply", items: chunk, runId }) as { runId?: string; results?: Plan[] };
+        const chunk = items.slice(index, index + APPLY_CHUNK).map(({ productId, variantId, sku, weightKg, shopifyPrice }) => ({ productId, variantId, sku, weightKg, shopifyPrice }));
+        const expected = Object.fromEntries(chunk.map(item => [item.variantId, fingerprints.get(item.variantId)]));
+        const response = await invokeOlistCatalog({ action: "apply", items: chunk, catalogId, runId, expected }) as { runId?: string; results?: Plan[] };
         runId = response.runId ?? runId;
         results.push(...(response.results ?? []));
       }
-      const failed = results.filter((plan) => plan.status === "error").length;
+      const failed = results.filter((plan) => plan.status !== "ok").length;
       if (runId) {
         await invokeOlistCatalog({
           action: "finish",
           runId,
-          notFound: summary.notInCatalog.length + summary.noCost.length + summary.duplicate.length,
+          notFound: summary.notInCatalog.length,
           failed: 0,
         });
       }
@@ -152,7 +161,8 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro inesperado";
       if (runId) await invokeOlistCatalog({ action: "finish", runId, error: message }).catch(() => undefined);
-      toast.error("A aplicação parou no meio.", { description: `${results.length} de ${items.length} gravados. ${message}`, duration: 12000 });
+      setApplied(true);
+      toast.error("A aplicação parou no meio.", { description: `${results.length} de ${items.length} com resposta recebida. Simule novamente para conferir o estado atual. ${message}`, duration: 12000 });
     } finally {
       setProgress(null);
       onBusyChange(false);
@@ -160,7 +170,7 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
     }
   };
 
-  const changedPlans = (plans ?? []).filter((plan) => plan.status === "ok" && plan.changed);
+  const eligiblePlans = (plans ?? []).filter((plan) => plan.status === "ok");
   const fallbackTargets = summary.notInCatalog.map((plan) => byVariant.get(plan.variantId)).filter((target): target is ApplyTarget => Boolean(target));
 
   return (
@@ -169,9 +179,9 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
         <DialogHeader>
           <DialogTitle>{applied ? "Resultado da aplicação" : "Simulação: atualizar pela Olist"}</DialogTitle>
           <DialogDescription>
-            {targets.length} variante{targets.length === 1 ? "" : "s"} selecionada{targets.length === 1 ? "" : "s"}. Usa o catálogo já lido;
-            não consulta nem altera a Olist. Grava custo, franquia (= custo) e assinante (custo + margem da categoria).
-            O preço normal da Shopify e o Valor do Cliente não mudam.
+            {targets.length} variante{targets.length === 1 ? "" : "s"} selecionada{targets.length === 1 ? "" : "s"}. Usa o catálogo lido {catalogDate ?? "anteriormente"};
+            não consulta nem altera a Olist. Importa o custo e os preços das listas Franqueados e Plano São Francisco. Sem preço de lista, usa o custo para franquia e a regra da categoria para o Clube.
+            A venda da Olist atualiza o Valor do Cliente quando o preço efetivo diverge. O preço-base da Shopify é preservado.
           </DialogDescription>
         </DialogHeader>
 
@@ -185,16 +195,17 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
         {plans && (
           <div className="space-y-4 text-sm">
             <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Encontrados na Olist</p><p className="text-lg font-bold">{summary.ok}</p><p className="text-xs text-muted-foreground">{summary.changed} com algum valor diferente</p></div>
-              <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Mudam</p><p className="text-sm">{summary.cost} custos · {summary.franchise} franquias · {summary.subscriber} assinantes</p></div>
+              <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Aptos no catálogo lido</p><p className="text-lg font-bold">{summary.ok}</p><p className="text-xs text-muted-foreground">{summary.changed} com algum valor diferente</p></div>
+              <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Mudam</p><p className="text-sm">{summary.cost} custos · {summary.franchise} franquias · {summary.subscriber} assinantes · {summary.sale} vendas</p></div>
               <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Venda normal ≤ custo</p><p className="text-sm"><span className="font-medium text-red-700">{summary.newlyBlocked.length} passam a ficar bloqueados</span> · <span className="font-medium text-emerald-700">{summary.unblocked.length} liberados</span></p></div>
             </div>
 
+            {summary.ok > 0 && summary.changed === 0 && <p>Os valores aplicáveis já coincidem com a Olist ou com a regra indicada abaixo.</p>}
             {(summary.notInCatalog.length > 0 || summary.noCost.length > 0 || summary.duplicate.length > 0 || summary.errors.length > 0) && (
               <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                {summary.notInCatalog.length > 0 && <p>{summary.notInCatalog.length} SKU fora do catálogo lido (inativo ou inexistente na Olist): {summary.notInCatalog.slice(0, 15).map((plan) => plan.sku).join(", ")}{summary.notInCatalog.length > 15 ? "…" : ""}</p>}
-                {summary.noCost.length > 0 && <p>{summary.noCost.length} sem preço de custo na Olist (nada é gravado): {summary.noCost.slice(0, 15).map((plan) => plan.sku).join(", ")}</p>}
-                {summary.duplicate.length > 0 && <p>{summary.duplicate.length} SKU repetido na Olist com custos diferentes (nada é gravado): {summary.duplicate.map((plan) => plan.sku).join(", ")}</p>}
+                {summary.notInCatalog.length > 0 && <p>{summary.notInCatalog.length} SKU fora do catálogo lido: {summary.notInCatalog.slice(0, 15).map((plan) => plan.sku).join(", ")}{summary.notInCatalog.length > 15 ? "…" : ""}</p>}
+                {summary.noCost.length > 0 && <p>{summary.noCost.length} sem valores disponíveis na Olist: {summary.noCost.slice(0, 15).map((plan) => plan.sku).join(", ")}</p>}
+                {summary.duplicate.length > 0 && <p>{summary.duplicate.length} SKU ambíguo na Olist (nada é gravado): {summary.duplicate.map((plan) => plan.sku).join(", ")}</p>}
                 {summary.errors.length > 0 && <p>{summary.errors.length} com erro ao gravar: {summary.errors.map((plan) => `${plan.sku} (${plan.error})`).join("; ")}</p>}
               </div>
             )}
@@ -206,25 +217,25 @@ export function OlistApplyDialog({ targets, open, onClose, onApplied, onFallback
               </p>
             )}
 
-            {changedPlans.length > 0 ? (
+            {eligiblePlans.length > 0 ? (
               <div className="overflow-x-auto rounded-md border">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead>Custo</TableHead><TableHead>Franquia</TableHead><TableHead>Assinante</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Produto</TableHead><TableHead>Venda efetiva</TableHead><TableHead>Custo</TableHead><TableHead>Franquia</TableHead><TableHead>Assinante</TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {changedPlans.slice(0, 300).map((plan) => (
+                    {eligiblePlans.map((plan) => (
                       <TableRow key={plan.variantId}>
                         <TableCell className="max-w-[280px]"><p className="truncate text-xs font-medium">{byVariant.get(plan.variantId)?.title ?? plan.olistName}</p><p className="text-[11px] text-muted-foreground">SKU {plan.sku}</p></TableCell>
+                        <TableCell className="text-xs"><Change value={plan.sale ?? { before: null, after: null }} /></TableCell>
                         <TableCell className="text-xs"><Change value={plan.cost} /></TableCell>
-                        <TableCell className="text-xs"><Change value={plan.franchise} /></TableCell>
-                        <TableCell className="text-xs"><Change value={plan.subscriber} /></TableCell>
+                        <TableCell className="text-xs"><Change value={plan.franchise} /><small className="block">{plan.franchise.after === null ? "Sem referência" : plan.franchiseOrigin === "olist" ? "Lista Franqueados" : "Custo"}</small></TableCell>
+                        <TableCell className="text-xs"><Change value={plan.subscriber} /><small className="block">{plan.subscriber.after === null ? "Sem referência" : plan.subscriberOrigin === "olist" ? "Lista Plano São Francisco" : "Regra da categoria"}</small></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                {changedPlans.length > 300 && <p className="p-2 text-xs text-muted-foreground">Mostrando 300 de {changedPlans.length}.</p>}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">Nenhum valor muda: aplicar só registra a data de conferência.</p>
+              <p className="text-xs text-muted-foreground">Nenhuma variante apta para aplicação.</p>
             )}
           </div>
         )}

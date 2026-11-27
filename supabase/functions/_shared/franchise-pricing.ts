@@ -3,7 +3,7 @@ import { fetchOlistCostBySku, type OlistCost } from "./olist.ts";
 import { applyProductCost, loadSubscriberMarginRules, type SubscriberMarginRules } from "./olist-cost-apply.ts";
 
 /**
- * Franquia paga custo — nunca o preço cheio por falta de cadastro.
+ * A franquia usa o preço de lista ou manual. O custo cobre a ausência de preço.
  *
  * Antes de precificar um carrinho de franquia, garante que cada item tenha
  * custo ou preço de franquia:
@@ -13,7 +13,7 @@ import { applyProductCost, loadSubscriberMarginRules, type SubscriberMarginRules
  *     não consegue mandar revisar produto que está certo;
  *  2. custo com mais de 7 dias: reconsulta na Olist (sem bloquear se falhar).
  *     A API só é usada quando uma franquia compra, e só para aquele carrinho;
- *  3. preço de franquia = custo, sempre (sem margem).
+ *  3. preços derivados acompanham o custo e preservam os valores explícitos.
  *
  * O bloqueio acontece antes de qualquer pedido, nota ou boleto na Olist.
  */
@@ -91,7 +91,7 @@ export async function ensureFranchiseCosts(
     // leitura-limitada: variantes do carrinho
     admin.from("product_costs").select("shopify_variant_id,cost,synced_at").in("shopify_variant_id", variantIds),
     // leitura-limitada: variantes do carrinho
-    admin.from("franchise_prices").select("shopify_variant_id,price").in("shopify_variant_id", variantIds),
+    admin.from("franchise_prices").select("shopify_variant_id,price,price_origin").in("shopify_variant_id", variantIds),
   ]);
   if (costResult.error) throw costResult.error;
   if (priceResult.error) throw priceResult.error;
@@ -107,6 +107,7 @@ export async function ensureFranchiseCosts(
       .map((row) => [row.shopify_variant_id, Number(row.price)]),
   );
 
+  const explicitPrices = new Set((priceResult.data ?? []).filter(row => ["olist", "manual"].includes(row.price_origin)).map(row => row.shopify_variant_id));
   const lookup = options.lookup ?? fetchOlistCostBySku;
   const maxLookups = options.maxLookups ?? DEFAULT_MAX_LOOKUPS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOOKUP_TIMEOUT_MS;
@@ -128,7 +129,7 @@ export async function ensureFranchiseCosts(
       await applyProductCost(admin, { productId: item.productId, variantId: item.variantId, sku }, cost, rules);
     }
     costs.set(item.variantId, { cost, syncedAt: now });
-    franchisePrices.set(item.variantId, cost);
+    if (!explicitPrices.has(item.variantId)) franchisePrices.set(item.variantId, cost);
   };
 
   // 1. Sem custo: busca na Olist; se não resolver, o item é bloqueado.
@@ -189,12 +190,10 @@ export async function ensureFranchiseCosts(
     }
   }
 
-  // 3. Franquia paga custo: o preço de franquia acompanha o custo para cima e
-  //    para baixo. Corrige o que estiver faltando ou diferente (inclusive valor
-  //    digitado à mão acima do custo).
+  // Realinha somente preços derivados.
   const misaligned = items.filter((item) => {
     const current = costs.get(item.variantId);
-    return current && franchisePrices.get(item.variantId) !== current.cost;
+    return current && !explicitPrices.has(item.variantId) && franchisePrices.get(item.variantId) !== current.cost;
   });
   if (misaligned.length) {
     const { error } = await admin.from("franchise_prices").upsert(
@@ -202,6 +201,7 @@ export async function ensureFranchiseCosts(
         shopify_product_id: item.productId,
         shopify_variant_id: item.variantId,
         price: costs.get(item.variantId)!.cost,
+        price_origin: "rule",
       })),
       { onConflict: "shopify_variant_id" },
     );

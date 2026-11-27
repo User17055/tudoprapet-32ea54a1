@@ -16,7 +16,7 @@ const isoDate = (year: number, month: number, day: number) =>
 
 export function franchiseVariantsWithoutSnapshotCost(items: Array<Record<string, unknown>>): string[] {
   return items
-    .filter((item) => !Number.isFinite(Number(item.costUnitPrice)) || Number(item.costUnitPrice) <= 0)
+    .filter((item) => !(Number(item.franchiseUnitPrice ?? item.costUnitPrice) > 0))
     .map((item) => String(item.variantId || ""))
     .filter(Boolean);
 }
@@ -26,18 +26,18 @@ export function resolveFranchiseOrderItems(
   currentCosts: Map<string, number>,
 ) {
   return items.map((item) => {
-    const snapshotCost = Number(item.costUnitPrice);
-    const unitCost = Number.isFinite(snapshotCost) && snapshotCost > 0
-      ? snapshotCost
+    const snapshotPrice = Number(item.franchiseUnitPrice ?? item.costUnitPrice);
+    const unitPrice = Number.isFinite(snapshotPrice) && snapshotPrice > 0
+      ? snapshotPrice
       : currentCosts.get(String(item.variantId || ""));
-    if (unitCost === undefined) {
+    if (unitPrice === undefined) {
       throw new Error(`Produto ${String(item.sku || item.productTitle || "sem SKU")} sem custo para a NF-e`);
     }
     return {
       sku: String(item.sku || ""),
       description: [item.productTitle, item.variantTitle].filter(Boolean).join(" - "),
       quantity: Number(item.quantity),
-      unitPrice: unitCost,
+      unitPrice,
     };
   });
 }
