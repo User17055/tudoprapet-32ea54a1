@@ -7,8 +7,8 @@ import { priceFromCostAndMargin, subscriberMarginWithFeedRule } from "./subscrib
  * regra do botão "sincronizar custos" do admin, usada também pelo checkout de
  * franquia (custo buscado na hora) e pela revisão de preço:
  *  - product_costs + histórico quando o custo muda;
- *  - franquia: preço de franquia = custo (sobe e desce junto com ele);
- *  - assinante: custo + margem da categoria mais específica.
+ *  - franquia sem preço explícito: acompanha o custo;
+ *  - assinante sem preço explícito: custo + margem da categoria mais específica.
  * Não mexe em customer_prices ("Valor do Cliente"): é preço definido à mão no
  * admin, e a sincronização apagava sem avisar (decisão de 26/11/2026).
  */
@@ -64,9 +64,7 @@ export interface AppliedCost {
 
 /**
  * Preços que dependem do custo, sem gravar nada (usado também na simulação):
- *  - franquia paga custo, sem margem: acompanha o custo para cima e para baixo
- *    (decisão de 12/11/2026 — nenhum produto é vendido às franquias acima do custo);
- *  - assinante: custo + margem da categoria (ração considera o peso do pacote).
+ * Usado como alternativa quando a lista correspondente não fornece um preço.
  */
 export function derivedPricesFromCost(
   productId: string,
@@ -145,6 +143,7 @@ export async function applyProductCost(
     shopify_product_id: item.productId,
     shopify_variant_id: item.variantId,
     price: franchisePrice,
+    price_origin: "rule",
   }, { onConflict: "shopify_variant_id" });
   if (franchiseError) throw franchiseError;
 
@@ -152,6 +151,7 @@ export async function applyProductCost(
     shopify_product_id: item.productId,
     shopify_variant_id: item.variantId,
     subscriber_price: subscriberPrice,
+    price_origin: "rule",
   }, { onConflict: "shopify_variant_id" });
   if (subscriberError) throw subscriberError;
 

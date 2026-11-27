@@ -97,9 +97,10 @@ export function OlistCatalogPanel({ data, unavailable, onReloaded, busy, onBusyC
             <p className="text-xs text-muted-foreground">
               Última aplicação: {shortDateTime(applyRun.finishedAt ?? applyRun.startedAt)} · {applyRun.applied} conferidos,{" "}
               {applyRun.changed} com valor alterado
+              {applyRun.status === "failed" && ` · falha: ${applyRun.error ?? "execução incompleta"}`}
               {applyRun.notFound ? ` · ${applyRun.notFound} fora do catálogo` : ""}
               {applyRun.failed ? ` · ${applyRun.failed} com erro` : ""}
-              {applyRun.status === "running" ? " · interrompida" : ""}
+              {applyRun.status === "running" ? " · em andamento ou interrompida" : ""}
             </p>
           )}
           <p className="text-[11px] text-muted-foreground">

@@ -101,7 +101,7 @@ export function SubscriberCategoryMarginsCard({ onPricesChanged }: { onPricesCha
       <CardContent className="space-y-4 p-4 pt-0">
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <p className="font-semibold">Regra automática para o grupo Ração</p>
-          <p className="mt-1">Todas as rações usam custo Olist + 5%, independentemente do peso. Essa regra prevalece sobre o percentual comum da categoria.</p>
+          <p className="mt-1">Na ausência de preço da lista, as rações usam custo Olist + 5%, independentemente do peso. Essa regra prevalece sobre o percentual comum da categoria.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px_auto]">
           <Select value={categoryId} onValueChange={setCategoryId} disabled={loading || Boolean(busyId)}>
@@ -131,7 +131,7 @@ export function SubscriberCategoryMarginsCard({ onPricesChanged }: { onPricesCha
             ))}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">Ao salvar ou remover uma regra, todos os produtos com custo importado são recalculados automaticamente.</p>
+        <p className="text-xs text-muted-foreground">Ao salvar ou remover uma regra, são recalculados os preços baseados em regra. Preços de lista e ajustes manuais são preservados.</p>
       </CardContent>
     </Card>
   );

@@ -5,7 +5,6 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { corsHeaders, errorResponse, jsonResponse } from "./cors.ts";
 import {
-  applyCostFloor,
   buildDraftLineItems,
   buildPriceAdjustmentLine,
   findUnpricedVariants,
@@ -126,27 +125,8 @@ export async function handleSpecialPriceCheckout(
       if (!Number.isFinite(customerPrice) || customerPrice <= 0) continue;
       customerPriceMap.set(row.shopify_variant_id, customerPrice);
       const profilePrice = specialPriceMap.get(row.shopify_variant_id);
-      if (profilePrice === undefined || customerPrice < profilePrice) {
+      if (config.priceTable !== "franchise_prices" && (profilePrice === undefined || customerPrice < profilePrice)) {
         specialPriceMap.set(row.shopify_variant_id, customerPrice);
-      }
-    }
-
-    const costFloorMap = new Map<string, number>();
-    if (config.priceTable === "franchise_prices") {
-      const { data: costRows } = await adminClient
-        // leitura-limitada: variantes do carrinho
-        .from("product_costs")
-        .select("shopify_variant_id,cost")
-        .in("shopify_variant_id", variantIds);
-      for (const row of costRows ?? []) {
-        const cost = Number(row.cost);
-        if (!Number.isFinite(cost) || cost <= 0) continue;
-        costFloorMap.set(row.shopify_variant_id, cost);
-        const current = specialPriceMap.get(row.shopify_variant_id)
-          ?? customerPriceMap.get(row.shopify_variant_id);
-        // Quando nao ha nenhum preco local, o piso e aplicado depois de buscar
-        // o valor atual da Shopify, no laco que monta finalPriceMap.
-        if (current !== undefined && current < cost) specialPriceMap.set(row.shopify_variant_id, cost);
       }
     }
 
@@ -174,16 +154,9 @@ export async function handleSpecialPriceCheckout(
     const finalPriceMap = new Map<string, number>();
     for (const item of items) {
       const base = customerPriceMap.get(item.variantId) ?? currentPriceMap.get(item.variantId);
-      let profilePrice = specialPriceMap.get(item.variantId);
-      if (config.priceTable === "franchise_prices") {
-        const cost = costFloorMap.get(item.variantId);
-        if (cost !== undefined && (profilePrice === undefined || profilePrice < cost)) {
-          profilePrice = cost;
-        }
-      }
-      const resolved = resolveUnitPrice(base, profilePrice);
-      const costFloor = config.priceTable === "franchise_prices" ? costFloorMap.get(item.variantId) : undefined;
-      const final = applyCostFloor(resolved, costFloor);
+      const profilePrice = specialPriceMap.get(item.variantId);
+      if (config.priceTable === "franchise_prices" && !(Number(profilePrice) > 0)) return errorResponse("Produto sem preço de franquia", 409);
+      const final = config.priceTable === "franchise_prices" ? profilePrice : resolveUnitPrice(base, profilePrice);
       if (final !== undefined) finalPriceMap.set(item.variantId, final);
     }
 

@@ -36,6 +36,7 @@ async function reprice(admin: SupabaseClient) {
     return {
       shopify_product_id: productId,
       shopify_variant_id: String(row.shopify_variant_id),
+      price_origin: "rule",
       subscriber_price: priceFromCostAndMargin(cost, percent),
     };
   }).filter((row) => row.shopify_product_id && row.shopify_variant_id && Number.isFinite(row.subscriber_price));

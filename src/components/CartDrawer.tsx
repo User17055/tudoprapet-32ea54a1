@@ -47,7 +47,7 @@ export const CartDrawer = () => {
   const franchiseTotalPrice = availableItems.reduce((sum, item) => {
     const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
     const franchisePrice = getFranchisePrice(item.variantId);
-    const price = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice
+    const price = isFranchisee && franchisePrice !== null
       ? franchisePrice
       : regularPrice;
     return sum + price * item.quantity;
@@ -256,7 +256,7 @@ export const CartDrawer = () => {
                     const regularPrice = getCustomerPrice(item.variantId) ?? parseFloat(item.price.amount);
                     const subscriberPrice = getSubscriberPrice(item.variantId);
                     const franchisePrice = getFranchisePrice(item.variantId);
-                    const hasFranchisePrice = isFranchisee && franchisePrice !== null && franchisePrice < regularPrice;
+                    const hasFranchisePrice = isFranchisee && franchisePrice !== null;
                     const hasSubscriberPrice = customerIsSubscribed && subscriberPrice !== null && subscriberPrice < regularPrice;
                     const itemPrice = hasFranchisePrice
                       ? franchisePrice
@@ -334,7 +334,7 @@ export const CartDrawer = () => {
                               </Button>
                             </div>
                             <div className="text-right whitespace-nowrap">
-                              {(hasFranchisePrice || hasSubscriberPrice) && (
+                              {((hasFranchisePrice && franchisePrice < regularPrice) || hasSubscriberPrice) && (
                                 <p className="text-[11px] leading-none text-muted-foreground line-through">
                                   R$ {regularLineTotal.toFixed(2).replace('.', ',')}
                                 </p>

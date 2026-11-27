@@ -5,11 +5,10 @@ A Olist alimenta o site; o site nunca grava na Olist (mão única).
 ## Regra comercial
 
 - custo: `preco_custo` da Olist, gravado em `product_costs` (com histórico);
-- franquia: igual ao custo, sobe e desce junto (`franchise_prices`);
-- assinante (Clube): custo + margem da categoria mais específica; ração considera o
-  peso do pacote (`subscriber_prices`);
-- venda normal: preço da Shopify, ou o "Valor do Cliente" (`customer_prices`)
-  quando o admin define um. A sincronização não mexe em nenhum dos dois.
+- A franquia usa a lista Franqueados (1872). Sem referência, a aplicação propõe o custo.
+- O Clube usa a lista Plano São Francisco (1871). Sem referência, a aplicação propõe o custo mais a margem de categoria (5% para ração).
+- A venda efetiva usa o promocional ou o preço normal da Olist. Quando difere do valor do site, a confirmação grava o Valor do Cliente. A edição manual da coluna Shopify atualiza o preço-base na Shopify.
+- O checkout e o recálculo de margens preservam os preços explícitos. Uma nova aplicação confirmada pode substituir um ajuste manual.
 
 O SKU da variante na Shopify precisa ser igual ao código do produto na Olist
 (sem espaços nas pontas, maiúsculas e minúsculas tanto faz, zero à esquerda conta).
@@ -32,8 +31,7 @@ Custo vazio ou zero na Olist não é gravado.
 
 O botão com seta em cada linha continua consultando aquele SKU direto na Olist.
 
-As listas da Olist ("Franqueados", "Plano São Francisco") e o preço de venda da
-Olist aparecem só como comparação. O preço efetivo de uma lista é o promocional
+A prévia mostra cada SKU apto e a origem dos preços. O preço efetivo de uma lista é o promocional
 da exceção do produto (ou o preço da exceção); sem exceção, o preço de venda com
 o acréscimo/desconto da lista.
 

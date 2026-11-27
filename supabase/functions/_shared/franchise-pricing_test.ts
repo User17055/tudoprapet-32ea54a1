@@ -222,3 +222,15 @@ Deno.test("preço de franquia acima do custo volta para o custo (sem margem)", a
   assertEquals(fake.upserts.length, 1);
   assertEquals((fake.upserts[0].payload as Array<{ price: number }>)[0].price, 17);
 });
+
+Deno.test("checkout preserva a lista Franqueados acima ou abaixo do custo", async () => {
+  for (const price of [34.17, 29]) {
+    const variant = item("1");
+    const fake = fakeAdmin({
+      product_costs: [{ shopify_variant_id: variant.variantId, cost: 31.98, synced_at: new Date().toISOString() }],
+      franchise_prices: [{ shopify_variant_id: variant.variantId, price, price_origin: "olist" }],
+    });
+    assertEquals((await ensureFranchiseCosts(fake.admin, [variant])).blocked, []);
+    assertEquals(fake.upserts, []);
+  }
+});
