@@ -148,6 +148,13 @@
       "when": 1795791600000,
       "tag": "0020_olist_price_priority",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795800677463,
+      "tag": "0021_apply_pr17_pending_migration",
+      "breakpoints": true
     }
   ]
 }
