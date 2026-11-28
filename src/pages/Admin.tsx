@@ -1565,10 +1565,11 @@ function UsersTab() {
       const next = new Set(memberEmails); next.delete(email); setMemberEmails(next);
       toast.success("Removido do clube");
     } else {
-      const { error } = await supabase.from("club_members").insert({
-        email, name: p.name, is_active: true,
-      });
-      if (error) { setTogglingEmail(null); return toast.error("Erro: " + error.message); }
+      const { data: existing } = await supabase.from("club_members").select("id").ilike("email", email).maybeSingle();
+      const { error } = existing
+        ? await supabase.from("club_members").update({ is_active: true }).eq("id", existing.id)
+        : await supabase.from("club_members").insert({ email, name: p.name, is_active: true });
+      if (error) { setTogglingEmail(null); return toast.error("Não foi possível adicionar ao clube"); }
       const next = new Set(memberEmails); next.add(email); setMemberEmails(next);
       toast.success("Adicionado ao clube 👑");
     }
